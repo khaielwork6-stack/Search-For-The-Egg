@@ -28,7 +28,13 @@ function Toast.new(gui: ScreenGui, motion: () -> Motion.MotionSettings): Toast
 	local container = Instance.new("Frame")
 	container.Name = "Toasts"
 	container.AnchorPoint = Vector2.new(0.5, 0)
-	container.Position = UDim2.new(0.5, 0, 0, Tokens.spacing.lg)
+	-- Sits below the objective banner (safe padding + banner height + caption line + spacing).
+	container.Position = UDim2.new(
+		0.5,
+		0,
+		0,
+		Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx + Tokens.typography.caption.size + Tokens.spacing.xl
+	)
 	container.Size = UDim2.fromScale(0.6, 0)
 	container.AutomaticSize = Enum.AutomaticSize.Y
 	container.BackgroundTransparency = 1

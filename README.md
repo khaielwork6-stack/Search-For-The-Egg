@@ -3,7 +3,8 @@
 Cozy first-person collection and hidden-object experience for Roblox. Built in six controlled phases from
 the build pack in `Search_For_The_Egg_Claude_Code_Build_Pack/` (start with `START_HERE.md` there).
 
-Current checkpoint: **Phase 1 - architecture, networking, data, sessions, tests.** See
+Current checkpoint: **Phase 2 - complete Chapter 1 vertical slice** (lobby -> party -> Sunlit Henhouse ->
+collect -> sell -> upgrade -> Egg reveal -> claim -> victory -> rewards -> results -> save -> lobby). See
 `docs/IMPLEMENTATION_STATUS.md`.
 
 ## Toolchain
@@ -37,9 +38,9 @@ Then connect the Rojo plugin in Studio. To build a place file instead: `rojo bui
 
 ## Layout
 
-- `src/shared` - configuration facade, domain math, reducers, network schema, design tokens, test framework.
-- `src/server` - bootstrap, profile store, transactions/receipts, adapters, services, Studio-only debug hooks.
-- `src/client` - bootstrap, controllers (net, profile, input, modal, audio, VFX, ambient, HUD), UI components.
+- `src/shared` - configuration facade, domain math (pile grid, Egg nodes, objectives, layout), reducers, network schema, design tokens, test framework.
+- `src/server` - bootstrap, profile store, transactions/receipts, adapters, services (round, collection, selling, upgrades, Egg, victory, objectives, arena), Studio-only debug hooks.
+- `src/client` - bootstrap, controllers (net, profile, input, modal, audio, VFX, ambient, HUD, round, pile visuals, hand, interactions, objectives, victory), UI components.
 - `tests` - spec modules (run headlessly and in Studio from the same files).
 - `docs` - inspection report, implementation status, Studio verification evidence, deployment ID checklist.
 

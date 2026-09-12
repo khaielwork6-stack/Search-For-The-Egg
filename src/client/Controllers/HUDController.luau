@@ -1,17 +1,20 @@
 --!strict
--- Phase 1 HUD shell: currency chips bound to the profile projection, a session/objective banner,
--- a settings button that opens a real modal (reduced motion / camera shake / haptics / quality
--- toggles round-tripped through SettingsUpdate), an input-prompt chip that swaps by input mode,
--- and the toast queue. Copy is original placeholder text; owner Phase 2 objective system.
+-- HUD: currency chips bound to the profile projection, objective banner (title + detail), input
+-- prompt chip that swaps by input mode, settings modal round trip, toast queue, and the round strip
+-- (bag meter / cash / timer) that appears only during rounds. Sale and upgrade feedback land here.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Trove = require(Shared.Util.Trove)
+local EconomyMath = require(Shared.EconomyMath)
 local SafeArea = require(script.Parent.Parent.UI.SafeArea)
 local Button = require(script.Parent.Parent.UI.Components.Button)
 local Toast = require(script.Parent.Parent.UI.Components.Toast)
+local RoundHud = require(script.Parent.Parent.UI.RoundHud)
+local UpgradeModal = require(script.Parent.Parent.UI.UpgradeModal)
 
 local HUDController = {}
 HUDController.__index = HUDController
@@ -20,8 +23,10 @@ export type HUDController = typeof(setmetatable(
 	{} :: {
 		gui: ScreenGui,
 		toasts: any,
+		round: any,
 		_deps: any,
-		_labels: { [string]: TextLabel },
+		_labels: { [string]: any },
+		_timerConnection: RBXScriptConnection?,
 		_trove: Trove.Trove,
 	},
 	HUDController
@@ -63,7 +68,10 @@ function HUDController.new(deps: any): HUDController
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	local _, scaleCleanup = SafeArea.applyScale(gui, deps.config)
 
-	local self = setmetatable({ gui = gui, toasts = nil, _deps = deps, _labels = {}, _trove = Trove.new() }, HUDController)
+	local self = setmetatable(
+		{ gui = gui, toasts = nil, round = nil, _deps = deps, _labels = {}, _timerConnection = nil, _trove = Trove.new() },
+		HUDController
+	)
 	self._trove:add(gui)
 	self._trove:add(scaleCleanup)
 
@@ -83,14 +91,31 @@ function HUDController.new(deps: any): HUDController
 	self._labels.gems = chip(row, "Gems", 1)
 	self._labels.tokens = chip(row, "Tokens", 2)
 
-	-- Top-center session/objective banner.
+	-- Top-center objective banner: title + detail on two lines, never covering the reticle.
 	local banner = chip(gui, "Banner", 1)
 	banner.AnchorPoint = Vector2.new(0.5, 0)
-	banner.Position = UDim2.new(0.5, 0, 0, Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx + Tokens.spacing.md)
-	banner.Font = Tokens.typography.body.font
-	banner.TextSize = Tokens.typography.body.size
+	banner.Position = UDim2.new(0.5, 0, 0, Tokens.layout.safeAreaPaddingPx)
+	banner.Size = UDim2.fromOffset(0, Tokens.layout.minimumTapTargetPx + Tokens.typography.caption.size + Tokens.spacing.sm)
+	banner.Font = Tokens.typography.heading.font
+	banner.TextSize = Tokens.typography.heading.size
+	banner.TextYAlignment = Enum.TextYAlignment.Top
 	banner.Text = "Loading your nest..."
+	local bannerPadding = banner:FindFirstChildOfClass("UIPadding") :: UIPadding
+	bannerPadding.PaddingTop = UDim.new(0, Tokens.spacing.sm)
 	self._labels.banner = banner
+	local detail = Instance.new("TextLabel")
+	detail.Name = "Detail"
+	detail.AnchorPoint = Vector2.new(0.5, 1)
+	detail.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.xs)
+	detail.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 2)
+	detail.BackgroundTransparency = 1
+	detail.Font = Tokens.typography.caption.font
+	detail.TextSize = Tokens.typography.caption.size
+	detail.TextColor3 = Tokens.color.inkMuted
+	detail.Text = ""
+	detail.ZIndex = Tokens.zIndex.hud + 1
+	detail.Parent = banner
+	self._labels.detail = detail
 
 	-- Bottom-right input prompt chip (swaps per input mode) and settings button.
 	local prompt = chip(gui, "Prompt", 1)
@@ -114,10 +139,29 @@ function HUDController.new(deps: any): HUDController
 	settingsButton.Position = UDim2.new(1, -Tokens.layout.safeAreaPaddingPx, 0, Tokens.layout.safeAreaPaddingPx)
 	self._trove:add(settingsCleanup)
 
+	-- Centre reticle (first-person aim aid), tiny and non-blocking.
+	local reticle = Instance.new("Frame")
+	reticle.Name = "Reticle"
+	reticle.AnchorPoint = Vector2.new(0.5, 0.5)
+	reticle.Position = UDim2.fromScale(0.5, 0.5)
+	reticle.Size = UDim2.fromOffset(6, 6)
+	reticle.BackgroundColor3 = Tokens.color.cream
+	reticle.BackgroundTransparency = 0.2
+	reticle.Visible = false
+	local reticleCorner = Instance.new("UICorner")
+	reticleCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
+	reticleCorner.Parent = reticle
+	reticle.Parent = gui
+	self._labels.reticle = reticle
+
 	self.toasts = Toast.new(gui, function()
 		return deps.accessibility:motionSettings()
 	end)
 	self._trove:add(self.toasts)
+	self.round = RoundHud.new(gui, function()
+		return deps.accessibility:motionSettings()
+	end)
+	self._trove:add(self.round)
 
 	-- Bindings.
 	local function refreshProfile(projection)
@@ -130,29 +174,9 @@ function HUDController.new(deps: any): HUDController
 	refreshProfile(deps.profile.projection)
 	self._trove:add(deps.profile.changed:Connect(refreshProfile))
 
-	local function refreshSession(session)
-		if not session then
-			return
-		end
-		local phase = session.phase
-		if phase == "Lobby" then
-			banner.Text = "Lobby ready - Phase 1 architecture shell"
-		elseif phase == "LoadRetry" then
-			banner.Text = "Reconnecting to your nest..."
-		elseif phase == "Party" then
-			banner.Text = "Party forming"
-		elseif phase == "Round" then
-			banner.Text = "Round (skeleton)"
-		else
-			banner.Text = phase
-		end
-	end
-	refreshSession(deps.profile.session)
-	self._trove:add(deps.profile.sessionChanged:Connect(refreshSession))
-
 	local function refreshPrompt(mode)
 		local prompts = Tokens.prompts[mode]
-		prompt.Text = string.format("%s  Look around   %s  Interact", prompts.primary, prompts.interact)
+		prompt.Text = string.format("%s  Gather   %s  Interact", prompts.primary, prompts.interact)
 	end
 	refreshPrompt(deps.input:mode())
 	self._trove:add(deps.input.modeChanged:Connect(refreshPrompt))
@@ -161,6 +185,91 @@ function HUDController.new(deps: any): HUDController
 		self.toasts:push(payload.key, payload.tone)
 	end))
 	return self
+end
+
+-- Wires the round controller (called by bootstrap once it exists).
+function HUDController.bindRound(self: HUDController, round: any, interaction: any)
+	local deps = self._deps
+	self._trove:add(round.phaseChanged:Connect(function(phase)
+		local inRound = phase == "Cutscene"
+			or phase == "Countdown"
+			or phase == "Searching"
+			or phase == "EggRevealed"
+			or phase == "Victory"
+			or phase == "CommittingRewards"
+			or phase == "Results"
+		self.round:setVisible(inRound)
+		self._labels.reticle.Visible = phase == "Searching" or phase == "EggRevealed"
+		if inRound and not self._timerConnection then
+			self._timerConnection = RunService.RenderStepped:Connect(function()
+				self.round:setTimer(round:elapsedMs())
+				local remaining = round:countdownRemaining()
+				if remaining then
+					self:setObjective(string.format("Get ready... %d", math.ceil(remaining)), "The nest opens in a moment")
+				end
+			end)
+			self._trove:add(self._timerConnection)
+		elseif not inRound and self._timerConnection then
+			self._timerConnection:Disconnect()
+			self._timerConnection = nil
+		end
+		if phase == "Cutscene" then
+			self:setObjective("Sunlit Henhouse", "Story")
+		end
+	end))
+	self._trove:add(round.playerChanged:Connect(function(player)
+		local capacity = deps.config.bags.levels[player.bagLevel].capacity
+		self.round:setBag(player.carriedStandard + player.carriedRainbow, capacity, false, false)
+		self.round:setCash(player.cashCents, false)
+	end))
+	self._trove:add(round.sale:Connect(function(sale)
+		self.round:setBag(0, deps.config.bags.levels[(round.player and round.player.bagLevel) or 1].capacity, false, true)
+		deps.audio:play(Tokens.sound.sellArc)
+		self.round:setCash(sale.cashCents, true, function()
+			deps.audio:play(Tokens.sound.sellTick, { pitchVariance = 0.05 })
+		end)
+		if sale.finalCents >= 100 then
+			deps.audio:play(Tokens.sound.sellBurst)
+		end
+		self.toasts:push(
+			string.format("Traded %d feathers for %s", sale.standardCount + sale.rainbowCount, EconomyMath.formatCents(sale.finalCents)),
+			"success"
+		)
+	end))
+	self._trove:add(round.upgrade:Connect(function(result)
+		if result.paidCents then
+			self.round:setCash(result.cashCents, true)
+		end
+	end))
+	self._trove:add(interaction.openUpgrades:Connect(function()
+		self:openUpgrades(round)
+	end))
+end
+
+-- Called by HandController on each accepted hit for the bag squash.
+function HUDController.onCollected(self: HUDController, data: { [string]: any })
+	self.round:setBag(data.carried, data.capacity, data.infinite == true, true)
+end
+
+function HUDController.setObjective(self: HUDController, title: string, detail: string?)
+	self._labels.banner.Text = title
+	self._labels.detail.Text = detail or ""
+end
+
+function HUDController.openUpgrades(self: HUDController, round: any)
+	local deps = self._deps
+	return deps.modals:open("upgrades", deps.modals.Priority.Shop, true, function(container, api)
+		return UpgradeModal.build(container, api, {
+			net = deps.net,
+			round = round,
+			audio = deps.audio,
+			haptics = deps.haptics,
+			accessibility = deps.accessibility,
+			config = deps.config,
+			minimumTapTarget = SafeArea.minimumTapTarget(deps.modals.gui, deps.config),
+			toasts = self.toasts,
+		})
+	end, "Workbench")
 end
 
 -- Settings modal: four toggles + quality selector, each round-tripped through SettingsUpdate.

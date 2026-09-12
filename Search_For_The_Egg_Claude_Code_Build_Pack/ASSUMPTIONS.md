@@ -32,6 +32,7 @@ This file is the canonical register for decisions that were not directly visible
 | A-EGG-04 | Reveal and claim radii | 5 and 8 studs | Clear local discovery with server-side proximity validation. | `eggSpawn.revealRadiusStuds`, `claimRadiusStuds` |
 | A-EGG-05 | Claim hold | 0.65 seconds | Long enough to prevent accidental claims, short enough to feel responsive. | `eggSpawn.claimHoldSeconds` |
 | A-EGG-06 | One winner event | First valid server claim wins; party shares completion | Prevents duplicate completion and receipt races. | `eggSpawn.oneWinnerPerRound`, `partySharesWin` |
+| A-EGG-07 | Pile grid and density | 16x16 cells of 2.5 studs, 6 feathers per cell (+-25% surface variance), cover cells 2x density in a 1-cell radius | Gives a ~1,500-feather nest: a solo Hand player with the first grasp upgrade reaches the 20-65% reveal window in roughly 3-7 minutes including selling trips (measured in the Phase 2 Studio run; 12 per cell took ~14 minutes). Cover cells hold the Egg longer. Reveal requires the cover cells cleared AND the configured removal fraction (A-EGG-03). | `pile` |
 
 ## Economy and progression assumptions
 

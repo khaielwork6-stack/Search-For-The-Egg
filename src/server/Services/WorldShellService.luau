@@ -75,7 +75,7 @@ function WorldShellService.build(workspaceService: Workspace, spawnLocation: Spa
 	local pad = part("SpawnPad", Vector3.new(10, 0.4, 10), origin * CFrame.new(0, 1.2, -18), straw, Enum.Material.WoodPlanks, folder)
 	pad:SetAttribute("SFE_Ambient", "dustMote")
 	if spawnLocation then
-		spawnLocation.CFrame = origin * CFrame.new(0, 2, -18)
+		spawnLocation.CFrame = CFrame.lookAt((origin * CFrame.new(0, 2, -18)).Position, (origin * CFrame.new(0, 2, 22)).Position)
 		spawnLocation.Anchored = true
 	end
 
@@ -88,6 +88,16 @@ function WorldShellService.build(workspaceService: Workspace, spawnLocation: Spa
 	diorama.Transparency = 0.35
 	diorama:SetAttribute("SFE_Ambient", "portalShimmer")
 	label(lintel, "Sunlit Henhouse", Enum.NormalId.Front)
+	local portalPrompt = Instance.new("ProximityPrompt")
+	portalPrompt.Name = "SFE_Portal"
+	portalPrompt.ActionText = "Enter"
+	portalPrompt.ObjectText = "Sunlit Henhouse"
+	portalPrompt.HoldDuration = 0
+	portalPrompt.MaxActivationDistance = 12
+	portalPrompt.RequiresLineOfSight = false
+	portalPrompt.KeyboardKeyCode = Enum.KeyCode.E
+	portalPrompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+	portalPrompt.Parent = diorama
 	postL:SetAttribute("SFE_Ambient", "clothSway")
 	postR:SetAttribute("SFE_Ambient", "clothSway")
 

@@ -427,7 +427,7 @@ return function(describe, it, expect)
 			local h = harness()
 			local seen = {}
 			for _ = 1, cfg.eggSpawn.repeatProtectionRounds + 1 do
-				table.insert(seen, h.rounds:selectEggNode("chapter1"))
+				table.insert(seen, h.rounds:selectEggNode("chapter1").id)
 			end
 			for i = 1, cfg.eggSpawn.repeatProtectionRounds do
 				for j = i + 1, cfg.eggSpawn.repeatProtectionRounds + 1 do

@@ -133,6 +133,64 @@ function StudioDebug.install(container: any): any?
 		local released = container.playerData:onPlayerRemoving(double)
 		return { released = released, activeProfiles = container.profiles:activeCount(), sessions = container.sessions:count() }
 	end
+	-- Releases the live profile (final save + lock release) and loads it again through the real
+	-- ProfileStore: proves persistence through the store without restarting Play (Studio memory
+	-- store cannot survive a Play restart). Returns before/after snapshots of persistent fields.
+	function hooks.reloadProfile(userId: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return { error = "not_allowed" }
+		end
+		local profile = container.profiles:get(userId)
+		if not profile then
+			return { error = "no_profile" }
+		end
+		local function summarize(data)
+			return {
+				gems = data.currencies.gems,
+				totalWins = data.progression.totalWins,
+				chapter1Normal = data.progression.chapterWins.chapter1.normal,
+				bestMs = data.progression.bestTimeMs.chapter1.normal,
+				hardUnlocked = data.progression.unlockedDifficulties.chapter1.hard,
+				chapter2Unlocked = data.progression.unlockedChapters.chapter2,
+				eggsFound = data.stats.eggsFound,
+				tutorialCompleted = data.tutorial.completed,
+			}
+		end
+		local before = summarize(profile.data)
+		local released = container.profiles:releaseAsync(profile)
+		local record = container.profileDataStore.peek and container.profileDataStore:peek(container.profiles:keyFor(userId)) or nil
+		local reloaded = container.profiles:loadAsync(userId)
+		local after = reloaded.profile and summarize(reloaded.profile.data) or nil
+		return {
+			released = released,
+			lockClearedInStore = record ~= nil and record.lock == nil,
+			before = before,
+			after = after,
+			roundActive = container.rounds:roundOf(userId) ~= nil,
+		}
+	end
+	function hooks.round(userId: number)
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return { active = false }
+		end
+		local PileGrid = require(game:GetService("ReplicatedStorage").Shared.Domain.PileGrid)
+		return {
+			active = true,
+			phase = runtime.state.phase,
+			removedFraction = PileGrid.removedFraction(runtime.grid),
+			eggDepthFraction = runtime.eggDepthFraction,
+			eggCoverCleared = runtime.eggCoverCleared,
+			eggNode = runtime.eggNode.id,
+			player = container.rounds:projectPlayer(runtime.state.roundId, userId),
+			elapsedMs = container.rounds:project(runtime.state.roundId).elapsedMs,
+			collection = table.clone(container.collection.stats),
+			selling = table.clone(container.selling.stats),
+			upgrades = table.clone(container.upgrades.stats),
+			egg = table.clone(container.egg.stats),
+			victory = table.clone(container.victory.stats),
+		}
+	end
 	function hooks.flushAll()
 		return container.playerData:flushAll()
 	end

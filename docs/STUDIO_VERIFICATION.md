@@ -113,3 +113,110 @@ MCP bridge only drives Play Solo. To repeat the acceptance item manually:
 
 Screenshots were captured through the Studio MCP bridge and reviewed in-session; they are not stored in the
 repository.
+
+---
+
+# Phase 2 - Verification Evidence
+
+Environment as Phase 1 (Studio, Rojo 7.7.0 serve, MCP bridge, unpublished place -> `studio-memory` store).
+Build label `phase2-vertical-slice`. The Studio-only client harness (`PlayerScripts.SFE_ClientDebug`)
+drives the real controllers and remotes (`autoPlay`: walk with `Humanoid:MoveTo`, gather through
+`HandController:tryCollect`, trade through the crate prompt path, buy through `UpgradePurchase`, claim through
+the Egg prompt path). No debug grants were used at any point; every value below came from server responses.
+
+## Automated
+
+| Command | Result |
+|---|---|
+| `lune run lune/test` | `Tests: 207 passed, 0 failed, 0 skipped, 207 total` - exit 0 (14 spec modules) |
+| `lune run lune/check` | config valid (567 checks), CSV/JSON agree (74 rows), no hard-coded prices/IDs (94 files), stylua ok, selene ok - exit 0 |
+| `selene src tests lune` | 0 errors, 0 warnings |
+
+Required Phase 2 automated evidence mapping (`tests/Gameplay.spec.luau`, 22 cases):
+- Cell depletion cannot double-award under simultaneous requests -> "two hits on a one-feather cell award once".
+- Invalid phase/range/cooldown/capacity requests rejected -> "rejects invalid phase, stale token, cooldown,
+  out-of-range origin/aim, and wrong tool"; bag_full -> "fills the bag to capacity, and never exceeds it".
+- Bag never exceeds capacity -> same case (25 hits, `carried == 25`, next hit `bag_full`).
+- 25 standard feathers sell for exactly 25 cents and duplicate sale pays once -> "Selling".
+- Egg node valid, concealed until condition, reveals once -> "Egg" (cover cleared but depth not reached stays
+  concealed; second `checkReveal` returns false; `reveals == 1`); reveal from a real hit on the last cover cell.
+- 100 simultaneous claim attempts choose one finder -> "100 simultaneous claims choose one finder".
+- Base reward once per present member; finder bonus once -> "Victory" (3 members, finder 2; replay of
+  `commitRewards` grants nothing more).
+- Reward save retry, results replay, teleport failure do not duplicate or lose reward -> "save failure holds
+  the round in CommittingRewards and a later retry commits once"; "a member who left before commit is not
+  granted; teleport failure never duplicates".
+- Timer and personal best use server milliseconds -> "Timer and projections"; "personal best only improves".
+- Tutorial transitions valid and persist by version -> "Objectives" (strict order, resume, skip, version reset).
+
+## Studio - Protocol A (Play Solo, desktop 1608x772)
+
+Run 1 (12 feathers per cell) was stopped after ~50 s to retune density; run 2 (6 per cell) completed the
+whole journey; run 3 (same build + harness fixes) captured the reveal/claim/results screens. Values quoted
+are from the bridge responses.
+
+1. **Fresh profile.** Server projection at boot: `gems=0 wins=0 c1normal=0 hardUnlocked=false ch2=false
+   tutorialCompleted=false` (studio-memory store). Screenshot `ScreenCapture_P2_LobbyFacing`: spawn faces the
+   highlighted "Sunlit Henhouse" doorway (objective highlight), banner "Step onto the henhouse path".
+2. **Lobby -> party -> round.** Portal prompt path -> `PartyCreate` then `PartyStart`:
+   `{"ok":true,"data":{"phase":"Countdown","countdownRemaining":2.99,...}}`; 3 s later the round exists:
+   `sessionPhase=Round roundPhase=Cutscene camera=LockFirstPerson pileCells=256 objective=collect_25`
+   (`enter_party` completed server-side on round creation).
+3. **Cutscene / skip / countdown / timer.** Screenshot `ScreenCapture_P2_Cutscene` (vignette, story beat,
+   "Skip story" button, round strip). `RoundSkipVote` -> `{"ok":true,"data":{"votes":{...}}}`; banner
+   "Get ready... 3" during Countdown; Searching reached with `timer=00:00.78` then `00:02.28` 1.5 s later
+   (server `searchingStartedAtMs` extrapolated locally).
+4. **Collect 25 and sell for $0.25.** Harness log: `sold 25 for 25 cents` (first sale), HUD `Bag 0 / 25`,
+   cash `$0.25`, toast "Traded 25 feathers for $0.25"; objective advanced `collect_25 -> sell_first_bag ->
+   buy_first_upgrade -> search_for_egg`. Server after 50 s: `collection accepted=84 rejected=0`,
+   `selling sales=4 rejected=1` (one `out_of_range` when the harness stood too far from the crate, then retried).
+5. **Starter upgrade before/after.** Workbench preview `Grasp 1 per pull -> 2 per pull, Buy $0.25`;
+   `bought handGrasp -> level 1`; server `handLevels.grasp=1 upgradeCount=1`; later hits award 2.
+   Screenshot `ScreenCapture_P2_Workbench` (previews old -> new with config costs: Bag 25->50 $1.00,
+   Grasp 2->3 $1.00, Speed 12.5->14.5 $0.50, Hold off->0.32s $1.00; round cash shown).
+6. **Visible pile deformation.** Screenshots `ScreenCapture_P2_Pile_Early` (mounds, strands streaming to the
+   bag, cleared patch showing straw, puff VFX) and `ScreenCapture_P2_Pile_Mid` (half the nest cleared to the
+   base). Client `pileStats.dents=571 streamed=975` after 6 min; `pileInstances` fell 1024 -> 559 as cells
+   emptied (strands returned to the pool: `pilePooled=467`).
+7. **Egg reveal and claim.** Run 2: server `removedFraction` crossed `eggDepthFraction=0.376` at 3:40 while
+   `eggCoverCleared=false`; the reveal fired once the cover cells were cleared, the harness claimed
+   (`claimed=true`), client `victoryStats {reveals=1, victories=1, results=1}`. Run 3 (harness halted at the
+   reveal): server `phase=EggRevealed reveals=1 eggCoverCleared=true removedFraction=0.855` (node 23, depth
+   roll 0.344 passed at ~3:16, cover cleared at 9:48); client `objective=claim_or_complete_round`, banner
+   "Claim the Egg!", `audioState=Discovery`, Egg part with PointLight, `SFE_EggGlow` highlight, and the
+   hold prompt (`HoldDuration=0.65` from config) 2.9 studs away. Screenshot `ScreenCapture_P2_Reveal`.
+   Claim through the prompt path: `{"ok":true,"data":{"finderUserId":2588317770,"elapsedMs":618000}}`;
+   an immediate second claim: `{"ok":false,"message":"already_won","code":"invalid_state"}`
+   (server `egg claims=1 rejected=1`).
+8. **Winner / rewards / results / lobby return.** Run 3 screenshot `ScreenCapture_P2_Results`: "You found
+   the Egg - Sunlit Henhouse - normal", "Time 10:18.00 NEW BEST", contribution (1360 feathers, 216 patches,
+   $13.25 cash), "Party reward: 10 Gems" and "Finder bonus: 5 Gems" on separate rows, "Unlocked: Sunlit
+   Henhouse - Hard, Moonlit Cellar", "Search again" / "Back to the lobby". Client `phase=Results
+   modalsOpen=1 audio=Results gemsChip="Gems 15"`; server `victory commits=1`, projection
+   `gems=15 wins=1 bestMs=618000 hard=true ch2=true eggsFound=1`, store record `saveCount=3 gems=15`
+   (saved before the results projection was sent). After the 15 s auto-continue (run 2 and run 3):
+   `sessionPhase=Lobby`, `cameraMode=Classic`, HUD `Gems 15`, banner "Ready for another search", objective
+   `complete`, Egg part destroyed, `rounds=0`.
+   Server projection: `gems=15 (10 base + 5 finder) wins=1 c1normal=1 bestMs=401000 hardUnlocked=true
+   ch2=true eggsFound=1 roundsCompleted=1 feathers=1033 tutorialCompleted=true`; store record
+   `saveCount=2 gems=15` (saved before results); `committedTransactions=1`.
+9. **Replay, second and third wins, personal best.** Round 4 (same session, same profile) started with
+   `gems=15` persistent and round state reset (`cashCents=0 bagLevel=1 grasp=0`), finished in 3:15 through
+   the auto-claim harness: projection `gems=30 wins=2 bestMs=195000` (best improved from 618000),
+   `saveCount=4`. A Replay press 6 s after results was refused by the server minimum-display guard
+   (`{"code":"rate_limited","message":"results_minimum"}`) and auto-continue returned the party. Round 5
+   (node 21, depth 0.499) finished in 7:12; Replay pressed 4.5 s after results:
+   `{"ok":true,"data":{"action":"replay"}}` -> lobby (`sessionPhase=Party`, camera Classic, modal closed)
+   -> new round created automatically (`roundPhase=Cutscene`, `pileCells=256`, `cashCents=0`), `Gems 45`.
+10. **Persistence proof (in place of a Play restart).** `reloadProfile`: `released=true
+   lockClearedInStore=true`, before == after for gems/wins/best/unlocks/eggsFound/tutorial; a new round starts
+   with `cashCents=0 bagLevel=1 grasp=0` (round state resets; run 3 snapshot).
+11. **Output.** Zero errors across the runs. Roblox's own `AnalyticsService: LogCustomEvent event fired.`
+    line was printed per event in run 2 (real adapter); the bootstrap now uses the counting adapter in Studio.
+
+Session totals at the end of the final run (server status): `registry accepted=1889 rejected=12
+handlerErrors=0`, `securityRejections=0`, `profile saves=5 saveFailures=0`, analytics `sent=346
+sampledOut=1674 rejected=0` (feather_collected sampled at the configured 5%), final projection `gems=45
+wins=3 bestMs=195000 eggsFound=3 roundsCompleted=3 feathersCollected=3011`. The 12 registry rejections are
+harness misses (`out_of_range` when the character had not fully reached a nest-edge cell or the crate); the
+server authority refused them and the harness retried. No security-pipeline rejections occurred.

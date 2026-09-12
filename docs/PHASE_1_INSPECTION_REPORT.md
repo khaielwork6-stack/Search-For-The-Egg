@@ -63,3 +63,25 @@ docs/                        this report, IMPLEMENTATION_STATUS.md, STUDIO_VERIF
 - Studio: Rojo serve + plugin sync, Play Solo through the Studio MCP bridge, evidence via the Studio-only
   `ServerStorage.SFE_DebugInvoke` / `PlayerScripts.SFE_ClientDebug` bridges, screenshots, and Output capture.
   Full evidence in `docs/STUDIO_VERIFICATION.md`.
+
+---
+
+# Phase 2 addendum - inspection before the vertical slice
+
+Date: 12 September 2026. Inspected from the Phase 1 checkpoint `076e23d9f5dc6a8f5496023c33f2a18e83e37191`.
+
+- Git: clean tree apart from the user's untracked zip; 185 headless tests green; Rojo serve and the Studio
+  plugin still connected; Studio in Edit mode.
+- Conflicts: none new. `SYSTEM_CONFIG.json` had no pile density / grid values, so an ASSUMED `pile` block
+  was added (registered as A-EGG-07 in `ASSUMPTIONS.md`); no economy value in the CSV changed.
+- Dependencies used from Phase 1: config facade + validator, reducers (party/round/session/modal), remote
+  registry, profile store + transaction ledger, entitlement/teleport adapters, HUD/modal/audio/VFX/ambient
+  foundations, Studio debug bridges.
+- Phase 2 file plan (implemented): shared `Domain/PileGrid`, `Domain/EggNodes`, `Domain/Objectives`,
+  `Domain/ChapterLayout`; server `RoundService` runtime, `RoundModifiers`, `CollectionService`,
+  `SellingService`, `UpgradeService`, `EggService`, `VictoryService`, `ObjectiveService`,
+  `ChapterShellService`, bootstrap wiring; client `RoundController`, `PileVisualController`, `HandController`,
+  `InteractionController`, `ObjectiveController`, `VictoryController`, `RoundHud`, `UpgradeModal`,
+  `CutsceneOverlay`, HUD/ambient extensions; `tests/Gameplay.spec.luau`.
+- Verification route: headless suite + `lune run lune/check`; Studio Play Solo Protocol A driven by the
+  Studio-only client harness through the real controllers and remotes (see `docs/STUDIO_VERIFICATION.md`).

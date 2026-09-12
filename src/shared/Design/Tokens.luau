@@ -75,6 +75,18 @@ Tokens.sound = table.freeze({
 	uiToast = "ui.toast",
 	uiError = "ui.error",
 	rewardTick = "reward.tick",
+	collectTug = "collect.tug",
+	collectRelease = "collect.release",
+	bagFull = "collect.bagFull",
+	sellArc = "sell.arc",
+	sellTick = "sell.tick",
+	sellBurst = "sell.burst",
+	upgradeChord = "upgrade.chord",
+	eggChime = "egg.chime",
+	eggClaimHold = "egg.claimHold",
+	victoryStem = "victory.stem",
+	countdownTick = "round.countdownTick",
+	countdownGo = "round.countdownGo",
 })
 
 -- Input prompt glyph keys per input mode; prompts swap without rebuilding UI.

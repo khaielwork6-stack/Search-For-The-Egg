@@ -93,6 +93,7 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		request("PartyStart", Schema.object({ partyId = TOKEN }), uiRate, 1),
 		-- Tutorial / round actions (handlers land in Phase 2+; schemas exist now) --------------
 		request("TutorialAction", Schema.object({ step = Schema.id(), action = Schema.enum({ "complete", "skip" }) }), uiRate, 2),
+		request("RoundSkipVote", Schema.object({ sessionToken = TOKEN }), uiRate, 2),
 		request(
 			"CollectAction",
 			Schema.object({

@@ -83,6 +83,17 @@
       "assumption": "ASSUMED"
     }
   },
+  "pile": {
+    "gridWidth": 16,
+    "gridDepth": 16,
+    "cellSizeStuds": 2.5,
+    "baseFeathersPerCell": 6,
+    "surfaceVariance": 0.25,
+    "coverDepthMultiplier": 2.0,
+    "coverRadiusCells": 1,
+    "maxVisualHeightStuds": 3.5,
+    "assumption": "ASSUMED"
+  },
   "eggSpawn": {
     "spawnNodeCountTarget": 24,
     "selection": "weighted_without_immediate_repeat",

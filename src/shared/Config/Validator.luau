@@ -388,6 +388,32 @@ function Validator.validate(raw: any): Report
 		end
 	end
 
+	-- Pile (ASSUMED A-EGG-07)
+	check(type(raw.pile) == "table", "pile block missing")
+	if type(raw.pile) == "table" then
+		local pile = raw.pile
+		check(isPositiveNumber(pile.gridWidth) and pile.gridWidth % 1 == 0, "pile.gridWidth must be a positive integer")
+		check(isPositiveNumber(pile.gridDepth) and pile.gridDepth % 1 == 0, "pile.gridDepth must be a positive integer")
+		if type(raw.collection) == "table" and type(raw.collection.pileRepresentation) == "table" then
+			check(
+				pile.gridWidth * pile.gridDepth == raw.collection.pileRepresentation.serverGridCells,
+				"pile grid must contain collection.pileRepresentation.serverGridCells cells"
+			)
+		end
+		check(isPositiveNumber(pile.cellSizeStuds), "pile.cellSizeStuds must be > 0")
+		check(
+			isPositiveNumber(pile.baseFeathersPerCell) and pile.baseFeathersPerCell % 1 == 0,
+			"pile.baseFeathersPerCell must be a positive integer"
+		)
+		check(isNonNegativeNumber(pile.surfaceVariance) and pile.surfaceVariance < 1, "pile.surfaceVariance must be within [0,1)")
+		check(isPositiveNumber(pile.coverDepthMultiplier) and pile.coverDepthMultiplier >= 1, "pile.coverDepthMultiplier must be >= 1")
+		check(
+			isNonNegativeNumber(pile.coverRadiusCells) and pile.coverRadiusCells % 1 == 0,
+			"pile.coverRadiusCells must be a non-negative integer"
+		)
+		check(isPositiveNumber(pile.maxVisualHeightStuds), "pile.maxVisualHeightStuds must be > 0")
+	end
+
 	-- Egg spawn
 	check(type(raw.eggSpawn) == "table", "eggSpawn missing")
 	if type(raw.eggSpawn) == "table" then

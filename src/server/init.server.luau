@@ -1,7 +1,7 @@
 --!strict
 -- Server bootstrap for Search for the Egg. Composes adapters and services with explicit
 -- dependency injection, publishes the client config projection, builds remotes, wires Roblox
--- player events, autosave, and shutdown flush. Order matters and is documented inline.
+-- player events, the same-place round flow (Phase 2 vertical slice), autosave, and shutdown flush.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12,6 +12,9 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Clock = require(Shared.Clock)
 local WeightedRandom = require(Shared.WeightedRandom)
+local ChapterLayout = require(Shared.Domain.ChapterLayout)
+local Objectives = require(Shared.Domain.Objectives)
+local Envelope = require(Shared.Net.Envelope)
 
 local Log = require(script.Log)
 local ServerPolicy = require(script.ServerPolicy)
@@ -36,8 +39,14 @@ local PartyService = require(script.Services.PartyService)
 local RoundService = require(script.Services.RoundService)
 local PlayerDataService = require(script.Services.PlayerDataService)
 local WorldShellService = require(script.Services.WorldShellService)
+local ChapterShellService = require(script.Services.ChapterShellService)
+local CollectionService = require(script.Services.CollectionService)
+local SellingService = require(script.Services.SellingService)
+local UpgradeService = require(script.Services.UpgradeService)
+local EggService = require(script.Services.EggService)
+local VictoryService = require(script.Services.VictoryService)
+local ObjectiveService = require(script.Services.ObjectiveService)
 local StudioDebug = require(script.Debug.StudioDebug)
-local Envelope = require(Shared.Net.Envelope)
 
 local log = Log.new("Server")
 local bootStarted = os.clock()
@@ -65,7 +74,10 @@ local rng = WeightedRandom.fromFunction(function()
 end)
 local productMap = ProductMap.new(config, ProductIds)
 local security = SecurityService.new({ log = log, sampleRate = ServerPolicy.securityLogSampleRate })
-local analytics = AnalyticsService.new({ adapter = AnalyticsAdapter.real(Players), config = config, buildInfo = BuildInfo })
+-- Studio uses the counting adapter (Roblox AnalyticsService prints a line per event in Studio and
+-- would flood Output); published servers use the real adapter.
+local analyticsAdapter = if RunService:IsStudio() then AnalyticsAdapter.mock() else AnalyticsAdapter.real(Players)
+local analytics = AnalyticsService.new({ adapter = analyticsAdapter, config = config, buildInfo = BuildInfo })
 
 -- 3. Persistence. Studio without API access falls back to an in-memory store so Play Solo never
 --    touches live data by accident; the choice is logged and shown in the debug status.
@@ -127,7 +139,7 @@ local function send(player: any, name: string, payload: { [string]: any })
 	registry:fireClient(name, player, payload)
 end
 
--- 6. Sessions, parties, rounds.
+-- 6. Sessions, player data, parties, rounds, gameplay services.
 local sessions = SessionService.new({ idGen = idGen, clock = clock, log = log })
 local playerData = PlayerDataService.new({
 	profiles = profiles,
@@ -155,82 +167,383 @@ local parties = PartyService.new({
 local rounds =
 	RoundService.new({ config = config, clock = clock, idGen = idGen, rng = rng, sessions = sessions, analytics = analytics, log = log })
 
--- Same-place adapter: a local reservation becomes a round in this server.
+local function getCharacterPosition(userId: number): Vector3?
+	local player = playerData:playerOf(userId)
+	if not player or typeof(player) ~= "Instance" then
+		return nil
+	end
+	local character = (player :: Player).Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	return if root then (root :: BasePart).Position else nil
+end
+local function getProfileData(userId: number): any?
+	local profile = profiles:get(userId)
+	return profile and profile.data or nil
+end
+local collection = CollectionService.new({
+	config = config,
+	clock = clock,
+	rounds = rounds,
+	sessions = sessions,
+	getCharacterPosition = getCharacterPosition,
+	getProfileData = getProfileData,
+	analytics = analytics,
+})
+local selling = SellingService.new({
+	config = config,
+	rounds = rounds,
+	sessions = sessions,
+	getCharacterPosition = getCharacterPosition,
+	getProfileData = getProfileData,
+	analytics = analytics,
+})
+local upgrades = UpgradeService.new({
+	config = config,
+	rounds = rounds,
+	sessions = sessions,
+	getCharacterPosition = getCharacterPosition,
+	analytics = analytics,
+})
+local egg =
+	EggService.new({ config = config, rounds = rounds, clock = clock, getCharacterPosition = getCharacterPosition, analytics = analytics })
+local victory = VictoryService.new({
+	config = config,
+	clock = clock,
+	rounds = rounds,
+	getProfile = function(userId)
+		return profiles:get(userId)
+	end,
+	saveProfile = function(profile)
+		return profiles:saveAsync(profile)
+	end,
+	analytics = analytics,
+	log = log,
+})
+local objectives = ObjectiveService.new({
+	getProfile = function(userId)
+		return profiles:get(userId)
+	end,
+	analytics = analytics,
+})
+
+-- 7. World: lobby shell and the Chapter 1 arena (same place; see ChapterLayout).
+Players.CharacterAutoLoads = false
+WorldShellService.build(workspace, workspace:FindFirstChildOfClass("SpawnLocation"))
+local arena = ChapterShellService.build(workspace, config)
+
+local function placeCharacter(player: Player, position: Vector3, lookAt: Vector3?)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if root then
+		local target = lookAt or (position + Vector3.new(0, 0, 1));
+		(root :: BasePart).CFrame = CFrame.lookAt(position, Vector3.new(target.X, position.Y, target.Z))
+	end
+end
+
+local function memberPlayers(members: { number }): { Player }
+	local out = {}
+	for _, userId in ipairs(members) do
+		local player = playerData:playerOf(userId)
+		if player and typeof(player) == "Instance" then
+			table.insert(out, player :: Player)
+		end
+	end
+	return out
+end
+
+local function sendObjective(userId: number)
+	local player = playerData:playerOf(userId)
+	if not player then
+		return
+	end
+	local runtime = rounds:roundOf(userId)
+	local step = objectives:roundObjective(userId, runtime ~= nil and runtime.state.phase == "EggRevealed")
+	if runtime == nil and objectives:current(userId) == Objectives.COMPLETE then
+		step = Objectives.COMPLETE
+	end
+	send(player, "ObjectiveChanged", { step = step, inRound = runtime ~= nil })
+end
+
+local function pushPreviews(player: Player)
+	local runtime = rounds:roundOf(player.UserId)
+	if not runtime then
+		return
+	end
+	local state = runtime.players[player.UserId]
+	send(player, "UpgradeResult", {
+		previews = upgrades:previews(state),
+		cashCents = state.cashCents,
+		player = rounds:projectPlayer(runtime.state.roundId, player.UserId),
+	})
+end
+
+-- Party -> round hand-off (local adapter) or real teleport.
 parties.started:Connect(function(party, reservation)
 	if reservation.isLocal then
 		rounds:createForParty(party)
 		parties:finish(party.partyId, true)
 	else
-		local members = {}
-		for _, userId in ipairs(party.members) do
-			local player = playerData:playerOf(userId)
-			if player then
-				table.insert(members, player)
-			end
-		end
-		local ok = teleport:teleport(reservation, members, { reservation = reservation.code, party = party.partyId })
+		local ok = teleport:teleport(reservation, memberPlayers(party.members), { reservation = reservation.code, party = party.partyId })
 		parties:finish(party.partyId, ok)
 	end
 end)
-
--- Projections: push party/session changes to affected clients.
 parties.changed:Connect(function(party)
 	local projection = parties:project(party)
-	for _, userId in ipairs(party.members) do
-		local player = playerData:playerOf(userId)
-		if player then
-			send(player, "PartyProjection", projection)
-		end
+	for _, player in ipairs(memberPlayers(party.members)) do
+		send(player, "PartyProjection", projection)
 	end
 end)
-sessions.changed:Connect(function(userId, _state)
+sessions.changed:Connect(function(userId)
 	local player = playerData:playerOf(userId)
 	if player then
 		playerData:pushSession(player)
 	end
 end)
 
--- 7. Request handlers (Phase 1: party, settings). Every other message is registered by later
---    phases; until then the registry answers UNAVAILABLE after validation and rate limiting.
+-- Round created: move characters into the arena, send the full snapshot, objectives, previews.
+rounds.created:Connect(function(state)
+	local layout = ChapterLayout[state.chapter]
+	for _, player in ipairs(memberPlayers(state.members)) do
+		placeCharacter(player, layout.spawn, layout.nestCenter)
+		local snapshot = rounds:project(state.roundId, true) :: any
+		snapshot.player = rounds:projectPlayer(state.roundId, player.UserId)
+		send(player, "RoundSnapshot", snapshot)
+		objectives:complete(player.UserId, "enter_party")
+		sendObjective(player.UserId)
+		pushPreviews(player)
+	end
+end)
+
+-- Phase changes: lightweight snapshot (no pile) to every member; victory announcement.
+rounds.changed:Connect(function(state)
+	if state.phase == "Bootstrapping" then
+		return
+	end
+	local projection = rounds:project(state.roundId, false)
+	if not projection then
+		return
+	end
+	for _, player in ipairs(memberPlayers(state.members)) do
+		send(player, "RoundSnapshot", projection)
+	end
+	if state.phase == "Victory" and state.victory then
+		local finder = playerData:playerOf(state.victory.finderUserId)
+		local finderName = if finder and typeof(finder) == "Instance" then (finder :: Player).DisplayName else "A forager"
+		for _, player in ipairs(memberPlayers(state.members)) do
+			send(player, "VictoryStarted", {
+				finderUserId = state.victory.finderUserId,
+				finderName = finderName,
+				elapsedMs = state.victory.elapsedMs,
+				chapter = state.chapter,
+				difficulty = state.difficulty,
+			})
+		end
+	end
+end)
+
+rounds.deltaFlushed:Connect(function(roundId, delta)
+	local state = rounds:get(roundId)
+	if not state then
+		return
+	end
+	for _, player in ipairs(memberPlayers(state.members)) do
+		local payload = table.clone(delta)
+		payload.player = rounds:projectPlayer(roundId, player.UserId)
+		send(player, "RoundDelta", payload)
+	end
+end)
+
+collection.collected:Connect(function(userId, runtime)
+	if egg:checkReveal(runtime) then
+		return
+	end
+	if
+		objectives:current(userId) == "collect_25"
+		and runtime.players[userId].contribution.feathersCollected >= config.collection.startingBagCapacity
+	then
+		objectives:complete(userId, "collect_25")
+		sendObjective(userId)
+	end
+end)
+
+selling.sold:Connect(function(userId, runtime, sale)
+	local player = playerData:playerOf(userId)
+	if player then
+		local payload = table.clone(sale)
+		payload.player = rounds:projectPlayer(runtime.state.roundId, userId)
+		send(player, "SaleResult", payload)
+		pushPreviews(player :: Player)
+	end
+	if objectives:current(userId) == "sell_first_bag" then
+		objectives:complete(userId, "sell_first_bag")
+		sendObjective(userId)
+	end
+end)
+
+upgrades.purchased:Connect(function(userId, runtime, result)
+	local player = playerData:playerOf(userId)
+	if player then
+		local payload = table.clone(result)
+		payload.player = rounds:projectPlayer(runtime.state.roundId, userId)
+		send(player, "UpgradeResult", payload)
+		local character = (player :: Player).Character
+		if result.walkSpeed and character then
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			if humanoid then
+				humanoid.WalkSpeed = result.walkSpeed
+			end
+		end
+		pushPreviews(player :: Player)
+	end
+	if objectives:current(userId) == "buy_first_upgrade" then
+		objectives:complete(userId, "buy_first_upgrade")
+		sendObjective(userId)
+	end
+end)
+
+egg.revealed:Connect(function(runtime, position)
+	ChapterShellService.spawnEgg(arena, position, config)
+	for _, player in ipairs(memberPlayers(runtime.state.members)) do
+		send(player, "EggRevealed", {
+			x = position.X,
+			y = position.Y,
+			z = position.Z,
+			coverCells = table.clone(runtime.eggNode.coverIndexes),
+			roundId = runtime.state.roundId,
+		})
+		if objectives:current(player.UserId) == "search_for_egg" then
+			objectives:complete(player.UserId, "search_for_egg")
+		end
+		sendObjective(player.UserId)
+	end
+end)
+
+egg.claimed:Connect(function(runtime, userId)
+	if objectives:current(userId) == "claim_or_complete_round" then
+		objectives:complete(userId, "claim_or_complete_round")
+	end
+	victory:start(runtime.state.roundId)
+end)
+
+victory.committed:Connect(function(runtime, results)
+	for _, player in ipairs(memberPlayers(runtime.state.members)) do
+		local result = results[player.UserId]
+		if result then
+			send(player, "RewardsCommitted", { roundId = runtime.state.roundId, saved = result.saved })
+			local finder = playerData:playerOf(result.finderUserId)
+			local payload = table.clone(result)
+			payload.finderName = if finder and typeof(finder) == "Instance" then (finder :: Player).DisplayName else "A forager"
+			payload.roundId = runtime.state.roundId
+			send(player, "ResultsProjection", payload)
+			if objectives:current(player.UserId) == "claim_or_complete_round" then
+				objectives:complete(player.UserId, "claim_or_complete_round")
+			end
+			playerData:pushProjection(player, config)
+		end
+	end
+end)
+
+-- Round returned: characters back to the lobby, remove the Egg, refresh projections, replay.
+rounds.returned:Connect(function(state, runtime)
+	local eggPart = arena:FindFirstChild("SFE_Egg")
+	if eggPart then
+		eggPart:Destroy()
+	end
+	for _, player in ipairs(memberPlayers(state.members)) do
+		placeCharacter(player, ChapterLayout.lobby.spawn, ChapterLayout.lobby.portal)
+		send(player, "RoundSnapshot", {
+			roundId = state.roundId,
+			phase = "Returning",
+			members = {},
+			elapsedMs = 0,
+			joinClosed = true,
+			version = state.version,
+			serverNowMs = clock:nowMs(),
+		})
+		playerData:pushProjection(player, config)
+		sendObjective(player.UserId)
+		if runtime.returnVotes[player.UserId] == "replay" then
+			task.defer(function()
+				local party = parties:create(player.UserId, state.chapter, state.difficulty)
+				if party then
+					parties:start(player.UserId, party.partyId)
+				end
+			end)
+		end
+	end
+end)
+
+-- 8. Request handlers.
+local function fail(err: string?): Envelope.Envelope<any>
+	return Envelope.fail(Envelope.Codes.INVALID_STATE, err)
+end
 registry:onRequest("PartyCreate", function(player, payload)
 	local party, err = parties:create(player.UserId, payload.chapter, payload.difficulty)
-	if not party then
-		return Envelope.fail(Envelope.Codes.INVALID_STATE, err)
-	end
-	return Envelope.ok(parties:project(party))
+	return if party then Envelope.ok(parties:project(party)) else fail(err)
 end)
 registry:onRequest("PartyJoin", function(player, payload)
 	local party, err = parties:join(player.UserId, payload.partyId)
-	if not party then
-		return Envelope.fail(Envelope.Codes.INVALID_STATE, err)
-	end
-	return Envelope.ok(parties:project(party))
+	return if party then Envelope.ok(parties:project(party)) else fail(err)
 end)
 registry:onRequest("PartyLeave", function(player)
 	local party, err = parties:leave(player.UserId)
-	if not party then
-		return Envelope.fail(Envelope.Codes.INVALID_STATE, err)
-	end
-	return Envelope.ok(parties:project(party))
+	return if party then Envelope.ok(parties:project(party)) else fail(err)
 end)
 registry:onRequest("PartySetDestination", function(player, payload)
 	local party, err = parties:setDestination(player.UserId, payload.chapter, payload.difficulty)
-	if not party then
-		return Envelope.fail(Envelope.Codes.INVALID_STATE, err)
-	end
-	return Envelope.ok(parties:project(party))
+	return if party then Envelope.ok(parties:project(party)) else fail(err)
 end)
 registry:onRequest("PartyStart", function(player, payload)
 	local party, err = parties:start(player.UserId, payload.partyId)
-	if not party then
-		return Envelope.fail(Envelope.Codes.INVALID_STATE, err)
+	return if party then Envelope.ok(parties:project(party)) else fail(err)
+end)
+registry:onRequest("RoundSkipVote", function(player, payload)
+	local okToken, tokenErr = sessions:validate(player.UserId, payload.sessionToken, "Round")
+	if not okToken then
+		return Envelope.fail(Envelope.Codes.STALE_TOKEN, tokenErr)
 	end
-	return Envelope.ok(parties:project(party))
+	local runtime = rounds:roundOf(player.UserId)
+	if not runtime then
+		return fail("no_round")
+	end
+	local state, err = rounds:voteSkip(runtime.state.roundId, player.UserId)
+	return if state then Envelope.ok({ votes = state.skipVotes }) else fail(err)
+end)
+registry:onRequest("CollectAction", function(player, payload)
+	return collection:collect(player.UserId, payload)
+end)
+registry:onRequest("SellRequest", function(player, payload)
+	return selling:sell(player.UserId, payload.sessionToken)
+end)
+registry:onRequest("UpgradePurchase", function(player, payload)
+	return upgrades:purchase(player.UserId, payload.sessionToken, payload.upgradeId, payload.expectedLevel)
+end)
+registry:onRequest("EggClaim", function(player, payload)
+	return egg:claim(player.UserId, payload.sessionToken)
+end)
+registry:onRequest("ResultsAction", function(player, payload)
+	local runtime = rounds:roundOf(player.UserId)
+	if not runtime then
+		return fail("no_round")
+	end
+	if runtime.resultsShownAt and (clock:monotonic() - runtime.resultsShownAt) < config.round.resultScreenMinimumSeconds then
+		return Envelope.fail(Envelope.Codes.RATE_LIMITED, "results_minimum")
+	end
+	local ok, err = rounds:resultsAction(runtime.state.roundId, player.UserId, payload.action)
+	return if ok then Envelope.ok({ action = payload.action }) else fail(err)
+end)
+registry:onRequest("TutorialAction", function(player, payload)
+	if payload.action == "skip" then
+		objectives:skip(player.UserId)
+		sendObjective(player.UserId)
+		return Envelope.ok({ step = Objectives.COMPLETE })
+	end
+	return fail("unsupported")
 end)
 registry:onRequest("SettingsUpdate", function(player, payload)
 	local profile = playerData:getProfile(player.UserId)
 	if not profile or not profile:isActive() then
-		return Envelope.fail(Envelope.Codes.INVALID_STATE)
+		return fail()
 	end
 	profile:update(function(data)
 		for key, value in pairs(payload) do
@@ -241,25 +554,77 @@ registry:onRequest("SettingsUpdate", function(player, payload)
 	return Envelope.ok({ settings = table.clone(profile.data.settings) })
 end)
 
--- 8. World shell (labeled placeholders) and player lifecycle wiring.
-Players.CharacterAutoLoads = false
-WorldShellService.build(workspace, workspace:FindFirstChildOfClass("SpawnLocation"))
+-- 9. Player lifecycle wiring.
+local function onCharacterAdded(player: Player, character: Model)
+	task.wait(0.1)
+	local runtime = rounds:roundOf(player.UserId)
+	if runtime then
+		local layout = ChapterLayout[runtime.state.chapter]
+		placeCharacter(player, layout.spawn, layout.nestCenter)
+		local snapshot = rounds:project(runtime.state.roundId, true) :: any
+		snapshot.player = rounds:projectPlayer(runtime.state.roundId, player.UserId)
+		send(player, "RoundSnapshot", snapshot)
+		local state = runtime.players[player.UserId]
+		local speed = state and config.handUpgrades.speed[state.handLevels.speed + 1]
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if humanoid and speed then
+			humanoid.WalkSpeed = speed.walkSpeed
+		end
+	else
+		placeCharacter(player, ChapterLayout.lobby.spawn, ChapterLayout.lobby.portal)
+	end
+	local humanoid = character:WaitForChild("Humanoid", 5) :: Humanoid?
+	if humanoid then
+		humanoid.Died:Connect(function()
+			analytics:track("player_died", { inRound = rounds:roundOf(player.UserId) ~= nil }, player.UserId)
+			-- Death preserves bag/cash/tools (ASSUMED A-RND-07); respawn after the configured delay.
+			task.delay(config.death.respawnSeconds, function()
+				if player.Parent then
+					player:LoadCharacter()
+				end
+			end)
+		end)
+	end
+end
+
+local function onPlayerLoaded(player: Player)
+	objectives:load(player.UserId)
+	sendObjective(player.UserId)
+	player.CharacterAdded:Connect(function(character)
+		onCharacterAdded(player, character)
+	end)
+	if player.Character then
+		task.spawn(onCharacterAdded, player, player.Character)
+	end
+end
 
 Players.PlayerAdded:Connect(function(player)
-	playerData:onPlayerAdded(player, config)
+	if playerData:onPlayerAdded(player, config) == "loaded" then
+		onPlayerLoaded(player)
+	end
 end)
 for _, player in ipairs(Players:GetPlayers()) do
 	task.spawn(function()
-		playerData:onPlayerAdded(player, config)
+		if playerData:onPlayerAdded(player, config) == "loaded" then
+			onPlayerLoaded(player)
+		end
 	end)
 end
 Players.PlayerRemoving:Connect(function(player)
+	local runtime = rounds:roundOf(player.UserId)
+	if runtime then
+		rounds:setPresent(runtime.state.roundId, player.UserId, false)
+	end
+	if parties:partyOf(player.UserId) then
+		parties:leave(player.UserId)
+	end
 	playerData:onPlayerRemoving(player)
+	objectives:forget(player.UserId)
 	core:forgetPlayer(player.UserId)
 	security:forget(player.UserId)
 end)
 
--- 9. Autosave with jitter, service ticks, and rate-limiter sweeps.
+-- 10. Loops: autosave with jitter, service ticks, delta replication, rate-limiter sweeps.
 task.spawn(function()
 	while true do
 		task.wait(ServerPolicy.autosaveMinSeconds + math.random() * (ServerPolicy.autosaveMaxSeconds - ServerPolicy.autosaveMinSeconds))
@@ -274,6 +639,14 @@ task.spawn(function()
 		task.wait(0.25)
 		parties:tick()
 		rounds:tick()
+		victory:tick()
+	end
+end)
+task.spawn(function()
+	local interval = 1 / config.collection.pileRepresentation.replicationHz
+	while true do
+		task.wait(interval)
+		rounds:flushDeltas()
 	end
 end)
 task.spawn(function()
@@ -283,13 +656,13 @@ task.spawn(function()
 	end
 end)
 
--- 10. Shutdown flush within Roblox's budget.
+-- 11. Shutdown flush within Roblox's budget.
 game:BindToClose(function()
 	local result = playerData:flushAll()
 	log:info("shutdown_flush", result)
 end)
 
--- 11. Studio-only debug hooks.
+-- 12. Studio-only debug hooks.
 local container = {
 	config = config,
 	buildInfo = BuildInfo,
@@ -305,6 +678,14 @@ local container = {
 	playerData = playerData,
 	dataStoreKind = dataStoreKind,
 	profileDataStore = profileDataStore,
+	collection = collection,
+	selling = selling,
+	upgrades = upgrades,
+	egg = egg,
+	victory = victory,
+	objectives = objectives,
+	arena = arena,
+	placeCharacter = placeCharacter,
 }
 local debugHooks = StudioDebug.install(container)
 
