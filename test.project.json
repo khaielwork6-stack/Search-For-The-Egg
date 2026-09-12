@@ -1,0 +1,24 @@
+{
+  "name": "SearchForTheEggTest",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "Shared": { "$path": "src/shared" }
+    },
+    "ServerScriptService": {
+      "Server": { "$path": "src/server" }
+    },
+    "ServerStorage": {
+      "SFE": {
+        "$className": "Folder",
+        "SystemConfig": { "$path": "Search_For_The_Egg_Claude_Code_Build_Pack/SYSTEM_CONFIG.json" }
+      },
+      "Tests": { "$path": "tests" }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": { "$path": "src/client" }
+      }
+    }
+  }
+}

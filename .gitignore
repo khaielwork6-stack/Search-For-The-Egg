@@ -1,0 +1,14 @@
+# Project place file
+/Search For The Egg.rbxlx
+
+# Roblox Studio lock files
+/*.rbxlx.lock
+/*.rbxl.lock
+
+sourcemap.json
+
+# Build outputs from the headless test harness
+/build/
+
+# Rokit tool cache
+/.rokit/

@@ -1,0 +1,16 @@
+# Selene std definition for Lune scripts (lune/*.luau) layered over the Roblox std.
+---
+base: lua51
+globals:
+  require:
+    args:
+      - type: string
+  task:
+    any: true
+  print:
+    any: true
+  warn:
+    any: true
+  typeof:
+    args:
+      - type: any
