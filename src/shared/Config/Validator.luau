@@ -414,6 +414,24 @@ function Validator.validate(raw: any): Report
 		check(isPositiveNumber(pile.maxVisualHeightStuds), "pile.maxVisualHeightStuds must be > 0")
 	end
 
+	-- Phase 3 ASSUMED tool mechanics (A-TOOL-01..03)
+	if type(raw.tools) == "table" then
+		local charge = raw.tools.confettiCharge
+		if type(charge) == "table" then
+			check(isPositiveNumber(charge.throwDistanceStuds), "tools.confettiCharge.throwDistanceStuds must be > 0")
+			check(isNonNegativeNumber(charge.cooldownSeconds), "tools.confettiCharge.cooldownSeconds must be >= 0")
+			check(isPositiveNumber(charge.miniChargeFuseSeconds), "tools.confettiCharge.miniChargeFuseSeconds must be > 0")
+		end
+		local chick = raw.tools.scoutChick
+		if type(chick) == "table" then
+			check(isPositiveNumber(chick.collectIntervalSeconds), "tools.scoutChick.collectIntervalSeconds must be > 0")
+			check(isNonNegativeNumber(chick.depositSeconds), "tools.scoutChick.depositSeconds must be >= 0")
+		end
+	end
+	if type(raw.collection) == "table" then
+		check(isPositiveNumber(raw.collection.overflowBundleSeconds), "collection.overflowBundleSeconds must be > 0")
+	end
+
 	-- Egg spawn
 	check(type(raw.eggSpawn) == "table", "eggSpawn missing")
 	if type(raw.eggSpawn) == "table" then

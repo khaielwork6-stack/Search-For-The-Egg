@@ -267,6 +267,145 @@ function StudioDebug.install(container: any): any?
 		return trace
 	end
 
+	-- Phase 3 verification hooks. Every grant is labelled DEBUG in the server log and never touches a
+	-- remote; they exist so the acceptance evidence can inject funds and entitlements deterministically.
+	local function debugLog(label: string, props: { [string]: any })
+		if container.log then
+			container.log:warn("DEBUG_" .. label, props)
+		else
+			warn("[SFE][DEBUG_" .. label .. "]", game:GetService("HttpService"):JSONEncode(props))
+		end
+	end
+
+	function hooks.debugGrantCash(userId: number, cents: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local runtime = container.rounds:roundOf(userId)
+		local state = runtime and runtime.players[userId]
+		if not state then
+			return { error = "no_round" }
+		end
+		cents = math.floor(tonumber(cents) or 0)
+		local before = state.cashCents
+		state.cashCents = math.max(0, state.cashCents + cents)
+		debugLog("GRANT_CASH", { userId = userId, cents = cents, before = before, after = state.cashCents })
+		local player = container.playerData:playerOf(userId)
+		if player and container.pushPreviews then
+			container.pushPreviews(player)
+		end
+		return { before = before, after = state.cashCents }
+	end
+
+	function hooks.debugGrantGems(userId: number, gems: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local profile = container.profiles:get(userId)
+		if not profile or not profile:isActive() then
+			return { error = "no_profile" }
+		end
+		gems = math.floor(tonumber(gems) or 0)
+		local before = profile.data.currencies.gems
+		profile:update(function(data)
+			data.currencies.gems = math.max(0, data.currencies.gems + gems)
+		end)
+		debugLog("GRANT_GEMS", { userId = userId, gems = gems, before = before, after = profile.data.currencies.gems })
+		local player = container.playerData:playerOf(userId)
+		if player then
+			container.playerData:pushProjection(player, container.config)
+		end
+		return { before = before, after = profile.data.currencies.gems }
+	end
+
+	-- Debug class selection (server-owned profile mutation; the Gem roll is Phase 4).
+	function hooks.setClasses(userId: number, classIdsCsv: string)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local profile = container.profiles:get(userId)
+		if not profile or not profile:isActive() then
+			return { error = "no_profile" }
+		end
+		local ids = {}
+		for id in string.gmatch(tostring(classIdsCsv or ""), "[%w_]+") do
+			if container.config.classes.weights[id] == nil and id ~= "newcomer" then
+				return { error = "unknown_class", id = id }
+			end
+			table.insert(ids, id)
+		end
+		profile:update(function(data)
+			for _, id in ipairs(ids) do
+				data.classes.owned[id] = true
+			end
+			data.classes.equipped = ids
+		end)
+		debugLog("SET_CLASSES", { userId = userId, classes = ids })
+		return { equipped = table.clone(profile.data.classes.equipped) }
+	end
+
+	-- Mock entitlement adapter: overrides pass ownership for one user until the server restarts.
+	function hooks.setEntitlement(userId: number, key: string, owned: boolean)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		container.debugEntitlements[userId] = container.debugEntitlements[userId] or {}
+		container.debugEntitlements[userId][key] = owned == true or owned == "true"
+		debugLog("SET_ENTITLEMENT", { userId = userId, key = key, owned = container.debugEntitlements[userId][key] })
+		return table.clone(container.debugEntitlements[userId])
+	end
+
+	function hooks.grantWins(userId: number, wins: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local profile = container.profiles:get(userId)
+		if not profile or not profile:isActive() then
+			return { error = "no_profile" }
+		end
+		wins = math.floor(tonumber(wins) or 0)
+		profile:update(function(data)
+			data.progression.totalWins = (data.progression.totalWins or 0) + wins
+			data.progression.chapterWins.chapter1.normal = (data.progression.chapterWins.chapter1.normal or 0) + wins
+		end)
+		debugLog("GRANT_WINS", { userId = userId, wins = wins, total = profile.data.progression.totalWins })
+		return { wins = profile.data.progression.totalWins, progression = container.playerData:getProgression(userId) }
+	end
+
+	-- One-round tool grant (the same interface a Phase 5 receipt uses).
+	function hooks.grantTool(userId: number, toolId: string)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local ok = container.tools:grantOneRound(userId, toolId, "debug")
+		debugLog("GRANT_TOOL", { userId = userId, toolId = toolId, ok = ok })
+		local player = container.playerData:playerOf(userId)
+		if ok and player and container.pushPreviews then
+			container.pushPreviews(player)
+		end
+		return { ok = ok }
+	end
+
+	function hooks.tools(userId: number)
+		local snapshot = container.tools:inspect(userId)
+		if snapshot then
+			local runtime = container.rounds:roundOf(userId)
+			snapshot.previews = container.upgrades:previews(runtime.players[userId], runtime, userId)
+			snapshot.cashCents = runtime.players[userId].cashCents
+			snapshot.carried = runtime.players[userId].carriedStandard + runtime.players[userId].carriedRainbow
+			snapshot.removedFraction = container.rounds:project(runtime.state.roundId).removedFraction
+		end
+		return snapshot
+	end
+
+	function hooks.pileRemaining(userId: number)
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return nil
+		end
+		return { removed = runtime.grid.removed, total = runtime.grid.total, fraction = runtime.grid.removed / runtime.grid.total }
+	end
+
 	-- selene: allow(global_usage)
 	shared.SFE_Debug = hooks
 

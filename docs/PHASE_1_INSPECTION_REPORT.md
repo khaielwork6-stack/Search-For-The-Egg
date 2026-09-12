@@ -85,3 +85,24 @@ Date: 12 September 2026. Inspected from the Phase 1 checkpoint `076e23d9f5dc6a8f
   `CutsceneOverlay`, HUD/ambient extensions; `tests/Gameplay.spec.luau`.
 - Verification route: headless suite + `lune run lune/check`; Studio Play Solo Protocol A driven by the
   Studio-only client harness through the real controllers and remotes (see `docs/STUDIO_VERIFICATION.md`).
+
+# Phase 3 addendum - inspection before progression and tools
+
+Date: 12 September 2026. Inspected from the Phase 2 checkpoint `db1b463873533049761cfb2d5fec7583c580b6ab`.
+
+- Git: clean tree apart from the user's untracked zip; 207 headless tests green; Rojo serve and the Studio
+  plugin connected; Studio in Edit mode.
+- Conflicts: none new. `SYSTEM_CONFIG.json` had no charge throw distance / cooldown / mini-charge fuse, no
+  chick peck interval / deposit time, and no overflow-bundle lifetime, so ASSUMED values were added and
+  registered as A-TOOL-01..03 in `ASSUMPTIONS.md`; no economy value in the CSV changed. The `UpgradePurchase`
+  id validator only allowed word characters, so it now accepts the structured ids (`nestRake.sweep`,
+  `tool:scoutChick`).
+- Dependencies used from Phase 2: round runtime + pile grid, collection validation order, upgrade previews,
+  selling math, resolver, entitlement service, Studio bridges, client round/pile/HUD/modal foundations.
+- Phase 3 file plan (implemented): shared `Domain/ToolSpecs`, `PileGrid` area helpers, `NetSchema`
+  additions; server `Services/ToolService`, `Services/RoundAwards`, generalized `CollectionService`,
+  `UpgradeService` tool paths + acquisition, `RoundService` tool state, `StudioDebug` grant hooks, bootstrap
+  wiring; client `ToolController` (replaces `HandController`), `ToolVisualController`, `UI/ToolHotbar`,
+  grouped `UpgradeModal`; `tests/Tools.spec.luau` + `tests/Helpers/GameplayHarness.luau`.
+- Verification route: headless suite + `lune run lune/check`; Studio Play Solo on desktop and the iPhone 17
+  Pro preset with labelled debug funds through the secured hooks (see `docs/STUDIO_VERIFICATION.md`).

@@ -14,6 +14,7 @@ local SafeArea = require(script.Parent.Parent.UI.SafeArea)
 local Button = require(script.Parent.Parent.UI.Components.Button)
 local Toast = require(script.Parent.Parent.UI.Components.Toast)
 local RoundHud = require(script.Parent.Parent.UI.RoundHud)
+local ToolHotbar = require(script.Parent.Parent.UI.ToolHotbar)
 local UpgradeModal = require(script.Parent.Parent.UI.UpgradeModal)
 
 local HUDController = {}
@@ -24,8 +25,10 @@ export type HUDController = typeof(setmetatable(
 		gui: ScreenGui,
 		toasts: any,
 		round: any,
+		hotbar: any,
 		_deps: any,
 		_labels: { [string]: any },
+		_infiniteBag: boolean?,
 		_timerConnection: RBXScriptConnection?,
 		_trove: Trove.Trove,
 	},
@@ -69,7 +72,7 @@ function HUDController.new(deps: any): HUDController
 	local _, scaleCleanup = SafeArea.applyScale(gui, deps.config)
 
 	local self = setmetatable(
-		{ gui = gui, toasts = nil, round = nil, _deps = deps, _labels = {}, _timerConnection = nil, _trove = Trove.new() },
+		{ gui = gui, toasts = nil, round = nil, hotbar = nil, _deps = deps, _labels = {}, _timerConnection = nil, _trove = Trove.new() },
 		HUDController
 	)
 	self._trove:add(gui)
@@ -162,6 +165,13 @@ function HUDController.new(deps: any): HUDController
 		return deps.accessibility:motionSettings()
 	end)
 	self._trove:add(self.round)
+	self.hotbar = ToolHotbar.new(gui, deps.config, function()
+		return deps.accessibility:motionSettings()
+	end, minimumTap, deps.input:mode())
+	self._trove:add(self.hotbar)
+	self._trove:add(deps.input.modeChanged:Connect(function(mode)
+		self.hotbar:setMode(mode)
+	end))
 
 	-- Bindings.
 	local function refreshProfile(projection)
@@ -218,8 +228,12 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 		end
 	end))
 	self._trove:add(round.playerChanged:Connect(function(player)
-		local capacity = deps.config.bags.levels[player.bagLevel].capacity
-		self.round:setBag(player.carriedStandard + player.carriedRainbow, capacity, false, false)
+		-- Capacity comes from the server projection (entitlements + class + level); config level is the fallback.
+		local capacity = player.bagCapacity or deps.config.bags.levels[player.bagLevel].capacity
+		if player.bagInfinite ~= nil then
+			self._infiniteBag = player.bagInfinite == true
+		end
+		self.round:setBag(player.carriedStandard + player.carriedRainbow, capacity, self._infiniteBag == true, false)
 		self.round:setCash(player.cashCents, false)
 	end))
 	self._trove:add(round.sale:Connect(function(sale)
@@ -246,8 +260,9 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 	end))
 end
 
--- Called by HandController on each accepted hit for the bag squash.
+-- Called by ToolController on each accepted award for the bag squash.
 function HUDController.onCollected(self: HUDController, data: { [string]: any })
+	self._infiniteBag = data.infinite == true
 	self.round:setBag(data.carried, data.capacity, data.infinite == true, true)
 end
 
@@ -268,6 +283,7 @@ function HUDController.openUpgrades(self: HUDController, round: any)
 			config = deps.config,
 			minimumTapTarget = SafeArea.minimumTapTarget(deps.modals.gui, deps.config),
 			toasts = self.toasts,
+			profile = deps.profile,
 		})
 	end, "Workbench")
 end

@@ -12,6 +12,7 @@ local SessionReducer = require(Shared.Reducers.SessionReducer)
 local WeightedRandom = require(Shared.WeightedRandom)
 local PileGrid = require(Shared.Domain.PileGrid)
 local EggNodes = require(Shared.Domain.EggNodes)
+local ToolSpecs = require(Shared.Domain.ToolSpecs)
 local Signal = require(Shared.Util.Signal)
 
 local RoundService = {}
@@ -34,6 +35,9 @@ export type PlayerState = {
 	saleCount: number,
 	upgradeCount: number,
 	lastSale: any?,
+	equippedTool: string,
+	toolRuntime: { [string]: any }, -- per-tool live state owned by ToolService (vac heat, charges, chick)
+	permanentTools: { [string]: boolean },
 }
 
 export type Runtime = {
@@ -149,13 +153,16 @@ local function newPlayerState(userId: number, roundId: string, nowMs: number): P
 		bagLevel = 1,
 		handLevels = { grasp = 0, speed = 0, hold = 0 },
 		roundTools = { hand = true },
-		toolLevels = {},
+		toolLevels = ToolSpecs.defaultLevels(),
 		contribution = { cellsRemoved = 0, feathersCollected = 0 },
 		alive = true,
 		cooldownUntil = 0,
 		saleCount = 0,
 		upgradeCount = 0,
 		lastSale = nil,
+		equippedTool = "hand",
+		toolRuntime = {},
+		permanentTools = {},
 	}
 end
 
@@ -188,6 +195,8 @@ function RoundService.createForParty(
 		players = {},
 		pendingDelta = {},
 		results = {},
+		bundles = {},
+		charges = {},
 		commitPending = false,
 		rewardsCommitted = false,
 		resultsShownAt = nil,
@@ -211,6 +220,11 @@ end
 
 function RoundService.runtime(self: RoundService, roundId: string): Runtime?
 	return self._rounds[roundId]
+end
+
+-- Live runtimes keyed by round id (read-only iteration for tick-driven services).
+function RoundService.all(self: RoundService): { [string]: Runtime }
+	return self._rounds
 end
 
 function RoundService.roundOf(self: RoundService, userId: number): Runtime?
@@ -472,8 +486,52 @@ function RoundService.project(self: RoundService, roundId: string, includePile: 
 	projection.removedFraction = PileGrid.removedFraction(runtime.grid)
 	if includePile then
 		projection.pile = PileGrid.snapshot(runtime.grid)
+		local bundles = {}
+		for _, bundle in pairs(runtime.bundles) do
+			table.insert(bundles, {
+				bundleId = bundle.id,
+				x = bundle.position.X,
+				y = bundle.position.Y,
+				z = bundle.position.Z,
+				standard = bundle.standard,
+				rainbow = bundle.rainbow,
+			})
+		end
+		projection.bundles = bundles
+		local charges = {}
+		for _, charge in pairs(runtime.charges) do
+			table.insert(charges, {
+				chargeId = charge.id,
+				userId = charge.userId,
+				x = charge.position.X,
+				y = charge.position.Y,
+				z = charge.position.Z,
+				radius = charge.radiusStuds,
+				fuseMs = math.max(0, math.floor((charge.explodeAt - self._clock:monotonic()) * 1000)),
+				mini = charge.mini,
+			})
+		end
+		projection.charges = charges
 	end
 	return projection
+end
+
+-- Shallow, scalar-only copy of per-tool live state (heat, overheated, running, active unit count).
+local function sanitizeToolRuntime(toolRuntime: { [string]: any }): { [string]: any }
+	local out = {}
+	for toolId, rt in pairs(toolRuntime) do
+		local copy = {}
+		for key, value in pairs(rt) do
+			local t = type(value)
+			if t == "number" or t == "boolean" or t == "string" then
+				copy[key] = value
+			elseif key == "units" then
+				copy.unitCount = #value
+			end
+		end
+		out[toolId] = copy
+	end
+	return out
 end
 
 -- Per-player round projection for the owning client (bag, cash, levels, contribution).
@@ -489,9 +547,13 @@ function RoundService.projectPlayer(self: RoundService, roundId: string, userId:
 		bagLevel = state.bagLevel,
 		handLevels = table.clone(state.handLevels),
 		roundTools = table.clone(state.roundTools),
+		toolLevels = state.toolLevels,
+		equippedTool = state.equippedTool,
+		permanentTools = table.clone(state.permanentTools),
 		contribution = table.clone(state.contribution),
 		saleCount = state.saleCount,
 		upgradeCount = state.upgradeCount,
+		toolRuntime = sanitizeToolRuntime(state.toolRuntime),
 	}
 end
 

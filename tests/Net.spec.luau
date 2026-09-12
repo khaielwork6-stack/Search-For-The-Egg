@@ -209,6 +209,17 @@ return function(describe, it, expect)
 			end
 		end)
 
+		it("UpgradePurchase accepts structured tool upgrade ids and rejects free text", function()
+			local def = registry.byName.UpgradePurchase
+			local token = "tok-12345678"
+			for _, id in ipairs({ "bag", "handGrasp", "nestRake.sweep", "confettiCharge.luckyBlast", "tool:scoutChick" }) do
+				expect(Schema.validate(def.payload, { sessionToken = token, upgradeId = id, expectedLevel = 0 }).ok).toBe(true)
+			end
+			for _, id in ipairs({ "", "tool:nest rake", "nestRake/sweep", string.rep("a", 49) }) do
+				expect(Schema.validate(def.payload, { sessionToken = token, upgradeId = id, expectedLevel = 0 }).ok).toBe(false)
+			end
+		end)
+
 		it("every client request has a direction, schema, bounds, and rate from config", function()
 			for _, def in ipairs(registry.list) do
 				if def.direction == "clientToServer" then

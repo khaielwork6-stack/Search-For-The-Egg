@@ -145,4 +145,86 @@ function PileGrid.snapshot(grid: Grid): { [string]: any }
 	}
 end
 
+-- Non-empty cells within `radius` cells of (x, z), nearest first (ties by index). Used by area tools.
+function PileGrid.cellsWithin(grid: Grid, x: number, z: number, radius: number): { Cell }
+	local out: { Cell } = {}
+	local distances: { [number]: number } = {}
+	for dz = -radius, radius do
+		for dx = -radius, radius do
+			local cell = PileGrid.get(grid, x + dx, z + dz)
+			if cell and cell.remaining > 0 then
+				table.insert(out, cell)
+				distances[cell.index] = dx * dx + dz * dz
+			end
+		end
+	end
+	table.sort(out, function(a, b)
+		if distances[a.index] == distances[b.index] then
+			return a.index < b.index
+		end
+		return distances[a.index] < distances[b.index]
+	end)
+	return out
+end
+
+-- Non-empty cells whose centre lies within `radiusStuds` of the local point, nearest first.
+function PileGrid.cellsWithinStuds(grid: Grid, localX: number, localZ: number, radiusStuds: number): { Cell }
+	local out: { Cell } = {}
+	local distances: { [number]: number } = {}
+	local r2 = radiusStuds * radiusStuds
+	for _, cell in ipairs(grid.cells) do
+		if cell.remaining > 0 then
+			local cx, cz = PileGrid.cellCenter(grid, cell)
+			local d2 = (cx - localX) ^ 2 + (cz - localZ) ^ 2
+			if d2 <= r2 then
+				table.insert(out, cell)
+				distances[cell.index] = d2
+			end
+		end
+	end
+	table.sort(out, function(a, b)
+		if distances[a.index] == distances[b.index] then
+			return a.index < b.index
+		end
+		return distances[a.index] < distances[b.index]
+	end)
+	return out
+end
+
+-- Removes up to `amount` feathers spread round-robin across `cells` (one per cell per pass), so a
+-- sweep touches each eligible cell at most once per pass and never exceeds the total. Returns the
+-- per-cell removals (only cells that lost feathers) and the total removed.
+function PileGrid.removeSpread(grid: Grid, cells: { Cell }, amount: number): ({ Removal }, number)
+	assert(amount >= 0 and amount % 1 == 0, "amount must be a non-negative integer")
+	local taken: { [number]: number } = {}
+	local remainingAmount = amount
+	local progress = true
+	while remainingAmount > 0 and progress do
+		progress = false
+		for _, cell in ipairs(cells) do
+			if remainingAmount <= 0 then
+				break
+			end
+			if cell.remaining > 0 then
+				cell.remaining -= 1
+				grid.removed += 1
+				taken[cell.index] = (taken[cell.index] or 0) + 1
+				remainingAmount -= 1
+				progress = true
+			end
+		end
+	end
+	local removals: { Removal } = {}
+	local total = 0
+	for _, cell in ipairs(cells) do
+		local removed = taken[cell.index]
+		if removed then
+			grid.version += 1
+			table.insert(removals, { index = cell.index, remaining = cell.remaining, removed = removed })
+			total += removed
+		end
+	end
+	return removals, total
+end
+
 return PileGrid

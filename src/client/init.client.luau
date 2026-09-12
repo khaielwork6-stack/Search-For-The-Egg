@@ -26,7 +26,8 @@ local HUDController = require(Controllers.HUDController)
 local LobbyShellController = require(Controllers.LobbyShellController)
 local RoundController = require(Controllers.RoundController)
 local PileVisualController = require(Controllers.PileVisualController)
-local HandController = require(Controllers.HandController)
+local ToolController = require(Controllers.ToolController)
+local ToolVisualController = require(Controllers.ToolVisualController)
 local InteractionController = require(Controllers.InteractionController)
 local ObjectiveController = require(Controllers.ObjectiveController)
 local VictoryController = require(Controllers.VictoryController)
@@ -73,7 +74,16 @@ local round = trove:add(
 local pile = trove:add(
 	PileVisualController.new({ round = round, quality = quality, accessibility = accessibility, vfx = vfx, audio = audio, config = config })
 )
-local hand = trove:add(HandController.new({
+local toolVisuals = trove:add(ToolVisualController.new({
+	net = net,
+	round = round,
+	vfx = vfx,
+	audio = audio,
+	accessibility = accessibility,
+	quality = quality,
+	config = config,
+}))
+local tools = trove:add(ToolController.new({
 	net = net,
 	round = round,
 	input = input,
@@ -83,8 +93,11 @@ local hand = trove:add(HandController.new({
 	haptics = haptics,
 	camera = camera,
 	accessibility = accessibility,
+	hud = hud,
+	visuals = toolVisuals,
 	config = config,
 }))
+local hand = tools -- Phase 2 automation helpers keep working through the tool controller
 local interaction =
 	trove:add(InteractionController.new({ net = net, round = round, audio = audio, haptics = haptics, hud = hud, config = config }))
 local objectives = trove:add(ObjectiveController.new({ net = net, hud = hud, round = round }))
@@ -144,6 +157,8 @@ local container = {
 	round = round,
 	pile = pile,
 	hand = hand,
+	tools = tools,
+	toolVisuals = toolVisuals,
 	interaction = interaction,
 	objectives = objectives,
 	victory = victory,
@@ -196,6 +211,10 @@ if RunService:IsStudio() then
 			snap.pilePooled = pile:pooledCount()
 			snap.pileStats = pile.stats
 			snap.handStats = hand.stats
+			snap.tools = tools:status()
+			snap.toolVisuals = toolVisuals:counts()
+			snap.toolVisualInstances = toolVisuals:instanceCount()
+			snap.hotbarOwned = hud.hotbar:ownedCount()
 			snap.objective = objectives.step
 			snap.victoryStats = victory.stats
 			snap.cameraMode = tostring(player.CameraMode)
@@ -497,6 +516,99 @@ if RunService:IsStudio() then
 		end,
 		closeModal = function(id)
 			return modals:close(id)
+		end,
+		-- Phase 3 tool helpers: every call goes through the same controller/remotes a player uses.
+		equip = function(toolId)
+			return { ok = tools:equip(toolId), equipped = tools:equipped() }
+		end,
+		toolBegin = function(x, y, z)
+			local aim = if x then Vector3.new(tonumber(x) or 0, tonumber(y) or 0, tonumber(z) or 0) else nil
+			return tools:beginAction(aim)
+		end,
+		toolEnd = function()
+			return tools:endAction()
+		end,
+		toolStatus = function()
+			local status = tools:status()
+			status.visuals = toolVisuals:counts()
+			return status
+		end,
+		gather = function(bundleId)
+			return tools:gather(bundleId)
+		end,
+		pressPrimary = function(seconds)
+			input:touchBegin("Primary")
+			task.wait(tonumber(seconds) or 0.2)
+			input:touchEnd("Primary")
+			return tools:status()
+		end,
+		-- Discrete-tool cadence harness: attempts a collect every `stepSeconds` for `seconds`, auto-aiming at
+		-- the nearest feathered cell within range, and records accepted timestamps, yields, and server codes.
+		sweepTest = function(seconds, stepSeconds)
+			local ChapterLayout = require(Shared.Domain.ChapterLayout)
+			local layout = ChapterLayout.chapter1
+			local report = { attempts = 0, accepted = 0, awarded = 0, removed = 0, codes = {}, timestamps = {}, cells = {} }
+			local function aimTarget(): Vector3?
+				local character = player.Character
+				local root = character and character:FindFirstChild("HumanoidRootPart")
+				if not root or not round.pile then
+					return nil
+				end
+				local origin = (root :: BasePart).Position
+				local best, bestDistance = nil, math.huge
+				for index, remaining in pairs(pile:remainingByIndex()) do
+					if remaining > 0 then
+						local x = (index - 1) % round.pile.width
+						local z = math.floor((index - 1) / round.pile.width)
+						local world =
+							ChapterLayout.cellWorldPosition(layout, round.pile.width, round.pile.depth, round.pile.cellSize, x, z, 0)
+						local flat = Vector3.new(world.X - origin.X, 0, world.Z - origin.Z).Magnitude
+						if flat < bestDistance and flat <= config.interaction.defaultRangeStuds - 1 then
+							best, bestDistance = world, flat
+						end
+					end
+				end
+				return best and Vector3.new(best.X, layout.nestBaseY + config.pile.maxVisualHeightStuds * 0.5, best.Z) or nil
+			end
+			local acceptedConn = tools.collected:Connect(function(data)
+				report.accepted += 1
+				report.awarded += data.awarded or 0
+				report.removed += data.removed or data.awarded or 0
+				report.cells[#report.cells + 1] = data.cells and #data.cells or 1
+				table.insert(report.timestamps, os.clock())
+			end)
+			local rejectedConn = tools.rejected:Connect(function(result)
+				local key = tostring(result.message or result.code)
+				report.codes[key] = (report.codes[key] or 0) + 1
+			end)
+			local started = os.clock()
+			while os.clock() - started < (tonumber(seconds) or 10) do
+				local aim = aimTarget()
+				if aim then
+					report.attempts += 1
+					tools:tryCollect(aim)
+				else
+					report.codes.no_target_in_range = (report.codes.no_target_in_range or 0) + 1
+				end
+				task.wait(tonumber(stepSeconds) or 0.05)
+			end
+			acceptedConn:Disconnect()
+			rejectedConn:Disconnect()
+			local intervals = {}
+			for i = 2, #report.timestamps do
+				table.insert(intervals, report.timestamps[i] - report.timestamps[i - 1])
+			end
+			table.sort(intervals)
+			local sum = 0
+			for _, v in ipairs(intervals) do
+				sum += v
+			end
+			report.timestamps = nil
+			report.minInterval = intervals[1]
+			report.medianInterval = intervals[math.ceil(#intervals / 2)]
+			report.meanInterval = if #intervals > 0 then sum / #intervals else nil
+			report.equipped = tools:equipped()
+			return report
 		end,
 	}
 	bridge.OnInvoke = function(name: string, ...)

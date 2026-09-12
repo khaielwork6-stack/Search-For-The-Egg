@@ -22,6 +22,7 @@ return table.freeze({
 
 	entitlementCacheSeconds = 120,
 	rateLimiterSweepSeconds = 120,
+	toolTickSeconds = 0.1, -- Charge fuses, Vac suction/heat, Scout Chick trips, bundle expiry
 	rateLimiterIdleSeconds = 300,
 	securityLogSampleRate = 0.1,
 

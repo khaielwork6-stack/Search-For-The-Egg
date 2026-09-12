@@ -220,3 +220,124 @@ sampledOut=1674 rejected=0` (feather_collected sampled at the configured 5%), fi
 wins=3 bestMs=195000 eggsFound=3 roundsCompleted=3 feathersCollected=3011`. The 12 registry rejections are
 harness misses (`out_of_range` when the character had not fully reached a nest-edge cell or the crate); the
 server authority refused them and the harness retried. No security-pipeline rejections occurred.
+
+# Phase 3 - Verification Evidence
+
+Environment as Phase 2 (Studio Play Solo, MCP bridge, unpublished place -> `studio-memory` store), build
+label `phase3-progression-tools`. Debug funds and mock entitlements came only from the secured server hooks
+(`SFE_DebugInvoke`: `debugGrantCash`, `debugGrantGems`, `setEntitlement`), each one printed as a labelled
+`DEBUG_*` warning in Output. Every purchase, equip, action and pickup went through the real remotes from the
+client harness (`SFE_ClientDebug`: `buy`, `equip`, `toolBegin`, `toolEnd`, `sweepTest`, `sell`, `moveTo`).
+Studio user id `2588317770`.
+
+Rojo note: `rojo serve` was restarted mid-phase and the Studio plugin dropped its connection. The last edits
+(network schema, spec, bootstrap, three client controllers) were pushed into the open place by source patches
+whose fingerprints (byte hash + length) were compared against the files on disk after each push - all matched
+- and the in-Studio suite was re-run on the patched build (see Automated).
+
+## Automated
+
+| Command | Result |
+|---|---|
+| `lune run lune/test` | `Tests: 225 passed, 0 failed, 0 skipped, 225 total` - exit 0 (15 spec modules) |
+| `lune run lune/check` | config valid (576 checks), CSV/JSON agree (74 rows), no hard-coded prices/IDs (99 files), stylua ok, selene ok - exit 0 |
+| In-Studio `runTests` (patched build, phone session) | `Tests: 225 passed, 0 failed, 0 skipped, 225 total (0.12s)` |
+
+Required Phase 3 automated evidence mapping (`tests/Tools.spec.luau`, 17 cases):
+- Every path purchasable to max with injected funds matching the JSON -> "acquires every tool and buys every
+  path to max" (each level funded with exactly `dollarsToCents(nextCash)`, cash ends at 0, previews maxed).
+- Stale / max / insufficient / duplicate / invalid tool / wrong phase never debit -> "stale level, max,
+  insufficient funds, duplicate acquisition, invalid ids, and wrong phase never debit".
+- Rake removes eligible cells once, discount and yield applied once -> "sweeps a 3x3 neighbourhood once per
+  action" and "Rake Expert discounts Rake path costs once and boosts Rake yield once".
+- Charge validates throw/fuse/radius, server RNG, no duplicate awards -> "validates throws, honours the fuse
+  and radius, rolls rainbow on the server, and never double-awards"; mini-charges only from the class ->
+  "Blast Artist mini-charges come only from the resolved class modifier".
+- Vac blocked while overheated, config cooling/runtime -> "pulls continuously ... overheats at runtime, and
+  cools for coolingSeconds"; cleanup -> "stops on death, on equip change, and when the bag fills".
+- Chick cleanup on round end/death/disconnect, never awards others -> "runs server-owned trips ... pays only
+  its owner in exact cents" and "cleans up on death, disconnect, and round end".
+- One-round grants reset next round, mock permanent grants max upgrades -> "one-round grants vanish next
+  round; mock permanent entitlements grant max upgrades every round" (also Infinite Bag through the resolver).
+- Overflow policy exact -> "overflow policy: the bag is clamped and the remainder becomes a short-lived world
+  bundle" (awarded 5, bundle 7, gather after selling, expiry at `overflowBundleSeconds`).
+- Integer cents drift-free -> cents asserted integral in the chick, purchase and stress cases.
+- Four-player stress within acceptance, no unbounded tasks -> "four players running every tool for a
+  simulated minute" (600 ticks under 3 s wall, charges and chick units bounded, pile bookkeeping exact).
+- Normal/Hard through config -> "Hard difficulty modifiers flow from config through the resolver".
+
+## Studio - desktop (Play Solo, 1608x772)
+
+1. **Funds.** `DEBUG_GRANT_CASH {before=0 after=72749}`, `DEBUG_GRANT_GEMS {before=0 after=40}` (72749 cents =
+   the sum of every acquisition and path cost in `SYSTEM_CONFIG`).
+2. **Purchase every path to max through `UpgradePurchase`.** 51 accepted purchases (4 acquisitions + 47 path
+   levels), each `paidCents` equal to the JSON cost (e.g. `nestRake.sweep 100/200/400/800`, `featherVac.power
+   600/1400/3200/7000`, `tool:featherVac 6999`, `tool:scoutChick 40 Gems`), 12 "maxed" refusals with no debit,
+   cash `72749 -> 0` exactly, profile Gems `40 -> 0`, HUD `Gems 0`. Server `toolLevels` all at the JSON
+   maxima; `upgrades purchases=47 acquisitions=4`. The purchase rate limit (3/s from config) throttled a
+   first, unpaced loop with `rate_limited` and no debit. Screenshot `P3_workbench_maxed` (rows grouped per
+   tool, "MAXED" / "OWNED" states).
+3. **Nest Rake (max paths, mock Infinite Bag).** `sweepTest` from the nest centre: 23 sweeps in 16 s,
+   508 feathers, cadence min/median/mean `0.650 / 0.663 / 0.665 s` against the configured hold interval
+   0.62 s (network round trip on top); an earlier edge run gave 8 sweeps at `0.657-0.665 s` before the
+   neighbourhood ran dry (`no_feathers`).
+4. **Confetti Charge (max, then base).** 20 throws total, 20 explosions, 20 immediate re-throws refused
+   (`cooldown`), one live charge at a time. Fuse measured client-side from the accepted throw to the visual
+   burst: max paths `1.42-1.47 s` (config 1.40), base `2.53-2.61 s` (config 2.50). Max-power throws removed
+   115 each; 36 of 230 feathers came back rainbow (15.7% against the 16% Lucky Blast max). Two max blasts
+   pushed the removed fraction past the Egg depth, the round left `Searching`, and further throws were refused
+   with `phase` - the Egg was then claimed through the prompt path (`elapsedMs=263000`) and Replay started
+   round 2.
+5. **Round reset vs permanent grant.** `DEBUG_SET_ENTITLEMENT {key=nestRakePermanent owned=true}` before
+   Replay; round 2 started with `roundTools={hand,nestRake}`, `permanentTools={nestRake}`, Rake levels
+   `sweep=4 cooldown=4 hold=3`, Charge/Vac/Chick levels 0 and not owned, cash `$0.00`, equipped `hand`,
+   hotbar 2 slots. Screenshot `P3_workbench_acquire` (Rake rows "PERMANENT", other tools "Buy $25.00" /
+   "Buy $69.99" / "Buy 40 Gems").
+6. **Feather Vac (base).** `toolBegin` -> `{perSecond=8, runtimeSeconds=8, coolingSeconds=20}`; heat sampled
+   every second `0.94, 1.98, 3.01, 3.95, 4.89, 6.04, 7.09, 8.00`; overheated at `8.06 s`, 63 feathers pulled
+   (7.8/s), retry refused `overheated`. Server `overheatedAt=44021.02`, next accepted start `44042.64`
+   (20 s cooling plus the client reacting to the `ready` event). Release stops suction with heat retained
+   (`wasRunning=true heat=1.47`). Screenshot `P3_vac_running` (heat bar full, "Overheated", toasts).
+7. **Scout Chick (base) + concurrent Charge.** Deploy `{moveSpeed=12.5, grasp=1, capacity=10}`; server trace
+   over 22 s: `Collecting load 2..10 -> ToSeller -> Depositing -> ToPile`, trips `7 -> 8 -> 9`, owner cash
+   `70 -> 80 -> 90` cents (10 feathers x 1 cent per trip) while 10 charges were thrown and exploded on top;
+   21 trips by the end of the session. Screenshot `P3_charge_chick` (hotbar "Out foraging", `$0.20`).
+8. **Overflow bundle (normal 25 bag).** `DEBUG_SET_ENTITLEMENT {infiniteBag false}`; one Rake sweep on a fresh
+   corner: `removed=27 awarded=25 overflow=2 bag=25/25 bundles=1`, later sweeps `bag_full`, the walk-over
+   gather refused while full; after selling 25 for 25 cents the walk-over gather took exactly 2 (`gathers=1`,
+   bundle removed, bag `2 / 25`); server `bundlesGathered=1`.
+9. **Death cleanup.** With the Vac running (heat 1.55) and the Chick out: `Humanoid.Health = 0` -> server
+   `vac.running=false`, `chick.active=false units=[]`; after respawn `phase=Searching`, 5 tools still owned,
+   equipped tool restored, bag `14 / 25` and cash preserved (A-RND-07).
+10. **Input.** Hotbar slot `Slot_nestRake` (96x64 px) clicked through the GUI -> `equipped=nestRake`; a
+    virtual `Five` key press equipped the Scout Chick before Studio refused a core-bound key.
+11. **Stress scene (single client: Chick out, Charge in flight, Vac pulling, then Rake).** Client `40 fps`,
+    worst frame `28 ms`, workspace `698 parts (20 unanchored)`, `3 enabled emitters`, `1046 descendants`,
+    tool visual instances 6, VFX `402 emitted 0 dropped`, `2080 MB` Studio memory; server `158 Hz` heartbeat,
+    `handlerErrors=0`, `securityRejections=0`. The 22 rejected remotes in the 8 s window were the walk-over
+    gather retrying against a full bag; that client loop now skips a full bag (fix verified in the phone
+    session: `rejected=0`).
+12. **Output.** No errors across the session; only the labelled `DEBUG_*` warnings, autosaves, and the known
+    `GuiService.SelectedObject` notice on modal close.
+
+## Studio - iPhone 17 Pro preset (874x402, viewport 750x361)
+
+Client `layoutClass=phone inputMode=touch qualityTier=low`. In-Studio suite 225/225 on the patched build.
+Purchases of the three tools through the touch-scaled workbench; every visible TextButton at least 44 px
+(`Buy 113x44`, `Done 419x44`, `Close 44x44`, hotbar slots `82x55`). Screenshot `P3_phone_workbench`
+(grouped rows fit the safe area). Chick deployed and Vac started on the nest: `heat=2.98 running=true`
+then the Vac stopped itself at `Bag 25 / 25`; screenshot `P3_phone_hud_vac` (hotbar with "Out foraging" /
+"Ready", ember bag meter, touch prompts). Server `registry rejected=0 handlerErrors=0`. Device simulator reset
+to default afterwards.
+
+## Screenshot index (Phase 3)
+
+| Id | Content |
+|---|---|
+| P3_lobby | Lobby at boot with the Phase 3 build |
+| P3_workbench_maxed | Workbench, every tool owned and every path maxed |
+| P3_workbench_acquire | Round 2: permanent Rake rows, acquisition rows with config prices |
+| P3_vac_running | Feather Vac overheated: heat bar, hotbar status, toasts |
+| P3_charge_chick | Charge viewmodel, Chick "Out foraging", chick cash |
+| P3_phone_workbench | iPhone 17 Pro workbench |
+| P3_phone_hud_vac | iPhone 17 Pro HUD with hotbar during Vac/Chick |

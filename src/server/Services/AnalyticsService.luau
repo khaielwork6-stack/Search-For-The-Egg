@@ -32,6 +32,8 @@ AnalyticsService.ENUM_STRING_KEYS = table.freeze({
 	reason = true,
 	phase = true,
 	buildLabel = true,
+	source = true, -- acquisition source: softCash | softGems | permanent | class | receipt | debug
+	action = true, -- tool action: throw | explode | sweep | start | stop | deploy | recall
 })
 
 local MAX_ENUM_LENGTH = 48

@@ -15,6 +15,7 @@ local WeightedRandom = require(Shared.WeightedRandom)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local Objectives = require(Shared.Domain.Objectives)
 local Envelope = require(Shared.Net.Envelope)
+local RoundReducer = require(Shared.Reducers.RoundReducer)
 
 local Log = require(script.Log)
 local ServerPolicy = require(script.ServerPolicy)
@@ -43,6 +44,7 @@ local ChapterShellService = require(script.Services.ChapterShellService)
 local CollectionService = require(script.Services.CollectionService)
 local SellingService = require(script.Services.SellingService)
 local UpgradeService = require(script.Services.UpgradeService)
+local ToolService = require(script.Services.ToolService)
 local EggService = require(script.Services.EggService)
 local VictoryService = require(script.Services.VictoryService)
 local ObjectiveService = require(script.Services.ObjectiveService)
@@ -180,13 +182,28 @@ local function getProfileData(userId: number): any?
 	local profile = profiles:get(userId)
 	return profile and profile.data or nil
 end
+-- Verified entitlements (Roblox ownership through the adapter) merged with Studio-only debug overrides
+-- (the mock entitlement adapter for Phase 3 verification; never active outside Studio/allowlist).
+local debugEntitlements: { [number]: { [string]: boolean } } = {}
+local function getEntitlements(userId: number): { [string]: boolean }
+	local snapshot = entitlements:snapshot(userId)
+	local overrides = debugEntitlements[userId]
+	if overrides then
+		for key, value in pairs(overrides) do
+			snapshot[key] = value
+		end
+	end
+	return snapshot
+end
 local collection = CollectionService.new({
 	config = config,
 	clock = clock,
 	rounds = rounds,
 	sessions = sessions,
+	idGen = idGen,
 	getCharacterPosition = getCharacterPosition,
 	getProfileData = getProfileData,
+	getEntitlements = getEntitlements,
 	analytics = analytics,
 })
 local selling = SellingService.new({
@@ -202,7 +219,25 @@ local upgrades = UpgradeService.new({
 	rounds = rounds,
 	sessions = sessions,
 	getCharacterPosition = getCharacterPosition,
+	getProfileData = getProfileData,
+	getProfile = function(userId)
+		return profiles:get(userId)
+	end,
+	getEntitlements = getEntitlements,
 	analytics = analytics,
+})
+local tools = ToolService.new({
+	config = config,
+	clock = clock,
+	rounds = rounds,
+	sessions = sessions,
+	collection = collection,
+	rng = rng,
+	idGen = idGen,
+	getCharacterPosition = getCharacterPosition,
+	getEntitlements = getEntitlements,
+	analytics = analytics,
+	log = log,
 })
 local egg =
 	EggService.new({ config = config, rounds = rounds, clock = clock, getCharacterPosition = getCharacterPosition, analytics = analytics })
@@ -264,6 +299,18 @@ local function sendObjective(userId: number)
 	send(player, "ObjectiveChanged", { step = step, inRound = runtime ~= nil })
 end
 
+-- Player projection plus the resolved bag capacity (entitlements + class + level) for the HUD.
+local function projectPlayerFor(roundId: string, userId: number): { [string]: any }?
+	local projection = rounds:projectPlayer(roundId, userId)
+	local runtime = rounds:runtime(roundId)
+	if projection and runtime and runtime.players[userId] then
+		local capacity = collection:bagCapacity(runtime, userId)
+		projection.bagCapacity = capacity.capacity
+		projection.bagInfinite = capacity.infinite
+	end
+	return projection
+end
+
 local function pushPreviews(player: Player)
 	local runtime = rounds:roundOf(player.UserId)
 	if not runtime then
@@ -271,9 +318,9 @@ local function pushPreviews(player: Player)
 	end
 	local state = runtime.players[player.UserId]
 	send(player, "UpgradeResult", {
-		previews = upgrades:previews(state),
+		previews = upgrades:previews(state, runtime, player.UserId),
 		cashCents = state.cashCents,
-		player = rounds:projectPlayer(runtime.state.roundId, player.UserId),
+		player = projectPlayerFor(runtime.state.roundId, player.UserId),
 	})
 end
 
@@ -301,12 +348,14 @@ sessions.changed:Connect(function(userId)
 end)
 
 -- Round created: move characters into the arena, send the full snapshot, objectives, previews.
-rounds.created:Connect(function(state)
+rounds.created:Connect(function(state, runtime)
+	-- Starting grants (permanent entitlements at max levels, class Scout Chick) before the first snapshot.
+	tools:grantStartingTools(runtime)
 	local layout = ChapterLayout[state.chapter]
 	for _, player in ipairs(memberPlayers(state.members)) do
 		placeCharacter(player, layout.spawn, layout.nestCenter)
 		local snapshot = rounds:project(state.roundId, true) :: any
-		snapshot.player = rounds:projectPlayer(state.roundId, player.UserId)
+		snapshot.player = projectPlayerFor(state.roundId, player.UserId)
 		send(player, "RoundSnapshot", snapshot)
 		objectives:complete(player.UserId, "enter_party")
 		sendObjective(player.UserId)
@@ -318,6 +367,10 @@ end)
 rounds.changed:Connect(function(state)
 	if state.phase == "Bootstrapping" then
 		return
+	end
+	local runtime = rounds:runtime(state.roundId)
+	if runtime and not RoundReducer.acceptsGameplay(state) then
+		tools:onRoundEnded(runtime) -- live charges, vac heat, chick units, bundles end with gameplay
 	end
 	local projection = rounds:project(state.roundId, false)
 	if not projection then
@@ -348,12 +401,12 @@ rounds.deltaFlushed:Connect(function(roundId, delta)
 	end
 	for _, player in ipairs(memberPlayers(state.members)) do
 		local payload = table.clone(delta)
-		payload.player = rounds:projectPlayer(roundId, player.UserId)
+		payload.player = projectPlayerFor(roundId, player.UserId)
 		send(player, "RoundDelta", payload)
 	end
 end)
 
-collection.collected:Connect(function(userId, runtime)
+local function onFeathersAwarded(userId: number, runtime: any)
 	if egg:checkReveal(runtime) then
 		return
 	end
@@ -364,13 +417,54 @@ collection.collected:Connect(function(userId, runtime)
 		objectives:complete(userId, "collect_25")
 		sendObjective(userId)
 	end
+end
+collection.collected:Connect(onFeathersAwarded)
+tools.awarded:Connect(onFeathersAwarded)
+
+-- Tool / bundle events: broadcast to the round (or one member when targeted).
+local function broadcastToolEvent(roundId: string, payload: { [string]: any }, targetUserId: number?)
+	local state = rounds:get(roundId)
+	if not state then
+		return
+	end
+	if targetUserId then
+		local player = playerData:playerOf(targetUserId)
+		if player then
+			send(player, "ToolEvent", payload)
+		end
+		return
+	end
+	for _, player in ipairs(memberPlayers(state.members)) do
+		send(player, "ToolEvent", payload)
+	end
+end
+tools.event:Connect(broadcastToolEvent)
+collection.event:Connect(broadcastToolEvent)
+tools.deposited:Connect(function(userId, _runtime, sale)
+	local player = playerData:playerOf(userId)
+	if player then
+		send(
+			player,
+			"ToolEvent",
+			{ kind = "chick_deposit", userId = userId, cents = sale.finalCents, feathers = sale.feathers, cashCents = sale.cashCents }
+		)
+		pushPreviews(player :: Player)
+	end
+end)
+upgrades.acquired:Connect(function(userId, runtime, toolId)
+	broadcastToolEvent(runtime.state.roundId, { kind = "tools_granted", tools = { toolId }, userId = userId })
+	-- Gem-priced acquisitions change the profile: refresh the client projection (currency chips).
+	local player = playerData:playerOf(userId)
+	if player and typeof(player) == "Instance" then
+		playerData:pushProjection(player, config)
+	end
 end)
 
 selling.sold:Connect(function(userId, runtime, sale)
 	local player = playerData:playerOf(userId)
 	if player then
 		local payload = table.clone(sale)
-		payload.player = rounds:projectPlayer(runtime.state.roundId, userId)
+		payload.player = projectPlayerFor(runtime.state.roundId, userId)
 		send(player, "SaleResult", payload)
 		pushPreviews(player :: Player)
 	end
@@ -384,7 +478,7 @@ upgrades.purchased:Connect(function(userId, runtime, result)
 	local player = playerData:playerOf(userId)
 	if player then
 		local payload = table.clone(result)
-		payload.player = rounds:projectPlayer(runtime.state.roundId, userId)
+		payload.player = projectPlayerFor(runtime.state.roundId, userId)
 		send(player, "UpgradeResult", payload)
 		local character = (player :: Player).Character
 		if result.walkSpeed and character then
@@ -512,6 +606,18 @@ end)
 registry:onRequest("CollectAction", function(player, payload)
 	return collection:collect(player.UserId, payload)
 end)
+registry:onRequest("BundleGather", function(player, payload)
+	return collection:gatherBundle(player.UserId, payload)
+end)
+registry:onRequest("ToolEquip", function(player, payload)
+	return tools:equip(player.UserId, payload.toolId)
+end)
+registry:onRequest("ToolActionBegin", function(player, payload)
+	return tools:actionBegin(player.UserId, payload)
+end)
+registry:onRequest("ToolActionEnd", function(player, payload)
+	return tools:actionEnd(player.UserId, payload)
+end)
 registry:onRequest("SellRequest", function(player, payload)
 	return selling:sell(player.UserId, payload.sessionToken)
 end)
@@ -562,7 +668,7 @@ local function onCharacterAdded(player: Player, character: Model)
 		local layout = ChapterLayout[runtime.state.chapter]
 		placeCharacter(player, layout.spawn, layout.nestCenter)
 		local snapshot = rounds:project(runtime.state.roundId, true) :: any
-		snapshot.player = rounds:projectPlayer(runtime.state.roundId, player.UserId)
+		snapshot.player = projectPlayerFor(runtime.state.roundId, player.UserId)
 		send(player, "RoundSnapshot", snapshot)
 		local state = runtime.players[player.UserId]
 		local speed = state and config.handUpgrades.speed[state.handLevels.speed + 1]
@@ -577,6 +683,7 @@ local function onCharacterAdded(player: Player, character: Model)
 	if humanoid then
 		humanoid.Died:Connect(function()
 			analytics:track("player_died", { inRound = rounds:roundOf(player.UserId) ~= nil }, player.UserId)
+			tools:onDeath(player.UserId)
 			-- Death preserves bag/cash/tools (ASSUMED A-RND-07); respawn after the configured delay.
 			task.delay(config.death.respawnSeconds, function()
 				if player.Parent then
@@ -613,6 +720,7 @@ end
 Players.PlayerRemoving:Connect(function(player)
 	local runtime = rounds:roundOf(player.UserId)
 	if runtime then
+		tools:onLeave(player.UserId)
 		rounds:setPresent(runtime.state.roundId, player.UserId, false)
 	end
 	if parties:partyOf(player.UserId) then
@@ -640,6 +748,12 @@ task.spawn(function()
 		parties:tick()
 		rounds:tick()
 		victory:tick()
+	end
+end)
+task.spawn(function()
+	while true do
+		task.wait(ServerPolicy.toolTickSeconds)
+		tools:tick()
 	end
 end)
 task.spawn(function()
@@ -682,6 +796,11 @@ local container = {
 	selling = selling,
 	upgrades = upgrades,
 	egg = egg,
+	tools = tools,
+	entitlements = entitlements,
+	debugEntitlements = debugEntitlements,
+	pushPreviews = pushPreviews,
+	log = log,
 	victory = victory,
 	objectives = objectives,
 	arena = arena,

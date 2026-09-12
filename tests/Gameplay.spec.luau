@@ -7,243 +7,22 @@ return function(describe, it, expect)
 	local Shared = game:GetService("ReplicatedStorage").Shared
 	local Server = game:GetService("ServerScriptService").Server
 	local Config = require(Shared.Config)
-	local Clock = require(Shared.Clock)
 	local WeightedRandom = require(Shared.WeightedRandom)
 	local PileGrid = require(Shared.Domain.PileGrid)
 	local EggNodes = require(Shared.Domain.EggNodes)
 	local Objectives = require(Shared.Domain.Objectives)
 	local ChapterLayout = require(Shared.Domain.ChapterLayout)
+	local ToolSpecs = require(Shared.Domain.ToolSpecs)
 	local EconomyMath = require(Shared.EconomyMath)
-	local MockDataStore = require(Server.Data.MockDataStore)
-	local ProfileStore = require(Server.Data.ProfileStore)
-	local ProductMap = require(Server.Deployment.ProductMap)
-	local MarketplaceAdapter = require(Server.Adapters.MarketplaceAdapter)
-	local TeleportAdapter = require(Server.Adapters.TeleportAdapter)
-	local AnalyticsAdapter = require(Server.Adapters.AnalyticsAdapter)
-	local AnalyticsService = require(Server.Services.AnalyticsService)
-	local EntitlementService = require(Server.Services.EntitlementService)
-	local SessionService = require(Server.Services.SessionService)
-	local PartyService = require(Server.Services.PartyService)
-	local RoundService = require(Server.Services.RoundService)
-	local PlayerDataService = require(Server.Services.PlayerDataService)
-	local CollectionService = require(Server.Services.CollectionService)
-	local SellingService = require(Server.Services.SellingService)
-	local UpgradeService = require(Server.Services.UpgradeService)
-	local EggService = require(Server.Services.EggService)
-	local VictoryService = require(Server.Services.VictoryService)
-	local ObjectiveService = require(Server.Services.ObjectiveService)
-	local ServerPolicy = require(Server.ServerPolicy)
-	local Log = require(Server.Log)
 	local cfg = Config.fromRaw(require(ServerStorage.SFE.SystemConfig))
 	local layout = ChapterLayout.chapter1
 
-	local function fakePlayer(userId)
-		return { UserId = userId, Name = "P" .. userId, Kick = function() end, LoadCharacter = function() end }
-	end
+	local GameplayHarness = require(ServerStorage.Tests.Helpers.GameplayHarness)
 
-	-- Full gameplay harness: joins players, creates a solo/party round, and fast-forwards to Searching.
+	-- Full gameplay harness (tests/Helpers/GameplayHarness): joins players, creates a solo/party round,
+	-- and fast-forwards to Searching.
 	local function harness(options)
-		options = options or {}
-		local clock = Clock.fake(1000)
-		local counter = 0
-		local function idGen()
-			counter += 1
-			return "id-" .. string.format("%08d", counter)
-		end
-		local log = Log.capture("gameplay")
-		local dataStore = MockDataStore.new("profiles")
-		local profiles =
-			ProfileStore.new({ dataStore = dataStore, clock = clock, config = cfg, jobId = "job", wait = function() end, log = log })
-		local marketplace = MarketplaceAdapter.mock()
-		local productMap = ProductMap.new(cfg, { placeIds = {}, gamePasses = {}, developerProducts = {} })
-		local entitlements =
-			EntitlementService.new({ marketplace = marketplace, productMap = productMap, clock = clock, cacheSeconds = 60 })
-		local analyticsAdapter = AnalyticsAdapter.mock()
-		local analytics = AnalyticsService.new({
-			adapter = analyticsAdapter,
-			config = cfg,
-			buildInfo = { buildLabel = "test" },
-			rng = function()
-				return 0
-			end,
-		})
-		local sent = {}
-		local sessions = SessionService.new({ idGen = idGen, clock = clock })
-		local playerData = PlayerDataService.new({
-			profiles = profiles,
-			sessions = sessions,
-			entitlements = entitlements,
-			clock = clock,
-			policy = ServerPolicy,
-			send = function(player, name, payload)
-				table.insert(sent, { userId = player.UserId, name = name, payload = payload })
-			end,
-			analytics = analytics,
-			log = log,
-		})
-		local positions = {}
-		local function getCharacterPosition(userId)
-			return positions[userId]
-		end
-		local function getProfileData(userId)
-			local profile = profiles:get(userId)
-			return profile and profile.data or nil
-		end
-		local parties = PartyService.new({
-			config = cfg,
-			clock = clock,
-			idGen = idGen,
-			sessions = sessions,
-			getProgression = function(userId)
-				return playerData:getProgression(userId)
-			end,
-			teleport = TeleportAdapter.localAdapter(idGen),
-			analytics = analytics,
-		})
-		local rounds = RoundService.new({
-			config = cfg,
-			clock = clock,
-			idGen = idGen,
-			rng = WeightedRandom.fromSeed(options.seed or 11),
-			sessions = sessions,
-			analytics = analytics,
-		})
-		local collection = CollectionService.new({
-			config = cfg,
-			clock = clock,
-			rounds = rounds,
-			sessions = sessions,
-			getCharacterPosition = getCharacterPosition,
-			getProfileData = getProfileData,
-			analytics = analytics,
-		})
-		local selling = SellingService.new({
-			config = cfg,
-			rounds = rounds,
-			sessions = sessions,
-			getCharacterPosition = getCharacterPosition,
-			getProfileData = getProfileData,
-			analytics = analytics,
-		})
-		local upgrades = UpgradeService.new({
-			config = cfg,
-			rounds = rounds,
-			sessions = sessions,
-			getCharacterPosition = getCharacterPosition,
-			analytics = analytics,
-		})
-		local egg = EggService.new({
-			config = cfg,
-			rounds = rounds,
-			clock = clock,
-			getCharacterPosition = getCharacterPosition,
-			analytics = analytics,
-		})
-		local saveShouldFail = false
-		local victory = VictoryService.new({
-			config = cfg,
-			clock = clock,
-			rounds = rounds,
-			getProfile = function(userId)
-				return profiles:get(userId)
-			end,
-			saveProfile = function(profile)
-				if saveShouldFail then
-					return false
-				end
-				return profiles:saveAsync(profile)
-			end,
-			analytics = analytics,
-			log = log,
-		})
-		local objectives = ObjectiveService.new({
-			getProfile = function(userId)
-				return profiles:get(userId)
-			end,
-			analytics = analytics,
-		})
-		collection.collected:Connect(function(_userId, runtime)
-			egg:checkReveal(runtime)
-		end)
-		egg.claimed:Connect(function(runtime)
-			victory:start(runtime.state.roundId)
-		end)
-		parties.started:Connect(function(party, reservation)
-			if reservation.isLocal then
-				rounds:createForParty(party)
-				parties:finish(party.partyId, true)
-			end
-		end)
-
-		local h = {}
-		h.clock, h.profiles, h.dataStore, h.sessions, h.playerData, h.parties, h.rounds =
-			clock, profiles, dataStore, sessions, playerData, parties, rounds
-		h.collection, h.selling, h.upgrades, h.egg, h.victory, h.objectives, h.analyticsAdapter, h.sent =
-			collection, selling, upgrades, egg, victory, objectives, analyticsAdapter, sent
-		h.positions = positions
-		function h.setSaveFailing(value)
-			saveShouldFail = value
-		end
-		function h.join(userId)
-			playerData:onPlayerAdded(fakePlayer(userId), cfg)
-			positions[userId] = ChapterLayout.lobby.spawn
-			objectives:load(userId)
-		end
-		function h.token(userId)
-			return sessions:get(userId).sessionToken
-		end
-		-- Creates a party of the given members, starts it, and advances to Searching.
-		function h.startRound(members)
-			local leader = members[1]
-			local party = parties:create(leader, "chapter1", "normal")
-			for i = 2, #members do
-				parties:join(members[i], party.partyId)
-			end
-			parties:start(leader, party.partyId)
-			clock:advance(cfg.round.countdownSeconds)
-			parties:tick()
-			local roundId = sessions:get(leader).roundId
-			for _, userId in ipairs(members) do
-				rounds:voteSkip(roundId, userId)
-				positions[userId] = layout.spawn
-			end
-			rounds:tick()
-			clock:advance(cfg.round.countdownSeconds)
-			rounds:tick()
-			return roundId, rounds:runtime(roundId)
-		end
-		-- Aim from `userId` at cell (x, z) of the pile: places the character beside the cell and aims down.
-		function h.aimAt(userId, runtime, x, z)
-			local grid = runtime.grid
-			local target = ChapterLayout.cellWorldPosition(layout, grid.width, grid.depth, grid.cellSize, x, z, 0)
-			local standing = target + Vector3.new(0, 2, -4)
-			positions[userId] = standing
-			local origin = standing + Vector3.new(0, 1.5, 0)
-			local planeY = layout.nestBaseY + cfg.pile.maxVisualHeightStuds * 0.5
-			local aim = Vector3.new(target.X, planeY, target.Z)
-			return origin, (aim - origin).Unit
-		end
-		function h.collectAt(userId, runtime, x, z)
-			local origin, direction = h.aimAt(userId, runtime, x, z)
-			clock:advance(1) -- clears the hand cooldown between calls
-			return collection:collect(userId, { sessionToken = h.token(userId), origin = origin, direction = direction, toolId = "hand" })
-		end
-		function h.standAt(userId, position)
-			positions[userId] = position
-		end
-		-- Clears the whole pile except the Egg cover through direct grid mutation (fast-forward helper).
-		function h.clearGridExcept(runtime, keepIndexes)
-			local keep = {}
-			for _, index in ipairs(keepIndexes or {}) do
-				keep[index] = true
-			end
-			for _, cell in ipairs(runtime.grid.cells) do
-				if not keep[cell.index] then
-					PileGrid.remove(runtime.grid, cell, cell.remaining)
-				end
-			end
-		end
-		return h
+		return GameplayHarness.new(cfg, options)
 	end
 
 	describe("PileGrid", function()
@@ -443,7 +222,8 @@ return function(describe, it, expect)
 			local _, runtime = h.startRound({ 1 })
 			local state = runtime.players[1]
 			local previews = h.upgrades:previews(state)
-			expect(#previews).toBe(#UpgradeService.IDS)
+			-- Four base rows plus one acquisition row per configured tool (none owned yet).
+			expect(#previews).toBe(4 + #ToolSpecs.TOOL_IDS)
 			local graspPreview = h.upgrades:preview(state, "handGrasp")
 			expect(graspPreview.costCents).toBe(EconomyMath.dollarsToCents(cfg.handUpgrades.grasp[1].nextCash))
 			expect(graspPreview.next.amount).toBe(cfg.handUpgrades.grasp[2].amount)

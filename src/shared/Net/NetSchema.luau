@@ -26,6 +26,8 @@ NetSchema.DEFAULT_MAX_DEPTH = 6
 
 local DIFFICULTY = Schema.enum({ "normal", "hard" })
 local TOKEN = Schema.string({ min = 8, max = 64, pattern = "^[%w%-{}]+$" })
+-- Upgrade ids: "bag", "handGrasp", "<tool>.<path>", "tool:<tool>" (dots and colons are structural).
+local UPGRADE_ID = Schema.string({ max = 48, min = 1, pattern = "^[%w_%-%.:]+$" })
 
 local function request(
 	name: string,
@@ -94,6 +96,7 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		-- Tutorial / round actions (handlers land in Phase 2+; schemas exist now) --------------
 		request("TutorialAction", Schema.object({ step = Schema.id(), action = Schema.enum({ "complete", "skip" }) }), uiRate, 2),
 		request("RoundSkipVote", Schema.object({ sessionToken = TOKEN }), uiRate, 2),
+		request("BundleGather", Schema.object({ sessionToken = TOKEN, bundleId = Schema.id() }), collectRate, 3, 256),
 		request(
 			"CollectAction",
 			Schema.object({
@@ -120,7 +123,7 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 			"UpgradePurchase",
 			Schema.object({
 				sessionToken = TOKEN,
-				upgradeId = Schema.id(),
+				upgradeId = UPGRADE_ID,
 				expectedLevel = Schema.number({ min = 0, max = 100, integer = true }),
 			}),
 			slowRate,
@@ -181,6 +184,7 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		serverEvent("Toast", Schema.object({ key = Schema.id(), tone = Schema.enum({ "info", "success", "warning" }) }), 1),
 		serverEvent("ModalDirective", Schema.object({ modalId = Schema.id(), action = Schema.enum({ "open", "close" }) }), 1),
 		serverEvent("EntitlementsProjection", Schema.object({}), 1),
+		serverEvent("ToolEvent", Schema.object({}), 3),
 	}
 
 	local byName: { [string]: MessageDef } = {}

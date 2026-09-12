@@ -33,6 +33,9 @@ This file is the canonical register for decisions that were not directly visible
 | A-EGG-05 | Claim hold | 0.65 seconds | Long enough to prevent accidental claims, short enough to feel responsive. | `eggSpawn.claimHoldSeconds` |
 | A-EGG-06 | One winner event | First valid server claim wins; party shares completion | Prevents duplicate completion and receipt races. | `eggSpawn.oneWinnerPerRound`, `partySharesWin` |
 | A-EGG-07 | Pile grid and density | 16x16 cells of 2.5 studs, 6 feathers per cell (+-25% surface variance), cover cells 2x density in a 1-cell radius | Gives a ~1,500-feather nest: a solo Hand player with the first grasp upgrade reaches the 20-65% reveal window in roughly 3-7 minutes including selling trips (measured in the Phase 2 Studio run; 12 per cell took ~14 minutes). Cover cells hold the Egg longer. Reveal requires the cover cells cleared AND the configured removal fraction (A-EGG-03). | `pile` |
+| A-TOOL-01 | Confetti Charge throw and cadence | 16-stud throw, 1.2 s cooldown after a throw, 0.8 s mini-charge fuse | Keeps the charge a deliberate area tool with one live charge per player; mini-charges from the Blast Artist proc resolve quickly. | `tools.confettiCharge.throwDistanceStuds`, `cooldownSeconds`, `miniChargeFuseSeconds` |
+| A-TOOL-02 | Scout Chick trip timing | 0.5 s per collection peck, 1.0 s deposit | Readable companion cadence; speed/grasp/capacity paths remain the visible levers. | `tools.scoutChick.collectIntervalSeconds`, `depositSeconds` |
+| A-TOOL-03 | Overflow bundle lifetime | 20 s | Tool overflow becomes a short-lived server-owned pickup instead of an impossible bag value. | `collection.overflowBundleSeconds` |
 
 ## Economy and progression assumptions
 

@@ -71,6 +71,7 @@
     "baseHandCooldownSeconds": 0.32,
     "continuousHoldUnlockLevel": 1,
     "overflowPolicy": "tool_output_may_exceed_capacity_only_as_world_pickups; bag_value_is_clamped",
+    "overflowBundleSeconds": 20,
     "sharedPile": true,
     "personalBag": true,
     "personalCash": true,
@@ -167,6 +168,9 @@
       "baseYield": 40,
       "baseFuseSeconds": 2.5,
       "baseRadiusStuds": 12,
+      "throwDistanceStuds": 16,
+      "cooldownSeconds": 1.2,
+      "miniChargeFuseSeconds": 0.8,
       "permanentIncludesMaxUpgrades": true,
       "evidence": "VERIFIED soft/permanent public; ASSUMED one-round price and mechanics values"
     },
@@ -189,6 +193,8 @@
       "baseMoveSpeed": 12.5,
       "baseGrasp": 1,
       "baseCapacity": 10,
+      "collectIntervalSeconds": 0.5,
+      "depositSeconds": 1.0,
       "permanentIncludesMaxUpgrades": true,
       "evidence": "VERIFIED packaging/speed preview; ASSUMED target name and other base values"
     }
@@ -454,7 +460,8 @@
       "session_start", "tutorial_step", "party_created", "round_started", "feather_collected",
       "bag_full", "sell_completed", "upgrade_purchased", "tool_acquired", "egg_revealed",
       "egg_claimed", "round_completed", "results_closed", "class_rolled", "daily_claimed",
-      "code_redeemed", "purchase_prompted", "purchase_completed", "player_died", "round_rejoined"
+      "code_redeemed", "purchase_prompted", "purchase_completed", "player_died", "round_rejoined",
+      "tool_action", "tool_overheated", "chick_trip"
     ],
     "sampledCollectionEventRate": 0.05,
     "neverLogFreeText": true,
