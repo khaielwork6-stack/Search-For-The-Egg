@@ -1,0 +1,452 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "configVersion": 1,
+  "project": {
+    "title": "Search for the Egg",
+    "genre": "cozy first-person collection and hidden-object simulator",
+    "maxServerPlayers": 20,
+    "maxPartyPlayers": 4,
+    "targetPlatforms": ["desktop", "mobile", "controller"],
+    "dataAuthority": "server",
+    "evidenceBuildDate": "2026-09-12",
+    "researchDate": "2026-09-12"
+  },
+  "evidenceLabels": {
+    "VERIFIED": "Directly visible in the supplied recording or official surface",
+    "CORROBORATED": "Supported by multiple current public sources",
+    "ASSUMED": "Chosen for production because direct evidence is unavailable; must stay tunable"
+  },
+  "featureFlags": {
+    "chapter2Enabled": true,
+    "hardModeEnabled": true,
+    "classesEnabled": true,
+    "dailyRewardsEnabled": true,
+    "codesEnabled": true,
+    "eventChestEnabled": true,
+    "eggIndexEnabled": false,
+    "petsEnabled": false,
+    "tradingEnabled": false,
+    "offlineProgressEnabled": false,
+    "subscriptionsEnabled": false
+  },
+  "round": {
+    "cutsceneSeconds": 18,
+    "countdownSeconds": 3,
+    "timerMode": "count_up",
+    "maximumRoundSeconds": 1800,
+    "emptyRoundShutdownSeconds": 30,
+    "rejoinReservationSeconds": 120,
+    "resultScreenMinimumSeconds": 4,
+    "resultScreenAutoContinueSeconds": 15,
+    "returnToLobbyDelaySeconds": 1.5,
+    "discoverySequence": {
+      "inputLockSeconds": 1.1,
+      "cameraFocusSeconds": 1.5,
+      "winnerAnnouncementSeconds": 2.5,
+      "rewardRevealSeconds": 3.0,
+      "confettiSeconds": 4.0
+    },
+    "assumption": "ASSUMED except count-up timer and skippable cutscene"
+  },
+  "interaction": {
+    "defaultRangeStuds": 12,
+    "sellRangeStuds": 14,
+    "upgradeRangeStuds": 12,
+    "collectRequestRatePerSecond": 12,
+    "toolRequestRatePerSecond": 15,
+    "purchaseRequestRatePerSecond": 3,
+    "remoteBurstAllowance": 5,
+    "serverPositionToleranceStuds": 4,
+    "assumption": "ASSUMED"
+  },
+  "currencies": {
+    "cash": {"default": 0, "minimum": 0, "maximum": 1000000000000, "roundScoped": true},
+    "gems": {"default": 0, "minimum": 0, "maximum": 1000000000, "roundScoped": false},
+    "eventTokens": {"default": 0, "minimum": 0, "maximum": 1000000000, "roundScoped": false}
+  },
+  "collection": {
+    "startingBagCapacity": 25,
+    "baseFeatherCashValue": 0.01,
+    "baseHandCollectAmount": 1,
+    "baseHandCooldownSeconds": 0.32,
+    "continuousHoldUnlockLevel": 1,
+    "overflowPolicy": "tool_output_may_exceed_capacity_only_as_world_pickups; bag_value_is_clamped",
+    "sharedPile": true,
+    "personalBag": true,
+    "personalCash": true,
+    "pileRepresentation": {
+      "serverGridCells": 256,
+      "clientVisualStrandPoolDesktop": 900,
+      "clientVisualStrandPoolMobile": 420,
+      "replicationHz": 8,
+      "snapshotHz": 1,
+      "assumption": "ASSUMED"
+    }
+  },
+  "eggSpawn": {
+    "spawnNodeCountTarget": 24,
+    "selection": "weighted_without_immediate_repeat",
+    "minimumRemovalFraction": 0.2,
+    "maximumRemovalFraction": 0.65,
+    "revealRadiusStuds": 5,
+    "claimRadiusStuds": 8,
+    "claimHoldSeconds": 0.65,
+    "oneWinnerPerRound": true,
+    "partySharesWin": true,
+    "repeatProtectionRounds": 3,
+    "assumption": "ASSUMED"
+  },
+  "selling": {
+    "cashPerStandardFeather": 0.01,
+    "rainbowFeatherMultiplier": 5,
+    "minimumTransaction": 0.01,
+    "cashRounding": "round_half_up_to_cent",
+    "sellAllOnInteract": true,
+    "assumption": "VERIFIED baseline, ASSUMED rainbow and rounding"
+  },
+  "bags": {
+    "maxLevel": 5,
+    "levels": [
+      {"level": 1, "capacity": 25, "upgradeCash": 1.0, "skipRobux": 9, "evidence": "VERIFIED"},
+      {"level": 2, "capacity": 50, "upgradeCash": 2.0, "skipRobux": 9, "evidence": "VERIFIED capacity and next price; ASSUMED skip continuity"},
+      {"level": 3, "capacity": 100, "upgradeCash": 5.0, "skipRobux": 19, "evidence": "ASSUMED"},
+      {"level": 4, "capacity": 200, "upgradeCash": 12.0, "skipRobux": 29, "evidence": "ASSUMED"},
+      {"level": 5, "capacity": 400, "upgradeCash": null, "skipRobux": null, "evidence": "ASSUMED"}
+    ]
+  },
+  "handUpgrades": {
+    "grasp": [
+      {"level": 0, "amount": 1, "nextCash": 0.25, "evidence": "VERIFIED cost"},
+      {"level": 1, "amount": 2, "nextCash": 1.0, "evidence": "ASSUMED"},
+      {"level": 2, "amount": 3, "nextCash": 4.0, "evidence": "ASSUMED"},
+      {"level": 3, "amount": 4, "nextCash": 15.0, "evidence": "ASSUMED"},
+      {"level": 4, "amount": 6, "nextCash": 60.0, "evidence": "ASSUMED"},
+      {"level": 5, "amount": 8, "nextCash": null, "evidence": "ASSUMED"}
+    ],
+    "speed": [
+      {"level": 0, "walkSpeed": 12.5, "nextCash": 0.5, "evidence": "VERIFIED"},
+      {"level": 1, "walkSpeed": 14.5, "nextCash": 2.0, "evidence": "VERIFIED value; ASSUMED next cost"},
+      {"level": 2, "walkSpeed": 16.5, "nextCash": 8.0, "evidence": "ASSUMED"},
+      {"level": 3, "walkSpeed": 18.5, "nextCash": 30.0, "evidence": "ASSUMED"},
+      {"level": 4, "walkSpeed": 20.5, "nextCash": null, "evidence": "ASSUMED"}
+    ],
+    "hold": [
+      {"level": 0, "enabled": false, "nextCash": 1.0, "evidence": "VERIFIED cost"},
+      {"level": 1, "enabled": true, "intervalSeconds": 0.32, "nextCash": 4.0, "evidence": "ASSUMED"},
+      {"level": 2, "enabled": true, "intervalSeconds": 0.27, "nextCash": 16.0, "evidence": "ASSUMED"},
+      {"level": 3, "enabled": true, "intervalSeconds": 0.22, "nextCash": null, "evidence": "ASSUMED"}
+    ]
+  },
+  "tools": {
+    "nestRake": {
+      "displayName": "Nest Rake",
+      "softCashPrice": 8.0,
+      "oneRoundRobux": 19,
+      "permanentRobux": 99,
+      "baseYield": 12,
+      "baseCooldownSeconds": 0.85,
+      "permanentIncludesMaxUpgrades": true,
+      "evidence": "VERIFIED packaging and first values; ASSUMED target name"
+    },
+    "confettiCharge": {
+      "displayName": "Confetti Charge",
+      "softCashPrice": 25.0,
+      "oneRoundRobux": 29,
+      "permanentRobux": 149,
+      "baseYield": 40,
+      "baseFuseSeconds": 2.5,
+      "baseRadiusStuds": 12,
+      "permanentIncludesMaxUpgrades": true,
+      "evidence": "VERIFIED soft/permanent public; ASSUMED one-round price and mechanics values"
+    },
+    "featherVac": {
+      "displayName": "Feather Vac",
+      "softCashPrice": 69.99,
+      "oneRoundRobux": 49,
+      "permanentRobux": 249,
+      "baseSuctionPerSecond": 8,
+      "baseRuntimeSeconds": 8,
+      "baseCoolingSeconds": 20,
+      "permanentIncludesMaxUpgrades": true,
+      "evidence": "VERIFIED packaging/cooling; ASSUMED suction/runtime"
+    },
+    "scoutChick": {
+      "displayName": "Scout Chick",
+      "softGemPrice": 40,
+      "oneRoundRobux": 19,
+      "permanentRobux": 129,
+      "baseMoveSpeed": 12.5,
+      "baseGrasp": 1,
+      "baseCapacity": 10,
+      "permanentIncludesMaxUpgrades": true,
+      "evidence": "VERIFIED packaging/speed preview; ASSUMED target name and other base values"
+    }
+  },
+  "toolUpgrades": {
+    "nestRake": {
+      "sweep": [
+        {"level": 0, "yield": 12, "nextCash": 1, "evidence": "VERIFIED"},
+        {"level": 1, "yield": 15, "nextCash": 2, "evidence": "VERIFIED"},
+        {"level": 2, "yield": 18, "nextCash": 4, "evidence": "VERIFIED value; ASSUMED next cost"},
+        {"level": 3, "yield": 22, "nextCash": 8, "evidence": "ASSUMED"},
+        {"level": 4, "yield": 27, "nextCash": null, "evidence": "ASSUMED"}
+      ],
+      "cooldown": [
+        {"level": 0, "seconds": 0.85, "nextCash": 1},
+        {"level": 1, "seconds": 0.78, "nextCash": 2},
+        {"level": 2, "seconds": 0.71, "nextCash": 5},
+        {"level": 3, "seconds": 0.65, "nextCash": 10},
+        {"level": 4, "seconds": 0.6, "nextCash": null}
+      ],
+      "hold": [
+        {"level": 0, "enabled": false, "nextCash": 1},
+        {"level": 1, "enabled": true, "intervalSeconds": 0.85, "nextCash": 3},
+        {"level": 2, "enabled": true, "intervalSeconds": 0.72, "nextCash": 7},
+        {"level": 3, "enabled": true, "intervalSeconds": 0.62, "nextCash": null}
+      ],
+      "evidence": "VERIFIED taxonomy/early sweep; remaining values ASSUMED"
+    },
+    "confettiCharge": {
+      "luckyBlast": [
+        {"level": 0, "rainbowChance": 0.0, "nextCash": 3, "evidence": "VERIFIED"},
+        {"level": 1, "rainbowChance": 0.04, "nextCash": 7, "evidence": "VERIFIED"},
+        {"level": 2, "rainbowChance": 0.08, "nextCash": 15, "evidence": "ASSUMED"},
+        {"level": 3, "rainbowChance": 0.12, "nextCash": 30, "evidence": "ASSUMED"},
+        {"level": 4, "rainbowChance": 0.16, "nextCash": null, "evidence": "ASSUMED"}
+      ],
+      "speed": [
+        {"level": 0, "fuseSeconds": 2.5, "nextCash": 2},
+        {"level": 1, "fuseSeconds": 2.2, "nextCash": 5},
+        {"level": 2, "fuseSeconds": 1.9, "nextCash": 12},
+        {"level": 3, "fuseSeconds": 1.6, "nextCash": 25},
+        {"level": 4, "fuseSeconds": 1.4, "nextCash": null}
+      ],
+      "power": [
+        {"level": 0, "radiusStuds": 12, "yield": 40, "nextCash": 3},
+        {"level": 1, "radiusStuds": 14, "yield": 55, "nextCash": 7},
+        {"level": 2, "radiusStuds": 16, "yield": 72, "nextCash": 16},
+        {"level": 3, "radiusStuds": 18, "yield": 92, "nextCash": 35},
+        {"level": 4, "radiusStuds": 20, "yield": 115, "nextCash": null}
+      ],
+      "evidence": "VERIFIED taxonomy/first costs/lucky first step; remaining values ASSUMED"
+    },
+    "featherVac": {
+      "power": [
+        {"level": 0, "perSecond": 8, "nextCash": 6},
+        {"level": 1, "perSecond": 11, "nextCash": 14},
+        {"level": 2, "perSecond": 15, "nextCash": 32},
+        {"level": 3, "perSecond": 20, "nextCash": 70},
+        {"level": 4, "perSecond": 26, "nextCash": null}
+      ],
+      "cooling": [
+        {"level": 0, "seconds": 20, "nextCash": 5, "evidence": "VERIFIED"},
+        {"level": 1, "seconds": 18, "nextCash": 12, "evidence": "VERIFIED"},
+        {"level": 2, "seconds": 15.5, "nextCash": 28, "evidence": "ASSUMED"},
+        {"level": 3, "seconds": 13, "nextCash": 60, "evidence": "ASSUMED"},
+        {"level": 4, "seconds": 10.5, "nextCash": null, "evidence": "ASSUMED"}
+      ],
+      "runtime": [
+        {"level": 0, "seconds": 8, "nextCash": 5},
+        {"level": 1, "seconds": 10, "nextCash": 12},
+        {"level": 2, "seconds": 12.5, "nextCash": 28},
+        {"level": 3, "seconds": 15.5, "nextCash": 60},
+        {"level": 4, "seconds": 19, "nextCash": null}
+      ],
+      "evidence": "VERIFIED taxonomy/first costs/cooling first step; remaining values ASSUMED"
+    },
+    "scoutChick": {
+      "speed": [
+        {"level": 0, "value": 12.5, "nextCash": 0.5, "evidence": "VERIFIED"},
+        {"level": 1, "value": 14.5, "nextCash": 2, "evidence": "VERIFIED"},
+        {"level": 2, "value": 17, "nextCash": 7, "evidence": "ASSUMED"},
+        {"level": 3, "value": 20, "nextCash": 20, "evidence": "ASSUMED"},
+        {"level": 4, "value": 24, "nextCash": null, "evidence": "ASSUMED"}
+      ],
+      "grasp": [
+        {"level": 0, "value": 1, "nextCash": 0.5},
+        {"level": 1, "value": 2, "nextCash": 2},
+        {"level": 2, "value": 3, "nextCash": 7},
+        {"level": 3, "value": 5, "nextCash": 20},
+        {"level": 4, "value": 8, "nextCash": null}
+      ],
+      "capacity": [
+        {"level": 0, "value": 10, "nextCash": 0.5},
+        {"level": 1, "value": 16, "nextCash": 2},
+        {"level": 2, "value": 24, "nextCash": 7},
+        {"level": 3, "value": 36, "nextCash": 20},
+        {"level": 4, "value": 52, "nextCash": null}
+      ],
+      "evidence": "VERIFIED taxonomy/first costs/speed first step; remaining values ASSUMED"
+    }
+  },
+  "classes": {
+    "rollGemCost": 40,
+    "autoRollDefault": false,
+    "slotsDefault": 1,
+    "maximumSlots": 2,
+    "weights": [
+      {"id": "newcomer", "displayName": "Newcomer", "weight": 40.0, "effect": {}, "evidence": "VERIFIED functional counterpart"},
+      {"id": "nestCarrier", "displayName": "Nest Carrier", "weight": 25.0, "effect": {"bagCapacityMultiplier": 1.5}, "evidence": "VERIFIED"},
+      {"id": "eggTrader", "displayName": "Egg Trader", "weight": 14.0, "effect": {"sellMultiplier": 1.2}, "evidence": "CORROBORATED"},
+      {"id": "rakeExpert", "displayName": "Rake Expert", "weight": 9.0, "effect": {"rakeYieldMultiplier": 1.25, "rakeUpgradeCostMultiplier": 0.75}, "evidence": "VERIFIED"},
+      {"id": "blastArtist", "displayName": "Blast Artist", "weight": 7.0, "effect": {"blastRadiusMultiplier": 1.2, "miniChargeChance": 0.1, "miniChargeCount": 3}, "evidence": "CORROBORATED"},
+      {"id": "gemSeeker", "displayName": "Gem Seeker", "weight": 3.9, "effect": {"gemFindChance": 0.01, "diamondFeatherChance": 0.002}, "evidence": "VERIFIED description; ASSUMED chances"},
+      {"id": "automationExpert", "displayName": "Automation Expert", "weight": 1.0, "effect": {"grantsScoutChick": true, "droneSpeedMultiplier": 1.3, "droneCapacityMultiplier": 1.4, "swarmChancePerTrip": 0.05, "swarmCount": 3}, "evidence": "CORROBORATED; ASSUMED swarm chance"},
+      {"id": "masterForager", "displayName": "Master Forager", "weight": 0.1, "effect": {"grantsAllPassiveBonuses": true, "goldenRushChancePerMinute": 0.03, "goldenRushSeconds": 15}, "evidence": "VERIFIED description; ASSUMED activation values"}
+    ],
+    "products": {
+      "doubleLuckRobux": 199,
+      "fastRollsRobux": 179,
+      "extraSlotRobux": 119
+    },
+    "luckTransform": {
+      "mode": "double_odds_at_or_below_weight_then_renormalize_from_newcomer",
+      "rareWeightThreshold": 9.0,
+      "assumption": "ASSUMED"
+    }
+  },
+  "dailyRewards": [
+    {"day": 1, "gems": 10, "evidence": "VERIFIED"},
+    {"day": 2, "gems": 120, "evidence": "VERIFIED"},
+    {"day": 3, "gems": 50, "evidence": "VERIFIED"},
+    {"day": 4, "gems": 50, "evidence": "VERIFIED"},
+    {"day": 5, "gems": 50, "evidence": "VERIFIED"},
+    {"day": 6, "gems": 50, "evidence": "VERIFIED"},
+    {"day": 7, "gems": 50, "evidence": "VERIFIED"},
+    {"day": 8, "gems": 500, "evidence": "VERIFIED"}
+  ],
+  "dailyRewardRules": {
+    "claimCooldownSeconds": 86400,
+    "gracePeriodSeconds": 172800,
+    "afterDay8": "loop_to_day1",
+    "missPolicy": "reset_to_day1_after_grace",
+    "serverTimeOnly": true,
+    "assumption": "ASSUMED"
+  },
+  "permanentPerks": {
+    "bagSize": {"baseGemCost": 25, "costGrowth": 1.7, "valuePerLevel": 0.1, "maxLevel": 10},
+    "handGrab": {"baseGemCost": 50, "costGrowth": 1.75, "valuePerLevel": 0.1, "maxLevel": 10},
+    "gemValue": {"baseGemCost": 150, "costGrowth": 1.8, "valuePerLevel": 0.1, "maxLevel": 10},
+    "featherValue": {"baseGemCost": 20, "costGrowth": 1.7, "valuePerLevel": 0.1, "maxLevel": 10},
+    "evidence": "VERIFIED first displayed prices; ASSUMED curves/effects/caps"
+  },
+  "chapters": {
+    "chapter1": {
+      "id": "sunlitHenhouse",
+      "displayName": "Sunlit Henhouse",
+      "normalUnlock": {"type": "always"},
+      "hardUnlock": {"type": "chapterWins", "chapter": "chapter1", "difficulty": "normal", "count": 1, "evidence": "VERIFIED 1 Win gate"},
+      "normalRewards": {"cash": 5, "gems": 10, "wins": 1, "eventTokens": 0, "evidence": "ASSUMED"},
+      "hardRewards": {"cash": 15, "gems": 25, "wins": 1, "eventTokens": 10, "evidence": "ASSUMED"}
+    },
+    "chapter2": {
+      "id": "moonlitCellar",
+      "displayName": "Moonlit Cellar",
+      "normalUnlock": {"type": "chapterWins", "chapter": "chapter1", "difficulty": "normal", "count": 1, "evidence": "VERIFIED 1 Win gate"},
+      "hardUnlock": {"type": "chapterWins", "chapter": "chapter2", "difficulty": "normal", "count": 1, "evidence": "ASSUMED"},
+      "normalRewards": {"cash": 25, "gems": 35, "wins": 1, "eventTokens": 15, "evidence": "ASSUMED"},
+      "hardRewards": {"cash": 60, "gems": 75, "wins": 1, "eventTokens": 35, "evidence": "ASSUMED"},
+      "puzzles": {
+        "leverCount": 3,
+        "crystalCountPuzzle": true,
+        "fourDigitCodePuzzle": true,
+        "tileRotationPuzzleSize": 16,
+        "randomizeEachRound": true,
+        "evidence": "CORROBORATED structure; ASSUMED randomization"
+      }
+    }
+  },
+  "difficulty": {
+    "normal": {"pileHealthMultiplier": 1.0, "toolYieldMultiplier": 1.0, "sellMultiplier": 1.0, "rewardMultiplier": 1.0},
+    "hard": {"pileHealthMultiplier": 1.6, "toolYieldMultiplier": 0.9, "sellMultiplier": 1.1, "rewardMultiplier": 2.0, "eggDepthMinimum": 0.45, "eggDepthMaximum": 0.8, "assumption": "ASSUMED"}
+  },
+  "victory": {
+    "partyRewardPolicy": "all_present_party_members",
+    "finderBonusGems": 5,
+    "bestTimeUsesServerElapsedMilliseconds": true,
+    "rewardTransactionIdFormat": "roundId:userId:chapter:difficulty",
+    "saveBeforeTeleport": true,
+    "saveTimeoutSeconds": 8,
+    "fallbackReceiptQueue": true,
+    "assumption": "ASSUMED"
+  },
+  "death": {
+    "respawnSeconds": 3,
+    "preserveBag": true,
+    "preserveRoundTools": true,
+    "preserveRoundCash": true,
+    "teleportToRoundSpawn": true,
+    "assumption": "ASSUMED cozy/no-punishment convention"
+  },
+  "monetization": {
+    "gemBundles": [
+      {"gems": 100, "robux": 29, "evidence": "VERIFIED"},
+      {"gems": 400, "robux": 69, "evidence": "VERIFIED"}
+    ],
+    "passes": {
+      "doubleGems": {"robux": 79, "evidence": "VERIFIED live recording"},
+      "infiniteBag": {"robux": 99, "evidence": "CORROBORATED historical public pass"}
+    },
+    "eventChest": {
+      "tokenCost": 100,
+      "robuxBundles": [
+        {"count": 3, "robux": 89},
+        {"count": 5, "robux": 129},
+        {"count": 10, "robux": 229}
+      ],
+      "rewards": [
+        {"id": "gemsSmall", "weight": 60.0, "min": 25, "max": 75},
+        {"id": "gemsLarge", "weight": 25.0, "min": 75, "max": 200},
+        {"id": "alienChargeSkin", "weight": 7.0},
+        {"id": "alienVacSkin", "weight": 4.5},
+        {"id": "alienRakeSkin", "weight": 2.5},
+        {"id": "ufoDroneSkin", "weight": 1.0}
+      ],
+      "duplicatePolicy": "convert_to_eventTokens",
+      "duplicateTokenValues": {"alienChargeSkin": 35, "alienVacSkin": 50, "alienRakeSkin": 75, "ufoDroneSkin": 150},
+      "evidence": "VERIFIED costs/weights; ASSUMED duplicate policy"
+    },
+    "groupRewardGems": 25,
+    "groupRewardEvidence": "VERIFIED amount; ASSUMED one-time account grant",
+    "principles": {
+      "noForcedPurchaseInTutorial": true,
+      "noPaywallForChapterCompletion": true,
+      "showExactGrantBeforePrompt": true,
+      "receiptHandledServerSide": true,
+      "neverTrustClientPriceOrOwnership": true
+    }
+  },
+  "codes": {
+    "ALIEN": {
+      "active": true,
+      "expiresAt": null,
+      "rewards": {"gems": 200, "eventTokens": 200},
+      "evidence": "CORROBORATED; activation/expiry configurable"
+    }
+  },
+  "polishBudgets": {
+    "targetFpsDesktop": 60,
+    "targetFpsMobileLowTier": 30,
+    "maximumServerPhysicsPartsPerRound": 350,
+    "maximumActiveParticlesDesktop": 1600,
+    "maximumActiveParticlesMobile": 550,
+    "maximumConcurrentOneShotSounds": 24,
+    "maximumLoopingAmbientSounds": 8,
+    "maximumUiTweenSeconds": 0.35,
+    "minimumTapTargetPixels": 44,
+    "reducedMotionScale": 0.35,
+    "streamingEnabled": true,
+    "assumption": "ASSUMED production budgets"
+  },
+  "analytics": {
+    "events": [
+      "session_start", "tutorial_step", "party_created", "round_started", "feather_collected",
+      "bag_full", "sell_completed", "upgrade_purchased", "tool_acquired", "egg_revealed",
+      "egg_claimed", "round_completed", "results_closed", "class_rolled", "daily_claimed",
+      "code_redeemed", "purchase_prompted", "purchase_completed", "player_died", "round_rejoined"
+    ],
+    "sampledCollectionEventRate": 0.05,
+    "neverLogFreeText": true,
+    "neverLogSensitiveData": true
+  }
+}

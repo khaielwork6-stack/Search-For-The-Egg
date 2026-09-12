@@ -1,0 +1,75 @@
+table,system,id,level,value,value_unit,cost,cost_currency,next_value,evidence,notes
+bag,bag,capacity,1,25,feathers,1.00,cash,50,VERIFIED,Starting capacity and first upgrade observed
+bag,bag,capacity,2,50,feathers,2.00,cash,100,VERIFIED/ASSUMED,Capacity and next price observed; next capacity assumed
+bag,bag,capacity,3,100,feathers,5.00,cash,200,ASSUMED,Central tuning value
+bag,bag,capacity,4,200,feathers,12.00,cash,400,ASSUMED,Central tuning value
+bag,bag,capacity,5,400,feathers,,,max,ASSUMED,Round cap without Infinite Bag
+hand,hand,grasp,0,1,feathers_per_action,0.25,cash,2,VERIFIED/ASSUMED,Cost observed; resulting amount assumed
+hand,hand,grasp,1,2,feathers_per_action,1.00,cash,3,ASSUMED,
+hand,hand,grasp,2,3,feathers_per_action,4.00,cash,4,ASSUMED,
+hand,hand,grasp,3,4,feathers_per_action,15.00,cash,6,ASSUMED,
+hand,hand,grasp,4,6,feathers_per_action,60.00,cash,8,ASSUMED,
+hand,hand,speed,0,12.5,walk_speed,0.50,cash,14.5,VERIFIED,
+hand,hand,speed,1,14.5,walk_speed,2.00,cash,16.5,VERIFIED/ASSUMED,Result observed; next cost/value assumed
+hand,hand,speed,2,16.5,walk_speed,8.00,cash,18.5,ASSUMED,
+hand,hand,speed,3,18.5,walk_speed,30.00,cash,20.5,ASSUMED,
+hand,hand,hold,0,0,boolean,1.00,cash,1,VERIFIED/ASSUMED,Cost observed; exact repeat interval assumed
+tool,acquisition,nestRake,0,1,owned_round,8.00,cash,,VERIFIED,Original target branding
+tool,acquisition,nestRakeOneRound,0,1,owned_round,19,robux,,VERIFIED,
+tool,acquisition,nestRakePermanent,0,1,owned_permanent,99,robux,,VERIFIED,
+tool,acquisition,confettiCharge,0,1,owned_round,25.00,cash,,VERIFIED,
+tool,acquisition,confettiChargeOneRound,0,1,owned_round,29,robux,,ASSUMED,
+tool,acquisition,confettiChargePermanent,0,1,owned_permanent,149,robux,,CORROBORATED,
+tool,acquisition,featherVac,0,1,owned_round,69.99,cash,,VERIFIED,
+tool,acquisition,featherVacOneRound,0,1,owned_round,49,robux,,VERIFIED,
+tool,acquisition,featherVacPermanent,0,1,owned_permanent,249,robux,,VERIFIED,
+tool,acquisition,scoutChick,0,1,owned_round,40,gems,,VERIFIED,Rebranded drone
+tool,acquisition,scoutChickOneRound,0,1,owned_round,19,robux,,VERIFIED,
+tool,acquisition,scoutChickPermanent,0,1,owned_permanent,129,robux,,VERIFIED,
+tool_upgrade,nestRake,sweep,0,12,feathers_per_action,1,cash,15,VERIFIED,
+tool_upgrade,nestRake,sweep,1,15,feathers_per_action,2,cash,18,VERIFIED,
+tool_upgrade,nestRake,sweep,2,18,feathers_per_action,4,cash,22,VERIFIED/ASSUMED,Value observed; continuation assumed
+tool_upgrade,nestRake,sweep,3,22,feathers_per_action,8,cash,27,ASSUMED,
+tool_upgrade,confettiCharge,luckyBlast,0,0,probability,3,cash,0.04,VERIFIED,
+tool_upgrade,confettiCharge,luckyBlast,1,0.04,probability,7,cash,0.08,VERIFIED/ASSUMED,First step observed; continuation assumed
+tool_upgrade,featherVac,cooling,0,20,seconds,5,cash,18,VERIFIED,
+tool_upgrade,featherVac,cooling,1,18,seconds,12,cash,15.5,VERIFIED/ASSUMED,First step observed; continuation assumed
+tool_upgrade,scoutChick,speed,0,12.5,walk_speed,0.50,cash,14.5,VERIFIED,
+tool_upgrade,scoutChick,speed,1,14.5,walk_speed,2,cash,17,VERIFIED/ASSUMED,First step observed; continuation assumed
+sale,selling,standardFeather,0,1,feather,0.01,cash,0.01,VERIFIED,Later transactions support one cent per feather
+sale,selling,rainbowFeather,0,1,feather,0.05,cash,0.05,ASSUMED,Five-times value
+reward,chapter1,normal,0,1,completion,0,,5_cash_10_gems_1_win,ASSUMED,Party receives base reward; finder gets 5 bonus gems
+reward,chapter1,hard,0,1,completion,0,,15_cash_25_gems_10_tokens_1_win,ASSUMED,
+reward,chapter2,normal,0,1,completion,0,,25_cash_35_gems_15_tokens_1_win,ASSUMED,
+reward,chapter2,hard,0,1,completion,0,,60_cash_75_gems_35_tokens_1_win,ASSUMED,
+daily,dailyReward,day1,1,10,gems,0,,day2,VERIFIED,
+daily,dailyReward,day2,2,120,gems,0,,day3,VERIFIED,
+daily,dailyReward,day3,3,50,gems,0,,day4,VERIFIED,
+daily,dailyReward,day4,4,50,gems,0,,day5,VERIFIED,
+daily,dailyReward,day5,5,50,gems,0,,day6,VERIFIED,
+daily,dailyReward,day6,6,50,gems,0,,day7,VERIFIED,
+daily,dailyReward,day7,7,50,gems,0,,day8,VERIFIED,
+daily,dailyReward,day8,8,500,gems,0,,day1,VERIFIED/ASSUMED,Reward observed; loop behavior assumed
+class,classRoll,newcomer,0,40,percent,40,gems,,VERIFIED,Weights sum to 100
+class,classRoll,nestCarrier,0,25,percent,40,gems,,VERIFIED,+50 percent bag capacity
+class,classRoll,eggTrader,0,14,percent,40,gems,,CORROBORATED,+20 percent sell value
+class,classRoll,rakeExpert,0,9,percent,40,gems,,VERIFIED,+25 percent rake yield and -25 percent rake upgrade cost
+class,classRoll,blastArtist,0,7,percent,40,gems,,CORROBORATED,+20 percent radius and 10 percent mini-charge split
+class,classRoll,gemSeeker,0,3.9,percent,40,gems,,VERIFIED/ASSUMED,Description verified; proc rates assumed in JSON
+class,classRoll,automationExpert,0,1,percent,40,gems,,CORROBORATED,Drone bonuses and swarm; proc assumed
+class,classRoll,masterForager,0,0.1,percent,40,gems,,VERIFIED/ASSUMED,All passives; Golden Rush timing assumed
+product,robux,gemBundle100,0,100,gems,29,robux,,VERIFIED,
+product,robux,gemBundle400,0,400,gems,69,robux,,VERIFIED,
+product,robux,doubleGems,0,2,multiplier,79,robux,,VERIFIED,Live recording overrides older guide
+product,robux,doubleLuck,0,2,displayed_luck,199,robux,,VERIFIED/ASSUMED,Price observed; transformation assumed
+product,robux,fastRolls,0,1,entitlement,179,robux,,VERIFIED,
+product,robux,extraClassSlot,0,1,slot,119,robux,,VERIFIED,
+product,robux,infiniteBag,0,-1,capacity,99,robux,,CORROBORATED,Historical official pass description
+event,eventChest,chestSingle,0,1,chest,100,eventTokens,,VERIFIED,
+event,eventChest,chest3,0,3,chests,89,robux,,VERIFIED,
+event,eventChest,chest5,0,5,chests,129,robux,,VERIFIED,
+event,eventChest,chest10,0,10,chests,229,robux,,VERIFIED,
+perk,permanent,bagSize,0,0.10,multiplier_per_level,25,gems,,VERIFIED/ASSUMED,First price observed; effect assumed
+perk,permanent,handGrab,0,0.10,multiplier_per_level,50,gems,,VERIFIED/ASSUMED,First price observed; effect assumed
+perk,permanent,gemValue,0,0.10,multiplier_per_level,150,gems,,VERIFIED/ASSUMED,First price observed; effect assumed
+perk,permanent,featherValue,0,0.10,multiplier_per_level,20,gems,,VERIFIED/ASSUMED,First price observed; effect assumed
