@@ -383,11 +383,19 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 				break
 			end
 		end
+		if bandDepth >= column.base * column.step then
+			-- Deeper than this (short, rim-side) column reaches: nothing to fill under it.
+			if part then
+				releasePart(self, part)
+				column.fluff[k] = nil
+			end
+			continue
+		end
 		if not part then
 			-- Placed once, anchored for the round: the bed never moves, whatever gets picked.
 			part = acquirePart(self)
 			part.Name = "Fluff"
-			part.CanQuery = true
+			part.CanQuery = false -- cosmetic filler: the pick ray only ever meets records
 			part:SetAttribute(CELL_ATTRIBUTE, column.index)
 			part.Color = paletteColor(self._config, math.min(1, h(9) * 0.6 + visual.fluffTintShift))
 			column.fluff[k] = part
@@ -429,6 +437,9 @@ function PileVisualController._applyUnderlayer(self: PileVisualController, colum
 	for sheet = 1, 2 do
 		local n = grid[sheet]
 		local depth = visual.underlayerDepths[sheet]
+		if depth >= column.base * column.step then
+			continue
+		end
 		local shift = if sheet == 2 then 0.5 else 0
 		for i = 0, n - 1 do
 			for j = 0, n - 1 do
@@ -444,7 +455,7 @@ function PileVisualController._applyUnderlayer(self: PileVisualController, colum
 				end
 				local part = acquirePart(self)
 				part.Name = "Fluff"
-				part.CanQuery = true
+				part.CanQuery = false -- cosmetic filler: the pick ray only ever meets records
 				part:SetAttribute(CELL_ATTRIBUTE, column.index)
 				part.Color = paletteColor(self._config, math.min(1, h(9) * 0.5 + visual.fluffTintShift))
 				local y, normal = self:_surfaceAt(wx, wz)
@@ -481,7 +492,10 @@ function PileVisualController._exposeFloor(self: PileVisualController, column: C
 	local depthNow = (column.base - column.remaining) * column.step
 	local spacing = visual.floorLevelSpacingStuds
 	local spread = field.cellSize * 0.98
-	local level = column.floorDepth + spacing
+	-- The records themselves fill the column down to the bottom of the rendered window (the top
+	-- `visibleSlotsPerCell` untaken slots); filler only goes below that, never into the dug space.
+	local windowBottom = math.min(column.base, column.base - column.remaining + visual.visibleSlotsPerCell) * column.step
+	local level = math.max(column.floorDepth, windowBottom - spacing) + spacing
 	local added = 0
 	while level <= depthNow + 0.01 and added < 40 do
 		for k = 1, visual.floorStrandsPerLevel do
@@ -495,7 +509,7 @@ function PileVisualController._exposeFloor(self: PileVisualController, column: C
 			if scale > 0 then
 				local part = acquirePart(self)
 				part.Name = "Fluff"
-				part.CanQuery = true
+				part.CanQuery = false -- cosmetic filler: the pick ray only ever meets records
 				part:SetAttribute(CELL_ATTRIBUTE, column.index)
 				part.Color = paletteColor(self._config, math.min(1, h(9) * 0.6 + visual.fluffTintShift))
 				local y, normal = self:_surfaceAt(wx, wz)
@@ -557,7 +571,10 @@ function PileVisualController._exposeWalls(self: PileVisualController, dug: Colu
 		local edgeX = minCorner.X + (nx + 0.5) * field.cellSize - offset[1] * field.cellSize * 0.42
 		local edgeZ = minCorner.Z + (nz + 0.5) * field.cellSize - offset[2] * field.cellSize * 0.42
 		local topY = field.baseY + self:_columnTop(neighbour)
-		local depthFrom = neighbour.wallDepth
+		-- The neighbour's own rendered records cover its side down to the bottom of its window;
+		-- wall filler starts below that.
+		local neighbourWindow = math.min(neighbour.base, neighbour.base - neighbour.remaining + visual.visibleSlotsPerCell) * neighbour.step
+		local depthFrom = math.max(neighbour.wallDepth, neighbourWindow - visual.wallLevelSpacingStuds)
 		local levelsAdded = 0
 		local depthNow = depthFrom + visual.wallLevelSpacingStuds
 		while depthNow <= exposure and levelsAdded < 40 do
@@ -571,7 +588,7 @@ function PileVisualController._exposeWalls(self: PileVisualController, dug: Colu
 				local wz = edgeZ + (if offset[2] == 0 then along else 0)
 				local part = acquirePart(self)
 				part.Name = "Fluff"
-				part.CanQuery = true
+				part.CanQuery = false -- cosmetic filler: the pick ray only ever meets records
 				part:SetAttribute(CELL_ATTRIBUTE, neighbour.index)
 				part.Color = paletteColor(self._config, math.min(1, h(9) * 0.6 + visual.fluffTintShift))
 				-- Lying along the wall face (not bridging the pit), with a little scatter.

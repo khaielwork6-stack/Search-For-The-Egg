@@ -190,7 +190,7 @@
       "pickupVolume": 0.7,
       "bagFullToastCooldownSeconds": 1.5,
       "assumption": "ASSUMED",
-      "visibleSlotsPerCell": 8,
+      "visibleSlotsPerCell": 12,
       "featherWidthRange": [
         1.0,
         1.5
@@ -229,9 +229,9 @@
       "rimStrandsDesktop": 1800,
       "rimStrandsMobile": 550,
       "fluffBandDepths": [
-        2.6,
-        3.0,
-        3.4
+        7.0,
+        7.5,
+        8.0
       ],
       "fluffBandShares": [
         0.4,
@@ -252,8 +252,8 @@
         2
       ],
       "underlayerDepths": [
-        1.1,
-        1.6
+        6.7,
+        7.2
       ],
       "underlayerLengthRange": [
         0.9,
