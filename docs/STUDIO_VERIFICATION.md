@@ -890,3 +890,16 @@ Play Solo, desktop viewport 1223x658, owner map. Headless: 289 tests pass, check
 - Bed strands sit in four depth bands (0, 0.9, 1.8, 2.8 studs) so a dug cell shows feathers on its
   walls and floor. One pick: 1 record gone, 1 exposed, 0 other feathers moved, 51 bed strands of
   that cell settled 0.34 studs, 13,403 parts unchanged; bag 0 -> 1.
+
+## Full-depth columns and the buried Egg (13 Sep 2026, follow-up 3)
+
+- Every cell now holds records from the floor to the dome (`pile.recordSpacingStuds` 0.55): 3,369
+  records this round, 1 at the rim to 32 at the crown (mask cap), crown cell 23.
+- Digging: 60 picks around the crown lowered its column 3.4 studs; the pit floor is a feather part and
+  rays from the pit centre at the exposed heights hit feather parts on every side (wall strands are
+  added on newly exposed faces, never moved or removed). Pile stats: fluff 12,967 -> 13,231 (walls added),
+  exposed feathers 477 -> 476.
+- Egg: server placed it in cell (5, 12) at slot 15 of 32 (5.1 studs above the ground, ~10 below the
+  surface), invisible and absent from the workspace. With the 3x3 dug to its height and one covering
+  record left, picking exactly that record (id 12687) revealed it at (-4.5, 57.7, 380.1) inside the hole;
+  phase EggRevealed. One pick still awards exactly one.
