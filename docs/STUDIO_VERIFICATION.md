@@ -941,3 +941,28 @@ Play Solo, desktop viewport 1223x658, owner map. Headless: 289 tests pass, check
   gameplay eye at the flank base, no ground or sky between feathers; digging a pit reveals more
   feathers.
 - One pick unchanged: 1 record removed, 0 parts moved, 14,722 unchanged, bag +1.
+
+
+## Follow-up: exact-cursor pick and the 12-feather carried stack (13 Sep 2026)
+
+Commits 524cac8, 24396bf, 8fd3f43, d7f555d, b20f3b6. Verified in Studio Play (three fresh rounds,
+`SFE_ClientDebug` automation, place 89488644743966).
+
+- **Exact pick.** The pick ray starts at the camera through the crosshair (the locked mouse sits on it;
+  a free mouse aims through its own position; touch/gamepad use the centre) and is resolved at the
+  instant of the click. The first part it meets must carry `SFE_FeatherId`; cosmetic strands no longer
+  answer the ray and a hit on the ground targets nothing. Three runs: highlighted id 13836 (cell 216)
+  -> server hit cell 216, 1 part removed, 0 parts moved; id 14859 (cell 232) -> cell 232, 1/0; id 13836
+  -> cell 216, 1/0.
+- **Records seat by slot** on both client and server (`FeatherLayout.seatOffset`), 12 per cell rendered
+  and collectible. Two server probes had to stop treating the invisible collision shell as geometry
+  (a colliding part is always queryable): before that fix, follow-up picks on a dug cell were refused
+  with `aim` (9/11) and then `line_of_sight` (10/11); after it, 14/18 aimed picks accepted with zero
+  server rejections (the 4 were client `no_target` on already-dug aim points).
+- **Pickable surface** from the gameplay eye: a 21x21 ray grid over the mound met a record on 392 of
+  400 rays (the 8 misses were the freshly dug hole).
+- **Carried stack.** Bag 2/25 -> 1 feather, 4 -> 2, 6 -> 3, 8 -> 4, 10 -> 5, 12 -> 6, 14 -> 7, 24 -> 12
+  (`ceil(fullness * 12)`). Infinite bag (`setEntitlement infiniteBag`): counter reads `Bag 26 / Infinite`
+  while the bundle shows 7 = `floor(1 + 11 * ln(26) / ln(200))`. Every bundle feather projected through
+  the viewport camera at 12 feathers stays within 87% of the frame's half-extents (no cropping); the
+  frame sits 18 px inside the right edge and 92 px above the bottom of the safe-area gui (1223x600).
