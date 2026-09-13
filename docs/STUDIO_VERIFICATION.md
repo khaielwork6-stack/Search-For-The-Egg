@@ -913,3 +913,12 @@ Play Solo, desktop viewport 1223x658, owner map. Headless: 289 tests pass, check
   floor/wall strands at the new depth). Bag 0 -> 1.
 - Digging one column: 25 of 25 rays down into the pit and 12 of 12 angled looks from its rim hit
   feathers, never the ground. Nothing in the coat moves after placement.
+
+## Wider double-sided feathers, four offset layers (13 Sep 2026, follow-up 5)
+
+- Feather vanes render both faces (`DoubleSided`), so flat strands no longer vanish at grazing angles.
+- Bed strands are 1.2-2.2 long and 0.9-1.6 wide, tilted 4-34 degrees, in four offset layers (0, 0.35,
+  0.7, 1.05 studs deep), 64 per cell; no shrink toward the rim. 20,064 instances at high tier.
+- Judged from a first-person camera at the base of the flank looking up the slope (edit render of a
+  fresh build with a 2x2 hole dug 12 records deep): solid feathers from foot to crown, no ground or
+  sky between them.
