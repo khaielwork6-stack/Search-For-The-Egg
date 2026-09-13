@@ -15,6 +15,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
@@ -873,24 +874,24 @@ function PileVisualController._step(self: PileVisualController, dt: number)
 	self:resolveUnderCursor()
 end
 
--- The pick ray: from the camera through the exact cursor position (the crosshair while the mouse
--- is locked in first person). Touch and gamepad have no cursor over the world, so they aim through
--- the viewport centre, where the crosshair is drawn.
+-- The pick ray: from the camera through the crosshair. In first person the mouse is locked to the
+-- screen centre, where the crosshair is drawn, so the centre IS the cursor; only a free mouse
+-- (camera not locked) aims through its own position. Touch and gamepad have no cursor over the
+-- world and aim through the centre too.
 function PileVisualController.aimRay(_self: PileVisualController): (Vector3?, Vector3?)
 	local camera = workspace.CurrentCamera
 	if not camera then
 		return nil, nil
 	end
-	local viewport = camera.ViewportSize
-	local point = viewport * 0.5
+	local point = camera.ViewportSize * 0.5
+	local firstPerson = Players.LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson
+		or UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
 	local lastInput = UserInputService:GetLastInputType()
-	if
-		lastInput == Enum.UserInputType.MouseButton1
+	local mouse = lastInput == Enum.UserInputType.MouseButton1
 		or lastInput == Enum.UserInputType.MouseMovement
 		or lastInput == Enum.UserInputType.MouseButton2
 		or lastInput == Enum.UserInputType.MouseWheel
-		or lastInput == Enum.UserInputType.Keyboard
-	then
+	if mouse and not firstPerson then
 		local okLocation, location = pcall(UserInputService.GetMouseLocation, UserInputService)
 		if okLocation and typeof(location) == "Vector2" then
 			point = location
