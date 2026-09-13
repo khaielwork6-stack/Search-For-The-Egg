@@ -929,3 +929,15 @@ Play Solo, desktop viewport 1223x658, owner map. Headless: 289 tests pass, check
   offset half a step) sit under every cell's bed: 29,971 instances at high tier. Close-up render from
   2.6 studs off the flank surface, looking down the slope, after a 2x2 hole dug 40 records: feathers
   behind every crack, no ground, sky, or darkness.
+
+## Real feather mesh restored (13 Sep 2026, follow-up 7)
+
+- Root cause: the Rojo-synced `SFE_Assets.Feather` MeshPart had an empty MeshId (rbxm strips it), so
+  every clone rendered as its blank bounding box - the grey angular shards. `AssetManifest.warm` now
+  rebuilds the mesh from a hard-coded id (feather rbxassetid://439102658) and applies it in place with
+  Automatic LOD + double-sided. Verified in Play: template healthy at client boot (meshSize
+  121.97/322.34/29.05), 14,723 rendered parts all real meshes, 0 blank boxes.
+- Density lowered to premium levels (~19.7k at high tier with the real mesh, Automatic LOD): from the
+  gameplay eye at the flank base, no ground or sky between feathers; digging a pit reveals more
+  feathers.
+- One pick unchanged: 1 record removed, 0 parts moved, 14,722 unchanged, bag +1.
