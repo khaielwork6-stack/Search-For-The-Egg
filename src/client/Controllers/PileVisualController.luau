@@ -216,10 +216,12 @@ function PileVisualController._surfaceAt(self: PileVisualController, wx: number,
 	local height = PileSurface.heightAt(field, wx, wz)
 	local normal = PileSurface.normalAt(field, wx, wz)
 	local y = field.baseY + height
+	-- Never under the collision core or the map earth: the voxel surface can bulge above the smooth
+	-- field by up to a stud, and every strand must sit on top of it (seats are taken once, at build).
 	local result =
 		workspace:Raycast(Vector3.new(wx, field.baseY + field.apex + 12, wz), Vector3.new(0, -(field.apex + 20), 0), terrainParams)
-	if result and result.Instance ~= workspace.Terrain and result.Position.Y > y then
-		return result.Position.Y, result.Normal -- map earth higher than the mound edge
+	if result and result.Position.Y > y then
+		return result.Position.Y, if result.Instance == workspace.Terrain then normal else result.Normal
 	end
 	return y, normal
 end
@@ -333,7 +335,7 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 			continue
 		end
 		local y, normal = self:_surfaceAt(wx, wz)
-		local seatY = y + visual.surfaceLiftStuds - sink - (depth - 1) * visual.layerStepStuds
+		local seatY = y + visual.surfaceLiftStuds + 0.2 - sink - (depth - 1) * visual.layerStepStuds
 		local part = column.feathers[slot]
 		if not part then
 			part = acquirePart(self)
@@ -395,7 +397,7 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 			placeFeather(
 				part,
 				wx,
-				y + lerp(0.04, 0.2, h(3)) - layer * visual.fluffLayerStepStuds - sink,
+				y + lerp(0.12, 0.42, h(3)) - layer * visual.fluffLayerStepStuds - sink,
 				wz,
 				normal,
 				yaw,

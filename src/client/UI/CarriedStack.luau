@@ -46,7 +46,7 @@ export type CarriedStack = typeof(setmetatable(
 ))
 
 local TEMPLATE_SIZE = Vector3.new(0.54, 1.44, 0.13)
-local REST_CAMERA = CFrame.lookAt(Vector3.new(0.4, 0.55, 4.4), Vector3.new(0.15, 0.25, 0))
+local REST_CAMERA = CFrame.lookAt(Vector3.new(0, 0.35, 6.2), Vector3.new(0, 0.15, 0))
 local RENDER_NAME = "SFE_CarriedStackSway"
 
 local function makeFeather(index: number, palette: { { number } }): BasePart
@@ -83,11 +83,11 @@ local function restPose(index: number, count: number): CFrame
 	local h = function(salt: number)
 		return FeatherLayout.hash(index, 11, salt)
 	end
-	local base = Vector3.new(0.9, -1.15, 0.2)
-	local spread = math.rad(56)
+	local base = Vector3.new(0.55, -1.05, 0.2) -- inside the frame with room for the fanned heads
+	local spread = math.rad(52)
 	local t = if count <= 1 then 0.5 else (index - 1) / (count - 1)
 	local fan = -spread / 2 + spread * t + (h(1) - 0.5) * math.rad(6)
-	local lean = math.rad(-38) -- heads lean up-left, away from the crosshair
+	local lean = math.rad(-30) -- heads lean up-left, away from the crosshair
 	local roll = (h(2) - 0.5) * math.rad(14)
 	local depth = (t - 0.5) * 0.35 + (h(3) - 0.5) * 0.08
 	-- Quill (+Y) points from the base up-left; rotate about the view axis to fan.
@@ -164,10 +164,14 @@ function CarriedStack._layout(self: CarriedStack)
 	local gui = self.frame.Parent :: ScreenGui
 	local class = SafeArea.layoutClass(gui.AbsoluteSize.X, gui.AbsoluteSize.Y)
 	local mobile = class ~= "desktop"
-	local width = if mobile then carried.widthPxMobile else carried.widthPxDesktop
-	local height = if mobile then carried.heightPxMobile else carried.heightPxDesktop
+	-- Size follows the viewport (a fraction of its width, clamped) so the whole bundle stays inside
+	-- the bottom-right safe area on every screen; the frame never extends past the gui bounds.
+	local scale = gui:FindFirstChildOfClass("UIScale")
+	local factor = if scale then scale.Scale else 1
+	local width = math.clamp(gui.AbsoluteSize.X * carried.widthFraction / factor, carried.minWidthPx, carried.maxWidthPx)
+	local height = math.floor(width * carried.aspect)
 	local bottom = if mobile then carried.bottomOffsetPxMobile else carried.bottomOffsetPxDesktop
-	self.frame.Size = UDim2.fromOffset(width, height)
+	self.frame.Size = UDim2.fromOffset(math.floor(width), height)
 	self.frame.Position = UDim2.new(carried.anchorX, -carried.rightOffsetPx, 1, -bottom)
 end
 

@@ -756,6 +756,15 @@ function Validator.validate(raw: any): Report
 			check(isPositiveNumber(carried[key]), "hud.carriedStack." .. key .. " must be > 0")
 		end
 		check(isNonNegativeNumber(carried.anchorX) and carried.anchorX <= 1, "hud.carriedStack.anchorX must be 0..1")
+		check(
+			isPositiveNumber(carried.widthFraction)
+				and carried.widthFraction <= 0.5
+				and isPositiveNumber(carried.minWidthPx)
+				and isPositiveNumber(carried.maxWidthPx)
+				and carried.minWidthPx <= carried.maxWidthPx
+				and isPositiveNumber(carried.aspect),
+			"hud.carriedStack width rule must be a fraction <= 0.5 with min <= max px and a positive aspect"
+		)
 		for _, key in ipairs({
 			"rightOffsetPx",
 			"bottomOffsetPxDesktop",
