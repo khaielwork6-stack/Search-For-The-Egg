@@ -43,6 +43,7 @@ export type ProfileStore = typeof(setmetatable(
 		_jobId: string,
 		_wait: (seconds: number) -> (),
 		_log: any,
+		_stealLockPrefix: string?,
 		_active: { [number]: Profile },
 		_policy: typeof(ServerPolicy),
 		stats: { loads: number, loadFailures: number, saves: number, saveFailures: number, releases: number, lockConflicts: number },
@@ -58,6 +59,7 @@ export type Options = {
 	wait: ((seconds: number) -> ())?,
 	log: any?,
 	policy: { [string]: any }?,
+	stealLockPrefix: string?, -- locks held by job ids with this prefix are taken over at once
 }
 
 function ProfileStore.new(options: Options): ProfileStore
@@ -70,6 +72,9 @@ function ProfileStore.new(options: Options): ProfileStore
 			task.wait(seconds)
 		end,
 		_log = options.log,
+		-- Locks held by job ids with this prefix are never live servers (Studio sessions do not share
+		-- profiles), so they are taken over immediately instead of waiting out the lock timeout.
+		_stealLockPrefix = options.stealLockPrefix,
 		_active = {},
 		_policy = (options.policy or ServerPolicy) :: any,
 		stats = { loads = 0, loadFailures = 0, saves = 0, saveFailures = 0, releases = 0, lockConflicts = 0 },
@@ -112,11 +117,16 @@ function ProfileStore.loadAsync(self: ProfileStore, userId: number): LoadResult
 				}
 			end
 			local lock = existing.lock
+			local stealable = self._stealLockPrefix ~= nil
+				and type(lock) == "table"
+				and type(lock.jobId) == "string"
+				and string.sub(lock.jobId, 1, #self._stealLockPrefix) == self._stealLockPrefix
 			if
 				type(lock) == "table"
 				and lock.jobId ~= self._jobId
 				and type(lock.lockedAt) == "number"
 				and (now - lock.lockedAt) < self._policy.sessionLockTimeoutSeconds
+				and not stealable
 			then
 				outcome = "locked"
 				return nil -- abort write; another live server owns this profile

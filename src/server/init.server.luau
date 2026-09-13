@@ -109,6 +109,9 @@ local profiles = ProfileStore.new({
 	config = config,
 	jobId = if game.JobId ~= "" then game.JobId else "studio-" .. idGen(),
 	log = log,
+	-- A Studio session that was closed mid-round leaves its lock behind; the next Studio session must
+	-- not wait out the timeout (and get kicked) for a "server" that can never release it.
+	stealLockPrefix = if RunService:IsStudio() then "studio-" else nil,
 })
 local receiptLedger = ReceiptLedger.new(receiptDataStore)
 

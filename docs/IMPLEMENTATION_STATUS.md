@@ -173,6 +173,11 @@ scale 1.35, clump overlap 1.85 x cell.
   renderer batches, but the mobile tier (3,200) should be checked on a real phone in Phase 6.
 - `assets/models/Feather.rbxm` and `Egg.rbxm` lack mesh metadata (`MeshSize` 0), repaired at boot by
   `AssetManifest.warm()`; re-saving the two MeshParts from Studio would make the files self-sufficient.
+- Studio join fix (13 Sep): the DataStore availability probe now performs a real read, so a Studio session
+  without API access (the usual case for a shared or published place opened by a collaborator) uses the in-memory
+  store instead of failing five real loads and kicking the player; and a lock left behind by a closed Studio
+  session (`studio-*` job ids) is taken over immediately instead of holding the profile for 90 s. Live server
+  locks are still respected.
 - `luau-lsp analyze` is not installed on the laptop toolchain (advisory only).
 - In Studio the place is unpublished, so DataStores are replaced by the in-memory store; the Play Solo place also
   contains two stray Creator Store meshes in Workspace (`feather`, `Egg`) that are not part of this repository.

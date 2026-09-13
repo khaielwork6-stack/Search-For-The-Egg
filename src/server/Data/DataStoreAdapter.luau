@@ -33,14 +33,17 @@ function DataStoreAdapter.updateAsync(self: DataStoreAdapter, key: string, trans
 	return ok, result
 end
 
--- True when DataStore access is expected to work (published place or Studio with API access).
+-- True when DataStore access actually works (published place, or Studio with "Enable Studio Access to
+-- API Services" on). GetDataStore alone succeeds in any published place even when API access is off
+-- and every read/write then throws, which used to send a Studio player down the real-store path and
+-- kick them after five failed loads; the probe therefore performs a real read.
 function DataStoreAdapter.isAvailable(): boolean
-	local ok, result = pcall(function()
+	local ok = pcall(function()
 		local DataStoreService = game:GetService("DataStoreService")
 		local store = DataStoreService:GetDataStore("SFE_Probe")
-		return store ~= nil
+		store:GetAsync("probe")
 	end)
-	return ok and result == true
+	return ok
 end
 
 return DataStoreAdapter

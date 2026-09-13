@@ -191,6 +191,38 @@ return function(describe, it, expect)
 			expect(third.profile).toBeTruthy()
 		end)
 
+		it("a lock left by a closed Studio session is taken over at once, live server locks are not", function()
+			local ds = MockDataStore.new("profiles")
+			local clock = Clock.fake(1000)
+			local previous = newStore(ds, "studio-abc", clock)
+			previous:loadAsync(1) -- Studio closed without releasing
+			local nextStudio = ProfileStore.new({
+				dataStore = ds,
+				clock = clock,
+				config = cfg,
+				jobId = "studio-def",
+				wait = function() end,
+				stealLockPrefix = "studio-",
+			})
+			local taken = nextStudio:loadAsync(1)
+			expect(taken.profile).toBeTruthy()
+			expect(nextStudio.stats.lockConflicts).toBe(0)
+			expect(ds:peek(nextStudio:keyFor(1)).lock.jobId).toBe("studio-def")
+			-- A real server's lock is still respected even with the prefix configured.
+			local live = newStore(ds, "live-job", clock)
+			nextStudio:releaseAsync(taken.profile)
+			live:loadAsync(1)
+			local another = ProfileStore.new({
+				dataStore = ds,
+				clock = clock,
+				config = cfg,
+				jobId = "studio-ghi",
+				wait = function() end,
+				stealLockPrefix = "studio-",
+			})
+			expect(another:loadAsync(1).profile).toBeNil()
+		end)
+
 		it("a stale lock from a dead server is taken over after the timeout", function()
 			local ds = MockDataStore.new("profiles")
 			local clock = Clock.fake(1000)
