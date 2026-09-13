@@ -41,6 +41,7 @@ export type ModalController = typeof(setmetatable(
 		_views: { [string]: any },
 		_focusMemory: { [string]: GuiObject? },
 		_externalUnlock: boolean?,
+		_unlockBound: boolean?,
 		mouseUnlocked: boolean?,
 		_debug: { [string]: { [string]: (...any) -> any } },
 		_blur: BlurEffect,
@@ -119,9 +120,20 @@ function ModalController._applyMouseLock(self: ModalController)
 		player.CameraMinZoomDistance = 0.5
 		player.CameraMaxZoomDistance = 0.5
 		player.CameraMode = Enum.CameraMode.Classic
-		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		UserInputService.MouseIconEnabled = true
+		if not self._unlockBound then
+			-- The camera module re-locks the mouse every frame at first-person zoom; free it after it.
+			self._unlockBound = true
+			RunService:BindToRenderStep("SFE_MenuMouseUnlock", Enum.RenderPriority.Camera.Value + 1, function()
+				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			end)
+		end
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	else
+		if self._unlockBound then
+			self._unlockBound = false
+			RunService:UnbindFromRenderStep("SFE_MenuMouseUnlock")
+		end
 		player.CameraMode = Enum.CameraMode.LockFirstPerson
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 		UserInputService.MouseIconEnabled = false
