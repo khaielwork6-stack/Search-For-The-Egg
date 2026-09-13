@@ -140,8 +140,8 @@
       "shellFolderName": "SFE_PileCollision"
     },
     "visual": {
-      "partBudgetDesktop": 16000,
-      "partBudgetMobile": 5500,
+      "partBudgetDesktop": 20000,
+      "partBudgetMobile": 6500,
       "featherLengthRange": [
         2.0,
         3.0
@@ -211,8 +211,8 @@
         4,
         34
       ],
-      "fluffPerCellDesktop": 34,
-      "fluffPerCellMobile": 12,
+      "fluffPerCellDesktop": 42,
+      "fluffPerCellMobile": 14,
       "fluffTintShift": 0.35,
       "selectionOutlineColor": [
         255,
@@ -226,8 +226,8 @@
       "liftSeconds": 0.09,
       "liftStuds": 0.5,
       "pickScale": 1.25,
-      "rimStrandsDesktop": 1400,
-      "rimStrandsMobile": 450,
+      "rimStrandsDesktop": 1800,
+      "rimStrandsMobile": 550,
       "fluffBandDepths": [
         0.0,
         0.4,
@@ -244,7 +244,7 @@
       "floorLevelSpacingStuds": 0.5,
       "rimMinScale": 0.85,
       "underlayerGridDesktop": [
-        3,
+        4,
         3
       ],
       "underlayerGridMobile": [
