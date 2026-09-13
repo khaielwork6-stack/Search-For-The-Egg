@@ -79,16 +79,20 @@ Build label: `phase4-lobby-meta` (`src/server/BuildInfo.luau`). Config version 1
   old -> new), Daily (calendar, countdown, grace note, claim), Codes, Inventory, Stats (personal + boards), Event
   (chest contents and odds; opening lands in Phase 5).
 - HUD currency chips count up only from acknowledged projections and punch on `RewardGranted`.
-- `PileVisualController` rebuilt around `Shared/Domain/PileSurface` (A-UX-07): the 16x16 logical cells become one
-  rounded-cone mound (apex `pile.maxVisualHeightStuds`, profile `1 - r^1.5`, foot at 1.15x the footprint radius =
-  the nest base cylinder) whose height is the continuous profile times the interpolated smoothed remaining
-  fraction. The client renders it as one runtime `EditableMesh` heightfield (64/48/32 segments by tier, per-vertex
-  normals and cream vertex tints, SmoothPlastic) with an ellipsoid `SpecialMesh` fallback when the mesh API is
-  unavailable; invisible per-column collider boxes keep players outside and drop with the surface; the repo Feather
-  mesh is instanced by density from the tier budget and seated tangent to the surface. Deltas rebuild the field,
-  move the touched vertices in place (live dents), drop colliders, and thin shingles. The server resolves aims by
-  marching the same surface (`CollectionService.resolveAim`); rays that start inside the mound fall back to the
-  `pile.aimPlaneHeightStuds` plane and hits on the skirt map to the nearest edge cell.
+- `PileVisualController` rebuilt around `Shared/Domain/PileSurface` (A-UX-07) as a major feature: the 16x16
+  logical cells become one rounded-cone mound (apex `pile.maxVisualHeightStuds`, profile `1 - r^1.5`, foot at
+  1.15x the footprint radius = the nest base cylinder) whose height is the continuous profile times the
+  interpolated smoothed remaining fraction, plus low-frequency fluff noise so the silhouette is uneven. The client
+  renders a warm beige `EditableMesh` body that is never meant to show (ellipsoid `SpecialMesh` fallback) under a
+  coat of 9,000 desktop / 3,200 mobile anchored clones of the repo Feather mesh: planned per cell (deterministic
+  hashes, no repeats), weighted by surface area with a rim boost that dresses the skirt, in four kinds - flat on
+  the coat, half-buried, upright/crossed, and stacked clumps of 6-12 - with sizes 1.9-4.4 studs and cream-to-beige
+  tints. Clones share one mesh (renderer batching), have no physics, collisions, or queries, and are placed 400
+  per frame. Deltas rebuild the field, dent the body vertices in place, drop the per-column colliders, and thin /
+  re-seat only the touched cells' feathers. The server resolves aims by marching the same surface
+  (`CollectionService.resolveAim`); rays that start inside the mound fall back to the `pile.aimPlaneHeightStuds`
+  plane and hits on the skirt map to the nearest edge cell. Baking the coat into runtime `EditableMesh` chunks was
+  tried and rejected: the Play client's editable-mesh memory budget allowed 7 of 64 chunks.
 - `AssetManifest.warm()` (server bootstrap and client bootstrap) repairs mesh templates whose mesh metadata never
   loaded: the Rojo-synced `Feather.rbxm`/`Egg.rbxm` ship without `MeshSize`, which made every feather render at the
   mesh's native ~322-stud size (the "feathers cover the whole map" bug). Warm-up recreates the mesh through
@@ -160,8 +164,13 @@ scale 1.35, clump overlap 1.85 x cell.
 - The mound's colliders are per-column boxes, so the flank reads as invisible steps (2-5 studs at the rim): a
   player cannot walk in, but can jump up the mound. A smooth collider that follows the dug surface is a Phase 6
   polish item (the mesh's own convex hull cannot follow dents).
-- `EditableMesh` needs the experience to allow runtime mesh creation; if it fails at runtime the mound falls back to
-  one ellipsoid (no per-cell dents in the body, shingles still thin). `stats.domeKind` reports which path ran.
+- The body is one runtime `EditableMesh`; if creation fails the body falls back to one ellipsoid (no per-cell
+  dents in the body, the coat still thins). `stats.domeKind` reports which path ran. The coat never depends on
+  the mesh API.
+- Studio throttles rendering to 15 fps while its window is unfocused, so frame times sampled through the MCP bridge
+  read 66.7 ms regardless of scene cost (the 60 Hz heartbeat confirms the simulation is unthrottled); the owner
+  should read the in-game frame rate with the window focused. 9,000 anchored clones of one mesh is within what the
+  renderer batches, but the mobile tier (3,200) should be checked on a real phone in Phase 6.
 - `assets/models/Feather.rbxm` and `Egg.rbxm` lack mesh metadata (`MeshSize` 0), repaired at boot by
   `AssetManifest.warm()`; re-saving the two MeshParts from Studio would make the files self-sufficient.
 - `luau-lsp analyze` is not installed on the laptop toolchain (advisory only).

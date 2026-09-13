@@ -129,12 +129,12 @@ The hidden key, three colored levers, crystal-count puzzle, four-digit note puzz
 | ID | `ASSUMED` decision | Current value | Configuration key |
 |---|---|---:|---|
 | A-UX-01 | Minimum touch target | 44 px | `polishBudgets.minimumTapTargetPixels` |
-| A-UX-02 | Visual feather budget | 1,400 desktop / 700 mobile feather meshes (raised from 900 / 420 for the dome shingle layer) | `collection.pileRepresentation.clientVisualStrandPool*` |
+| A-UX-02 | Visual feather budget | 9,000 desktop / 3,200 mobile anchored clones of the Feather mesh (shared geometry, no physics, no queries, placed 400 per frame), distributed per cell by surface area with a rim boost so the skirt is dressed | `collection.pileRepresentation.clientVisualStrandPool*` |
 | A-UX-03 | Low-tier target | Stable 30 FPS | `polishBudgets.targetFpsMobileLowTier` |
 | A-UX-04 | Reduced motion | 35% camera/UI motion, no essential information removed | `polishBudgets.reducedMotionScale` |
 | A-UX-05 | Controller navigation | Selection groups and explicit focus restoration | UI architecture rule |
 | A-UX-08 | Aim fallback plane | Server aims that start inside the mound or miss the dome resolve against a plane 1.75 studs above the nest base (the pre-dome aim height) | `pile.aimPlaneHeightStuds` |
-| A-UX-07 | Pile dome presentation | Apex 22 studs (`pile.maxVisualHeightStuds`), continuous rounded-cone profile 1 - r^1.5 reaching the floor at 1.15x the footprint radius (the nest base cylinder), skirt hits map to the nearest edge cell, height = apex x profile x interpolated smoothed-3x3 remaining fraction; the client renders one runtime EditableMesh heightfield (SmoothPlastic, vertex-tinted cream) with an ellipsoid fallback when the mesh API is unavailable, invisible per-column colliders keep players outside, feather shingles lie tangent to the surface | `pile.maxVisualHeightStuds`, `Shared/Domain/PileSurface` constants, `PileVisualController` constants |
+| A-UX-07 | Pile dome presentation | Apex 22 studs (`pile.maxVisualHeightStuds`), continuous rounded-cone profile 1 - r^1.5 reaching the floor at 1.15x the footprint radius (the nest base cylinder), skirt hits map to the nearest edge cell, height = apex x profile x interpolated smoothed-3x3 remaining fraction; the client renders a warm beige EditableMesh body (never meant to show, ellipsoid fallback) under a coat of thousands of Feather-mesh clones: flat, half-buried, upright and stacked clumps with a 1.9-4.4 stud length range, cream-to-beige tints, and 0.55-stud fluff noise on the silhouette; invisible per-column colliders keep players outside | `pile.maxVisualHeightStuds`, `Shared/Domain/PileSurface` constants, `PileVisualController` constants |
 | A-UX-06 | UI tween cap | 0.45 s (raised from 0.35 s) so the owner-supplied motion recipes (panel open 0.45 s, Elastic release 0.4 s, notification pop 0.45 s) run uncapped | `polishBudgets.maximumUiTweenSeconds` |
 
 ## Premium presentation assumptions

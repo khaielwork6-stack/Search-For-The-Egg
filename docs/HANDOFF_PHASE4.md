@@ -32,3 +32,5 @@ in `Shared/Design/Motion`, the three PNGs uploaded as image assets in `Shared/De
 rebuilt as one smooth mound (`Shared/Domain/PileSurface` + `PileVisualController`). The Feather/Egg rbxm files
 shipped without mesh metadata, which is why the first pile attempt covered the whole map; `AssetManifest.warm()`
 repairs the templates at boot. Evidence: `docs/STUDIO_VERIFICATION.md` (Phase 4) and `docs/IMPLEMENTATION_STATUS.md`.
+Owner review of the first mound (smooth body with sparse shingles) was rejected on 13 Sep; the pile was rebuilt as
+a dense feather mountain (9,000 anchored Feather-mesh clones over a hidden body, stacked in depth, dents live).

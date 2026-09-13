@@ -96,8 +96,8 @@
     "personalCash": true,
     "pileRepresentation": {
       "serverGridCells": 256,
-      "clientVisualStrandPoolDesktop": 1400,
-      "clientVisualStrandPoolMobile": 700,
+      "clientVisualStrandPoolDesktop": 9000,
+      "clientVisualStrandPoolMobile": 3200,
       "replicationHz": 8,
       "snapshotHz": 1,
       "assumption": "ASSUMED"
