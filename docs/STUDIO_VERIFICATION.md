@@ -903,3 +903,13 @@ Play Solo, desktop viewport 1223x658, owner map. Headless: 289 tests pass, check
   surface), invisible and absent from the workspace. With the 3x3 dug to its height and one covering
   record left, picking exactly that record (id 12687) revealed it at (-4.5, 57.7, 380.1) inside the hole;
   phase EggRevealed. One pick still awards exactly one.
+
+## Frozen bed and packed layers (13 Sep 2026, follow-up 4)
+
+- Coat: 477 exposed records + 17,220 bed strands (60 small strands per cell in three shallow bands,
+  2,400 rim strands); 17,697 instances. From above over the footprint 747 of 749 rays meet a feather
+  first; from the sides 283 of 283.
+- One pick: 1 record gone, 0 parts moved, 17,695 unchanged, 29 added (the next record plus fixed
+  floor/wall strands at the new depth). Bag 0 -> 1.
+- Digging one column: 25 of 25 rays down into the pit and 12 of 12 angled looks from its rim hit
+  feathers, never the ground. Nothing in the coat moves after placement.
