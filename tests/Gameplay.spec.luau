@@ -270,7 +270,7 @@ return function(describe, it, expect)
 	end)
 
 	describe("Egg", function()
-		it("selected node is valid, stays concealed until cover and depth are met, reveals once", function()
+		it("selected node is valid, stays concealed until its covering records are gone, reveals once", function()
 			local h = harness()
 			h.join(1)
 			local roundId, runtime = h.startRound({ 1 })
@@ -278,22 +278,30 @@ return function(describe, it, expect)
 			expect(runtime.eggDepthFraction).toBeGreaterThanOrEqual(cfg.eggSpawn.minimumRemovalFraction)
 			expect(runtime.eggDepthFraction).toBeLessThanOrEqual(cfg.eggSpawn.maximumRemovalFraction)
 			expect(h.rounds:project(roundId, true).eggNodeId).toBeNil()
-			-- Cover cleared but depth not reached: still concealed.
+			local eggCell = runtime.grid.cells[PileGrid.index(runtime.grid.width, runtime.eggNode.x, runtime.eggNode.z)]
+			expect(runtime.eggSlot).toBeGreaterThanOrEqual(2)
+			expect(runtime.eggSlot).toBeLessThanOrEqual(eggCell.base)
+			-- The Egg sits deep inside its column, below the surface and above the floor.
+			local height = h.egg:buriedHeight(runtime)
+			expect(height).toBeGreaterThan(0.5)
+			expect(height).toBeLessThan(cfg.pile.maxVisualHeightStuds)
+			-- Everything around the Egg gone, its own cover intact: still concealed.
 			for _, index in ipairs(runtime.eggNode.coverIndexes) do
-				local cell = runtime.grid.cells[index]
-				PileGrid.remove(runtime.grid, cell, cell.remaining)
+				if index ~= eggCell.index then
+					local cell = runtime.grid.cells[index]
+					PileGrid.remove(runtime.grid, cell, cell.remaining)
+				end
 			end
 			expect(h.egg:checkReveal(runtime)).toBe(false)
-			expect(runtime.eggCoverCleared).toBe(true)
+			expect(runtime.eggCoverCleared).toBe(false)
 			expect(runtime.state.phase).toBe("Searching")
-			-- Reach the depth fraction through the rest of the pile.
-			for _, cell in ipairs(runtime.grid.cells) do
-				if PileGrid.removedFraction(runtime.grid) >= runtime.eggDepthFraction then
-					break
-				end
-				PileGrid.remove(runtime.grid, cell, cell.remaining)
-			end
+			-- All but the last covering record: still concealed.
+			PileGrid.remove(runtime.grid, eggCell, eggCell.remaining - runtime.eggSlot)
+			expect(h.egg:checkReveal(runtime)).toBe(false)
+			-- The last covering record reveals it, exactly once.
+			PileGrid.remove(runtime.grid, eggCell, 1)
 			expect(h.egg:checkReveal(runtime)).toBe(true)
+			expect(runtime.eggCoverCleared).toBe(true)
 			expect(runtime.state.phase).toBe("EggRevealed")
 			expect(runtime.state.joinClosed).toBe(true)
 			expect(h.egg:checkReveal(runtime)).toBe(false)
@@ -301,25 +309,20 @@ return function(describe, it, expect)
 			expect(h.analyticsAdapter:countOf("egg_revealed")).toBe(1)
 		end)
 
-		it("reveal triggers from a real collection hit on the last cover cell", function()
+		it("reveal triggers from a real collection hit on the last covering record", function()
 			local h = harness()
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
-			h.clearGridExcept(runtime, runtime.eggNode.coverIndexes)
-			for _, index in ipairs(runtime.eggNode.coverIndexes) do
-				local cell = runtime.grid.cells[index]
-				PileGrid.remove(runtime.grid, cell, cell.remaining - 1)
-			end
+			local eggCell = runtime.grid.cells[PileGrid.index(runtime.grid.width, runtime.eggNode.x, runtime.eggNode.z)]
+			PileGrid.remove(runtime.grid, eggCell, eggCell.remaining - runtime.eggSlot)
 			local revealed = false
 			h.egg.revealed:Connect(function(_rt, position)
 				revealed = true
 				expect(typeof(position)).toBe("Vector3")
 			end)
-			for _, index in ipairs(runtime.eggNode.coverIndexes) do
-				local cell = runtime.grid.cells[index]
-				local result = h.collectAt(1, runtime, cell.x, cell.z)
-				expect(result.ok).toBe(true)
-			end
+			runtime.players[1].carriedStandard = 0
+			local result = h.collectAt(1, runtime, eggCell.x, eggCell.z)
+			expect(result.ok).toBe(true)
 			expect(revealed).toBe(true)
 			expect(runtime.state.phase).toBe("EggRevealed")
 		end)

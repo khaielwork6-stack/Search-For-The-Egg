@@ -11,6 +11,7 @@ local RoundReducer = require(Shared.Reducers.RoundReducer)
 local SessionReducer = require(Shared.Reducers.SessionReducer)
 local WeightedRandom = require(Shared.WeightedRandom)
 local PileGrid = require(Shared.Domain.PileGrid)
+local PileSurface = require(Shared.Domain.PileSurface)
 local EggNodes = require(Shared.Domain.EggNodes)
 local ToolSpecs = require(Shared.Domain.ToolSpecs)
 local Signal = require(Shared.Util.Signal)
@@ -49,6 +50,7 @@ export type Runtime = {
 	nodes: { EggNodes.Node },
 	eggNode: EggNodes.Node,
 	eggDepthFraction: number,
+	eggSlot: number,
 	eggCoverCleared: boolean,
 	players: { [number]: PlayerState },
 	pendingDelta: { [number]: number }, -- cell index -> remaining
@@ -182,9 +184,18 @@ function RoundService.createForParty(
 	for _, index in ipairs(eggNode.coverIndexes) do
 		cover[index] = true
 	end
-	local grid = PileGrid.create(self._config.pile, difficulty.pileHealthMultiplier, cover, function()
+	local pileConfig = self._config.pile
+	local config = self._config
+	local grid = PileGrid.create(pileConfig, difficulty.pileHealthMultiplier, cover, function()
 		return self._rng:next()
+	end, function(x, z)
+		return PileSurface.columnRecords(config, pileConfig.gridWidth, pileConfig.gridDepth, pileConfig.cellSizeStuds, x, z)
 	end)
+	-- The Egg sits inside its column: `eggSlot` is the lowest record that must be gone before it
+	-- shows, chosen so a deep fraction of the column covers it.
+	local eggDepthFraction = EggNodes.rollDepth(self._config.eggSpawn, difficulty, self._rng:next())
+	local eggCell = grid.cells[PileGrid.index(grid.width, eggNode.x, eggNode.z)]
+	local eggSlot = math.clamp(eggCell.base - math.floor(eggCell.base * eggDepthFraction + 0.5) + 1, 2, math.max(2, eggCell.base))
 	local runtime: Runtime = {
 		state = state,
 		cutsceneDeadline = self._clock:monotonic() + self._config.round.cutsceneSeconds,
@@ -192,7 +203,8 @@ function RoundService.createForParty(
 		grid = grid,
 		nodes = self:candidateNodes(party.chapter),
 		eggNode = eggNode,
-		eggDepthFraction = EggNodes.rollDepth(self._config.eggSpawn, difficulty, self._rng:next()),
+		eggDepthFraction = eggDepthFraction,
+		eggSlot = eggSlot,
 		eggCoverCleared = false,
 		players = {},
 		pendingDelta = {},

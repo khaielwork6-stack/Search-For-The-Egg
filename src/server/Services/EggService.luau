@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local RoundReducer = require(Shared.Reducers.RoundReducer)
 local PileGrid = require(Shared.Domain.PileGrid)
+local PileSurface = require(Shared.Domain.PileSurface)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local Envelope = require(Shared.Net.Envelope)
 local Signal = require(Shared.Util.Signal)
@@ -50,20 +51,44 @@ end
 -- World position of the Egg for a runtime (server-only; never projected before reveal). In a
 -- chapter whose layout places the Egg at the exit (Moonlit Cellar), the mound hides the key instead
 -- and the Egg waits at the ladder.
-function EggService.position(_self: EggService, runtime: any): Vector3
+function EggService.position(self: EggService, runtime: any): Vector3
 	local layout = ChapterLayout[runtime.state.chapter]
 	if layout.eggAtExit then
 		return layout.eggExit
 	end
+	return self:buriedPosition(runtime)
+end
+
+-- Height of the Egg inside its column: just above the record below it.
+function EggService.buriedHeight(self: EggService, runtime: any): number
 	local grid = runtime.grid
-	return ChapterLayout.cellWorldPosition(layout, grid.width, grid.depth, grid.cellSize, runtime.eggNode.x, runtime.eggNode.z, 1)
+	local cell = grid.cells[PileGrid.index(grid.width, runtime.eggNode.x, runtime.eggNode.z)]
+	local full = PileSurface.columnFullHeight(self._config, grid.width, grid.depth, grid.cellSize, runtime.eggNode.x, runtime.eggNode.z)
+	local slot = runtime.eggSlot or 1
+	return full * (slot - 1) / math.max(1, cell.base) + 1
 end
 
 -- World position of whatever the mound hides (the Egg in Chapter 1, the key in Chapter 2).
-function EggService.buriedPosition(_self: EggService, runtime: any): Vector3
+function EggService.buriedPosition(self: EggService, runtime: any): Vector3
 	local layout = ChapterLayout[runtime.state.chapter]
 	local grid = runtime.grid
-	return ChapterLayout.cellWorldPosition(layout, grid.width, grid.depth, grid.cellSize, runtime.eggNode.x, runtime.eggNode.z, 1)
+	return ChapterLayout.cellWorldPosition(
+		layout,
+		grid.width,
+		grid.depth,
+		grid.cellSize,
+		runtime.eggNode.x,
+		runtime.eggNode.z,
+		self:buriedHeight(runtime)
+	)
+end
+
+-- True once every record covering the Egg (its own column, slots >= eggSlot) has been collected.
+function EggService.coverCleared(_self: EggService, runtime: any): boolean
+	local grid = runtime.grid
+	local cell = grid.cells[PileGrid.index(grid.width, runtime.eggNode.x, runtime.eggNode.z)]
+	local top = PileGrid.topSlot(cell)
+	return top == nil or top < (runtime.eggSlot or 1)
 end
 
 -- Optional hook: when set and it returns true for a runtime, uncovering the buried node hands
@@ -101,13 +126,10 @@ function EggService.checkReveal(self: EggService, runtime: any): boolean
 	if runtime.state.phase ~= "Searching" then
 		return false
 	end
-	local coverCleared = PileGrid.allCleared(runtime.grid, runtime.eggNode.coverIndexes)
+	local coverCleared = self:coverCleared(runtime)
 	runtime.eggCoverCleared = coverCleared
 	if not coverCleared then
 		return false
-	end
-	if PileGrid.removedFraction(runtime.grid) < runtime.eggDepthFraction then
-		return false -- exposed pending depth: keep clearing the nest
 	end
 	local hook = (self :: any)._uncoverHook
 	if hook and hook(runtime, self:buriedPosition(runtime)) then

@@ -444,12 +444,16 @@ function StudioDebug.install(container: any): any?
 		end
 		-- Optionally thin the Egg's cover cells down to `coverRemaining` records each so the final
 		-- picks (the ones that reveal the Egg) can go through the real client path quickly.
+		-- `coverRemaining` records are left ABOVE the Egg in its own column (the cover); the rest of
+		-- the 3x3 is dug to the Egg's height so it sits in a hole once those last picks land.
 		local coverTarget = tonumber(coverRemaining)
 		if coverTarget then
+			local eggIndex = PileGrid.index(grid.width, runtime.eggNode.x, runtime.eggNode.z)
 			for index in pairs(cover) do
 				local cell = grid.cells[index]
-				if cell and cell.remaining > coverTarget then
-					local removal = PileGrid.remove(grid, cell, cell.remaining - coverTarget)
+				local keep = if index == eggIndex then (runtime.eggSlot or 1) - 1 + coverTarget else (runtime.eggSlot or 1) - 1
+				if cell and cell.remaining > keep then
+					local removal = PileGrid.remove(grid, cell, cell.remaining - keep)
 					removed += removal.removed
 					container.rounds:queueDelta(runtime.state.roundId, cell.index, removal.remaining, removal.mask)
 					local lx, lz = PileGrid.cellCenter(grid, cell)
@@ -631,10 +635,17 @@ function StudioDebug.install(container: any): any?
 		for _, index in ipairs(runtime.eggNode.coverIndexes) do
 			local cell = grid.cells[index]
 			local lx, lz = PileGrid.cellCenter(grid, cell)
-			table.insert(out, { index = index, x = minCorner.X + lx, z = minCorner.Z + lz, remaining = cell.remaining })
+			table.insert(out, { index = index, x = minCorner.X + lx, z = minCorner.Z + lz, remaining = cell.remaining, base = cell.base })
 		end
+		local eggIndex = PileGrid.index(grid.width, runtime.eggNode.x, runtime.eggNode.z)
 		return {
 			cells = out,
+			eggIndex = eggIndex,
+			eggSlot = runtime.eggSlot,
+			eggCellRemaining = grid.cells[eggIndex].remaining,
+			eggCellBase = grid.cells[eggIndex].base,
+			coverCleared = container.egg:coverCleared(runtime),
+			eggHeight = container.egg:buriedHeight(runtime),
 			phase = runtime.state.phase,
 			eggVisible = workspace:FindFirstChild("SFE_Egg", true) ~= nil,
 			terrain = container.pileTerrain.stats,

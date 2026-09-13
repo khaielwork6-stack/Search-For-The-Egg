@@ -1,13 +1,13 @@
 --!strict
 -- Pure pile surface model shared by the server (aim resolution, collision) and the client (coat): the
--- authoritative 16x16 cells become one smooth dome. The surface height at any world XZ is
---   max(0, apex * domeProfile(normalised radius) - depth(x, z))
--- where the dome profile is a continuous rounded cone (1 at the centre, 0 at the rim stretch) and
--- depth is the bilinear interpolation of each cell's smoothed 3x3 removed-record count times
--- `pile.depthPerFeatherStuds`, so one pick barely moves the surface and a well-dug area becomes a
--- bowl a few studs deep - never a collapse to the floor. `march` walks a ray until it enters the
+-- authoritative 16x16 cells become one smooth dome. Every cell holds a column of feather records from
+-- the ground to the dome surface (`pile.recordSpacingStuds` apart), so the surface height at any
+-- world XZ is
+--   apex * domeProfile(normalised radius) * fraction(x, z)
+-- where the fraction is the bilinear interpolation of each cell's smoothed 3x3 remaining/base. One
+-- record moves the surface by one spacing (barely), and a column dug to its last record reaches the
+-- floor: there is always another feather under a feather. `march` walks a ray until it enters the
 -- surface from above.
--- Presentation constants are ASSUMED (A-UX-07); the logical grid, yields, and cells are untouched.
 
 local PileSurface = {}
 
@@ -74,7 +74,6 @@ function PileSurface.buildField(cfg: { [string]: any }, grid: { [string]: any },
 	local centre = layout.nestCenter
 	local apex = cfg.pile.maxVisualHeightStuds
 	local radius = math.min(halfW, halfD)
-	local step = cfg.pile.depthPerFeatherStuds
 	local heights, fractions, depths = table.create(width * depth, 0), table.create(width * depth, 0), table.create(width * depth, 0)
 	for z = 0, depth - 1 do
 		for x = 0, width - 1 do
@@ -82,10 +81,11 @@ function PileSurface.buildField(cfg: { [string]: any }, grid: { [string]: any },
 			local cx = (x + 0.5) * cellSize - halfW
 			local cz = (z + 0.5) * cellSize - halfD
 			local rNorm = math.sqrt(cx * cx + cz * cz) / radius
-			fractions[index] = PileSurface.smoothedFraction(width, depth, grid.remaining, grid.base, x, z)
-			local dug = PileSurface.smoothedRemoved(width, depth, grid.remaining, grid.base, x, z) * step
-			depths[index] = dug
-			heights[index] = math.max(0, apex * PileSurface.domeProfile(rNorm) - dug)
+			local fraction = PileSurface.smoothedFraction(width, depth, grid.remaining, grid.base, x, z)
+			fractions[index] = fraction
+			local full = apex * PileSurface.domeProfile(rNorm)
+			depths[index] = full * (1 - fraction)
+			heights[index] = full * fraction
 		end
 	end
 	return {
@@ -146,7 +146,21 @@ function PileSurface.heightAt(field: Field, worldX: number, worldZ: number): num
 	if profile <= 0 then
 		return 0
 	end
-	return math.max(0, field.apex * profile - PileSurface.depthAt(field, worldX, worldZ))
+	return field.apex * profile * PileSurface.fractionAt(field, worldX, worldZ)
+end
+
+-- Full (undepleted) column height of a cell from the dome profile alone; needs no field.
+function PileSurface.columnFullHeight(cfg: { [string]: any }, width: number, depth: number, cellSize: number, x: number, z: number): number
+	local halfW, halfD = width * cellSize / 2, depth * cellSize / 2
+	local radius = math.min(halfW, halfD)
+	local cx = (x + 0.5) * cellSize - halfW
+	local cz = (z + 0.5) * cellSize - halfD
+	return cfg.pile.maxVisualHeightStuds * PileSurface.domeProfile(math.sqrt(cx * cx + cz * cz) / radius)
+end
+
+-- Records a column holds: its full height divided by the record spacing (at least one).
+function PileSurface.columnRecords(cfg: { [string]: any }, width: number, depth: number, cellSize: number, x: number, z: number): number
+	return math.max(1, PileSurface.columnFullHeight(cfg, width, depth, cellSize, x, z) / cfg.pile.recordSpacingStuds)
 end
 
 -- Undepleted mound height at a world XZ (the dome with every cell full).

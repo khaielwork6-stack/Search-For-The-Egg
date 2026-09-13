@@ -240,10 +240,12 @@
         0.2,
         0.12,
         0.08
-      ]
+      ],
+      "wallStrandsPerLevel": 3,
+      "wallLevelSpacingStuds": 0.55
     },
     "assumption": "ASSUMED",
-    "depthPerFeatherStuds": 0.6
+    "recordSpacingStuds": 0.55
   },
   "eggSpawn": {
     "spawnNodeCountTarget": 24,

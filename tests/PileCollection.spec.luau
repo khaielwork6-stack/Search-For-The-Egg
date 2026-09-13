@@ -359,7 +359,7 @@ return function(describe, it, expect)
 	end)
 
 	describe("Egg concealment", function()
-		it("the Egg is never projected or revealed before its cover clears and the depth is reached", function()
+		it("the Egg is never projected or revealed before the records covering it are picked, one by one", function()
 			local h = GameplayHarness.new(cfg)
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
@@ -368,23 +368,31 @@ return function(describe, it, expect)
 			h.egg.revealed:Connect(function()
 				revealed = true
 			end)
-			-- Clear everything except the cover: still concealed.
-			h.clearGridExcept(runtime, runtime.eggNode.coverIndexes)
+			local eggCell = runtime.grid.cells[PileGrid.index(runtime.grid.width, runtime.eggNode.x, runtime.eggNode.z)]
+			-- Clear everything except the Egg's own column: still concealed.
+			h.clearGridExcept(runtime, { eggCell.index })
 			expect(h.egg.stats.reveals).toBe(0)
 			expect(revealed).toBe(false)
 			expect(runtime.state.phase).toBe("Searching")
-			-- Cover strikes reveal it exactly once.
-			for _, index in ipairs(runtime.eggNode.coverIndexes) do
-				local cell = runtime.grid.cells[index]
-				while cell.remaining > 0 do
-					runtime.players[1].carriedStandard = 0 -- keep the bag open; the full-bag rule has its own test
-					local result = h.collectAt(1, runtime, cell.x, cell.z)
-					expect(result.ok).toBe(true)
+			-- Pick the covering records one at a time; the reveal lands exactly on the last one.
+			local covering = eggCell.remaining - runtime.eggSlot + 1
+			expect(covering).toBeGreaterThanOrEqual(1)
+			for pick = 1, covering do
+				runtime.players[1].carriedStandard = 0
+				local result = h.collectAt(1, runtime, eggCell.x, eggCell.z)
+				expect(result.ok).toBe(true)
+				expect(result.data.awarded).toBe(1)
+				if pick < covering then
+					expect(revealed).toBe(false)
 				end
 			end
 			expect(revealed).toBe(true)
 			expect(runtime.state.phase).toBe("EggRevealed")
 			expect(h.pileTerrain.stats.hollows).toBe(1)
+			-- The Egg rests inside the dug column, not on the surface and not under the floor.
+			local position = h.egg:position(runtime)
+			expect(position.Y).toBeGreaterThan(layout.nestBaseY)
+			expect(position.Y).toBeLessThan(layout.nestBaseY + cfg.pile.maxVisualHeightStuds)
 		end)
 	end)
 
@@ -413,7 +421,7 @@ return function(describe, it, expect)
 				p.visual.visibleSlotsPerCell = 9
 			end).ok).toBe(false)
 			expect(withPile(function(p)
-				p.baseFeathersPerCell = 40 -- densest cover cell would exceed the 63-slot feather id
+				p.recordSpacingStuds = 0
 			end).ok).toBe(false)
 		end)
 	end)

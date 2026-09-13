@@ -685,6 +685,12 @@ function Validator.validate(raw: any): Report
 			end
 			check(isNonNegativeNumber(visual.surfaceLiftStuds), "pile.visual.surfaceLiftStuds must be >= 0")
 			check(
+				isPositiveNumber(visual.wallStrandsPerLevel)
+					and visual.wallStrandsPerLevel % 1 == 0
+					and isPositiveNumber(visual.wallLevelSpacingStuds),
+				"pile.visual wall strand rule must be a positive integer count and spacing"
+			)
+			check(
 				isNonNegativeNumber(visual.rimStrandsDesktop)
 					and isNonNegativeNumber(visual.rimStrandsMobile)
 					and visual.rimStrandsMobile <= visual.rimStrandsDesktop,
@@ -727,26 +733,12 @@ function Validator.validate(raw: any): Report
 				check(isNonNegativeNumber(visual[key]) and visual[key] <= 1, "pile.visual." .. key .. " must be 0..1")
 			end
 		end
-		check(
-			isPositiveNumber(pile.depthPerFeatherStuds) and pile.depthPerFeatherStuds <= 4,
-			"pile.depthPerFeatherStuds must be within (0, 4]"
-		)
+		check(isPositiveNumber(pile.recordSpacingStuds) and pile.recordSpacingStuds <= 4, "pile.recordSpacingStuds must be within (0, 4]")
 		check(
 			isPositiveNumber(pile.aimPlaneHeightStuds) and pile.aimPlaneHeightStuds <= pile.maxVisualHeightStuds,
 			"pile.aimPlaneHeightStuds must be > 0 and <= maxVisualHeightStuds"
 		)
-		-- Feather ids pack the slot into 6 bits: the densest cell (cover, hard difficulty, max variance)
-		-- must stay below 64 feathers.
-		local densest = pile.baseFeathersPerCell * (1 + pile.surfaceVariance) * pile.coverDepthMultiplier
-		local hardest = 1
-		if type(raw.difficulty) == "table" then
-			for _, difficulty in pairs(raw.difficulty) do
-				if type(difficulty) == "table" and type(difficulty.pileHealthMultiplier) == "number" then
-					hardest = math.max(hardest, difficulty.pileHealthMultiplier)
-				end
-			end
-		end
-		check(densest * hardest < 63.5, "pile: the densest possible cell must hold fewer than 64 feathers (feather id slot bits)")
+		-- Records per column are capped at PileGrid.MAX_SLOTS (32, one mask bit each); denser configs saturate.
 	end
 	-- Carried feather stack HUD (ASSUMED A-HUD-04)
 	local carried = type(raw.hud) == "table" and raw.hud.carriedStack or nil

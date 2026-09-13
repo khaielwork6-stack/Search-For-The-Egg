@@ -786,7 +786,8 @@ function ToolService._tickChick(self: ToolService, runtime: any, userId: number,
 				local cx, cz = PileGrid.cellAt(grid, unit.position.X - minCorner.X, unit.position.Z - minCorner.Z)
 				cx = math.clamp(cx, 0, grid.width - 1)
 				cz = math.clamp(cz, 0, grid.depth - 1)
-				local target = PileGrid.findTarget(grid, cx, cz, math.max(grid.width, grid.depth))
+				local reach = math.max(grid.width, grid.depth)
+				local target = PileGrid.findRichTarget(grid, cx, cz, reach, spec.capacity) or PileGrid.findTarget(grid, cx, cz, reach)
 				if not target then
 					-- Pile empty: deliver whatever is carried, or dock.
 					if unit.load > 0 then

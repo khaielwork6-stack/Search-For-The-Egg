@@ -7,7 +7,7 @@
 
 local PileGrid = {}
 
-PileGrid.MAX_SLOTS = 63 -- feather ids pack the slot into 6 bits (FeatherLayout.SLOT_STRIDE)
+PileGrid.MAX_SLOTS = 32 -- one bit per record in the taken mask (bit32)
 
 export type Cell = {
 	index: number, -- 1-based, row-major (z * width + x + 1)
@@ -41,7 +41,8 @@ function PileGrid.create(
 	pileConfig: { [string]: any },
 	healthMultiplier: number,
 	coverCells: { [number]: boolean },
-	roll: () -> number
+	roll: () -> number,
+	columnRecords: ((x: number, z: number) -> number)?
 ): Grid
 	local width, depth = pileConfig.gridWidth, pileConfig.gridDepth
 	local cells: { Cell } = {}
@@ -50,7 +51,10 @@ function PileGrid.create(
 		for x = 0, width - 1 do
 			local index = PileGrid.index(width, x, z)
 			local variance = 1 + (roll() * 2 - 1) * pileConfig.surfaceVariance
-			local base = pileConfig.baseFeathersPerCell * healthMultiplier * variance
+			-- Full-depth columns (the real pile): records from the floor to the dome surface; the flat
+			-- per-cell count is the headless default.
+			local perCell = if columnRecords then columnRecords(x, z) else pileConfig.baseFeathersPerCell
+			local base = perCell * healthMultiplier * variance
 			if coverCells[index] then
 				base *= pileConfig.coverDepthMultiplier
 			end
@@ -94,6 +98,37 @@ function PileGrid.findTarget(grid: Grid, x: number, z: number, radius: number): 
 				local distance = dx * dx + dz * dz
 				if distance < bestDistance then
 					best, bestDistance = cell, distance
+				end
+			end
+		end
+	end
+	return best
+end
+
+-- Nearest cell (within `radius` cells of (x, z)) whose 3x3 neighbourhood still holds at least
+-- `minimumRecords` feathers, preferring the exact cell; nil when none qualifies. Area workers use it
+-- so they do not walk to a one-feather rim column and come back with a partial load.
+function PileGrid.findRichTarget(grid: Grid, x: number, z: number, radius: number, minimumRecords: number): Cell?
+	local best: Cell? = nil
+	local bestDistance = math.huge
+	for dz = -radius, radius do
+		for dx = -radius, radius do
+			local cell = PileGrid.get(grid, x + dx, z + dz)
+			if cell and cell.remaining > 0 then
+				local around = 0
+				for nz = -1, 1 do
+					for nx = -1, 1 do
+						local neighbour = PileGrid.get(grid, cell.x + nx, cell.z + nz)
+						if neighbour then
+							around += neighbour.remaining
+						end
+					end
+				end
+				if around >= minimumRecords then
+					local distance = dx * dx + dz * dz
+					if distance < bestDistance then
+						best, bestDistance = cell, distance
+					end
 				end
 			end
 		end
