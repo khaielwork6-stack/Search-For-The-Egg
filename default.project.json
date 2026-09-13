@@ -6,6 +6,9 @@
     "ReplicatedStorage": {
       "Shared": {
         "$path": "src/shared"
+      },
+      "SFE_Assets": {
+        "$path": "assets/models"
       }
     },
 
