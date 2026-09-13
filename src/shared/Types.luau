@@ -56,7 +56,10 @@ export type PlayerProfile = {
 		roundsStarted: number,
 		roundsCompleted: number,
 		deaths: number,
+		chestsOpened: number,
+		puzzlesSolved: number,
 	},
+	pendingGrants: { oneRoundTools: { [string]: number }, skipBagUpgrades: number },
 	settings: {
 		musicVolume: number,
 		sfxVolume: number,

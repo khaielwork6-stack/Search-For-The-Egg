@@ -42,6 +42,43 @@ ChapterLayout.chapter1 = table.freeze({
 	roofHeight = 26,
 })
 
+-- Moonlit Cellar (Chapter 2). A low subterranean hatchery: the debris mound (same 16x16 logical grid)
+-- sits under a moon shaft, the three mechanisms line the left wall, the crystal alcove and the code
+-- door share the right wall, the mosaic wall closes the far end, and the hatchling cage guards the
+-- barrier in front of the exit ladder where the Egg appears. Original layout (A-CH2-01).
+ChapterLayout.chapter2 = table.freeze({
+	origin = Vector3.new(0, 0, 800),
+	floorSize = Vector3.new(150, 1, 150),
+	spawn = Vector3.new(0, 3, 742), -- faces +Z toward the mound
+	nestCenter = Vector3.new(0, 0, 790),
+	nestBaseY = 1,
+	sellStation = Vector3.new(-30, 0, 758),
+	upgradeBoard = Vector3.new(30, 0, 758),
+	roofHeight = 18,
+	moonShaft = Vector3.new(0, 18, 790),
+	plaque = Vector3.new(-58, 6, 776),
+	levers = table.freeze({
+		Vector3.new(-58, 0, 790),
+		Vector3.new(-58, 0, 806),
+		Vector3.new(-58, 0, 822),
+	}),
+	crystalAlcove = Vector3.new(58, 0, 786), -- clusters spread around this point
+	crystalDial = Vector3.new(50, 0, 800),
+	codeDoor = Vector3.new(58, 0, 818),
+	noteSlots = table.freeze({
+		Vector3.new(-40, 5, 848),
+		Vector3.new(40, 5, 848),
+		Vector3.new(-58, 5, 838),
+		Vector3.new(58, 5, 838),
+	}),
+	tileWall = Vector3.new(0, 6, 858), -- mosaic centre on the far wall
+	cage = Vector3.new(-18, 0, 848),
+	barrier = Vector3.new(0, 0, 862),
+	exitLadder = Vector3.new(0, 0, 868),
+	eggExit = Vector3.new(0, 1, 866), -- the Egg appears at the foot of the ladder
+	eggAtExit = true,
+})
+
 -- World position of a pile cell centre for a grid (cells are 2.5 studs by config).
 function ChapterLayout.cellWorldPosition(
 	chapter: { [string]: any },

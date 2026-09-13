@@ -9,6 +9,7 @@ export type Adapter = {
 	promptGamePassPurchase: (self: Adapter, player: any, gamePassId: number) -> boolean,
 	promptProductPurchase: (self: Adapter, player: any, productId: number) -> boolean,
 	bindProcessReceipt: (self: Adapter, handler: (receiptInfo: any) -> any) -> (),
+	bindPassPurchaseFinished: (self: Adapter, handler: (userId: number, gamePassId: number, wasPurchased: boolean) -> ()) -> (),
 	kind: string,
 }
 
@@ -58,6 +59,13 @@ function Real.bindProcessReceipt(_, handler: (receiptInfo: any) -> any)
 	end
 end
 
+function Real.bindPassPurchaseFinished(_, handler: (userId: number, gamePassId: number, wasPurchased: boolean) -> ())
+	local MarketplaceService = game:GetService("MarketplaceService")
+	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player: Player, gamePassId: number, wasPurchased: boolean)
+		handler(player.UserId, gamePassId, wasPurchased)
+	end)
+end
+
 -- Mock ---------------------------------------------------------------------------------------
 
 local Mock = {}
@@ -69,7 +77,11 @@ export type Mock = Adapter & {
 	failOwnershipChecks: (self: Mock, count: number) -> (),
 	prompts: { { userId: number, kind: string, id: number } },
 	receiptHandler: ((receiptInfo: any) -> any)?,
+	passFinishedHandler: ((userId: number, gamePassId: number, wasPurchased: boolean) -> ())?,
+	finishPassPurchase: (self: Mock, userId: number, gamePassId: number, wasPurchased: boolean) -> (),
+	completeProductPurchase: (self: Mock, userId: number, productId: number, purchaseId: string?) -> any,
 	ownershipCalls: number,
+	purchaseCounter: number,
 }
 
 function MarketplaceAdapter.mock(): Mock
@@ -79,7 +91,9 @@ function MarketplaceAdapter.mock(): Mock
 		_failChecks = 0,
 		prompts = {},
 		receiptHandler = nil,
+		passFinishedHandler = nil,
 		ownershipCalls = 0,
+		purchaseCounter = 0,
 	}, Mock)
 	return (self :: any) :: Mock
 end
@@ -109,6 +123,40 @@ end
 
 function Mock.bindProcessReceipt(self, handler)
 	self.receiptHandler = handler
+end
+
+function Mock.bindPassPurchaseFinished(self, handler)
+	self.passFinishedHandler = handler
+end
+
+-- Simulates the native pass prompt closing. A purchase grants ownership in the mock before the
+-- handler runs (the server still rechecks ownership itself).
+function Mock.finishPassPurchase(self, userId: number, gamePassId: number, wasPurchased: boolean)
+	if wasPurchased then
+		self._owned[ownKey(userId, gamePassId)] = true
+	end
+	if self.passFinishedHandler then
+		self.passFinishedHandler(userId, gamePassId, wasPurchased)
+	end
+end
+
+-- Simulates a completed developer-product purchase: delivers a receipt to the bound ProcessReceipt
+-- handler exactly as Roblox would (same PurchaseId on replay). Returns the decision.
+function Mock.completeProductPurchase(self, userId: number, productId: number, purchaseId: string?): any
+	if not self.receiptHandler then
+		return "NotProcessedYet"
+	end
+	if not purchaseId then
+		(self :: any).purchaseCounter += 1
+		purchaseId = string.format("mock-%d-%d-%d", userId, productId, (self :: any).purchaseCounter)
+	end
+	return self.receiptHandler({
+		PurchaseId = purchaseId,
+		PlayerId = userId,
+		ProductId = productId,
+		CurrencySpent = 0,
+		CurrencyType = "Robux",
+	})
 end
 
 function Mock.grantPass(self, userId: number, gamePassId: number)

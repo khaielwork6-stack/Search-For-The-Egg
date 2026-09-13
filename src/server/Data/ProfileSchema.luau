@@ -58,7 +58,12 @@ function ProfileSchema.default(now: number): { [string]: any }
 			roundsStarted = 0,
 			roundsCompleted = 0,
 			deaths = 0,
+			chestsOpened = 0,
+			puzzlesSolved = 0,
 		},
+		-- Paid grants that apply to a round (one-round tools, skip upgrades) bought outside one:
+		-- consumed by the next round the player enters. Persisted so a crash never loses a purchase.
+		pendingGrants = { oneRoundTools = {}, skipBagUpgrades = 0 },
 		settings = { musicVolume = 0.7, sfxVolume = 0.85, reducedMotion = false, cameraShake = true, haptics = true, qualityMode = "auto" },
 		pendingTransactions = {},
 		migrationHistory = {},
@@ -372,6 +377,19 @@ function ProfileSchema.reconcile(raw: any, cfg: { [string]: any }, now: number):
 			profile.stats[key] = nil
 		end
 	end
+
+	-- Pending paid grants ------------------------------------------------------------------------
+	ensureTable(profile, "pendingGrants", default.pendingGrants, issues, "pendingGrants")
+	ensureTable(profile.pendingGrants, "oneRoundTools", {}, issues, "pendingGrants.oneRoundTools")
+	for toolId, count in pairs(profile.pendingGrants.oneRoundTools) do
+		if cfg.tools[toolId] == nil or type(count) ~= "number" or count < 1 then
+			profile.pendingGrants.oneRoundTools[toolId] = nil
+			table.insert(issues, "pendingGrants.oneRoundTools." .. tostring(toolId) .. ":removed")
+		else
+			profile.pendingGrants.oneRoundTools[toolId] = math.floor(math.min(count, 100))
+		end
+	end
+	reconcileNumber(profile.pendingGrants, "skipBagUpgrades", 0, 0, 100, issues, "pendingGrants.skipBagUpgrades", true)
 
 	-- Settings ---------------------------------------------------------------------------------
 	ensureTable(profile, "settings", default.settings, issues, "settings")

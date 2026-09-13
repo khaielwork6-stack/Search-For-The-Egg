@@ -5,6 +5,7 @@
 -- Enum.ProductPurchaseDecision by the Marketplace adapter.
 
 local TransactionLedger = require(script.Parent.Parent.Data.TransactionLedger)
+local Signal = require(game:GetService("ReplicatedStorage").Shared.Util.Signal)
 
 local ReceiptService = {}
 ReceiptService.__index = ReceiptService
@@ -22,6 +23,7 @@ export type ReceiptService = typeof(setmetatable(
 		_log: any,
 		_analytics: any,
 		_handlers: { [string]: GrantHandler },
+		granted: any, -- (userId, entry, result, replayed) after the grant is persisted
 		stats: { granted: number, replayed: number, deferred: number, unknown: number },
 	},
 	ReceiptService
@@ -38,6 +40,7 @@ function ReceiptService.new(
 		_log = options.log,
 		_analytics = options.analytics,
 		_handlers = {},
+		granted = Signal.new(),
 		stats = { granted = 0, replayed = 0, deferred = 0, unknown = 0 },
 	}, ReceiptService)
 end
@@ -127,6 +130,7 @@ function ReceiptService.processReceipt(self: ReceiptService, receiptInfo: any): 
 		self.stats.replayed += 1
 	end
 	log(self, "info", "receipt_granted", { userId = userId, productId = receiptInfo.ProductId, replayed = applied.status == "replayed" })
+	self.granted:Fire(userId, entry, applied.result, applied.status == "replayed", purchaseId)
 	return "PurchaseGranted"
 end
 

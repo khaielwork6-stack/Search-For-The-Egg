@@ -94,6 +94,14 @@ return function(describe, it, expect)
 	describe("Destinations", function()
 		it("unavailable chapters are refused at create and set-destination; unlock policy reports locked members", function()
 			local h = fresh(2)
+			-- Content availability is config: mark Chapter 2 unshipped for this harness only.
+			local sealed = table.clone(cfg.chapters.chapter2)
+			sealed.availableDifficulties = { normal = false, hard = false }
+			local chapters = table.clone(cfg.chapters)
+			chapters.chapter2 = sealed
+			local sealedConfig = table.clone(cfg)
+			sealedConfig.chapters = chapters
+			h.parties._config = sealedConfig
 			local _, unavailable = h.parties:create(1, "chapter2", "normal")
 			expect(unavailable).toBe(PartyService.Errors.UNAVAILABLE)
 			local _, badDifficulty = h.parties:create(1, "chapter1", "nightmare")
@@ -129,9 +137,20 @@ return function(describe, it, expect)
 		it("availability is config-driven and separate from the unlock policy", function()
 			expect(PartyService.isDestinationAvailable(cfg, "chapter1", "normal")).toBe(true)
 			expect(PartyService.isDestinationAvailable(cfg, "chapter1", "hard")).toBe(true)
-			local ok, reason = PartyService.isDestinationAvailable(cfg, "chapter2", "normal")
+			local sealed = table.clone(cfg.chapters.chapter2)
+			sealed.availableDifficulties = { normal = false, hard = false }
+			local chapters = table.clone(cfg.chapters)
+			chapters.chapter2 = sealed
+			local sealedConfig = table.clone(cfg)
+			sealedConfig.chapters = chapters
+			local ok, reason = PartyService.isDestinationAvailable(sealedConfig, "chapter2", "normal")
 			expect(ok).toBe(false)
 			expect(reason).toBe(PartyService.Errors.UNAVAILABLE)
+			local flags = table.clone(cfg.featureFlags)
+			flags.chapter2Enabled = false
+			local flagged = table.clone(cfg)
+			flagged.featureFlags = flags
+			expect(PartyService.isDestinationAvailable(flagged, "chapter2", "normal")).toBe(false)
 			local _, unknown = PartyService.isDestinationAvailable(cfg, "chapter9", "normal")
 			expect(unknown).toBe(PartyService.Errors.NOT_FOUND)
 		end)

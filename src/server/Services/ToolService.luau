@@ -220,6 +220,29 @@ function ToolService.grantStartingTools(self: ToolService, runtime: any): { [num
 	return granted
 end
 
+-- Verified permanent-pass grant during a live round (Phase 5): the tool is owned for the rest of
+-- the round at the configured maximum levels, exactly as a start-of-round permanent grant.
+function ToolService.grantPermanentNow(self: ToolService, userId: number, toolId: string): boolean
+	local runtime = self._rounds:roundOf(userId)
+	if not runtime or not ToolSpecs.isTool(toolId) then
+		return false
+	end
+	local state = runtime.players[userId]
+	if not state or state.permanentTools[toolId] then
+		return false
+	end
+	local cfg = self._config
+	state.roundTools[toolId] = true
+	state.permanentTools[toolId] = true
+	if cfg.tools[toolId].permanentIncludesMaxUpgrades then
+		state.toolLevels[toolId] = ToolSpecs.maxLevels(cfg, toolId)
+	end
+	track(self, "tool_acquired", { chapter = runtime.state.chapter, tool = toolId, source = "permanent" }, userId)
+	self.granted:Fire(userId, runtime, toolId, "permanent")
+	self.event:Fire(runtime.state.roundId, { kind = "tools_granted", tools = { toolId }, userId = userId }, userId)
+	return true
+end
+
 -- One-round grant interface (Phase 5 receipts, tests, debug). Levels stay at the round's values.
 function ToolService.grantOneRound(self: ToolService, userId: number, toolId: string, source: string): boolean
 	local runtime = self._rounds:roundOf(userId)

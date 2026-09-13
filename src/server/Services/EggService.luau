@@ -47,11 +47,53 @@ function EggService.new(options: {
 	}, EggService)
 end
 
--- World position of the Egg for a runtime (server-only; never projected before reveal).
+-- World position of the Egg for a runtime (server-only; never projected before reveal). In a
+-- chapter whose layout places the Egg at the exit (Moonlit Cellar), the mound hides the key instead
+-- and the Egg waits at the ladder.
 function EggService.position(_self: EggService, runtime: any): Vector3
+	local layout = ChapterLayout[runtime.state.chapter]
+	if layout.eggAtExit then
+		return layout.eggExit
+	end
+	local grid = runtime.grid
+	return ChapterLayout.cellWorldPosition(layout, grid.width, grid.depth, grid.cellSize, runtime.eggNode.x, runtime.eggNode.z, 1)
+end
+
+-- World position of whatever the mound hides (the Egg in Chapter 1, the key in Chapter 2).
+function EggService.buriedPosition(_self: EggService, runtime: any): Vector3
 	local layout = ChapterLayout[runtime.state.chapter]
 	local grid = runtime.grid
 	return ChapterLayout.cellWorldPosition(layout, grid.width, grid.depth, grid.cellSize, runtime.eggNode.x, runtime.eggNode.z, 1)
+end
+
+-- Optional hook: when set and it returns true for a runtime, uncovering the buried node hands
+-- control to the hook (Chapter 2 reveals the key) instead of revealing the Egg.
+function EggService.setUncoverHook(self: EggService, hook: ((runtime: any, position: Vector3) -> boolean)?)
+	(self :: any)._uncoverHook = hook
+end
+
+-- Marks the Egg revealed now (puzzle chapters call this when their last stage opens). Returns
+-- true when the reveal happened on this call.
+function EggService.revealNow(self: EggService, runtime: any): boolean
+	if runtime.state.phase ~= "Searching" then
+		return false
+	end
+	local next = self._rounds:markEggRevealed(runtime.state.roundId)
+	if not next then
+		return false
+	end
+	self.stats.reveals += 1
+	local position = self:position(runtime)
+	if self._analytics then
+		self._analytics:track("egg_revealed", {
+			chapter = runtime.state.chapter,
+			difficulty = runtime.state.difficulty,
+			removedFraction = PileGrid.removedFraction(runtime.grid),
+			elapsedMs = RoundReducer.elapsedMs(next, self._clock:nowMs()),
+		})
+	end
+	self.revealed:Fire(runtime, position)
+	return true
 end
 
 -- Evaluates the reveal condition after a pile change. Returns true when the Egg was revealed now.
@@ -66,6 +108,10 @@ function EggService.checkReveal(self: EggService, runtime: any): boolean
 	end
 	if PileGrid.removedFraction(runtime.grid) < runtime.eggDepthFraction then
 		return false -- exposed pending depth: keep clearing the nest
+	end
+	local hook = (self :: any)._uncoverHook
+	if hook and hook(runtime, self:buriedPosition(runtime)) then
+		return false -- the chapter took the uncover (key found); the Egg comes later
 	end
 	local next = self._rounds:markEggRevealed(runtime.state.roundId)
 	if not next then

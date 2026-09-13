@@ -82,6 +82,22 @@ function ProductMap.new(cfg: { [string]: any }, deployment: { [string]: any }): 
 	return setmetatable({ _entries = entries, _byId = byId }, ProductMap)
 end
 
+-- Studio-only deployment table with synthetic ids (900001, 900002, ...) so the whole purchase pipeline
+-- (prompt -> receipt -> ledger -> grant -> projection) can be exercised against the mock Marketplace
+-- adapter. Never used outside Studio; the shipped ProductIds file stays the only live source.
+function ProductMap.studioMockDeployment(cfg: { [string]: any }): { [string]: any }
+	local deployment = { placeIds = {}, gamePasses = {}, developerProducts = {} }
+	local sections = { place = "placeIds", gamePass = "gamePasses", developerProduct = "developerProducts" }
+	local nextId = 900001
+	for _, entry in ipairs(ProductMap.expectedKeys(cfg)) do
+		if entry.kind ~= "place" then
+			deployment[sections[entry.kind]][entry.key] = nextId
+			nextId += 1
+		end
+	end
+	return deployment
+end
+
 function ProductMap.resolve(self: ProductMap, key: string): Entry?
 	return self._entries[key]
 end

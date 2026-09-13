@@ -432,6 +432,76 @@ function Validator.validate(raw: any): Report
 			end
 		end
 		check(chapterIds.chapter1 == true, "chapter1 must exist")
+		-- Chapter 2 puzzle configuration (MASTER_SPEC 12; ASSUMED A-CH2-02..08)
+		local chapter2 = raw.chapters.chapter2
+		if type(chapter2) == "table" then
+			local puzzles = chapter2.puzzles
+			check(type(puzzles) == "table", "chapters.chapter2.puzzles missing")
+			if type(puzzles) == "table" then
+				local known = {
+					findKey = true,
+					activateLevers = true,
+					solveCrystals = true,
+					solveCode = true,
+					solveTiles = true,
+					releaseHatchling = true,
+					exit = true,
+				}
+				check(type(puzzles.order) == "table" and #puzzles.order == 7, "chapter2.puzzles.order must list the seven stages")
+				if type(puzzles.order) == "table" then
+					local seen = {}
+					for _, stage in ipairs(puzzles.order) do
+						check(
+							known[stage] == true and not seen[stage],
+							"chapter2.puzzles.order has unknown or duplicate stage " .. tostring(stage)
+						)
+						seen[stage] = true
+					end
+					check(puzzles.order[#puzzles.order] == "exit", "chapter2.puzzles.order must end with exit")
+				end
+				check(
+					isPositiveNumber(puzzles.leverCount) and puzzles.leverCount % 1 == 0,
+					"chapter2.puzzles.leverCount must be a positive integer"
+				)
+				check(
+					type(puzzles.leverLabels) == "table" and #puzzles.leverLabels == puzzles.leverCount,
+					"chapter2.puzzles.leverLabels must have one colour+symbol entry per lever"
+				)
+				if type(puzzles.leverLabels) == "table" then
+					local colours, symbols = {}, {}
+					for index, entry in ipairs(puzzles.leverLabels) do
+						check(
+							type(entry) == "table" and type(entry.color) == "string" and type(entry.symbol) == "string",
+							"chapter2.puzzles.leverLabels[" .. index .. "] needs color and symbol"
+						)
+						if type(entry) == "table" then
+							check(
+								not colours[entry.color] and not symbols[entry.symbol],
+								"chapter2.puzzles.leverLabels must be distinct (never colour alone)"
+							)
+							colours[entry.color] = true
+							symbols[entry.symbol] = true
+						end
+					end
+				end
+				check(
+					type(puzzles.crystalCountRange) == "table"
+						and isPositiveNumber(puzzles.crystalCountRange.min)
+						and isPositiveNumber(puzzles.crystalCountRange.max)
+						and puzzles.crystalCountRange.min <= puzzles.crystalCountRange.max
+						and puzzles.crystalCountRange.max <= 12,
+					"chapter2.puzzles.crystalCountRange must be 1..12 with min <= max"
+				)
+				check(puzzles.codeDigits == 4, "chapter2.puzzles.codeDigits must be 4 (four-digit code)")
+				check(type(puzzles.codeDistinctDigits) == "boolean", "chapter2.puzzles.codeDistinctDigits must be a boolean")
+				check(puzzles.tileRotationPuzzleSize == 16, "chapter2.puzzles.tileRotationPuzzleSize must be 16 (4x4)")
+				check(
+					isPositiveNumber(puzzles.tileMinimumScrambled) and puzzles.tileMinimumScrambled <= 16,
+					"chapter2.puzzles.tileMinimumScrambled must be 1..16"
+				)
+				check(isNonNegativeNumber(puzzles.wrongInputFeedbackSeconds), "chapter2.puzzles.wrongInputFeedbackSeconds must be >= 0")
+			end
+		end
 	end
 
 	-- Difficulty

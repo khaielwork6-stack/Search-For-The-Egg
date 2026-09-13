@@ -964,12 +964,44 @@
         "evidence": "ASSUMED"
       },
       "puzzles": {
+        "order": [
+          "findKey",
+          "activateLevers",
+          "solveCrystals",
+          "solveCode",
+          "solveTiles",
+          "releaseHatchling",
+          "exit"
+        ],
         "leverCount": 3,
+        "leverLabels": [
+          {
+            "color": "amber",
+            "symbol": "triangle"
+          },
+          {
+            "color": "teal",
+            "symbol": "circle"
+          },
+          {
+            "color": "violet",
+            "symbol": "square"
+          }
+        ],
+        "leverResetOnWrongOrder": true,
         "crystalCountPuzzle": true,
+        "crystalCountRange": {
+          "min": 4,
+          "max": 9
+        },
         "fourDigitCodePuzzle": true,
+        "codeDigits": 4,
+        "codeDistinctDigits": true,
         "tileRotationPuzzleSize": 16,
+        "tileMinimumScrambled": 6,
         "randomizeEachRound": true,
-        "evidence": "CORROBORATED structure; ASSUMED randomization"
+        "wrongInputFeedbackSeconds": 1.2,
+        "evidence": "CORROBORATED structure; ASSUMED randomization, labels, ranges, and feedback"
       }
     }
   },
@@ -1150,7 +1182,11 @@
       "group_reward_claimed",
       "skin_equipped",
       "party_joined",
-      "class_equipped"
+      "class_equipped",
+      "puzzle_step",
+      "puzzle_input",
+      "chest_opened",
+      "pass_verified"
     ],
     "sampledCollectionEventRate": 0.05,
     "neverLogFreeText": true,

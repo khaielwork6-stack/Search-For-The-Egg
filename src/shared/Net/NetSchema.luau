@@ -68,6 +68,7 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 	local collectRate = { perSecond = interaction.collectRequestRatePerSecond, burst = burst }
 	local toolRate = { perSecond = interaction.toolRequestRatePerSecond, burst = burst }
 	local uiRate = { perSecond = 2, burst = burst }
+	local puzzleRate = { perSecond = 5, burst = burst } -- shared puzzle inputs (tile turns are rapid)
 	local rollRate = { perSecond = cfg.lobby.autoRollMaxPerMinute / 60, burst = 2 }
 	local codeRate = { perSecond = cfg.codePolicy.attemptsPerMinute / 60, burst = cfg.codePolicy.burst }
 	local maxParty = cfg.project.maxPartyPlayers
@@ -178,6 +179,21 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 			1
 		),
 		request("PurchasePromptRequest", Schema.object({ productKey = Schema.id() }), slowRate, 5),
+		request("ProductCatalogRequest", Schema.none(), uiRate, 5),
+		request("EventChestOpen", Schema.object({ count = Schema.number({ min = 1, max = 10, integer = true }) }), slowRate, 5),
+		request(
+			"PuzzleAction",
+			Schema.object({
+				sessionToken = TOKEN,
+				kind = Schema.enum({ "pickupKey", "lever", "crystals", "code", "tile", "release", "reset" }),
+				index = Schema.optional(Schema.number({ min = 1, max = 16, integer = true })),
+				count = Schema.optional(Schema.number({ min = 0, max = 99, integer = true })),
+				value = Schema.optional(Schema.string({ min = 1, max = 8, pattern = "^%d+$" })),
+			}),
+			puzzleRate,
+			5,
+			512
+		),
 		-- Server -> client projections/events ------------------------------------------------
 		serverEvent("ProfileProjection", Schema.object({ projection = Schema.object({}) }), 1),
 		serverEvent("PartyProjection", Schema.object({}), 1),
@@ -199,6 +215,8 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		serverEvent("PartyListProjection", Schema.object({}), 4),
 		serverEvent("LeaderboardProjection", Schema.object({}), 4),
 		serverEvent("RewardGranted", Schema.object({}), 4),
+		serverEvent("PuzzleProjection", Schema.object({}), 5),
+		serverEvent("PurchaseGranted", Schema.object({}), 5),
 	}
 
 	local byName: { [string]: MessageDef } = {}

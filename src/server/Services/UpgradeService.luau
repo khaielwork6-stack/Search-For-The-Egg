@@ -291,6 +291,49 @@ local function acquire(self: UpgradeService, userId: number, runtime: any, state
 	return Envelope.ok(result)
 end
 
+-- Paid Skip Bag Upgrade grant (receipt path): raises the bag one level at no cash cost, only
+-- inside a live round and never past the maximum. Returns the same result shape as a purchase.
+function UpgradeService.skipBag(self: UpgradeService, userId: number, source: string): Envelope.Envelope<any>
+	local runtime = self._rounds:roundOf(userId)
+	if not runtime or not RoundReducer.acceptsGameplay(runtime.state) then
+		return reject(self, Envelope.Codes.INVALID_STATE, "no_round")
+	end
+	local state = runtime.players[userId]
+	if not state then
+		return reject(self, Envelope.Codes.INVALID_STATE, "no_player")
+	end
+	local before = self:preview(state, "bag", runtime, userId)
+	if not before or before.maxed then
+		return reject(self, Envelope.Codes.INVALID_STATE, "maxed")
+	end
+	state.bagLevel += 1
+	state.upgradeCount += 1
+	self.stats.purchases += 1
+	local after = self:preview(state, "bag", runtime, userId) :: Preview
+	local result = {
+		upgradeId = "bag",
+		kind = "bag",
+		level = after.level,
+		paidCents = 0,
+		cashCents = state.cashCents,
+		previous = before.current,
+		current = after.current,
+		next = after.next,
+		nextCostCents = after.costCents,
+		maxed = after.maxed,
+		source = source,
+	}
+	if self._analytics then
+		self._analytics:track(
+			"upgrade_purchased",
+			{ chapter = runtime.state.chapter, upgradeId = "bag", level = after.level, cents = 0, source = source },
+			userId
+		)
+	end
+	self.purchased:Fire(userId, runtime, result)
+	return Envelope.ok(result)
+end
+
 function UpgradeService.purchase(
 	self: UpgradeService,
 	userId: number,
