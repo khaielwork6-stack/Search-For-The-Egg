@@ -220,14 +220,14 @@
       "fluffLayers": 4,
       "fluffLayerStepStuds": 0.1,
       "downslopeYawJitterDegrees": 35,
-      "rimInsetStuds": 0.2,
+      "rimInsetStuds": -1.2,
       "rimTaperStuds": 2.0,
       "liftSeconds": 0.09,
       "liftStuds": 0.5,
       "pickScale": 1.25,
       "settleSeconds": 0.22,
-      "rimStrandsDesktop": 1100,
-      "rimStrandsMobile": 360
+      "rimStrandsDesktop": 1600,
+      "rimStrandsMobile": 500
     },
     "assumption": "ASSUMED",
     "depthPerFeatherStuds": 0.6

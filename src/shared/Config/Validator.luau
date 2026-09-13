@@ -684,9 +684,13 @@ function Validator.validate(raw: any): Report
 					and visual.rimStrandsMobile <= visual.rimStrandsDesktop,
 				"pile.visual rim strand counts must be non-negative with mobile <= desktop"
 			)
-			for _, key in ipairs({ "liftSeconds", "settleSeconds", "liftStuds", "pickScale", "rimInsetStuds", "rimTaperStuds" }) do
+			for _, key in ipairs({ "liftSeconds", "settleSeconds", "liftStuds", "pickScale", "rimTaperStuds" }) do
 				check(isPositiveNumber(visual[key]), "pile.visual." .. key .. " must be > 0")
 			end
+			check(
+				type(visual.rimInsetStuds) == "number" and visual.rimInsetStuds >= -4 and visual.rimInsetStuds <= 4,
+				"pile.visual.rimInsetStuds must be within -4..4 (negative = bed spills past the mound's foot)"
+			)
 			check(
 				isNonNegativeNumber(visual.downslopeYawJitterDegrees) and visual.downslopeYawJitterDegrees <= 180,
 				"pile.visual.downslopeYawJitterDegrees must be 0..180"
