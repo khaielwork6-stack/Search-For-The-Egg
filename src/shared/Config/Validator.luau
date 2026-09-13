@@ -685,6 +685,28 @@ function Validator.validate(raw: any): Report
 			end
 			check(isNonNegativeNumber(visual.surfaceLiftStuds), "pile.visual.surfaceLiftStuds must be >= 0")
 			check(isPositiveNumber(visual.rimMinScale) and visual.rimMinScale <= 1, "pile.visual.rimMinScale must be within (0, 1]")
+			range("underlayerLengthRange", 0.2, 12)
+			range("underlayerWidthRange", 0.1, 6)
+			range("underlayerTiltRangeDegrees", 0, 90)
+			local function gridOk(grid)
+				return type(grid) == "table"
+					and #grid == 2
+					and isPositiveNumber(grid[1])
+					and isPositiveNumber(grid[2])
+					and grid[1] % 1 == 0
+					and grid[2] % 1 == 0
+			end
+			check(
+				gridOk(visual.underlayerGridDesktop) and gridOk(visual.underlayerGridMobile),
+				"pile.visual underlayer grids must be [n, m] positive integers"
+			)
+			check(
+				type(visual.underlayerDepths) == "table"
+					and #visual.underlayerDepths == 2
+					and isPositiveNumber(visual.underlayerDepths[1])
+					and isPositiveNumber(visual.underlayerDepths[2]),
+				"pile.visual.underlayerDepths must be two positive depths"
+			)
 			check(
 				isPositiveNumber(visual.wallStrandsPerLevel)
 					and visual.wallStrandsPerLevel % 1 == 0

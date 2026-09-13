@@ -41,6 +41,7 @@ type Column = {
 	walls: { BasePart },
 	wallDepth: number, -- studs of interior wall already materialised
 	floorDepth: number, -- studs of interior floor layers already materialised
+	underlayerDone: boolean,
 }
 
 export type Target = { featherId: number, part: BasePart, position: Vector3, cell: number, slot: number }
@@ -406,6 +407,63 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 			part.Parent = folder
 		end
 	end
+	self:_applyUnderlayer(column, folder)
+end
+
+-- Underlayer: two flat, gridded sheets of smaller feathers under the bed, each offset by half a
+-- step from the sheet above, so any crack between top strands looks onto a feather face, never
+-- ground or sky. Placed once with the bed; never moved.
+function PileVisualController._applyUnderlayer(self: PileVisualController, column: Column, folder: Folder)
+	if column.underlayerDone then
+		return
+	end
+	column.underlayerDone = true
+	local visual = self._config.pile.visual
+	local field = self._seatField :: PileSurface.Field
+	local minCorner = self._minCorner :: Vector3
+	local grid = if self._quality:tier() == "low" then visual.underlayerGridMobile else visual.underlayerGridDesktop
+	local cell = field.cellSize
+	local originX = minCorner.X + column.x * cell
+	local originZ = minCorner.Z + column.z * cell
+	for sheet = 1, 2 do
+		local n = grid[sheet]
+		local depth = visual.underlayerDepths[sheet]
+		local shift = if sheet == 2 then 0.5 else 0
+		for i = 0, n - 1 do
+			for j = 0, n - 1 do
+				local k = sheet * 1000 + i * 100 + j
+				local h = function(salt: number)
+					return FeatherLayout.hash(column.index, k, salt)
+				end
+				local wx = originX + ((i + 0.5 + shift) / n) * cell + (h(1) - 0.5) * 0.25
+				local wz = originZ + ((j + 0.5 + shift) / n) * cell + (h(2) - 0.5) * 0.25
+				local scale = self:_rimScale(wx, wz)
+				if scale <= 0 then
+					continue
+				end
+				local part = acquirePart(self)
+				part.Name = "Fluff"
+				part.CanQuery = true
+				part:SetAttribute(CELL_ATTRIBUTE, column.index)
+				part.Color = paletteColor(self._config, math.min(1, h(9) * 0.5 + visual.fluffTintShift))
+				local y, normal = self:_surfaceAt(wx, wz)
+				placeFeather(
+					part,
+					wx,
+					y - depth + (h(3) - 0.5) * 0.15,
+					wz,
+					normal,
+					self:_downslope(wx, wz) + (h(4) - 0.5) * math.rad(visual.downslopeYawJitterDegrees) * 2,
+					math.rad(lerp(visual.underlayerTiltRangeDegrees[1], visual.underlayerTiltRangeDegrees[2], h(5))),
+					(h(6) - 0.5) * math.rad(40),
+					lerp(visual.underlayerLengthRange[1], visual.underlayerLengthRange[2], h(7)) * scale,
+					lerp(visual.underlayerWidthRange[1], visual.underlayerWidthRange[2], h(8)) * scale
+				)
+				part.Parent = folder
+				table.insert(column.walls, part)
+			end
+		end
+	end
 end
 
 -- The column's interior is packed layers too: as records leave and the top recedes, the layer at
@@ -597,6 +655,7 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 			walls = {},
 			wallDepth = 0,
 			floorDepth = 0,
+			underlayerDone = false,
 		}
 	end
 	self:_buildRimBed(folder)

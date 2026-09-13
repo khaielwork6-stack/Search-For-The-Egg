@@ -140,8 +140,8 @@
       "shellFolderName": "SFE_PileCollision"
     },
     "visual": {
-      "partBudgetDesktop": 20000,
-      "partBudgetMobile": 7000,
+      "partBudgetDesktop": 32000,
+      "partBudgetMobile": 10000,
       "featherLengthRange": [
         1.8,
         2.6
@@ -244,7 +244,31 @@
       "wallLevelSpacingStuds": 0.5,
       "floorStrandsPerLevel": 14,
       "floorLevelSpacingStuds": 0.5,
-      "rimMinScale": 0.85
+      "rimMinScale": 0.85,
+      "underlayerGridDesktop": [
+        5,
+        4
+      ],
+      "underlayerGridMobile": [
+        3,
+        2
+      ],
+      "underlayerDepths": [
+        1.3,
+        1.75
+      ],
+      "underlayerLengthRange": [
+        0.9,
+        1.4
+      ],
+      "underlayerWidthRange": [
+        0.8,
+        1.2
+      ],
+      "underlayerTiltRangeDegrees": [
+        0,
+        7
+      ]
     },
     "assumption": "ASSUMED",
     "recordSpacingStuds": 0.55
