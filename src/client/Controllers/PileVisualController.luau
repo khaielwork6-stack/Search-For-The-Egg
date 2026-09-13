@@ -87,6 +87,7 @@ export type PileVisualController = typeof(setmetatable(
 local TEMPLATE_SIZE = Vector3.new(0.54, 1.44, 0.13) -- repo Feather mesh extents (quill along +Y)
 local RENDER_NAME = "SFE_PileTargeting"
 local FEATHER_ID_ATTRIBUTE = "SFE_FeatherId"
+local CELL_ATTRIBUTE = "SFE_Cell"
 
 function PileVisualController.new(
 	deps: { round: any, quality: any, accessibility: any, vfx: any, audio: any, config: { [string]: any } }
@@ -185,6 +186,7 @@ local function releasePart(self: PileVisualController, part: BasePart)
 	part.Transparency = 0
 	part.CanQuery = true
 	part:SetAttribute(FEATHER_ID_ATTRIBUTE, nil)
+	part:SetAttribute(CELL_ATTRIBUTE, nil)
 	table.insert(self._partPool, part)
 end
 
@@ -384,7 +386,8 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 		if not part then
 			part = acquirePart(self)
 			part.Name = "Fluff"
-			part.CanQuery = false
+			part.CanQuery = true
+			part:SetAttribute(CELL_ATTRIBUTE, column.index)
 			part.Color = paletteColor(self._config, math.min(1, h(9) * 0.6 + visual.fluffTintShift))
 			column.fluff[k] = part
 			local y, normal = self:_surfaceAt(wx, wz)
@@ -631,15 +634,29 @@ function PileVisualController.resolveTarget(self: PileVisualController, origin: 
 	if not result or not result.Instance:IsA("BasePart") then
 		return nil
 	end
-	local featherId = result.Instance:GetAttribute(FEATHER_ID_ATTRIBUTE)
+	local hitPart = result.Instance
+	local featherId = hitPart:GetAttribute(FEATHER_ID_ATTRIBUTE)
 	if type(featherId) ~= "number" then
-		return nil
+		-- The reticle is on the fluff bed: the pick is that cell's top record (the feather it lies
+		-- under), so a click on the mound always names exactly one feather and highlights it first.
+		local cellIndex = hitPart:GetAttribute(CELL_ATTRIBUTE)
+		local column = type(cellIndex) == "number" and self._columns[cellIndex] or nil
+		if not column then
+			return nil
+		end
+		local top = FeatherLayout.exposedSlots(column.base, column.mask, 1)[1]
+		local part = top and column.feathers[top]
+		if not part then
+			return nil
+		end
+		hitPart = part
+		featherId = FeatherLayout.featherId(column.index, top)
 	end
 	local cell, slot = FeatherLayout.decode(featherId)
 	if not cell or not slot then
 		return nil
 	end
-	return { featherId = featherId, part = result.Instance, position = result.Position, cell = cell, slot = slot }
+	return { featherId = featherId, part = hitPart, position = hitPart.Position, cell = cell, slot = slot }
 end
 
 function PileVisualController._setTarget(self: PileVisualController, target: Target?)
