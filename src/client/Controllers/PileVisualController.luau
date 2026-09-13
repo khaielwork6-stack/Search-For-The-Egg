@@ -1,24 +1,19 @@
 --!strict
--- Client visual layer for the logical pile: an enormous, ridiculously dense mountain of loose feathers
--- that players dig from the outside (owner requirement, docs/HANDOFF_PHASE4.md; ASSUMED A-UX-07). The
--- server keeps its 16x16 logical cells; the client renders the shared PileSurface field as:
---   1. The mound body: one runtime EditableMesh heightfield (warm beige, low-frequency "fluff" noise so
---      the silhouette is uneven) that is never meant to be seen - it only closes gaps between feathers.
---   2. The feather coat: thousands of anchored clones of the repo Feather mesh (shared geometry, so the
---      renderer batches them; no physics, no collisions, no queries, no per-frame work). Feathers are
---      planned per cell and stacked in depth - flat on the coat, half-buried, upright, and clumps that
---      pile on each other - with many orientations, sizes, and warm cream-to-beige tints, hashed per
---      feather so nothing repeats. Deltas thin the touched cells' feathers and re-seat the rest on the
---      lowered surface (live dents). Placement is spread over frames so a build never hitches.
---      (Baking the coat into runtime EditableMeshes was tried and rejected: the client's editable-mesh
---      memory budget allows only a handful of chunks in Play.)
---   3. Invisible per-column colliders that keep players outside and drop with the surface.
---   4. Pooled clones for the few animated feathers (stream-to-bag, reveal spiral).
--- Without the mesh API the body falls back to one ellipsoid; without the Feather asset the coat uses
--- plain parts (placeholder-tagged).
+-- Client visual layer for the logical pile (owner requirement; ASSUMED A-PILE-02/03). The server owns
+-- the 16x16 cells, their individual feather records, the yields, the Egg, and the collision core (a
+-- terrain mound it re-writes after every accepted pick). The client renders, per cell:
+--   * the exposed feather records (the top `visibleSlotsPerCell` untaken slots) as individually
+--     targetable parts placed by the shared FeatherLayout, seated on the live terrain surface so the
+--     stack recedes as the cell is dug out and the next record is exposed where the last one was;
+--   * a fluff bed of small non-targetable strands (the down between the feathers) that only leaves
+--     when the cell's last record is gone, so picking one feather never disturbs its neighbours.
+-- Targeting is a raycast from the camera through the reticle: the first feather part hit is the one
+-- and only candidate, outlined with a Highlight. On an accepted pick exactly that part detaches and
+-- flies to the carried stack. Nothing here is simulated physics; every part is anchored, non-colliding.
+-- Quality tiers change only the fluff density and the cull distance.
 
-local AssetService = game:GetService("AssetService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
@@ -27,47 +22,24 @@ local Motion = require(Shared.Design.Motion)
 local AssetManifest = require(Shared.Design.AssetManifest)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local PileSurface = require(Shared.Domain.PileSurface)
+local FeatherLayout = require(Shared.Domain.FeatherLayout)
 
 local PileVisualController = {}
 PileVisualController.__index = PileVisualController
 
-type Feather = {
-	cell: number, -- logical cell index (1-based)
-	rank: number, -- 1-based order within the cell; higher ranks vanish first as the cell empties
-	ox: number, -- seat offset from the cell centre (studs)
-	oz: number,
-	yaw: number,
-	pitch: number, -- tip lift off the surface (radians)
-	roll: number, -- twist about the quill
-	depth: number, -- along the surface normal (negative = buried)
-	length: number,
-	width: number,
-	bend: number,
-	visible: boolean,
-}
-
-type Coat = {
-	feathers: { Feather },
-	instanced: { [number]: BasePart }, -- one clone per visible feather (index = plan index)
-}
-
 type Column = {
-	collider: Part,
-	base: number,
-	remaining: number,
+	index: number,
 	x: number,
 	z: number,
-	count: number, -- feathers planned for this cell
+	base: number,
+	remaining: number,
+	mask: number,
+	feathers: { [number]: BasePart }, -- slot -> part (exposed records only)
+	fluff: { BasePart },
+	fluffCount: number,
 }
 
-type Dome = {
-	part: BasePart,
-	mesh: any?,
-	vertexIds: { number },
-	normalIds: { number },
-	segments: number,
-	half: number,
-}
+export type Target = { featherId: number, part: BasePart, position: Vector3, cell: number, slot: number }
 
 export type PileVisualController = typeof(setmetatable(
 	{} :: {
@@ -79,36 +51,42 @@ export type PileVisualController = typeof(setmetatable(
 		_config: { [string]: any },
 		_folder: Folder?,
 		_columns: { [number]: Column },
-		_coat: Coat,
-		_dome: Dome?,
-		_pool: { BasePart },
-		_streaming: number,
+		_partPool: { BasePart },
 		_layout: any,
 		_grid: { [string]: any }?,
 		_field: PileSurface.Field?,
+		_minCorner: Vector3?,
 		_building: boolean,
 		_pendingDeltas: { { [string]: any } },
 		_generation: number,
+		_highlight: Highlight?,
+		_targetAccumulator: number,
+		_cullAccumulator: number,
+		_culled: boolean,
+		_dirtyCells: { [number]: number },
+		_chevronGui: BillboardGui?,
+		_streakPool: { BasePart },
+		_bound: boolean,
+		_lastPile: { [string]: any }?,
+		_lastChapter: string?,
 		_trove: Trove.Trove,
-		stats: { dents: number, streamed: number, feathersPlaced: number, domeKind: string, coatKind: string, reseats: number },
+		target: Target?,
+		stats: {
+			dents: number,
+			streamed: number,
+			feathersPlaced: number,
+			fluffPlaced: number,
+			reseats: number,
+			domeKind: string,
+			coatKind: string,
+		},
 	},
 	PileVisualController
 ))
 
--- Presentation constants (A-UX-07). Counts come from config (A-UX-02); shapes and ratios live here.
-local FEATHER_MIN_LENGTH, FEATHER_MAX_LENGTH = 1.9, 4.4
-local TEMPLATE_SIZE = Vector3.new(0.54, 1.44, 0.13) -- repo Feather mesh extents (scaled per feather)
-local CLUMP_SHARE = 0.32 -- share of a cell's feathers that arrive as stacked clumps
-local CLUMP_MIN, CLUMP_MAX = 6, 12
-local FLUFF_NOISE = 0.55 -- studs of low-frequency surface noise (uneven silhouette)
-local PLACE_PER_FRAME = 400 -- clones placed per frame during a build
-local FALLBACK_SCALE = 2.4 -- pooled animated feathers
-local MESH_SEGMENTS_BY_TIER = { low = 32, medium = 48, high = 64 }
-local CREAM = Color3.fromRGB(252, 246, 232)
-local BEIGE = Color3.fromRGB(230, 212, 180)
-local DOME_COLOR = Color3.fromRGB(236, 222, 194)
-local DOME_COLOR_DEEP = Color3.fromRGB(218, 200, 166)
-local TINTS = { CREAM, Color3.fromRGB(246, 238, 220), Color3.fromRGB(240, 228, 204), BEIGE }
+local TEMPLATE_SIZE = Vector3.new(0.54, 1.44, 0.13) -- repo Feather mesh extents (quill along +Y)
+local RENDER_NAME = "SFE_PileTargeting"
+local FEATHER_ID_ATTRIBUTE = "SFE_FeatherId"
 
 function PileVisualController.new(
 	deps: { round: any, quality: any, accessibility: any, vfx: any, audio: any, config: { [string]: any } }
@@ -122,18 +100,27 @@ function PileVisualController.new(
 		_config = deps.config,
 		_folder = nil,
 		_columns = {},
-		_coat = { feathers = {}, instanced = {} },
-		_dome = nil,
-		_pool = {},
-		_streaming = 0,
+		_partPool = {},
 		_layout = ChapterLayout.chapter1,
 		_grid = nil,
 		_field = nil,
+		_minCorner = nil,
 		_building = false,
 		_pendingDeltas = {},
 		_generation = 0,
+		_highlight = nil,
+		_targetAccumulator = 0,
+		_cullAccumulator = 0,
+		_culled = false,
+		_dirtyCells = {},
+		_chevronGui = nil,
+		_streakPool = {},
+		_bound = false,
+		_lastPile = nil,
+		_lastChapter = nil,
 		_trove = Trove.new(),
-		stats = { dents = 0, streamed = 0, feathersPlaced = 0, domeKind = "none", coatKind = "none", reseats = 0 },
+		target = nil,
+		stats = { dents = 0, streamed = 0, feathersPlaced = 0, fluffPlaced = 0, reseats = 0, domeKind = "terrain", coatKind = "none" },
 	}, PileVisualController)
 	self._trove:add(deps.round.snapshot:Connect(function(payload)
 		if payload.pile then
@@ -151,39 +138,34 @@ function PileVisualController.new(
 	return self
 end
 
--- Deterministic per-index pseudo-random in [0,1) so rebuilds are stable and there is no visible order.
-local function hash(index: number, salt: number): number
-	local n = math.sin(index * 12.9898 + salt * 78.233) * 43758.5453
-	return n - math.floor(n)
-end
-
 local function lerp(a: number, b: number, t: number): number
 	return a + (b - a) * t
 end
 
--- Low-frequency "fluff" noise so the coat and the body silhouette are uneven, never a clean cone.
-local function fluff(wx: number, wz: number): number
-	return FLUFF_NOISE
-		* (
-			0.6 * math.sin(wx * 0.61 + 1.3) * math.cos(wz * 0.53 + 0.4)
-			+ 0.4 * math.sin(wx * 1.7 + wz * 0.9) * math.sin(wz * 1.9 - wx * 0.7)
-		)
+local function paletteColor(cfg: { [string]: any }, t: number): Color3
+	local palette = cfg.pile.visual.palette
+	local scaled = math.clamp(t, 0, 0.9999) * (#palette - 1)
+	local index = math.floor(scaled) + 1
+	local frac = scaled - (index - 1)
+	local a, b = palette[index], palette[math.min(#palette, index + 1)]
+	return Color3.fromRGB(a[1], a[2], a[3]):Lerp(Color3.fromRGB(b[1], b[2], b[3]), frac)
 end
 
-local function acquireFeather(self: PileVisualController): BasePart
-	local feather = table.remove(self._pool)
-	if feather then
-		feather.Size = TEMPLATE_SIZE * FALLBACK_SCALE
-		return feather
+-- ---------------------------------------------------------------------------------------------
+-- Part pool
+-- ---------------------------------------------------------------------------------------------
+
+local function acquirePart(self: PileVisualController): BasePart
+	local part = table.remove(self._partPool)
+	if part then
+		return part
 	end
 	local template = AssetManifest.model("feather")
-	local part: BasePart
 	if template and template:IsA("BasePart") then
 		part = template:Clone() :: BasePart
-		part.Size = template.Size * FALLBACK_SCALE
 	else
 		local fallback = Instance.new("Part")
-		fallback.Size = TEMPLATE_SIZE * FALLBACK_SCALE
+		fallback.Size = TEMPLATE_SIZE
 		fallback.Material = Enum.Material.SmoothPlastic
 		fallback:SetAttribute("SFE_Placeholder", "PHASE_6_VFX")
 		part = fallback
@@ -191,345 +173,181 @@ local function acquireFeather(self: PileVisualController): BasePart
 	part.Name = "Feather"
 	part.Anchored = true
 	part.CanCollide = false
-	part.CanQuery = false
+	part.CanQuery = true
 	part.CanTouch = false
 	part.CastShadow = false
 	part.Transparency = 0
-	return part
+	return part :: BasePart
 end
 
-local function releaseFeather(self: PileVisualController, feather: BasePart)
-	feather.Parent = nil
-	feather.Transparency = 0
-	table.insert(self._pool, feather)
-end
-
--- World centre of a column (XZ) and its current height.
-function PileVisualController._columnGeometry(self: PileVisualController, column: Column): (Vector3, number)
-	local field = self._field :: PileSurface.Field
-	local centre = ChapterLayout.cellWorldPosition(self._layout, field.width, field.depth, field.cellSize, column.x, column.z, 0)
-	return centre, PileSurface.columnHeight(field, column.x, column.z)
-end
-
--- Visual surface height above the base at a world XZ: the shared field plus fluff where feathers remain.
-function PileVisualController._visualHeight(self: PileVisualController, wx: number, wz: number): number
-	local field = self._field :: PileSurface.Field
-	local h = PileSurface.heightAt(field, wx, wz)
-	if h <= 0 then
-		return 0
-	end
-	return math.max(0, h + fluff(wx, wz) * math.min(1, h / 3))
-end
-
--- Collider box per column: full column height, dropped below the floor once the column is cleared.
-function PileVisualController._shapeCollider(self: PileVisualController, column: Column)
-	local field = self._field :: PileSurface.Field
-	local centre, height = self:_columnGeometry(column)
-	local cell = field.cellSize
-	local cleared = height <= 0.001
-	if cleared then
-		column.collider.Size = Vector3.new(cell, 0.1, cell)
-		column.collider.CFrame = CFrame.new(centre + Vector3.new(0, field.baseY - 0.2, 0))
-	else
-		column.collider.Size = Vector3.new(cell, height, cell)
-		column.collider.CFrame = CFrame.new(centre + Vector3.new(0, field.baseY + height / 2, 0))
-	end
-	column.collider.CanCollide = not cleared
+local function releasePart(self: PileVisualController, part: BasePart)
+	part.Parent = nil
+	part.Transparency = 0
+	part.CanQuery = true
+	part:SetAttribute(FEATHER_ID_ATTRIBUTE, nil)
+	table.insert(self._partPool, part)
 end
 
 -- ---------------------------------------------------------------------------------------------
--- Mound body
+-- Surface sampling: the replicated terrain core first, the shared field as fallback.
 -- ---------------------------------------------------------------------------------------------
 
-function PileVisualController._domeVertex(self: PileVisualController, dome: Dome, ix: number, iz: number): (Vector3, Vector3)
+local terrainParams = RaycastParams.new()
+terrainParams.FilterType = Enum.RaycastFilterType.Include
+terrainParams.FilterDescendantsInstances = { workspace.Terrain }
+
+-- The owner map's pit floor is stepped earth: seat on it wherever it rises above the mound.
+local function refreshSurfaceFilter()
+	local include: { Instance } = { workspace.Terrain }
+	local pit = workspace:FindFirstChild("GroundPit", true)
+	if pit then
+		table.insert(include, pit)
+	end
+	terrainParams.FilterDescendantsInstances = include
+end
+
+function PileVisualController._surfaceAt(self: PileVisualController, wx: number, wz: number): (number, Vector3)
 	local field = self._field :: PileSurface.Field
-	local lx = -dome.half + (ix / dome.segments) * dome.half * 2
-	local lz = -dome.half + (iz / dome.segments) * dome.half * 2
-	local rim = field.radius * PileSurface.RIM_STRETCH
-	local r = math.sqrt(lx * lx + lz * lz)
-	if r > rim then
-		lx, lz = lx * rim / r, lz * rim / r
+	local analytic = field.baseY + PileSurface.heightAt(field, wx, wz)
+	local result =
+		workspace:Raycast(Vector3.new(wx, field.baseY + field.apex + 12, wz), Vector3.new(0, -(field.apex + 20), 0), terrainParams)
+	if result and result.Position.Y >= field.baseY - 0.5 then
+		return result.Position.Y, result.Normal
 	end
-	local wx, wz = field.centreX + lx, field.centreZ + lz
-	-- The body sits a little under the visual surface so the coat, not the body, defines the skin.
-	local h = math.max(0, self:_visualHeight(wx, wz) - 0.25)
-	return Vector3.new(lx, h, lz), PileSurface.normalAt(field, wx, wz)
+	return analytic, PileSurface.normalAt(field, wx, wz)
 end
 
-local function partDefaults(part: BasePart, name: string, tier: string)
-	part.Name = name
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanQuery = name == "Dome"
-	part.CanTouch = false
-	part.CastShadow = tier ~= "low"
-	part.Material = Enum.Material.SmoothPlastic
-	part:SetAttribute("SFE_Placeholder", "PHASE_6_ART")
-end
-
-function PileVisualController._buildDome(self: PileVisualController, folder: Folder, tier: string)
-	local field = self._field :: PileSurface.Field
-	local segments = MESH_SEGMENTS_BY_TIER[tier] or MESH_SEGMENTS_BY_TIER.medium
-	local half = math.max(field.width, field.depth) * field.cellSize / 2 * PileSurface.RIM_STRETCH
-	local dome: Dome = { part = nil :: any, mesh = nil, vertexIds = {}, normalIds = {}, segments = segments, half = half }
-	local ok, err = pcall(function()
-		local mesh = (AssetService :: any):CreateEditableMesh()
-		local colorIds = {}
-		for iz = 0, segments do
-			for ix = 0, segments do
-				local k = iz * (segments + 1) + ix + 1
-				local position, normal = self:_domeVertex(dome, ix, iz)
-				dome.vertexIds[k] = mesh:AddVertex(position)
-				dome.normalIds[k] = mesh:AddNormal(normal)
-				colorIds[k] = mesh:AddColor(DOME_COLOR:Lerp(DOME_COLOR_DEEP, hash(k, 41) * 0.8), 1)
-			end
-		end
-		for iz = 0, segments - 1 do
-			for ix = 0, segments - 1 do
-				local a = iz * (segments + 1) + ix + 1
-				local b = a + 1
-				local c = a + segments + 1
-				local d = c + 1
-				local f1 = mesh:AddTriangle(dome.vertexIds[a], dome.vertexIds[c], dome.vertexIds[b])
-				local f2 = mesh:AddTriangle(dome.vertexIds[b], dome.vertexIds[c], dome.vertexIds[d])
-				mesh:SetFaceNormals(f1, { dome.normalIds[a], dome.normalIds[c], dome.normalIds[b] })
-				mesh:SetFaceNormals(f2, { dome.normalIds[b], dome.normalIds[c], dome.normalIds[d] })
-				mesh:SetFaceColors(f1, { colorIds[a], colorIds[c], colorIds[b] })
-				mesh:SetFaceColors(f2, { colorIds[b], colorIds[c], colorIds[d] })
-			end
-		end
-		dome.part = (AssetService :: any):CreateMeshPartAsync(Content.fromObject(mesh)) :: MeshPart
-		dome.mesh = mesh
-	end)
-	if ok and dome.part then
-		self.stats.domeKind = "mesh"
-		dome.part.Color = Color3.new(1, 1, 1)
-	else
-		warn("[SFE][Pile] editable mesh unavailable, using ellipsoid mound: " .. tostring(err))
-		local part = Instance.new("Part")
-		local special = Instance.new("SpecialMesh")
-		special.MeshType = Enum.MeshType.Sphere
-		special.Parent = part
-		dome.part = part
-		dome.mesh = nil
-		dome.part.Color = DOME_COLOR
-		self.stats.domeKind = "ellipsoid"
-	end
-	partDefaults(dome.part, "Dome", tier)
-	dome.part.Material = Enum.Material.Fabric
-	self._dome = dome
-	self:_placeDome()
-	dome.part.Parent = folder
-end
-
-function PileVisualController._placeDome(self: PileVisualController)
-	local dome = self._dome
-	local field = self._field
-	if not dome or not field then
-		return
-	end
-	if dome.mesh then
-		dome.part.CFrame = CFrame.new(field.centreX, field.baseY, field.centreZ)
-	else
-		local peak = math.max(0.2, PileSurface.heightAt(field, field.centreX, field.centreZ))
-		local footprint = dome.half * 2
-		dome.part.Size = Vector3.new(footprint, peak * 2, footprint)
-		dome.part.CFrame = CFrame.new(field.centreX, field.baseY, field.centreZ)
-	end
-end
-
--- Moves the body vertices inside a world XZ box onto the current field (live dent).
-function PileVisualController._refreshDome(self: PileVisualController, minX: number, maxX: number, minZ: number, maxZ: number)
-	local dome = self._dome
-	local field = self._field
-	if not dome or not field then
-		return
-	end
-	if not dome.mesh then
-		self:_placeDome()
-		return
-	end
-	for iz = 0, dome.segments do
-		local wz = field.centreZ - dome.half + (iz / dome.segments) * dome.half * 2
-		if wz < minZ or wz > maxZ then
-			continue
-		end
-		for ix = 0, dome.segments do
-			local wx = field.centreX - dome.half + (ix / dome.segments) * dome.half * 2
-			if wx < minX or wx > maxX then
-				continue
-			end
-			local k = iz * (dome.segments + 1) + ix + 1
-			local position, normal = self:_domeVertex(dome, ix, iz)
-			dome.mesh:SetPosition(dome.vertexIds[k], position)
-			dome.mesh:SetNormal(dome.normalIds[k], normal)
-		end
-	end
-end
-
--- ---------------------------------------------------------------------------------------------
--- Feather coat
--- ---------------------------------------------------------------------------------------------
-
--- Plans every feather of a cell: singles across the cell plus stacked clumps. Deterministic per cell.
-local function planCell(cellIndex: number, count: number, cellSize: number, out: { Feather }, rimPush: Vector3?)
-	local rank = 0
-	local function add(seed: number, ox: number, oz: number, yaw: number, pitch: number, roll: number, depth: number)
-		rank += 1
-		local length = lerp(FEATHER_MIN_LENGTH, FEATHER_MAX_LENGTH, hash(seed, 61) ^ 1.3)
-		if rimPush then
-			-- Rim cells also dress the skirt below them: push a share of their seats outward.
-			local push = hash(seed, 89) * cellSize * 1.6
-			ox += rimPush.X * push
-			oz += rimPush.Z * push
-		end
-		table.insert(out, {
-			cell = cellIndex,
-			rank = rank,
-			ox = ox,
-			oz = oz,
-			yaw = yaw,
-			pitch = pitch,
-			roll = roll,
-			depth = depth,
-			length = length,
-			width = length * lerp(0.26, 0.40, hash(seed, 67)),
-			bend = lerp(0.05, 0.22, hash(seed, 71)),
-			visible = true,
-		})
-	end
-	local clumpBudget = math.floor(count * CLUMP_SHARE)
-	local singles = count - clumpBudget
-	local spread = cellSize * 0.8
-	for f = 1, singles do
-		local seed = cellIndex * 97 + f * 17
-		local kind = hash(seed, 3)
-		local pitch, depth
-		if kind < 0.58 then
-			-- flat on the coat, slightly sunk so the quill end disappears
-			pitch = hash(seed, 5) * 0.35
-			depth = lerp(-0.35, 0.1, hash(seed, 7))
-		elseif kind < 0.82 then
-			-- half-buried: only the tip shows, reads as depth
-			pitch = hash(seed, 5) * 0.55
-			depth = lerp(-1.3, -0.5, hash(seed, 7))
-		else
-			-- upright / crossed pieces that break the silhouette
-			pitch = lerp(0.6, 1.35, hash(seed, 5))
-			depth = lerp(-0.5, -0.15, hash(seed, 7))
-		end
-		add(
-			seed,
-			(hash(seed, 11) - 0.5) * spread,
-			(hash(seed, 13) - 0.5) * spread,
-			hash(seed, 23) * math.pi * 2,
-			pitch,
-			(hash(seed, 29) - 0.5) * 1.2,
-			depth
-		)
-	end
-	local placed = 0
-	local clumpNo = 0
-	while placed < clumpBudget do
-		clumpNo += 1
-		local seed = cellIndex * 131 + clumpNo * 523
-		local size = math.min(clumpBudget - placed, math.floor(lerp(CLUMP_MIN, CLUMP_MAX + 0.99, hash(seed, 31))))
-		local cx, cz = (hash(seed, 11) - 0.5) * spread, (hash(seed, 13) - 0.5) * spread
-		local clumpYaw = hash(seed, 23) * math.pi * 2
-		for k = 1, size do
-			local s = seed + k * 7
-			add(
-				s,
-				cx + (hash(s, 11) - 0.5) * 1.1,
-				cz + (hash(s, 13) - 0.5) * 1.1,
-				clumpYaw + (hash(s, 23) - 0.5) * 1.1,
-				lerp(0.05, 0.5, hash(s, 5)),
-				(hash(s, 29) - 0.5) * 1.4,
-				-0.25 + (k - 1) * 0.24 + hash(s, 7) * 0.1 -- stacked: each sits on the one below
-			)
-		end
-		placed += size
-	end
-end
-
--- Seat frame for a feather on the current visual surface (world space).
-function PileVisualController._featherFrame(self: PileVisualController, feather: Feather): CFrame
-	local field = self._field :: PileSurface.Field
-	local column = self._columns[feather.cell]
-	local centre = self:_columnGeometry(column)
-	local wx, wz = centre.X + feather.ox, centre.Z + feather.oz
-	local dx, dz = wx - field.centreX, wz - field.centreZ
-	local r = math.sqrt(dx * dx + dz * dz)
-	local rimInset = field.radius * PileSurface.RIM_STRETCH * 0.96
-	if r > rimInset then
-		wx, wz = field.centreX + dx * rimInset / r, field.centreZ + dz * rimInset / r
-	end
-	local y = field.baseY + self:_visualHeight(wx, wz)
-	local normal = PileSurface.normalAt(field, wx, wz)
-	local yawDirection = Vector3.new(math.cos(feather.yaw), 0, math.sin(feather.yaw))
+-- Places a feather-shaped part with its base at (wx, y, wz), lying along the surface (normal) with the
+-- given yaw/tilt/roll, quill length `length` and vane width `width`.
+local function placeFeather(
+	part: BasePart,
+	wx: number,
+	y: number,
+	wz: number,
+	normal: Vector3,
+	yaw: number,
+	tilt: number,
+	roll: number,
+	length: number,
+	width: number
+)
+	part.Size = Vector3.new(width, length, math.max(0.06, TEMPLATE_SIZE.Z * (length / TEMPLATE_SIZE.Y) * 0.7))
+	local yawDirection = Vector3.new(math.cos(yaw), 0, math.sin(yaw))
 	local tangent = yawDirection - normal * yawDirection:Dot(normal)
 	if tangent.Magnitude < 0.01 then
 		tangent = Vector3.new(1, 0, 0)
 	end
 	tangent = tangent.Unit
 	local binormal = normal:Cross(tangent)
-	-- X = width, Y = along the quill, Z = feather "up" (its own normal).
-	local frame = CFrame.fromMatrix(Vector3.new(wx, y, wz) + normal * feather.depth, binormal, tangent, normal)
-	return frame * CFrame.Angles(feather.pitch, feather.roll, 0)
+	local frame = CFrame.fromMatrix(Vector3.new(wx, y, wz), tangent, normal, -binormal)
+	-- Quill (+Y of the mesh) lies along the tangent, lifted by the tilt, rolled about itself; the
+	-- mesh centre sits half a length along the quill so the base is at the pivot.
+	part.CFrame = frame
+		* CFrame.Angles(tilt, 0, 0)
+		* CFrame.Angles(0, 0, roll)
+		* CFrame.Angles(-math.pi / 2, 0, 0)
+		* CFrame.new(0, length * 0.5, 0)
 end
 
--- Whether a planned feather is still present for the cell's remaining fraction.
-function PileVisualController._featherVisible(self: PileVisualController, feather: Feather): boolean
-	local column = self._columns[feather.cell]
-	if not column or column.remaining <= 0 then
-		return false
+function PileVisualController._fluffPerCell(self: PileVisualController): number
+	local visual = self._config.pile.visual
+	local tier = self._quality:tier()
+	local perCell = if tier == "low"
+		then visual.fluffPerCellMobile
+		elseif tier == "medium" then math.floor((visual.fluffPerCellMobile + visual.fluffPerCellDesktop) / 2)
+		else visual.fluffPerCellDesktop
+	-- Respect the part budget: exposed feathers first, fluff with what is left.
+	local budget = if tier == "low"
+		then visual.partBudgetMobile
+		elseif tier == "medium" then math.floor((visual.partBudgetMobile + visual.partBudgetDesktop) / 2)
+		else visual.partBudgetDesktop
+	local cells = 0
+	for _ in pairs(self._columns) do
+		cells += 1
 	end
-	local keep = math.ceil(column.count * (column.remaining / math.max(1, column.base)))
-	return feather.rank <= keep
+	local exposed = cells * visual.visibleSlotsPerCell
+	local fluffBudget = math.max(0, budget - exposed)
+	return math.min(perCell, math.floor(fluffBudget / math.max(1, cells)))
 end
 
--- Seats (or hides) coat clones. `onlyCells` limits the pass to the touched cells; `budgetPerFrame`
--- yields between batches so a full build never stalls a frame.
-function PileVisualController._placeCoat(
-	self: PileVisualController,
-	folder: Folder,
-	onlyCells: { [number]: boolean }?,
-	budgetPerFrame: number?
-)
-	local coat = self._coat
-	local instanced = coat.instanced
-	local placedThisFrame = 0
-	for i, feather in ipairs(coat.feathers) do
-		if onlyCells and not onlyCells[feather.cell] then
-			continue
+function PileVisualController._cullDistance(self: PileVisualController): number
+	local visual = self._config.pile.visual
+	return if self._quality:tier() == "low" then visual.cullDistanceMobileStuds else visual.cullDistanceDesktopStuds
+end
+
+-- (Re)materialises and seats one column: exposed records as targetable feathers, fluff underneath.
+function PileVisualController._applyColumn(self: PileVisualController, column: Column, folder: Folder)
+	local visual = self._config.pile.visual
+	local field = self._field :: PileSurface.Field
+	local minCorner = self._minCorner :: Vector3
+	local exposed = if self._culled then {} else FeatherLayout.exposedSlots(column.base, column.mask, visual.visibleSlotsPerCell)
+	local wanted: { [number]: boolean } = {}
+	for _, slot in ipairs(exposed) do
+		wanted[slot] = true
+	end
+	for slot, part in pairs(column.feathers) do
+		if not wanted[slot] then
+			releasePart(self, part)
+			column.feathers[slot] = nil
 		end
-		local visible = self:_featherVisible(feather)
-		feather.visible = visible
-		local part = instanced[i]
-		if visible then
-			if not part then
-				part = acquireFeather(self)
-				local seed = feather.cell * 977 + feather.rank * 31
-				part.Color = CREAM:Lerp(BEIGE, hash(seed, 83) ^ 1.1)
-				part.Size = TEMPLATE_SIZE * (feather.length / TEMPLATE_SIZE.Y)
-				instanced[i] = part
-			end
-			part.CFrame = self:_featherFrame(feather) * CFrame.new(0, feather.length * 0.5, 0)
+	end
+	for depth, slot in ipairs(exposed) do
+		local placement = FeatherLayout.placement(visual, column.index, slot, field.cellSize)
+		local wx, wz = FeatherLayout.worldXZ(minCorner, field.cellSize, column.x, column.z, placement)
+		local y, normal = self:_surfaceAt(wx, wz)
+		-- The top record sits on the surface; the record under it a layer lower (its own offset shows a
+		-- flank of it), so the stack reads as depth and the next feather is where the last one was.
+		local seatY = y + visual.surfaceLiftStuds - (depth - 1) * visual.layerStepStuds
+		local part = column.feathers[slot]
+		if not part then
+			part = acquirePart(self)
+			part.Name = "Feather"
+			part.CanQuery = true
+			part.Color = paletteColor(self._config, placement.tint)
+			part:SetAttribute(FEATHER_ID_ATTRIBUTE, FeatherLayout.featherId(column.index, slot))
+			column.feathers[slot] = part
+		end
+		placeFeather(part, wx, seatY, wz, normal, placement.yaw, placement.tilt, placement.roll, placement.length, placement.width)
+		if part.Parent ~= folder then
 			part.Parent = folder
-			self.stats.reseats += 1
-		elseif part then
-			releaseFeather(self, part)
-			instanced[i] = nil
 		end
-		if budgetPerFrame then
-			placedThisFrame += 1
-			if placedThisFrame >= budgetPerFrame then
-				placedThisFrame = 0
-				task.wait()
-				if self._folder ~= folder then
-					return
-				end
-			end
+		self.stats.reseats += 1
+	end
+	-- Fluff bed: present while the cell has any record left (never thins per pick).
+	local fluffWanted = if column.remaining > 0 and not self._culled then column.fluffCount else 0
+	while #column.fluff > fluffWanted do
+		releasePart(self, table.remove(column.fluff) :: BasePart)
+	end
+	local spread = field.cellSize * 0.98
+	for k = 1, fluffWanted do
+		local part = column.fluff[k]
+		if not part then
+			part = acquirePart(self)
+			part.Name = "Fluff"
+			part.CanQuery = false
+			part.Color = paletteColor(self._config, math.min(1, FeatherLayout.hash(column.index, k, 91) * 0.6 + visual.fluffTintShift))
+			column.fluff[k] = part
+		end
+		local h = function(salt: number)
+			return FeatherLayout.hash(column.index, k, salt)
+		end
+		local wx = minCorner.X + (column.x + 0.5) * field.cellSize + (h(1) - 0.5) * spread
+		local wz = minCorner.Z + (column.z + 0.5) * field.cellSize + (h(2) - 0.5) * spread
+		local y, normal = self:_surfaceAt(wx, wz)
+		placeFeather(
+			part,
+			wx,
+			y + lerp(-0.12, 0.1, h(3)),
+			wz,
+			normal,
+			h(4) * math.pi * 2,
+			math.rad(lerp(visual.fluffTiltRangeDegrees[1], visual.fluffTiltRangeDegrees[2], h(5))),
+			(h(6) - 0.5) * math.rad(visual.rollRangeDegrees),
+			lerp(visual.fluffLengthRange[1], visual.fluffLengthRange[2], h(7)),
+			lerp(visual.fluffWidthRange[1], visual.fluffWidthRange[2], h(8))
+		)
+		if part.Parent ~= folder then
+			part.Parent = folder
 		end
 	end
 end
@@ -538,12 +356,20 @@ end
 -- Build / delta
 -- ---------------------------------------------------------------------------------------------
 
--- Builds the mound from a snapshot. Mesh creation yields, so the heavy work runs in its own thread
--- and deltas that arrive meanwhile are queued and applied once the coat exists.
 function PileVisualController.build(self: PileVisualController, pile: { [string]: any }, chapter: string?)
 	self:clear()
+	self._lastPile = {
+		width = pile.width,
+		depth = pile.depth,
+		cellSize = pile.cellSize,
+		remaining = table.clone(pile.remaining),
+		base = table.clone(pile.base),
+		masks = table.clone(pile.masks or {}),
+	}
+	self._lastChapter = chapter
 	self._generation += 1
 	local generation = self._generation
+	refreshSurfaceFilter()
 	local folder = Instance.new("Folder")
 	folder.Name = "SFE_PileVisual"
 	folder.Parent = workspace
@@ -557,83 +383,53 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 		base = table.clone(pile.base),
 	}
 	self._field = PileSurface.buildField(self._config, self._grid, self._layout)
-	local field = self._field :: PileSurface.Field
-	local budgets = self._quality:budgets()
-	local tier = self._quality:tier()
-	local cellCount = pile.width * pile.depth
-
-	-- Columns (colliders) and the feather budget over the cells the mound actually covers, weighted
-	-- by each cell's surface area (steep flanks get more) and boosted at the rim (the skirt below).
-	local covered = 0
-	local weights: { [number]: number } = {}
-	local rimPush: { [number]: Vector3 } = {}
-	local weightSum = 0
-	for index = 1, cellCount do
-		local x = (index - 1) % pile.width
-		local z = math.floor((index - 1) / pile.width)
-		local collider = Instance.new("Part")
-		collider.Name = "Collider" .. index
-		collider.Anchored = true
-		collider.CanCollide = true
-		collider.CanQuery = false
-		collider.CanTouch = false
-		collider.Transparency = 1
-		collider.CastShadow = false
-		local column: Column =
-			{ collider = collider, base = pile.base[index], remaining = pile.remaining[index], x = x, z = z, count = 0, topCount = 0 }
-		self._columns[index] = column
-		local centre = self:_columnGeometry(column)
-		local dx, dz = centre.X - field.centreX, centre.Z - field.centreZ
-		local rNorm = math.sqrt(dx * dx + dz * dz) / field.radius
-		if PileSurface.domeProfile(rNorm) > 0 then
-			covered += 1
-			local gx, gz = PileSurface.gradientAt(field, centre.X, centre.Z)
-			local area = math.sqrt(1 + gx * gx + gz * gz) -- surface area per footprint area
-			local weight = math.min(2.4, area) * lerp(0.8, 1.25, hash(index, 47))
-			if rNorm > 0.78 then
-				weight *= 1.35
-				rimPush[index] = Vector3.new(dx, 0, dz).Unit
-			end
-			weights[index] = weight
-			weightSum += weight
-			column.count = -1 -- marked, sized below
-		end
-		self:_shapeCollider(column)
-		collider.Parent = folder
+	self._minCorner = ChapterLayout.gridMinCorner(self._layout, pile.width, pile.depth, pile.cellSize)
+	local masks = pile.masks or {}
+	for index = 1, pile.width * pile.depth do
+		self._columns[index] = {
+			index = index,
+			x = (index - 1) % pile.width,
+			z = math.floor((index - 1) / pile.width),
+			base = pile.base[index],
+			remaining = pile.remaining[index],
+			mask = masks[index] or 0,
+			feathers = {},
+			fluff = {},
+			fluffCount = 0,
+		}
 	end
-	for index = 1, cellCount do
-		local column = self._columns[index]
-		if column.count < 0 then
-			column.count = math.max(1, math.floor(budgets.strands * weights[index] / math.max(1e-6, weightSum) + 0.5))
-		end
+	local fluffPerCell = self:_fluffPerCell()
+	for _, column in pairs(self._columns) do
+		-- Vary the bed a little per cell so no row reads as a grid.
+		column.fluffCount = math.max(0, math.floor(fluffPerCell * lerp(0.75, 1.25, FeatherLayout.hash(column.index, 0, 17)) + 0.5))
 	end
-
-	-- Plan the coat (deterministic per cell) and place it over a few frames.
-	self._coat = { feathers = {}, instanced = {} }
-	local planned = 0
-	for index = 1, cellCount do
-		local column = self._columns[index]
-		if column.count > 0 then
-			planCell(index, column.count, pile.cellSize, self._coat.feathers, rimPush[index])
-			planned += column.count
-		end
-	end
-	self.stats.feathersPlaced = planned
 	self.stats.reseats = 0
+	self.stats.coatKind = "feathers"
+	self.stats.domeKind = "terrain"
 
+	-- Place over a few frames so a build never stalls one frame.
 	self._building = true
 	task.spawn(function()
-		self:_buildDome(folder, tier)
-		if self._generation ~= generation or self._folder ~= folder then
-			return
+		local placedThisFrame = 0
+		for _, column in pairs(self._columns) do
+			if self._generation ~= generation or self._folder ~= folder then
+				return
+			end
+			self:_applyColumn(column, folder)
+			placedThisFrame += column.fluffCount + 2
+			if placedThisFrame >= 160 then
+				placedThisFrame = 0
+				task.wait()
+			end
 		end
-		self:_placeCoat(folder, nil, PLACE_PER_FRAME)
 		if self._generation ~= generation or self._folder ~= folder then
 			return
 		end
 		local template = AssetManifest.model("feather")
-		self.stats.coatKind = if template and template:IsA("MeshPart") then "mesh" else "parts"
+		self.stats.coatKind = if template and template:IsA("MeshPart") then "feathers" else "feathers-parts"
+		self:_recount()
 		self._building = false
+		self:_bindTargeting()
 		local pending = self._pendingDeltas
 		self._pendingDeltas = {}
 		for _, payload in ipairs(pending) do
@@ -642,8 +438,21 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 	end)
 end
 
--- Applies an authoritative delta: rebuild the field, dent the body around the touched cells, drop
--- their colliders, and re-seat / thin the coat feathers of those cells.
+function PileVisualController._recount(self: PileVisualController)
+	local feathers, fluff = 0, 0
+	for _, column in pairs(self._columns) do
+		for _ in pairs(column.feathers) do
+			feathers += 1
+		end
+		fluff += #column.fluff
+	end
+	self.stats.feathersPlaced = feathers
+	self.stats.fluffPlaced = fluff
+end
+
+-- Applies an authoritative delta ({ i, r, m } per cell): the touched cell's exposed records change
+-- (a taken record leaves, the next one appears) and the neighbourhood re-seats on the carved
+-- surface. Terrain replicates a beat after the delta, so touched cells stay "dirty" and re-seat again.
 function PileVisualController.applyDelta(self: PileVisualController, payload: { [string]: any })
 	if not self._folder or not self._grid then
 		return
@@ -659,9 +468,16 @@ function PileVisualController.applyDelta(self: PileVisualController, payload: { 
 		if not column then
 			continue
 		end
+		if change.r ~= column.remaining or (change.m ~= nil and change.m ~= column.mask) then
+			self.stats.dents += 1
+		end
 		column.remaining = change.r
+		if change.m ~= nil then
+			column.mask = change.m
+		elseif change.r < column.remaining then
+			column.mask = column.mask -- unknown slots: keep local prediction
+		end
 		grid.remaining[change.i] = change.r
-		self.stats.dents += 1
 		for dz = -1, 1 do
 			for dx = -1, 1 do
 				local nx, nz = column.x + dx, column.z + dz
@@ -675,63 +491,308 @@ function PileVisualController.applyDelta(self: PileVisualController, payload: { 
 		return
 	end
 	self._field = PileSurface.buildField(self._config, grid, self._layout)
-	local field = self._field :: PileSurface.Field
-	local minX, maxX, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge
+	local now = os.clock()
 	for index in pairs(touched) do
-		local column = self._columns[index]
-		local centre = self:_columnGeometry(column)
-		minX = math.min(minX, centre.X - field.cellSize * 2)
-		maxX = math.max(maxX, centre.X + field.cellSize * 2)
-		minZ = math.min(minZ, centre.Z - field.cellSize * 2)
-		maxZ = math.max(maxZ, centre.Z + field.cellSize * 2)
-		self:_shapeCollider(column)
+		self:_applyColumn(self._columns[index], self._folder :: Folder)
+		self._dirtyCells[index] = now
 	end
-	self:_refreshDome(minX, maxX, minZ, maxZ)
-	self:_placeCoat(self._folder :: Folder, touched, nil)
+	self:_recount()
 end
 
--- Feedback for an awarded hit: feathers tug up from the hit point, then stream toward `target`.
-function PileVisualController.streamToBag(self: PileVisualController, hitPosition: Vector3, count: number, target: () -> Vector3)
-	if not self._folder then
+-- ---------------------------------------------------------------------------------------------
+-- Targeting, culling, and dirty re-seats (one throttled render binding)
+-- ---------------------------------------------------------------------------------------------
+
+function PileVisualController._bindTargeting(self: PileVisualController)
+	if self._bound then
 		return
 	end
-	local motion = self._accessibility:motionSettings()
-	local budget = math.max(1, math.floor(self._quality:budgets().strands / 400))
-	local n = math.min(count, budget, 6)
-	local field = self._field
-	local surfaceY = if field then field.baseY + self:_visualHeight(hitPosition.X, hitPosition.Z) else hitPosition.Y
-	for i = 1, n do
-		local feather = acquireFeather(self)
-		feather.Color = TINTS[(i % #TINTS) + 1]
-		feather.Parent = self._folder
-		local offset = Vector3.new((i - n / 2) * 0.35, 0.4, ((i * 7) % 3 - 1) * 0.3)
-		feather.CFrame = CFrame.new(Vector3.new(hitPosition.X, surfaceY, hitPosition.Z) + offset) * CFrame.Angles(math.rad(70), i * 1.1, 0)
-		self._streaming += 1
-		self.stats.streamed += 1
-		-- Tug (anticipation), then release toward the bag (reward), then recycle (recovery).
-		local tugInfo = TweenInfo.new(Motion.duration("quick", motion), Tokens.motion.easeOut)
-		local tug = TweenService:Create(
-			feather,
-			tugInfo,
-			{ CFrame = feather.CFrame * CFrame.new(0, 0.8 * self._accessibility:motionScale(), 0) * CFrame.Angles(0.6, 0.4, 0) }
-		)
-		tug:Play()
-		tug.Completed:Once(function()
-			local flyInfo = TweenInfo.new(Motion.duration("slow", motion), Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-			local fly =
-				TweenService:Create(feather, flyInfo, { CFrame = CFrame.new(target()) * CFrame.Angles(0, i, 0), Transparency = 0.6 })
-			fly:Play()
-			fly.Completed:Once(function()
-				self._streaming -= 1
-				releaseFeather(self, feather)
-			end)
-		end)
-	end
-	self._vfx:burst("featherPuff", Vector3.new(hitPosition.X, surfaceY, hitPosition.Z), 0.35)
+	self._bound = true
+	RunService:BindToRenderStep(RENDER_NAME, Enum.RenderPriority.Camera.Value + 3, function(dt)
+		self:_step(dt)
+	end)
 end
 
--- Reveal spiral: feathers from the cover cells lift in a spiral around the Egg (reduced motion:
--- shorter, lower lift).
+function PileVisualController._unbindTargeting(self: PileVisualController)
+	if self._bound then
+		self._bound = false
+		RunService:UnbindFromRenderStep(RENDER_NAME)
+	end
+	if self._highlight then
+		self._highlight.Adornee = nil
+		self._highlight.Enabled = false
+	end
+	self.target = nil
+end
+
+function PileVisualController._step(self: PileVisualController, dt: number)
+	local folder = self._folder
+	local field = self._field
+	if not folder or not field then
+		return
+	end
+	local visual = self._config.pile.visual
+	local now = os.clock()
+	for index, stamp in pairs(self._dirtyCells) do
+		if now - stamp > 0.45 then
+			self._dirtyCells[index] = nil
+			self:_applyColumn(self._columns[index], folder)
+		end
+	end
+	self._cullAccumulator += dt
+	if self._cullAccumulator > 0.5 then
+		self._cullAccumulator = 0
+		local camera = workspace.CurrentCamera
+		if camera then
+			local distance = (camera.CFrame.Position - Vector3.new(field.centreX, field.baseY, field.centreZ)).Magnitude
+			local culled = distance > self:_cullDistance()
+			if culled ~= self._culled then
+				self._culled = culled
+				for _, column in pairs(self._columns) do
+					self:_applyColumn(column, folder)
+				end
+				self:_recount()
+			end
+		end
+	end
+	self._targetAccumulator += dt
+	if self._targetAccumulator < 1 / visual.targetRateHz then
+		return
+	end
+	self._targetAccumulator = 0
+	local camera = workspace.CurrentCamera
+	if camera then
+		self:_setTarget(self:resolveTarget(camera.CFrame.Position, camera.CFrame.LookVector))
+	end
+end
+
+-- The one feather under a ray: the first feather part the ray meets (terrain and fluff never count
+-- as a feather; terrain does occlude buried records). Nil when the ray meets nothing collectible.
+function PileVisualController.resolveTarget(self: PileVisualController, origin: Vector3, direction: Vector3): Target?
+	local folder = self._folder
+	if not folder then
+		return nil
+	end
+	local range = self._config.interaction.defaultRangeStuds + 10
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = { folder, workspace.Terrain }
+	local result = workspace:Raycast(origin, direction.Unit * range, params)
+	if not result or not result.Instance:IsA("BasePart") then
+		return nil
+	end
+	local featherId = result.Instance:GetAttribute(FEATHER_ID_ATTRIBUTE)
+	if type(featherId) ~= "number" then
+		return nil
+	end
+	local cell, slot = FeatherLayout.decode(featherId)
+	if not cell or not slot then
+		return nil
+	end
+	return { featherId = featherId, part = result.Instance, position = result.Position, cell = cell, slot = slot }
+end
+
+function PileVisualController._setTarget(self: PileVisualController, target: Target?)
+	local folder = self._folder
+	if not folder then
+		return
+	end
+	local visual = self._config.pile.visual
+	if not self._highlight then
+		local highlight = Instance.new("Highlight")
+		highlight.Name = "SFE_PileTarget"
+		local rgb = visual.selectionOutlineColor
+		highlight.FillColor = Color3.fromRGB(rgb[1], rgb[2], rgb[3])
+		highlight.FillTransparency = visual.selectionFillTransparency
+		highlight.OutlineColor = Color3.fromRGB(rgb[1], rgb[2], rgb[3])
+		highlight.OutlineTransparency = 0.05
+		highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+		highlight.Enabled = false
+		highlight.Parent = folder
+		self._highlight = highlight
+	end
+	local highlight = self._highlight :: Highlight
+	if target then
+		if highlight.Adornee ~= target.part then
+			highlight.Adornee = target.part
+		end
+		highlight.Enabled = true
+	else
+		highlight.Enabled = false
+		highlight.Adornee = nil
+	end
+	self.target = target
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- Pick feedback: the exact feather detaches, flies to the carried stack, chevrons, layered audio
+-- ---------------------------------------------------------------------------------------------
+
+local function acquireStreak(self: PileVisualController): BasePart
+	local streak = table.remove(self._streakPool)
+	if streak then
+		return streak
+	end
+	local part = Instance.new("Part")
+	part.Name = "Streak"
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Material = Enum.Material.Neon
+	part.Color = Tokens.color.creamPill
+	part.Transparency = 0.15
+	return part
+end
+
+function PileVisualController._chevrons(self: PileVisualController, position: Vector3)
+	local visual = self._config.pile.visual
+	local motion = self._accessibility:motionSettings()
+	local folder = self._folder
+	if not folder then
+		return
+	end
+	local gui = self._chevronGui
+	if not gui then
+		gui = Instance.new("BillboardGui")
+		gui.Name = "SFE_Chevrons"
+		gui.AlwaysOnTop = true
+		gui.Size = UDim2.fromOffset(60, 90)
+		gui.LightInfluence = 0
+		gui.MaxDistance = 60
+		for i = 1, visual.chevronCount do
+			local label = Instance.new("TextLabel")
+			label.Name = "Chevron" .. i
+			label.BackgroundTransparency = 1
+			label.Size = UDim2.fromOffset(60, 26)
+			label.Font = Enum.Font.GothamBlack
+			label.Text = "︿"
+			label.TextScaled = true
+			label.TextColor3 = Color3.new(1, 1, 1)
+			label.TextStrokeTransparency = 0.5
+			label.TextTransparency = 1
+			label.Parent = gui
+		end
+		self._chevronGui = gui
+	end
+	local anchor = folder:FindFirstChild("SFE_ChevronAnchor") :: BasePart?
+	if not anchor then
+		anchor = Instance.new("Part")
+		anchor.Name = "SFE_ChevronAnchor"
+		anchor.Anchored = true
+		anchor.CanCollide = false
+		anchor.CanQuery = false
+		anchor.Transparency = 1
+		anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+		anchor.Parent = folder
+	end
+	anchor.Position = position + Vector3.new(0, 0.8, 0)
+	gui.Parent = anchor
+	local seconds = Motion.clampSeconds(visual.chevronSeconds, motion)
+	for i = 1, visual.chevronCount do
+		local label = gui:FindFirstChild("Chevron" .. i) :: TextLabel?
+		if label then
+			label.Position = UDim2.fromOffset(0, 70 - i * 8)
+			label.TextTransparency = 0.1
+			task.delay((i - 1) * 0.06, function()
+				TweenService:Create(label, TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					Position = UDim2.fromOffset(0, 20 - i * 12),
+					TextTransparency = 1,
+				}):Play()
+			end)
+		end
+	end
+end
+
+-- Server-confirmed pick of one record: that exact part lifts off, then pulls toward `target()` (the
+-- carried stack); the column re-applies at once so the next record shows where this one was.
+function PileVisualController.collectFeather(self: PileVisualController, featherId: number, hitPosition: Vector3, target: () -> Vector3)
+	local folder = self._folder
+	if not folder then
+		return
+	end
+	local visual = self._config.pile.visual
+	local motion = self._accessibility:motionSettings()
+	local scale = self._accessibility:motionScale()
+	local cellIndex, slot = FeatherLayout.decode(featherId)
+	local column = cellIndex and self._columns[cellIndex] or nil
+	local part = column and slot and column.feathers[slot] or nil
+	local from = hitPosition
+	if part then
+		from = part.Position
+		column.feathers[slot] = nil -- detached: no longer part of the coat, never re-targetable
+		part:SetAttribute(FEATHER_ID_ATTRIBUTE, nil)
+		part.CanQuery = false
+	else
+		part = acquirePart(self)
+		part.CanQuery = false
+		local placement = FeatherLayout.placement(visual, cellIndex or 1, slot or 1, (self._field :: PileSurface.Field).cellSize)
+		part.Size = Vector3.new(placement.width, placement.length, 0.1)
+		part.Color = paletteColor(self._config, placement.tint)
+		part.CFrame = CFrame.new(hitPosition)
+		part.Parent = folder
+	end
+	-- Local prediction: mark the record taken and re-apply the column (the server delta is idempotent).
+	if column and slot then
+		column.mask = bit32.bor(column.mask, bit32.lshift(1, slot - 1))
+		column.remaining = math.max(0, column.remaining - 1)
+		if self._grid then
+			(self._grid :: any).remaining[column.index] = column.remaining
+		end
+		self:_applyColumn(column, folder)
+		self:_recount()
+	end
+	if self.target and self.target.featherId == featherId then
+		self:_setTarget(nil)
+	end
+	self.stats.streamed += 1
+	local pullInfo = TweenInfo.new(Motion.clampSeconds(visual.pullSeconds, motion), Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	local tugInfo = TweenInfo.new(Motion.duration("quick", motion), Tokens.motion.easeOut)
+	local tug = TweenService:Create(part, tugInfo, { CFrame = part.CFrame * CFrame.new(0, 1.0 * scale, 0) * CFrame.Angles(0.4, 0.6, 0.2) })
+	tug:Play()
+	local flying = part
+	tug.Completed:Once(function()
+		local destination = target()
+		local fly =
+			TweenService:Create(flying, pullInfo, { CFrame = CFrame.new(destination) * CFrame.Angles(0, 1.2, 0.4), Transparency = 0.6 })
+		fly:Play()
+		fly.Completed:Once(function()
+			releasePart(self, flying)
+		end)
+	end)
+	-- Streaks: thin bright lines from the pick point toward the stack that stretch and fade.
+	local destination = target()
+	for i = 1, visual.streakCount do
+		local streak = acquireStreak(self)
+		local jitter = Vector3.new(
+			(FeatherLayout.hash(i, 1, 83) - 0.5) * 0.8,
+			(FeatherLayout.hash(i, 2, 89) - 0.5) * 0.5,
+			(FeatherLayout.hash(i, 3, 97) - 0.5) * 0.8
+		)
+		local start = from + jitter
+		local length = (destination - start).Magnitude
+		streak.Size = Vector3.new(0.07, 0.07, math.max(0.5, length * 0.3))
+		streak.CFrame = CFrame.lookAt(start, destination) * CFrame.new(0, 0, -length * 0.15)
+		streak.Transparency = 0.15
+		streak.Parent = folder
+		local tween = TweenService:Create(streak, pullInfo, {
+			CFrame = CFrame.lookAt(destination, destination + (destination - start)) * CFrame.new(0, 0, 0.2),
+			Size = Vector3.new(0.04, 0.04, 0.4),
+			Transparency = 1,
+		})
+		tween:Play()
+		tween.Completed:Once(function()
+			streak.Parent = nil
+			table.insert(self._streakPool, streak)
+		end)
+	end
+	self:_chevrons(from)
+	self._vfx:burst("featherPuff", from, 0.25)
+	self._audio:play(Tokens.sound.collectTug, { pitchVariance = 0.1 })
+end
+
+-- Reveal spiral: loose feathers lift in a spiral around the Egg.
 function PileVisualController.revealSpiral(self: PileVisualController, eggPosition: Vector3, coverCells: { number })
 	if not self._folder then
 		return
@@ -740,7 +801,10 @@ function PileVisualController.revealSpiral(self: PileVisualController, eggPositi
 	local scale = self._accessibility:motionScale()
 	local count = math.min(#coverCells * 2, 18)
 	for i = 1, count do
-		local feather = acquireFeather(self)
+		local feather = acquirePart(self)
+		feather.CanQuery = false
+		feather.Size = Vector3.new(1.2, 3, 0.12)
+		feather.Color = paletteColor(self._config, FeatherLayout.hash(i, 0, 91))
 		feather.Parent = self._folder
 		local angle = (i / count) * math.pi * 2
 		feather.CFrame = CFrame.new(eggPosition + Vector3.new(math.cos(angle) * 2, 0.2, math.sin(angle) * 2))
@@ -752,7 +816,7 @@ function PileVisualController.revealSpiral(self: PileVisualController, eggPositi
 		local tween = TweenService:Create(feather, info, { CFrame = goal, Transparency = 1 })
 		tween:Play()
 		tween.Completed:Once(function()
-			releaseFeather(self, feather)
+			releasePart(self, feather)
 		end)
 	end
 	self._vfx:burst("sparkle", eggPosition + Vector3.new(0, 1, 0), 1.2)
@@ -762,26 +826,49 @@ function PileVisualController.clear(self: PileVisualController)
 	self._generation += 1
 	self._building = false
 	self._pendingDeltas = {}
-	for _, part in pairs(self._coat.instanced) do
-		releaseFeather(self, part)
+	self._dirtyCells = {}
+	self:_unbindTargeting()
+	for _, column in pairs(self._columns) do
+		for slot, part in pairs(column.feathers) do
+			releasePart(self, part)
+			column.feathers[slot] = nil
+		end
+		for _, part in ipairs(column.fluff) do
+			releasePart(self, part)
+		end
+		table.clear(column.fluff)
 	end
-	self._coat = { feathers = {}, instanced = {} }
 	table.clear(self._columns)
 	self._grid = nil
 	self._field = nil
-	local dome = self._dome
-	if dome then
-		if dome.mesh then
-			pcall(function()
-				dome.mesh:Destroy()
-			end)
-		end
-		self._dome = nil
+	self._minCorner = nil
+	self._culled = false
+	self.stats.feathersPlaced = 0
+	self.stats.fluffPlaced = 0
+	if self._chevronGui then
+		self._chevronGui.Parent = nil
+	end
+	if self._highlight then
+		self._highlight:Destroy()
+		self._highlight = nil
 	end
 	if self._folder then
 		self._folder:Destroy()
 		self._folder = nil
 	end
+end
+
+-- Rebuilds the coat from the latest known cells (after a quality-tier change).
+function PileVisualController.rebuild(self: PileVisualController)
+	local pile = self._lastPile
+	if not pile then
+		return
+	end
+	for index, column in pairs(self._columns) do
+		pile.remaining[index] = column.remaining
+		pile.masks[index] = column.mask
+	end
+	self:build(pile, self._lastChapter)
 end
 
 -- Latest known remaining count per cell index (from snapshot + deltas).
@@ -796,7 +883,11 @@ end
 -- Surface height above the base at a world XZ (0 without a pile), for tests and the harness.
 function PileVisualController.surfaceHeightAt(self: PileVisualController, worldX: number, worldZ: number): number
 	local field = self._field
-	return if field then PileSurface.heightAt(field, worldX, worldZ) else 0
+	if not field then
+		return 0
+	end
+	local y = self:_surfaceAt(worldX, worldZ)
+	return y - field.baseY
 end
 
 function PileVisualController.domeKind(self: PileVisualController): string
@@ -815,15 +906,15 @@ function PileVisualController.cellCount(self: PileVisualController): number
 	return n
 end
 
--- Visible feathers in the coat.
+-- Visible targetable feather parts in the coat.
 function PileVisualController.featherCount(self: PileVisualController): number
-	local n = 0
-	for _, feather in ipairs(self._coat.feathers) do
-		if feather.visible then
-			n += 1
-		end
-	end
-	return n
+	self:_recount()
+	return self.stats.feathersPlaced
+end
+
+function PileVisualController.fluffCount(self: PileVisualController): number
+	self:_recount()
+	return self.stats.fluffPlaced
 end
 
 function PileVisualController.instanceCount(self: PileVisualController): number
@@ -831,15 +922,18 @@ function PileVisualController.instanceCount(self: PileVisualController): number
 end
 
 function PileVisualController.pooledCount(self: PileVisualController): number
-	return #self._pool
+	return #self._partPool
 end
 
 function PileVisualController.destroy(self: PileVisualController)
 	self:clear()
-	for _, feather in ipairs(self._pool) do
-		feather:Destroy()
+	for _, part in ipairs(self._partPool) do
+		part:Destroy()
 	end
-	table.clear(self._pool)
+	table.clear(self._partPool)
+	if self._chevronGui then
+		self._chevronGui:Destroy()
+	end
 	self._trove:destroy()
 end
 

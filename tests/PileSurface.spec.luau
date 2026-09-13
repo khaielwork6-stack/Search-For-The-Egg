@@ -100,57 +100,46 @@ return function(describe, it, expect)
 	end)
 
 	describe("Server aim", function()
-		it("resolves an upward aim at the dome face from the rim to a nearby cell within range", function()
+		it("resolves an upward aim at the dome face from the rim to a nearby cell within range (area tools)", function()
 			local h = GameplayHarness.new(cfg)
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
+			local CollectionService = require(game:GetService("ServerScriptService").Server.Services.CollectionService)
 			local centre = layout.nestCenter
 			local radius = runtime.grid.width * runtime.grid.cellSize / 2
 			local standing = Vector3.new(centre.X, layout.nestBaseY + 2, centre.Z - (radius + 4))
-			h.standAt(1, standing)
-			h.clock:advance(1)
 			local origin = standing + Vector3.new(0, 1.5, 0)
-			local result = h.collection:collect(
-				1,
-				{ sessionToken = h.token(1), origin = origin, direction = Vector3.new(0, 0.2, 1).Unit, toolId = "hand" }
-			)
-			expect(result.ok).toBe(true)
-			expect(result.data.awarded).toBe(1)
+			local aim = CollectionService.resolveAim(cfg, runtime, standing, origin, Vector3.new(0, 0.2, 1).Unit)
+			expect(aim).toBeTruthy()
 			-- The cell hit sits on the near face, not across the mound.
-			expect(result.data.hitZ).toBeLessThan(centre.Z)
+			expect(aim.hit.Z).toBeLessThan(centre.Z)
+			expect(aim.cz).toBeLessThan(runtime.grid.depth / 2)
 			-- A ray that starts inside the mound (no surface entry) resolves through the aim plane.
-			h.standAt(1, Vector3.new(centre.X, layout.nestBaseY + 2, centre.Z))
-			h.clock:advance(1)
-			local fallback = h.collection:collect(1, {
-				sessionToken = h.token(1),
-				origin = Vector3.new(centre.X, layout.nestBaseY + 3.5, centre.Z),
-				direction = Vector3.new(0, -1, 0),
-				toolId = "hand",
-			})
-			expect(fallback.ok).toBe(true)
+			local inside = Vector3.new(centre.X, layout.nestBaseY + 2, centre.Z)
+			local fallback = CollectionService.resolveAim(cfg, runtime, inside, inside + Vector3.new(0, 1.5, 0), Vector3.new(0, -1, 0))
+			expect(fallback).toBeTruthy()
 			-- A hit on the mound's skirt (past the logical footprint but under the surface) resolves to
 			-- the nearest edge cell instead of "outside_nest".
 			local foot = radius * PileSurface.RIM_STRETCH
-			h.standAt(1, Vector3.new(centre.X, layout.nestBaseY + 2, centre.Z - (foot + 5)))
-			h.clock:advance(1)
-			local skirt = h.collection:collect(1, {
-				sessionToken = h.token(1),
-				origin = Vector3.new(centre.X, layout.nestBaseY + 3.5, centre.Z - (foot + 5)),
-				direction = (Vector3.new(centre.X, layout.nestBaseY + 0.6, centre.Z - (foot - 1.5)) - Vector3.new(
-					centre.X,
-					layout.nestBaseY + 3.5,
-					centre.Z - (foot + 5)
-				)).Unit,
-				toolId = "hand",
-			})
-			expect(skirt.ok).toBe(true)
-			expect(skirt.data.hitZ).toBeLessThan(centre.Z - (radius - 2)) -- resolved edge-row cell centre
-			local hitCell = runtime.grid.cells[skirt.data.cellIndex]
-			expect(hitCell.z).toBe(0) -- the nearest edge row, never "outside_nest"
-			expect(hitCell.remaining).toBeLessThan(hitCell.base)
-			-- The harness aim lands on exactly the requested column.
+			local skirtStanding = Vector3.new(centre.X, layout.nestBaseY + 2, centre.Z - (foot + 5))
+			local skirtOrigin = Vector3.new(centre.X, layout.nestBaseY + 3.5, centre.Z - (foot + 5))
+			local skirt = CollectionService.resolveAim(
+				cfg,
+				runtime,
+				skirtStanding,
+				skirtOrigin,
+				(Vector3.new(centre.X, layout.nestBaseY + 0.6, centre.Z - (foot - 1.5)) - skirtOrigin).Unit
+			)
+			expect(skirt).toBeTruthy()
+			expect(skirt.cz).toBeGreaterThanOrEqual(-1) -- one row past the footprint at most, never "outside_nest"
+			expect(PileGrid.findTarget(runtime.grid, skirt.cx, skirt.cz, 1).z).toBe(0) -- resolves to the edge row
+			local _, code, message = CollectionService.resolveAim(cfg, runtime, standing, origin, Vector3.new(0, 0, -1))
+			expect(code).toBe("out_of_range")
+			expect(message).toBe("aim")
+			-- The hand harness aim lands on exactly the requested column's exposed feather.
 			local exact = h.collectAt(1, runtime, 3, 12)
 			expect(exact.ok).toBe(true)
+			expect(exact.data.cellIndex).toBe(12 * runtime.grid.width + 3 + 1)
 			expect(runtime.grid.cells[12 * runtime.grid.width + 3 + 1].remaining).toBeLessThan(
 				runtime.grid.cells[12 * runtime.grid.width + 3 + 1].base
 			)

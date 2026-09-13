@@ -434,7 +434,7 @@ function ToolService._explode(self: ToolService, runtime: any, charge: any, now:
 	local removals, total = PileGrid.removeSpread(grid, cells, charge.yield)
 	local cleared = 0
 	for _, removal in ipairs(removals) do
-		self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining)
+		self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining, removal.mask)
 		if removal.remaining == 0 then
 			cleared += 1
 		end
@@ -647,7 +647,7 @@ function ToolService._tickVac(self: ToolService, runtime: any, userId: number, s
 		end
 		local cleared = 0
 		for _, removal in ipairs(removals) do
-			self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining)
+			self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining, removal.mask)
 			if removal.remaining == 0 then
 				cleared += 1
 			end
@@ -827,7 +827,7 @@ function ToolService._tickChick(self: ToolService, runtime: any, userId: number,
 					break
 				end
 				local removal = PileGrid.remove(grid, cell, math.min(spec.grasp, spec.capacity - unit.load))
-				self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining)
+				self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining, removal.mask)
 				if removal.remaining == 0 then
 					state.contribution.cellsRemoved += 1
 				end

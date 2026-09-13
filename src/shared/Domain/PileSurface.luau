@@ -128,6 +128,12 @@ function PileSurface.heightAt(field: Field, worldX: number, worldZ: number): num
 	return field.apex * profile * PileSurface.fractionAt(field, worldX, worldZ)
 end
 
+-- Undepleted mound height at a world XZ (the dome with every cell full).
+function PileSurface.fullHeightAt(field: Field, worldX: number, worldZ: number): number
+	local dx, dz = worldX - field.centreX, worldZ - field.centreZ
+	return field.apex * PileSurface.domeProfile(math.sqrt(dx * dx + dz * dz) / field.radius)
+end
+
 -- Surface slope at a world XZ as (dh/dx, dh/dz) for orienting shingles and mesh normals.
 function PileSurface.gradientAt(field: Field, worldX: number, worldZ: number): (number, number)
 	local d = field.cellSize * 0.35

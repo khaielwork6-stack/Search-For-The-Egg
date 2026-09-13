@@ -8,7 +8,8 @@ Build label: `phase4-lobby-meta` (`src/server/BuildInfo.luau`). Config version 1
 | 2 - Vertical slice (lobby -> party -> Chapter 1 -> collect -> sell -> upgrade -> Egg -> victory -> results -> save -> lobby) | Verified | `db1b463873533049761cfb2d5fec7583c580b6ab` |
 | 3 - Progression and tools (Hand paths, Bag, Nest Rake, Confetti Charge, Feather Vac, Scout Chick, grants, modifiers) | Verified | `6e2a8e0b02ed78f7d5c08ef61b1e99498c78708f` |
 | 4 - Lobby / meta (parties, chapter selection, classes, perks, daily, codes, group reward, inventory, stats, leaderboards, modals, pile rebuild) | **Verified** (headless + Studio Play Solo desktop and phone) | see git log / `docs/STUDIO_VERIFICATION.md` |
-| 5 - Hard, Chapter 2, monetization | Not started | |
+| 4b - Feather pile rebuild (per-feather pickup, terrain collision, carried stack) | **Verified** (headless + Studio Play, 13 Sep 2026) | see `docs/STUDIO_VERIFICATION.md` |
+| 5 - Hard, Chapter 2, monetization | Groundwork committed, not wired | |
 | 6 - Release QA | Not started | |
 
 ## Phase 4 - what exists
@@ -107,6 +108,42 @@ Build label: `phase4-lobby-meta` (`src/server/BuildInfo.luau`). Config version 1
   covers the recipes, the asset manifest and the mesh warm-up; `Net.spec` lists the new remotes; the gameplay
   harness aims straight down at each target column's surface point. 18 modules, 256 cases headless.
 
+## Feather pile rebuild (13 Sep 2026)
+
+Owner requirements: no smooth dome, a dense layered feather mound; invisible solid collision; no hands, arms,
+tools, or the yellow oval; one click = exactly one targeted feather; a cosmetic carried stack; visible local
+depression; the Egg hidden until its cover is dug out; everything server-authoritative.
+
+- **Logical pile** (`src/shared/Domain/PileGrid.luau`): each cell holds `base` individually collectible feather
+  records (slots 1..base) with a `taken` bitmask; `removeFeather` removes exactly one record, area tools take
+  the top of the stack. Ids are `cell * 64 + slot` (`FeatherLayout.featherId`). Snapshots and deltas carry the
+  mask (`{ i, r, m }`).
+- **Collision core** (`src/server/Services/PileTerrainService.luau`): the mound is written into Roblox Terrain
+  (Snow, custom colour) as a pure function of the depleted field plus a dent map of accepted strikes; every
+  accepted pick re-writes the neighbourhood (never raising a voxel), the Egg reveal opens a hollow, round end
+  clears it. No decorative part is ever collidable.
+- **Collection** (`CollectionService._collectFeather`): the hand names one `featherId`; the server checks the
+  record exists, is untaken, and is exposed (one of the top `visibleSlotsPerCell` records), range, aim
+  (closest approach within `interaction.aimMissToleranceStuds`), line of sight, bag space, request-id
+  duplicates and cooldown; removes exactly that record and awards exactly one. A hand click ignores the grasp
+  `amount` (owner rule "exactly one"; grasp levels currently buy nothing on the click path - flagged below).
+  Feather positions never sit below the owner map's stepped pit floor (`floorHeight` probe in `init.server`).
+- **Client coat** (`src/client/Controllers/PileVisualController.luau`): the exposed records of every cell are
+  pooled feather parts placed by the shared `FeatherLayout` and seated on the live terrain (or the pit earth
+  where it is higher); a non-targetable fluff bed fills between them and leaves only when a cell's last
+  record is gone. Targeting is a camera-centre raycast; the first feather part hit gets a Highlight; on an
+  accepted pick that part detaches and flies to the carried stack (streaks, chevrons, rustle/pickup audio).
+  Quality tiers change only the fluff density (22 / 7 per cell) and cull distance.
+- **Carried stack** (`src/client/UI/CarriedStack.luau`): ViewportFrame feathers in tiers empty/low/medium/
+  high/full (0/1/3/6/9 feathers) from bag fullness, settle animation on growth, cleared on sale, hidden while a
+  modal blocks or outside Searching/EggRevealed. No hands: the old viewmodel is deleted from `ToolController`.
+- **Input**: one press = at most one request (in-flight guard, `interaction.collectDebounceSeconds`, server
+  cooldown); a refused request holds the debounce before the next try.
+
+Owner decision needed: hand grasp upgrades (`handUpgrades.grasp[*].amount` 2..8) no longer change the click
+yield because every click collects exactly one feather. Options: re-purpose grasp (cooldown, rake yield) or
+remove it from the shop. The config and shop are untouched pending that call.
+
 ## Map integration (13 Sep 2026)
 
 The owner placed two final environments in the place file: `Workspace.SearchForTheEgg_Lobby` (fenced farm
@@ -144,6 +181,14 @@ sample rate 10%; tool tick 0.1 s; leaderboard tick 5 s.
 and the eight lobby station positions - presentation constants, not economy values. Client-only presentation
 constants: bundle walk-over radius 6 studs, chick arrive threshold 1.5 studs, tool tick clamp 0.5 s, feather mesh
 scale 1.35, clump overlap 1.85 x cell.
+
+ASSUMED pile values (`SYSTEM_CONFIG.json`): `pile.collision` (Snow terrain, colour 246/236/214, voxel 4, dig
+radius 2.2, strike dent 0.45, sweep dent 0.25, egg hollow 6.0 r / 6.0 deep (a 3.2 hollow left a marching-cubes skin over the Egg on 4-stud voxels), rewrite margin 2 cells, surface
+inset 0.35, line-of-sight tolerance 1.5); `pile.visual` (part budgets 9000 / 3200, 2 visible slots per cell,
+feather length 2.6-4.2, width 1.0-1.5, spread 0.8, tilt 6-30, roll 60, layer step 0.5, lift 0.12, fluff
+0.9-2.0 x 0.35-0.7, tilt 2-22, 22 / 7 per cell, palette of five warm whites, cull 220 / 120, target rate 20 Hz,
+pull 0.34 s, 3 streaks, 3 chevrons); `interaction.aimMissToleranceStuds` 2.0, `collectDebounceSeconds` 0.12;
+`hud.carriedStack` (tiers, infinite reference 40, 220x120 / 150x84 px, bounce 0.28 s).
 
 ## Deviations from the pack
 

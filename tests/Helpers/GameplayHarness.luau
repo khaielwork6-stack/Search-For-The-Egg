@@ -8,6 +8,7 @@ local Server = game:GetService("ServerScriptService").Server
 local Clock = require(Shared.Clock)
 local WeightedRandom = require(Shared.WeightedRandom)
 local PileGrid = require(Shared.Domain.PileGrid)
+local FeatherLayout = require(Shared.Domain.FeatherLayout)
 local PileSurface = require(Shared.Domain.PileSurface)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local RoundReducer = require(Shared.Reducers.RoundReducer)
@@ -27,6 +28,7 @@ local CollectionService = require(Server.Services.CollectionService)
 local SellingService = require(Server.Services.SellingService)
 local UpgradeService = require(Server.Services.UpgradeService)
 local ToolService = require(Server.Services.ToolService)
+local PileTerrainService = require(Server.Services.PileTerrainService)
 local EggService = require(Server.Services.EggService)
 local VictoryService = require(Server.Services.VictoryService)
 local ObjectiveService = require(Server.Services.ObjectiveService)
@@ -123,12 +125,16 @@ function GameplayHarness.new(cfg, options)
 		sessions = sessions,
 		analytics = analytics,
 	})
+	local lineOfSightBlocked = false
 	local collection = CollectionService.new({
 		config = cfg,
 		clock = clock,
 		rounds = rounds,
 		sessions = sessions,
 		idGen = idGen,
+		lineOfSight = function()
+			return not lineOfSightBlocked
+		end,
 		getCharacterPosition = getCharacterPosition,
 		getProfileData = getProfileData,
 		getEntitlements = getEntitlements,
@@ -252,10 +258,25 @@ function GameplayHarness.new(cfg, options)
 		return { daily = rewards:dailyEvaluation(data), slotCount = ClassRoll.slotCount(cfg, getEntitlements(userId)) }
 	end)
 	local toolEvents = {}
-	collection.collected:Connect(function(_userId, runtime)
+	local terrainAdapter = PileTerrainService.mockAdapter()
+	local pileTerrain = PileTerrainService.new({ config = cfg, adapter = terrainAdapter })
+	rounds.created:Connect(function(_state, runtime)
+		pileTerrain:build(runtime)
+	end)
+	rounds.returned:Connect(function(_state, runtime)
+		pileTerrain:clear(runtime)
+	end)
+	egg.revealed:Connect(function(runtime, position)
+		pileTerrain:openEggHollow(runtime, position)
+	end)
+	collection.collected:Connect(function(_userId, runtime, result)
+		pileTerrain:onAwarded(runtime, result)
 		egg:checkReveal(runtime)
 	end)
-	tools.awarded:Connect(function(_userId, runtime)
+	tools.awarded:Connect(function(_userId, runtime, result)
+		if type(result) == "table" then
+			pileTerrain:onAwarded(runtime, result)
+		end
 		egg:checkReveal(runtime)
 	end)
 	tools.event:Connect(function(roundId, payload, targetUserId)
@@ -296,6 +317,11 @@ function GameplayHarness.new(cfg, options)
 	h.entitlements = entitlements
 	h.toolEvents = toolEvents
 	h.toolRng = toolRng
+	h.pileTerrain = pileTerrain
+	h.terrainAdapter = terrainAdapter
+	function h.setLineOfSightBlocked(value)
+		lineOfSightBlocked = value
+	end
 	function h.setSaveFailing(value)
 		saveShouldFail = value
 	end
@@ -348,26 +374,32 @@ function GameplayHarness.new(cfg, options)
 		return roundId, rounds:runtime(roundId)
 	end
 	-- Aim from `userId` at cell (x, z) of the pile: places the character beside the cell and aims down.
+	-- Aim from `userId` at the exposed top feather of cell (x, z): places the character beside the
+	-- feather and aims straight at its server-side position. Returns origin, direction, featherId.
 	function h.aimAt(userId, runtime, x, z)
 		local grid = runtime.grid
-		local target = ChapterLayout.cellWorldPosition(layout, grid.width, grid.depth, grid.cellSize, x, z, 0)
-		-- Stand above the target column and aim straight down at its dome surface point so the
-		-- server's surface march resolves to exactly this cell (A-UX-07).
+		local cell = PileGrid.get(grid, x, z)
+		local slot = cell and PileGrid.topSlot(cell) or 1
 		local field = PileSurface.buildField(cfg, PileGrid.snapshot(grid), layout)
-		local surface = layout.nestBaseY + PileSurface.heightAt(field, target.X, target.Z)
-		local standing = Vector3.new(target.X, surface + 2, target.Z)
+		local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
+		local placement =
+			FeatherLayout.placement(cfg.pile.visual, cell and cell.index or PileGrid.index(grid.width, x, z), slot, grid.cellSize)
+		local feather = FeatherLayout.worldPosition(field, minCorner, x, z, placement)
+		local standing = Vector3.new(feather.X, feather.Y + 2, feather.Z)
 		positions[userId] = standing
 		local origin = standing + Vector3.new(0, 1.5, 0)
-		local aim = Vector3.new(target.X, surface, target.Z)
-		return origin, (aim - origin).Unit
+		return origin, (feather - origin).Unit, cell and FeatherLayout.featherId(cell.index, slot) or nil
 	end
 	function h.collectAt(userId, runtime, x, z, toolId)
-		local origin, direction = h.aimAt(userId, runtime, x, z)
+		local origin, direction, featherId = h.aimAt(userId, runtime, x, z)
 		clock:advance(1) -- clears the tool cooldown between calls
-		return collection:collect(
-			userId,
-			{ sessionToken = h.token(userId), origin = origin, direction = direction, toolId = toolId or "hand" }
-		)
+		return collection:collect(userId, {
+			sessionToken = h.token(userId),
+			origin = origin,
+			direction = direction,
+			toolId = toolId or "hand",
+			featherId = if (toolId or "hand") == "hand" then featherId else nil,
+		})
 	end
 	function h.equip(userId, toolId)
 		return tools:equip(userId, toolId)

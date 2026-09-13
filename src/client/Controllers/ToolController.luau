@@ -13,6 +13,7 @@ local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
 local Signal = require(Shared.Util.Signal)
+local FeatherLayout = require(Shared.Domain.FeatherLayout)
 local Tokens = require(Shared.Design.Tokens)
 local ToolSpecs = require(Shared.Domain.ToolSpecs)
 
@@ -22,8 +23,11 @@ ToolController.__index = ToolController
 export type ToolController = typeof(setmetatable(
 	{} :: {
 		_deps: any,
-		_viewmodel: Part?,
 		_swing: number,
+		_bagFullToastAt: number?,
+		_requestCounter: number?,
+		_inFlight: boolean,
+		_lastAttemptAt: number?,
 		_nextAllowedAt: number,
 		_bound: boolean,
 		_enabled: boolean,
@@ -43,6 +47,7 @@ export type ToolController = typeof(setmetatable(
 			sent: number,
 			accepted: number,
 			rejected: number,
+			noTarget: number,
 			equips: number,
 			throws: number,
 			vacStarts: number,
@@ -57,37 +62,8 @@ export type ToolController = typeof(setmetatable(
 
 local RENDER_NAME = "SFE_ToolViewmodel"
 local GATHER_RADIUS = 6
-local VIEWMODELS: { [string]: { size: Vector3, color: Color3, offset: CFrame, shape: Enum.PartType? } } = {
-	hand = {
-		size = Vector3.new(0.7, 0.35, 1.1),
-		color = Color3.fromRGB(226, 191, 108),
-		offset = CFrame.new(0.95, -0.75, -1.7) * CFrame.Angles(math.rad(-20), math.rad(10), 0),
-	},
-	nestRake = {
-		size = Vector3.new(0.14, 0.14, 1.5),
-		color = Color3.fromRGB(150, 110, 70),
-		offset = CFrame.new(0.9, -0.7, -1.9) * CFrame.Angles(math.rad(-12), math.rad(14), 0),
-		shape = Enum.PartType.Block,
-	},
-	confettiCharge = {
-		size = Vector3.new(0.42, 0.42, 0.42),
-		color = Color3.fromRGB(228, 117, 70),
-		offset = CFrame.new(0.85, -0.65, -1.5),
-		shape = Enum.PartType.Ball,
-	},
-	featherVac = {
-		size = Vector3.new(0.32, 0.32, 1.3),
-		color = Color3.fromRGB(129, 190, 220),
-		offset = CFrame.new(0.8, -0.7, -1.8) * CFrame.Angles(math.rad(-6), 0, 0),
-		shape = Enum.PartType.Cylinder,
-	},
-	scoutChick = {
-		size = Vector3.new(0.45, 0.4, 0.5),
-		color = Color3.fromRGB(240, 210, 90),
-		offset = CFrame.new(0.9, -0.7, -1.5),
-		shape = Enum.PartType.Block,
-	},
-}
+-- No first-person hands, gloves, or tool props are ever drawn (owner requirement): the equipped tool
+-- is only the hotbar selection. Camera/haptic feedback carries the feel of a strike.
 
 function ToolController.new(deps: {
 	net: any,
@@ -105,8 +81,8 @@ function ToolController.new(deps: {
 }): ToolController
 	local self = setmetatable({
 		_deps = deps,
-		_viewmodel = nil,
 		_swing = 0,
+		_inFlight = false,
 		_nextAllowedAt = 0,
 		_bound = false,
 		_enabled = false,
@@ -126,6 +102,7 @@ function ToolController.new(deps: {
 			sent = 0,
 			accepted = 0,
 			rejected = 0,
+			noTarget = 0,
 			equips = 0,
 			throws = 0,
 			vacStarts = 0,
@@ -252,7 +229,6 @@ function ToolController._syncFromPlayer(self: ToolController, player: { [string]
 	self._owned = owned
 	if player.equippedTool and player.equippedTool ~= self._equipped then
 		self._equipped = player.equippedTool
-		self:_applyViewmodel()
 	end
 	local vac = player.toolRuntime and player.toolRuntime.featherVac
 	if vac then
@@ -305,49 +281,12 @@ function ToolController._refreshStatus(self: ToolController)
 	end
 end
 
-local function makeViewmodel(toolId: string): Part
-	local spec = VIEWMODELS[toolId] or VIEWMODELS.hand
-	local part = Instance.new("Part")
-	part.Name = "SFE_Viewmodel_" .. toolId
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanQuery = false
-	part.CanTouch = false
-	part.CastShadow = false
-	part.Size = spec.size
-	part.Color = spec.color
-	part.Material = Enum.Material.SmoothPlastic
-	part.Shape = spec.shape or Enum.PartType.Block
-	part:SetAttribute("SFE_Placeholder", "PHASE_6_ART")
-	if toolId == "hand" then
-		local mesh = Instance.new("SpecialMesh")
-		mesh.MeshType = Enum.MeshType.Sphere
-		mesh.Scale = Vector3.new(1, 0.7, 1.4)
-		mesh.Parent = part
-	end
-	return part
-end
-
-function ToolController._applyViewmodel(self: ToolController)
-	if not self._enabled then
-		return
-	end
-	if self._viewmodel then
-		self._viewmodel:Destroy()
-		self._viewmodel = nil
-	end
-	local part = makeViewmodel(self._equipped)
-	part.Parent = workspace.CurrentCamera
-	self._viewmodel = part
-end
-
 function ToolController.setEnabled(self: ToolController, enabled: boolean)
 	if enabled == self._enabled then
 		return
 	end
 	self._enabled = enabled
 	if enabled then
-		self:_applyViewmodel()
 		if not self._bound then
 			self._bound = true
 			RunService:BindToRenderStep(RENDER_NAME, Enum.RenderPriority.Camera.Value + 2, function(dt)
@@ -360,23 +299,13 @@ function ToolController.setEnabled(self: ToolController, enabled: boolean)
 			self._bound = false
 			RunService:UnbindFromRenderStep(RENDER_NAME)
 		end
-		if self._viewmodel then
-			self._viewmodel:Destroy()
-			self._viewmodel = nil
-		end
 		self:_stopHold()
 		self._deps.hud.hotbar:setVisible(false)
 	end
 end
 
 function ToolController._render(self: ToolController, dt: number)
-	local camera = workspace.CurrentCamera
-	local part = self._viewmodel
-	if not camera or not part then
-		return
-	end
 	self._swing = math.max(0, self._swing - dt * 4)
-	local swing = self._swing * self._deps.accessibility:motionScale()
 	-- Local heat interpolation between authoritative vac events (the server owns the real value).
 	if self._owned.featherVac and self._vac.runtimeSeconds > 0 then
 		if self._vacRunning then
@@ -386,10 +315,6 @@ function ToolController._render(self: ToolController, dt: number)
 		end
 		self:_refreshStatus()
 	end
-	local bob = math.sin(os.clock() * 2) * 0.015
-	local offset = (VIEWMODELS[self._equipped] or VIEWMODELS.hand).offset
-	local vacShake = if self._vacRunning then math.sin(os.clock() * 40) * 0.01 * self._deps.accessibility:motionScale() else 0
-	part.CFrame = camera.CFrame * offset * CFrame.new(vacShake, bob - swing * 0.25, -swing * 0.9) * CFrame.Angles(-swing * 0.8, 0, 0)
 	-- Walk-over bundle gathering (throttled).
 	local now = os.clock()
 	if now - self._lastGatherAt > 0.35 and self._deps.round:phase() == "Searching" then
@@ -423,7 +348,6 @@ function ToolController.equip(self: ToolController, toolId: string): boolean
 	self._equipped = toolId
 	self._vacRunning = false
 	self.stats.equips += 1
-	self:_applyViewmodel()
 	self._deps.hud.hotbar:setEquipped(toolId)
 	self._deps.audio:play(Tokens.sound.uiTap)
 	self._deps.haptics:pulse(0.15, 0.03)
@@ -447,12 +371,19 @@ function ToolController.canCollect(self: ToolController): boolean
 	return self._enabled and os.clock() >= self._nextAllowedAt and self._deps.round:phase() == "Searching"
 end
 
--- Hand / Rake: one collect request aimed from the camera through the screen centre.
--- `aimTarget` (Studio automation only) overrides the camera look direction with a world point.
+-- Hand: one request for the ONE feather under the reticle (owner requirement: single-feather pickup).
+-- Rake: one sweep request aimed from the camera. `aimTarget` (Studio automation only) replaces the
+-- camera look direction with a world point. Debounce: a request in flight, the cooldown, and the
+-- configured debounce window all swallow extra inputs, so one input never sends two requests.
 function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): boolean
-	if not self:canCollect() then
+	if not self:canCollect() or self._inFlight then
 		return false
 	end
+	local now = os.clock()
+	if now - (self._lastAttemptAt or 0) < self._deps.config.interaction.collectDebounceSeconds then
+		return false
+	end
+	self._lastAttemptAt = now
 	local toolId = self._equipped
 	if toolId ~= "hand" and toolId ~= "nestRake" then
 		return false
@@ -462,23 +393,78 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 	if not origin or not direction or not token then
 		return false
 	end
+	local featherId: number? = nil
+	if toolId == "hand" then
+		local target = self._deps.pile.target
+		if aimTarget then
+			local camera = workspace.CurrentCamera
+			local eye = if camera then camera.CFrame.Position else origin
+			target = self._deps.pile:resolveTarget(eye, (aimTarget - eye).Unit)
+		end
+		if not target then
+			-- Nothing collectible under the reticle: no request, no feedback spam.
+			self.stats.noTarget += 1
+			self.rejected:Fire({ ok = false, code = "not_found", message = "no_target", local_ = true })
+			return false
+		end
+		featherId = target.featherId
+		-- Aim at the record's base (its logical position), not at whichever point of the vane the
+		-- reticle ray touched.
+		local base = target.part.CFrame * CFrame.new(0, -target.part.Size.Y * 0.5, 0)
+		direction = (base.Position - origin).Unit
+	end
+	-- Full bag: no request, no pile change, clear feedback (throttled). Capacity mirrors the HUD's
+	-- derivation (server projection first, config level as the fallback); the server re-checks anyway.
+	local player = self._deps.round.player
+	if player and player.bagInfinite ~= true then
+		local levels = self._deps.config.bags.levels
+		local capacity = player.bagCapacity or (levels[player.bagLevel or 1] or levels[1]).capacity
+		if (player.carriedStandard or 0) + (player.carriedRainbow or 0) >= capacity then
+			if now - (self._bagFullToastAt or 0) > self._deps.config.pile.visual.bagFullToastCooldownSeconds then
+				self._bagFullToastAt = now
+				self._deps.hud.toasts:push("Bag full - trade your feathers", "warning")
+				self._deps.audio:play(Tokens.sound.bagFull)
+				self._deps.haptics:pulse(0.5, 0.1)
+			end
+			self.stats.rejected += 1
+			self.rejected:Fire({ ok = false, code = "invalid_state", message = "bag_full", local_ = true })
+			return false
+		end
+	end
 	self._swing = 1
-	self._deps.audio:play(Tokens.sound.collectTug, { pitchVariance = 0.08 })
 	self.stats.sent += 1
-	local result =
-		self._deps.net:request("CollectAction", { sessionToken = token, origin = origin, direction = direction, toolId = toolId })
+	self._requestCounter = (self._requestCounter or 0) + 1
+	self._inFlight = true
+	local result = self._deps.net:request("CollectAction", {
+		sessionToken = token,
+		origin = origin,
+		direction = direction,
+		toolId = toolId,
+		requestId = self._requestCounter,
+		featherId = featherId,
+	})
+	self._inFlight = false
 	if result.ok and result.data then
 		local data = result.data
+		local visual = self._deps.config.pile.visual
 		self.stats.accepted += 1
 		self._nextAllowedAt = os.clock() + (data.cooldownMs / 1000)
-		local hitPosition = Vector3.new(data.hitX, origin.Y - 1, data.hitZ)
-		self._deps.pile:streamToBag(hitPosition, data.awarded, function()
-			local cam = workspace.CurrentCamera
-			return if cam then (cam.CFrame * CFrame.new(0.8, -0.6, -1.2)).Position else hitPosition
-		end)
+		local hitPosition = Vector3.new(data.hitX, data.hitY or (origin.Y - 1), data.hitZ)
+		local function destination(): Vector3
+			return self._deps.hud:carriedStackWorldPoint() or hitPosition
+		end
+		if toolId == "hand" and data.featherId then
+			self._deps.pile:collectFeather(data.featherId, hitPosition, destination)
+		else
+			for _, removal in ipairs(data.cells or {}) do
+				for _, slot in ipairs(removal.slots or {}) do
+					self._deps.pile:collectFeather(FeatherLayout.featherId(removal.index, slot), hitPosition, destination)
+				end
+			end
+		end
 		self._deps.audio:play(Tokens.sound.collectRelease, { pitchVariance = 0.12 })
 		self._deps.haptics:pulse(if toolId == "nestRake" then 0.4 else 0.25, 0.05)
-		self._deps.camera:impulse(if toolId == "nestRake" then 0.14 else 0.08)
+		self._deps.camera:impulse(if toolId == "nestRake" then visual.cameraImpulseRake else visual.cameraImpulseHand)
 		if data.bagFull then
 			self._deps.audio:play(Tokens.sound.bagFull)
 			self._deps.haptics:pulse(0.6, 0.12)
@@ -487,14 +473,12 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 		return true
 	end
 	self.stats.rejected += 1
-	if result.code == "rate_limited" then
-		self._nextAllowedAt = os.clock() + 0.1
-	end
+	-- A refused request never re-sends immediately: hold the debounce window before the next try.
+	self._nextAllowedAt = math.max(self._nextAllowedAt, os.clock() + self._deps.config.interaction.collectDebounceSeconds)
 	self.rejected:Fire(result)
 	return false
 end
 
--- Hold-to-gather: repeat collects at the server cooldown while Primary is held (hold path only).
 function ToolController._holdEnabled(self: ToolController): boolean
 	local player = self._deps.round.player
 	if not player then

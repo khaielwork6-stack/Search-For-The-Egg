@@ -1,9 +1,13 @@
 --!strict
--- Pure logical pile grid (MASTER_SPEC section 6 "Pile model"): a width x depth array of cells with
--- integer remaining feathers. The server owns the only mutable instance per round; clients receive
--- snapshots/deltas. No Roblox instances here so it runs headlessly and in Studio identically.
+-- Pure logical pile grid (MASTER_SPEC section 6 "Pile model"): a width x depth array of cells, each
+-- holding `base` individually collectible feather records (slots 1..base; `taken` is a bitmask of
+-- collected slots, `remaining` the count still present). The server owns the only mutable instance
+-- per round; clients receive snapshots/deltas (remaining + mask per cell). No Roblox instances here so
+-- it runs headlessly and in Studio identically.
 
 local PileGrid = {}
+
+PileGrid.MAX_SLOTS = 63 -- feather ids pack the slot into 6 bits (FeatherLayout.SLOT_STRIDE)
 
 export type Cell = {
 	index: number, -- 1-based, row-major (z * width + x + 1)
@@ -11,6 +15,7 @@ export type Cell = {
 	z: number, -- 0-based row
 	base: number, -- feathers at round start
 	remaining: number,
+	taken: number, -- bitmask: bit (slot - 1) set when that feather has been collected
 }
 
 export type Grid = {
@@ -23,7 +28,7 @@ export type Grid = {
 	version: number, -- increments on every mutation
 }
 
-export type Removal = { index: number, remaining: number, removed: number }
+export type Removal = { index: number, remaining: number, removed: number, mask: number, slots: { number } }
 
 function PileGrid.index(width: number, x: number, z: number): number
 	return z * width + x + 1
@@ -49,8 +54,8 @@ function PileGrid.create(
 			if coverCells[index] then
 				base *= pileConfig.coverDepthMultiplier
 			end
-			local rounded = math.max(1, math.floor(base + 0.5))
-			cells[index] = { index = index, x = x, z = z, base = rounded, remaining = rounded }
+			local rounded = math.clamp(math.floor(base + 0.5), 1, PileGrid.MAX_SLOTS)
+			cells[index] = { index = index, x = x, z = z, base = rounded, remaining = rounded, taken = 0 }
 			total += rounded
 		end
 	end
@@ -96,16 +101,58 @@ function PileGrid.findTarget(grid: Grid, x: number, z: number, radius: number): 
 	return best
 end
 
--- Atomically removes up to `amount` from the cell. Returns the removal (removed may be 0).
+local function slotBit(slot: number): number
+	return bit32.lshift(1, slot - 1)
+end
+
+function PileGrid.isTaken(cell: Cell, slot: number): boolean
+	return bit32.band(cell.taken, slotBit(slot)) ~= 0
+end
+
+-- Highest untaken slot of a cell (the top of its stack), or nil when empty.
+function PileGrid.topSlot(cell: Cell): number?
+	for slot = cell.base, 1, -1 do
+		if not PileGrid.isTaken(cell, slot) then
+			return slot
+		end
+	end
+	return nil
+end
+
+-- Removes exactly one specific feather record. Returns the removal, or nil when the slot is invalid
+-- or already taken (nothing changes).
+function PileGrid.removeFeather(grid: Grid, cell: Cell, slot: number): Removal?
+	if slot < 1 or slot > cell.base or slot % 1 ~= 0 or PileGrid.isTaken(cell, slot) then
+		return nil
+	end
+	cell.taken = bit32.bor(cell.taken, slotBit(slot))
+	cell.remaining -= 1
+	grid.removed += 1
+	grid.version += 1
+	return { index = cell.index, remaining = cell.remaining, removed = 1, mask = cell.taken, slots = { slot } }
+end
+
+-- Atomically removes up to `amount` feathers from the top of the cell's stack (area tools, debug).
+-- Returns the removal (removed may be 0).
 function PileGrid.remove(grid: Grid, cell: Cell, amount: number): Removal
 	assert(amount >= 0 and amount % 1 == 0, "amount must be a non-negative integer")
-	local removed = math.min(cell.remaining, amount)
-	cell.remaining -= removed
-	grid.removed += removed
+	local slots = {}
+	local removed = 0
+	while removed < amount do
+		local slot = PileGrid.topSlot(cell)
+		if not slot then
+			break
+		end
+		cell.taken = bit32.bor(cell.taken, slotBit(slot))
+		cell.remaining -= 1
+		grid.removed += 1
+		removed += 1
+		table.insert(slots, slot)
+	end
 	if removed > 0 then
 		grid.version += 1
 	end
-	return { index = cell.index, remaining = cell.remaining, removed = removed }
+	return { index = cell.index, remaining = cell.remaining, removed = removed, mask = cell.taken, slots = slots }
 end
 
 function PileGrid.removedFraction(grid: Grid): number
@@ -129,9 +176,11 @@ end
 function PileGrid.snapshot(grid: Grid): { [string]: any }
 	local remaining = table.create(#grid.cells)
 	local base = table.create(#grid.cells)
+	local masks = table.create(#grid.cells)
 	for index, cell in ipairs(grid.cells) do
 		remaining[index] = cell.remaining
 		base[index] = cell.base
+		masks[index] = cell.taken
 	end
 	return {
 		width = grid.width,
@@ -139,6 +188,7 @@ function PileGrid.snapshot(grid: Grid): { [string]: any }
 		cellSize = grid.cellSize,
 		remaining = remaining,
 		base = base,
+		masks = masks,
 		total = grid.total,
 		removed = grid.removed,
 		version = grid.version,
@@ -196,7 +246,7 @@ end
 -- per-cell removals (only cells that lost feathers) and the total removed.
 function PileGrid.removeSpread(grid: Grid, cells: { Cell }, amount: number): ({ Removal }, number)
 	assert(amount >= 0 and amount % 1 == 0, "amount must be a non-negative integer")
-	local taken: { [number]: number } = {}
+	local taken: { [number]: { number } } = {}
 	local remainingAmount = amount
 	local progress = true
 	while remainingAmount > 0 and progress do
@@ -205,10 +255,13 @@ function PileGrid.removeSpread(grid: Grid, cells: { Cell }, amount: number): ({ 
 			if remainingAmount <= 0 then
 				break
 			end
-			if cell.remaining > 0 then
+			local slot = PileGrid.topSlot(cell)
+			if slot then
+				cell.taken = bit32.bor(cell.taken, slotBit(slot))
 				cell.remaining -= 1
 				grid.removed += 1
-				taken[cell.index] = (taken[cell.index] or 0) + 1
+				taken[cell.index] = taken[cell.index] or {}
+				table.insert(taken[cell.index], slot)
 				remainingAmount -= 1
 				progress = true
 			end
@@ -217,11 +270,11 @@ function PileGrid.removeSpread(grid: Grid, cells: { Cell }, amount: number): ({ 
 	local removals: { Removal } = {}
 	local total = 0
 	for _, cell in ipairs(cells) do
-		local removed = taken[cell.index]
-		if removed then
+		local slots = taken[cell.index]
+		if slots then
 			grid.version += 1
-			table.insert(removals, { index = cell.index, remaining = cell.remaining, removed = removed })
-			total += removed
+			table.insert(removals, { index = cell.index, remaining = cell.remaining, removed = #slots, mask = cell.taken, slots = slots })
+			total += #slots
 		end
 	end
 	return removals, total

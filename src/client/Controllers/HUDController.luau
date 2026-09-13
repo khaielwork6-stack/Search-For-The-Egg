@@ -14,6 +14,7 @@ local SafeArea = require(script.Parent.Parent.UI.SafeArea)
 local Button = require(script.Parent.Parent.UI.Components.Button)
 local Toast = require(script.Parent.Parent.UI.Components.Toast)
 local RoundHud = require(script.Parent.Parent.UI.RoundHud)
+local CarriedStack = require(script.Parent.Parent.UI.CarriedStack)
 local ToolHotbar = require(script.Parent.Parent.UI.ToolHotbar)
 local UpgradeModal = require(script.Parent.Parent.UI.UpgradeModal)
 local Tween = require(script.Parent.Parent.UI.Components.Tween)
@@ -28,6 +29,7 @@ export type HUDController = typeof(setmetatable(
 		toasts: any,
 		round: any,
 		hotbar: any,
+		carriedStack: any,
 		_deps: any,
 		_labels: { [string]: any },
 		_displayed: { [string]: number },
@@ -87,6 +89,7 @@ function HUDController.new(deps: any): HUDController
 		toasts = nil,
 		round = nil,
 		hotbar = nil,
+		carriedStack = nil,
 		_deps = deps,
 		_labels = {},
 		_displayed = {},
@@ -188,6 +191,16 @@ function HUDController.new(deps: any): HUDController
 		return deps.accessibility:motionSettings()
 	end, minimumTap, deps.input:mode())
 	self._trove:add(self.hotbar)
+	-- Carried feather stack: below the reticle, above the hotbar, hidden whenever a modal blocks.
+	self.carriedStack = CarriedStack.new(gui, deps.config, function()
+		return deps.accessibility:motionSettings()
+	end, function()
+		return Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx + Tokens.spacing.md + Tokens.spacing.md
+	end)
+	self._trove:add(self.carriedStack)
+	self._trove:add(deps.modals.changed:Connect(function()
+		self.carriedStack:setHiddenByUi(deps.modals:isBlocking())
+	end))
 	self._trove:add(deps.input.modeChanged:Connect(function(mode)
 		self.hotbar:setMode(mode)
 	end))
@@ -252,6 +265,7 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 			or phase == "Results"
 		self.round:setVisible(inRound)
 		self._labels.reticle.Visible = phase == "Searching" or phase == "EggRevealed"
+		self.carriedStack:setVisible(phase == "Searching" or phase == "EggRevealed")
 		if inRound and not self._timerConnection then
 			self._timerConnection = RunService.RenderStepped:Connect(function()
 				self.round:setTimer(round:elapsedMs())
@@ -276,10 +290,12 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 			self._infiniteBag = player.bagInfinite == true
 		end
 		self.round:setBag(player.carriedStandard + player.carriedRainbow, capacity, self._infiniteBag == true, false)
+		self.carriedStack:setBag(player.carriedStandard + player.carriedRainbow, capacity, self._infiniteBag == true, false)
 		self.round:setCash(player.cashCents, false)
 	end))
 	self._trove:add(round.sale:Connect(function(sale)
 		self.round:setBag(0, deps.config.bags.levels[(round.player and round.player.bagLevel) or 1].capacity, false, true)
+		self.carriedStack:clear()
 		deps.audio:play(Tokens.sound.sellArc)
 		self.round:setCash(sale.cashCents, true, function()
 			deps.audio:play(Tokens.sound.sellTick, { pitchVariance = 0.05 })
@@ -315,6 +331,19 @@ end
 function HUDController.onCollected(self: HUDController, data: { [string]: any })
 	self._infiniteBag = data.infinite == true
 	self.round:setBag(data.carried, data.capacity, data.infinite == true, true)
+	self.carriedStack:setBag(data.carried, data.capacity, data.infinite == true, true)
+end
+
+-- World point a couple of studs in front of the camera at the carried stack's screen position: the
+-- destination of a picked feather's flight. Nil without a camera.
+function HUDController.carriedStackWorldPoint(self: HUDController): Vector3?
+	local camera = workspace.CurrentCamera
+	if not camera or not self.carriedStack.frame.Visible then
+		return nil
+	end
+	local centre = self.carriedStack:screenCentre()
+	local ray = camera:ViewportPointToRay(centre.X, centre.Y + self.gui.AbsolutePosition.Y, 0)
+	return ray.Origin + ray.Direction.Unit * 2.2
 end
 
 function HUDController.setObjective(self: HUDController, title: string, detail: string?)

@@ -61,7 +61,9 @@
     "purchaseRequestRatePerSecond": 3,
     "remoteBurstAllowance": 5,
     "serverPositionToleranceStuds": 4,
-    "assumption": "ASSUMED"
+    "assumption": "ASSUMED",
+    "collectDebounceSeconds": 0.12,
+    "aimMissToleranceStuds": 2.0
   },
   "currencies": {
     "cash": {
@@ -113,6 +115,108 @@
     "coverRadiusCells": 1,
     "maxVisualHeightStuds": 16,
     "aimPlaneHeightStuds": 1.75,
+    "collision": {
+      "kind": "terrain",
+      "material": "Snow",
+      "color": [
+        246,
+        236,
+        214
+      ],
+      "voxelResolution": 4,
+      "digRadiusStuds": 2.2,
+      "strikeDentDepthStuds": 0.45,
+      "sweepDentDepthStuds": 0.25,
+      "eggHollowDepthStuds": 6.0,
+      "rewriteMarginCells": 2,
+      "sweepDigRadiusStuds": 1.1,
+      "eggHollowRadiusStuds": 6.0,
+      "surfaceInsetStuds": 0.35,
+      "lineOfSightToleranceStuds": 1.5,
+      "assumption": "ASSUMED"
+    },
+    "visual": {
+      "partBudgetDesktop": 9000,
+      "partBudgetMobile": 3200,
+      "featherLengthRange": [
+        2.6,
+        4.2
+      ],
+      "tiltRangeDegrees": [
+        6,
+        30
+      ],
+      "palette": [
+        [
+          252,
+          246,
+          232
+        ],
+        [
+          246,
+          236,
+          214
+        ],
+        [
+          240,
+          226,
+          196
+        ],
+        [
+          232,
+          214,
+          176
+        ],
+        [
+          222,
+          198,
+          150
+        ]
+      ],
+      "cullDistanceDesktopStuds": 220,
+      "cullDistanceMobileStuds": 120,
+      "targetRateHz": 20,
+      "pullSeconds": 0.34,
+      "streakCount": 3,
+      "chevronCount": 3,
+      "chevronSeconds": 0.38,
+      "cameraImpulseHand": 0.08,
+      "cameraImpulseRake": 0.14,
+      "rustleVolume": 0.55,
+      "pickupVolume": 0.7,
+      "bagFullToastCooldownSeconds": 1.5,
+      "assumption": "ASSUMED",
+      "visibleSlotsPerCell": 2,
+      "featherWidthRange": [
+        1.0,
+        1.5
+      ],
+      "featherSpreadFraction": 0.8,
+      "rollRangeDegrees": 60,
+      "layerStepStuds": 0.5,
+      "surfaceLiftStuds": 0.12,
+      "fluffLengthRange": [
+        0.9,
+        2.0
+      ],
+      "fluffWidthRange": [
+        0.35,
+        0.7
+      ],
+      "fluffTiltRangeDegrees": [
+        2,
+        22
+      ],
+      "fluffPerCellDesktop": 22,
+      "fluffPerCellMobile": 7,
+      "fluffTintShift": 0.35,
+      "selectionOutlineColor": [
+        255,
+        246,
+        200
+      ],
+      "selectionFillTransparency": 0.75
+    },
     "assumption": "ASSUMED"
   },
   "eggSpawn": {
@@ -1193,5 +1297,46 @@
     "sampledCollectionEventRate": 0.05,
     "neverLogFreeText": true,
     "neverLogSensitiveData": true
+  },
+  "hud": {
+    "carriedStack": {
+      "tiers": [
+        {
+          "name": "empty",
+          "minFullness": 0.0,
+          "feathers": 0
+        },
+        {
+          "name": "low",
+          "minFullness": 0.0001,
+          "feathers": 1
+        },
+        {
+          "name": "medium",
+          "minFullness": 0.25,
+          "feathers": 3
+        },
+        {
+          "name": "high",
+          "minFullness": 0.6,
+          "feathers": 6
+        },
+        {
+          "name": "full",
+          "minFullness": 1.0,
+          "feathers": 9
+        }
+      ],
+      "infiniteReferenceCount": 40,
+      "anchorX": 0.5,
+      "anchorBottomOffsetPx": 24,
+      "widthPxDesktop": 220,
+      "heightPxDesktop": 120,
+      "widthPxMobile": 150,
+      "heightPxMobile": 84,
+      "bounceSeconds": 0.28,
+      "bounceStuds": 0.22,
+      "assumption": "ASSUMED"
+    }
   }
 }

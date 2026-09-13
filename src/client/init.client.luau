@@ -406,8 +406,20 @@ if RunService:IsStudio() then
 			return token and net:request("RoundSkipVote", { sessionToken = token }) or { ok = false }
 		end,
 		collect = function(times, x, y, z)
-			local results = { sent = 0, accepted = 0, rejected = 0 }
+			local results = { sent = 0, accepted = 0, rejected = 0, codes = {}, hits = {} }
 			local aim = if x then Vector3.new(tonumber(x) or 0, tonumber(y) or 0, tonumber(z) or 0) else nil
+			local rejectedConn = hand.rejected:Connect(function(result)
+				local key = tostring(result.message or result.code)
+				results.codes[key] = (results.codes[key] or 0) + 1
+			end)
+			local hitConn = hand.collected:Connect(function(data)
+				if #results.hits < 3 then
+					table.insert(
+						results.hits,
+						{ x = data.hitX, y = data.hitY, z = data.hitZ, cell = data.cellIndex, remaining = data.remaining }
+					)
+				end
+			end)
 			for _ = 1, tonumber(times) or 1 do
 				local before = hand.stats.accepted
 				results.sent += 1
@@ -419,7 +431,53 @@ if RunService:IsStudio() then
 				end
 				task.wait(config.collection.baseHandCooldownSeconds + 0.05)
 			end
+			rejectedConn:Disconnect()
+			hitConn:Disconnect()
 			return results
+		end,
+		-- Quality tier switch (settings path) followed by a coat rebuild, for density evidence.
+		setQuality = function(mode)
+			quality:setMode(tostring(mode))
+			pile:rebuild()
+			task.wait(1.5)
+			return {
+				tier = quality:tier(),
+				feathers = pile:featherCount(),
+				fluff = pile:fluffCount(),
+				instances = pile:instanceCount(),
+			}
+		end,
+		pileReport = function()
+			local report: any = table.clone(pile.stats)
+			report.feathers = pile:featherCount()
+			report.fluff = pile:fluffCount()
+			report.instances = pile:instanceCount()
+			report.pooled = pile:pooledCount()
+			report.tier = quality:tier()
+			local target = pile.target
+			report.target = target
+					and {
+						x = target.position.X,
+						y = target.position.Y,
+						z = target.position.Z,
+						cell = target.cell,
+						featherId = target.featherId,
+						slot = target.slot,
+					}
+				or nil
+			-- Frame-time sample (render steps over ~2 seconds).
+			local frames, total, worst = 0, 0, 0
+			local conn = game:GetService("RunService").RenderStepped:Connect(function(dt)
+				frames += 1
+				total += dt
+				worst = math.max(worst, dt)
+			end)
+			task.wait(2)
+			conn:Disconnect()
+			report.fpsAvg = frames > 0 and math.floor(frames / total) or 0
+			report.frameWorstMs = math.floor(worst * 1000)
+			report.memoryMb = math.floor(game:GetService("Stats"):GetTotalMemoryUsageMb())
+			return report
 		end,
 		-- Walks the character with Humanoid:MoveTo (real locomotion, server-validated positions).
 		moveTo = function(x, y, z, timeout)

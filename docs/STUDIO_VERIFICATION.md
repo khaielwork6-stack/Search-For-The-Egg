@@ -806,3 +806,47 @@ auto start with sign countdown, modal parties untouched; `PileSurface.spec` re-b
 | ScreenCapture_map_processor | Processor with the green sell button and conveyors |
 | ScreenCapture_map_supplies | Supplies counter (upgrade prompt anchor) |
 
+
+# Feather pile rebuild - Verification Evidence (13 Sep 2026)
+
+Environment: Mac laptop, Roblox Studio Play Solo (unpublished place, `studio-memory` store), Rojo 7.7.0 serve,
+Studio MCP bridge. Play-mode screen captures return blank on this laptop and the Studio window is on another
+desktop space, so evidence is recorded as measurements taken through the real client/server debug surfaces.
+Frame-rate sampling is not meaningful here (Studio throttles a hidden window to ~14 fps regardless of the
+2,322 or 6,194 pile instances measured), so it is reported as inconclusive rather than as a pass.
+
+## Automated
+
+`lune run lune/test`: 284 passed, 0 failed (new `tests/PileCollection.spec.luau`: duplicate request id, line of
+sight, out-of-range / off-aim, full bag, exact single record + untouched neighbours, buried slot refused and
+next slot exposed, id/placement determinism, delta masks, dead/left/rejoin, terrain build/dent/rewrite/hollow/
+clear, fresh mound per round, Egg concealment, config validation; `Gameplay.spec`: same-feather race between two
+players, exactly one per click at any grasp level). `lune run lune/check`: OK (config 714 checks, CSV, forbidden
+literals, stylua, selene).
+
+## Studio - Play Solo (desktop viewport 1223x658), two rounds
+
+- Pile built: 512 exposed feather parts (2 per cell x 256) + 5,681 fluff strands = 6,194 instances (high);
+  low tier 1,809 fluff = 2,322 instances. Coat kind `feathers`, dome kind `terrain`. Terrain mound written:
+  surface 63.2 at the crown (base 47 + apex 16), 50.0 at the rim, 184 voxel cells, zero raycast misses along
+  two diameters, largest 1-stud step 1.38 (walkable slope).
+- Standing / walking: character teleported onto the crown stands at y 66.26 on `Snow`, velocity 0, no fall-through;
+  walking to four points down and around the mound stays on `Snow` / the map floor, max speed 20.2, never below
+  the base, no fling.
+- No hands: `workspace.CurrentCamera` children = `AudioListener` only; zero parts named hand/viewmodel anywhere;
+  hotbar keeps the Hand slot.
+- Targeted pickup: reticle highlight on feather 7687 (cell 120 slot 7); one click -> 1 request, 1 accepted,
+  exactly that part gone, the next record (7685) appeared in its place, 512 parts before and after, bag 0 -> 1,
+  carried stack 1 feather (tier low). Server masks after the first round's four picks: exactly the picked slots.
+- Rapid clicking: 12 presses in 0.49 s -> 2 requests (cooldown 0.32 s), 2 feathers. Held input without the hold
+  upgrade: 1.2 s press -> 1 request. Latency 1.0 s (server hold): five clicks 60 ms apart -> 1 request, 1 feather,
+  bag +1. Same-feather race (rival simulated player takes feather 9733 while the client's request is held
+  0.8 s): client reply `already_collected`, bag unchanged, feather no longer shown.
+- Depression: 10 picks around one spot lowered the terrain there 61.45 -> 60.61, 25 picks -> 57.77 (neighbours
+  60.1 -> 57.5), 50 picks -> 56.1 (east 53.9); emptied cells dropped their fluff (5,681 -> 5,588); crown untouched
+  beyond the rewrite margin.
+- Bag full (25/25): three presses -> 0 requests, 3 local rejections, pile unchanged, toast "Bag full - trade
+  your feathers", stack tier full (9 feathers). Sale at the crate: bag 0, stack cleared. Upgrades modal open:
+  stack hidden, gameplay input suspended; closed: stack visible again.
+- Mobile density: quality low -> 2,322 instances (fluff 7/cell), high -> 6,194.
+- Output: no errors or warnings from SFE code in either round (DataStore Studio-access notice only).

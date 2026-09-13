@@ -42,6 +42,7 @@ local RoundService = require(script.Services.RoundService)
 local PlayerDataService = require(script.Services.PlayerDataService)
 local WorldShellService = require(script.Services.WorldShellService)
 local PartyPadService = require(script.Services.PartyPadService)
+local PileTerrainService = require(script.Services.PileTerrainService)
 local ChapterShellService = require(script.Services.ChapterShellService)
 local CollectionService = require(script.Services.CollectionService)
 local SellingService = require(script.Services.SellingService)
@@ -208,12 +209,65 @@ local function getEntitlements(userId: number): { [string]: boolean }
 	end
 	return snapshot
 end
+-- Line of sight (A-PILE-01): a strike must not pass through map geometry; the terrain core itself
+-- and the pile visuals are the target, so only other solid parts block.
+local function collectLineOfSight(_runtime: any, origin: Vector3, hit: Vector3): boolean
+	local delta = hit - origin
+	local distance = delta.Magnitude
+	if distance < 0.5 then
+		return true
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local exclude = { workspace.Terrain }
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Character then
+			table.insert(exclude, player.Character)
+		end
+	end
+	for _, name in ipairs({ "SFE_PileVisual", "SFE_ToolVisuals", "SFE_Chapter1", "SFE_LobbyShell" }) do
+		local folder = workspace:FindFirstChild(name)
+		if folder then
+			table.insert(exclude, folder)
+		end
+	end
+	params.FilterDescendantsInstances = exclude
+	local result = workspace:Raycast(origin, delta.Unit * distance, params)
+	if not result then
+		return true
+	end
+	return (result.Position - origin).Magnitude >= distance - config.pile.collision.lineOfSightToleranceStuds
+end
+-- Map floor under a nest point (stepped pit earth in the owner map); nil when nothing is there.
+local function collectFloorHeight(x: number, z: number): number?
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local exclude: { Instance } = { workspace.Terrain }
+	for _, name in ipairs({ "SFE_PileVisual", "SFE_ToolVisuals" }) do
+		local inst = workspace:FindFirstChild(name)
+		if inst then
+			table.insert(exclude, inst)
+		end
+	end
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Character then
+			table.insert(exclude, player.Character)
+		end
+	end
+	params.FilterDescendantsInstances = exclude
+	local top = ChapterLayout.chapter1.nestBaseY + config.pile.maxVisualHeightStuds + 2
+	local result = workspace:Raycast(Vector3.new(x, top, z), Vector3.new(0, -(config.pile.maxVisualHeightStuds + 6), 0), params)
+	return if result then result.Position.Y else nil
+end
+local pileTerrain = PileTerrainService.new({ config = config, adapter = PileTerrainService.terrainAdapter(workspace.Terrain) })
 local collection = CollectionService.new({
 	config = config,
 	clock = clock,
 	rounds = rounds,
 	sessions = sessions,
 	idGen = idGen,
+	lineOfSight = collectLineOfSight,
+	floorHeight = collectFloorHeight,
 	getCharacterPosition = getCharacterPosition,
 	getProfileData = getProfileData,
 	getEntitlements = getEntitlements,
@@ -484,6 +538,7 @@ end)
 rounds.created:Connect(function(state, runtime)
 	-- Starting grants (permanent entitlements at max levels, class Scout Chick) before the first snapshot.
 	tools:grantStartingTools(runtime)
+	pileTerrain:build(runtime)
 	local layout = ChapterLayout[state.chapter]
 	for _, player in ipairs(memberPlayers(state.members)) do
 		placeCharacter(player, layout.spawn, layout.nestCenter)
@@ -539,7 +594,10 @@ rounds.deltaFlushed:Connect(function(roundId, delta)
 	end
 end)
 
-local function onFeathersAwarded(userId: number, runtime: any)
+local function onFeathersAwarded(userId: number, runtime: any, result: any)
+	if type(result) == "table" then
+		pileTerrain:onAwarded(runtime, result)
+	end
 	if egg:checkReveal(runtime) then
 		return
 	end
@@ -629,6 +687,7 @@ upgrades.purchased:Connect(function(userId, runtime, result)
 end)
 
 egg.revealed:Connect(function(runtime, position)
+	pileTerrain:openEggHollow(runtime, position)
 	ChapterShellService.spawnEgg(arena, position, config)
 	for _, player in ipairs(memberPlayers(runtime.state.members)) do
 		send(player, "EggRevealed", {
@@ -676,6 +735,7 @@ end)
 
 -- Round returned: characters back to the lobby, remove the Egg, refresh projections, replay.
 rounds.returned:Connect(function(state, runtime)
+	pileTerrain:clear(runtime)
 	local eggPart = arena:FindFirstChild("SFE_Egg")
 	if eggPart then
 		eggPart:Destroy()
@@ -1018,6 +1078,7 @@ local container = {
 	displayNameOf = displayNameOf,
 	pads = pads,
 	mapMode = mapMode,
+	pileTerrain = pileTerrain,
 }
 local debugHooks = StudioDebug.install(container)
 

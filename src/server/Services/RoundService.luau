@@ -19,6 +19,7 @@ local RoundService = {}
 RoundService.__index = RoundService
 
 export type PlayerState = {
+	lastCollectRequestId: any?,
 	userId: number,
 	roundId: string,
 	joinedAtMs: number,
@@ -144,6 +145,7 @@ end
 
 local function newPlayerState(userId: number, roundId: string, nowMs: number): PlayerState
 	return {
+		lastCollectRequestId = nil,
 		userId = userId,
 		roundId = roundId,
 		joinedAtMs = nowMs,
@@ -254,10 +256,11 @@ function RoundService.voteSkip(self: RoundService, roundId: string, userId: numb
 end
 
 -- Queues a pile cell change for the next replication flush.
-function RoundService.queueDelta(self: RoundService, roundId: string, cellIndex: number, remaining: number)
+function RoundService.queueDelta(self: RoundService, roundId: string, cellIndex: number, remaining: number, mask: number?)
 	local runtime = self._rounds[roundId]
 	if runtime then
-		runtime.pendingDelta[cellIndex] = remaining
+		local cell = runtime.grid.cells[cellIndex]
+		runtime.pendingDelta[cellIndex] = { r = remaining, m = mask or (cell and cell.taken) or 0 }
 	end
 end
 
@@ -267,8 +270,8 @@ function RoundService.flushDeltas(self: RoundService): number
 	for roundId, runtime in pairs(self._rounds) do
 		if next(runtime.pendingDelta) ~= nil then
 			local cells = {}
-			for index, remaining in pairs(runtime.pendingDelta) do
-				table.insert(cells, { i = index, r = remaining })
+			for index, change in pairs(runtime.pendingDelta) do
+				table.insert(cells, { i = index, r = change.r, m = change.m })
 			end
 			runtime.pendingDelta = {}
 			flushed += 1

@@ -95,9 +95,10 @@ return function(describe, it, expect)
 			local capacity = cfg.collection.startingBagCapacity
 			local carried, hits = 0, 0
 			while carried < capacity and hits < 200 do
-				local result = h.collectAt(1, runtime, 4, 4 + (hits % 3))
+				-- Every hand click collects exactly one feather (owner requirement); walk a 4x4 block.
+				local result = h.collectAt(1, runtime, 4 + (hits % 4), 4 + math.floor(hits / 4) % 4)
 				expect(result.ok).toBe(true)
-				expect(result.data.awarded).toBe(cfg.handUpgrades.grasp[1].amount)
+				expect(result.data.awarded).toBe(1)
 				carried = result.data.carried
 				hits += 1
 			end
@@ -111,60 +112,71 @@ return function(describe, it, expect)
 			expect(h.analyticsAdapter:countOf("bag_full")).toBe(1)
 		end)
 
-		it("cell depletion cannot double-award: two hits on a one-feather cell award once", function()
+		it("two players targeting the same feather: the first wins, the second is refused without an award", function()
 			local h = harness()
 			h.join(1)
 			h.join(2)
 			local _, runtime = h.startRound({ 1, 2 })
 			local cell = PileGrid.get(runtime.grid, 6, 6)
-			PileGrid.remove(runtime.grid, cell, cell.remaining - 1)
-			-- empty every neighbour so findTarget cannot fall back
-			for dz = -1, 1 do
-				for dx = -1, 1 do
-					if dx ~= 0 or dz ~= 0 then
-						local n = PileGrid.get(runtime.grid, 6 + dx, 6 + dz)
-						PileGrid.remove(runtime.grid, n, n.remaining)
-					end
-				end
-			end
+			local origin2, direction2, featherId = h.aimAt(2, runtime, 6, 6)
 			local first = h.collectAt(1, runtime, 6, 6)
-			local second = h.collectAt(2, runtime, 6, 6)
 			expect(first.ok).toBe(true)
 			expect(first.data.awarded).toBe(1)
+			expect(first.data.featherId).toBe(featherId)
+			h.clock:advance(1)
+			local second = h.collection:collect(
+				2,
+				{ sessionToken = h.token(2), origin = origin2, direction = direction2, toolId = "hand", featherId = featherId }
+			)
 			expect(second.ok).toBe(false)
-			expect(second.code).toBe("not_found")
-			expect(cell.remaining).toBe(0)
+			expect(second.code).toBe("already_done")
+			expect(second.message).toBe("already_collected")
+			expect(runtime.players[2].carriedStandard).toBe(0)
+			expect(cell.remaining).toBe(cell.base - 1)
+			-- The cell did not disappear because one feather left it; the next feather is now exposed.
+			local next = h.collectAt(2, runtime, 6, 6)
+			expect(next.ok).toBe(true)
+			expect(next.data.featherId).never.toBe(featherId)
+			expect(cell.remaining).toBe(cell.base - 2)
 		end)
 
 		it("rejects invalid phase, stale token, cooldown, out-of-range origin/aim, and wrong tool", function()
 			local h = harness()
 			h.join(1)
 			local roundId, runtime = h.startRound({ 1 })
-			local origin, direction = h.aimAt(1, runtime, 4, 4)
+			local origin, direction, featherId = h.aimAt(1, runtime, 4, 4)
 			local token = h.token(1)
-			local stale = h.collection:collect(1, { sessionToken = "stale-token", origin = origin, direction = direction, toolId = "hand" })
+			local function attempt(overrides)
+				local payload = { sessionToken = token, origin = origin, direction = direction, toolId = "hand", featherId = featherId }
+				for key, value in pairs(overrides) do
+					payload[key] = value
+				end
+				return h.collection:collect(1, payload)
+			end
+			local stale = attempt({ sessionToken = "stale-token" })
 			expect(stale.code).toBe("stale_token")
-			local wrongTool = h.collection:collect(1, { sessionToken = token, origin = origin, direction = direction, toolId = "nestRake" })
+			local wrongTool = attempt({ toolId = "nestRake" })
 			expect(wrongTool.code).toBe("not_authorized")
-			local farOrigin = h.collection:collect(
-				1,
-				{ sessionToken = token, origin = origin + Vector3.new(0, 0, 40), direction = direction, toolId = "hand" }
-			)
+			local farOrigin = attempt({ origin = origin + Vector3.new(0, 0, 40) })
 			expect(farOrigin.code).toBe("out_of_range")
-			local up = h.collection:collect(1, { sessionToken = token, origin = origin, direction = Vector3.new(0, 1, 0), toolId = "hand" })
+			expect(farOrigin.message).toBe("origin")
+			local up = attempt({ direction = Vector3.new(0, 1, 0) })
 			expect(up.code).toBe("out_of_range")
+			expect(up.message).toBe("aim")
+			local noFeather = h.collection:collect(1, { sessionToken = token, origin = origin, direction = direction, toolId = "hand" })
+			expect(noFeather.code).toBe("invalid_payload")
+			local bogus = attempt({ featherId = 64 * 100000 + 1 })
+			expect(bogus.code).toBe("not_found")
 			h.standAt(1, layout.spawn)
-			local tooFar = h.collection:collect(1, {
-				sessionToken = token,
-				origin = layout.spawn + Vector3.new(0, 1.5, 0),
-				direction = Vector3.new(0, -0.3, 1).Unit,
-				toolId = "hand",
-			})
+			local tooFar = attempt({ origin = layout.spawn + Vector3.new(0, 1.5, 0), direction = Vector3.new(0, -0.3, 1).Unit })
 			expect(tooFar.code).toBe("out_of_range")
 			local first = h.collectAt(1, runtime, 4, 4)
 			expect(first.ok).toBe(true)
-			local origin2, direction2 = h.aimAt(1, runtime, 4, 4)
-			local cooldown = h.collection:collect(1, { sessionToken = token, origin = origin2, direction = direction2, toolId = "hand" })
+			local origin2, direction2, featherId2 = h.aimAt(1, runtime, 4, 4)
+			local cooldown = h.collection:collect(
+				1,
+				{ sessionToken = token, origin = origin2, direction = direction2, toolId = "hand", featherId = featherId2 }
+			)
 			expect(cooldown.code).toBe("rate_limited")
 			expect(cooldown.message).toBe("cooldown")
 			h.egg:checkReveal(runtime)
@@ -173,15 +185,18 @@ return function(describe, it, expect)
 			expect(revealedPhase.code).toBe("invalid_state")
 		end)
 
-		it("cooldown deadline comes from config and the hand amount from the grasp level", function()
+		it("cooldown deadline comes from config and a hand click awards exactly one feather at any grasp level", function()
 			local h = harness()
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
 			local result = h.collectAt(1, runtime, 5, 5)
 			expect(result.data.cooldownMs).toBe(math.floor(cfg.collection.baseHandCooldownSeconds * 1000))
+			expect(result.data.awarded).toBe(1)
+			-- Owner requirement (single-feather pickup): grasp levels no longer multiply the click yield.
 			runtime.players[1].handLevels.grasp = 1
 			local upgraded = h.collectAt(1, runtime, 5, 6)
-			expect(upgraded.data.awarded).toBe(cfg.handUpgrades.grasp[2].amount)
+			expect(upgraded.data.awarded).toBe(1)
+			expect(upgraded.data.removed).toBe(1)
 		end)
 	end)
 
@@ -193,7 +208,7 @@ return function(describe, it, expect)
 			local carried = 0
 			local i = 0
 			while carried < cfg.collection.startingBagCapacity do
-				carried = h.collectAt(1, runtime, 3 + (i % 4), 3).data.carried
+				carried = h.collectAt(1, runtime, 3 + (i % 4), 3 + math.floor(i / 4) % 4).data.carried
 				i += 1
 			end
 			h.standAt(1, layout.spawn)

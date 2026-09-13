@@ -411,6 +411,225 @@ function StudioDebug.install(container: any): any?
 		return { removed = runtime.grid.removed, total = runtime.grid.total, fraction = runtime.grid.removed / runtime.grid.total }
 	end
 
+	-- Pile evidence hooks (server-only): digs every cell except the Egg cover down to the configured
+	-- fraction through the real grid (server carves terrain as it would for any award), and reports
+	-- the cover cells' world centres so a real collect can be aimed at them. Never reachable by clients.
+	function hooks.excavate(userId: number, fraction: number?, coverRemaining: number?)
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return nil
+		end
+		local PileGrid = require(game:GetService("ReplicatedStorage").Shared.Domain.PileGrid)
+		local ChapterLayout = require(game:GetService("ReplicatedStorage").Shared.Domain.ChapterLayout)
+		local target = math.clamp(fraction or runtime.eggDepthFraction + 0.02, 0, 1)
+		local cover = {}
+		for _, index in ipairs(runtime.eggNode.coverIndexes) do
+			cover[index] = true
+		end
+		local grid = runtime.grid
+		local layout = ChapterLayout[runtime.state.chapter]
+		local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
+		local removed = 0
+		for _, cell in ipairs(grid.cells) do
+			if PileGrid.removedFraction(grid) >= target then
+				break
+			end
+			if not cover[cell.index] and cell.remaining > 0 then
+				local removal = PileGrid.remove(grid, cell, cell.remaining)
+				removed += removal.removed
+				container.rounds:queueDelta(runtime.state.roundId, cell.index, 0, removal.mask)
+				local lx, lz = PileGrid.cellCenter(grid, cell)
+				container.pileTerrain:onAwarded(runtime, { hitX = minCorner.X + lx, hitZ = minCorner.Z + lz, cells = {} })
+			end
+		end
+		-- Optionally thin the Egg's cover cells down to `coverRemaining` records each so the final
+		-- picks (the ones that reveal the Egg) can go through the real client path quickly.
+		local coverTarget = tonumber(coverRemaining)
+		if coverTarget then
+			for index in pairs(cover) do
+				local cell = grid.cells[index]
+				if cell and cell.remaining > coverTarget then
+					local removal = PileGrid.remove(grid, cell, cell.remaining - coverTarget)
+					removed += removal.removed
+					container.rounds:queueDelta(runtime.state.roundId, cell.index, removal.remaining, removal.mask)
+					local lx, lz = PileGrid.cellCenter(grid, cell)
+					container.pileTerrain:onAwarded(runtime, { hitX = minCorner.X + lx, hitZ = minCorner.Z + lz, cells = { removal } })
+				end
+			end
+		end
+		container.log:warn("DEBUG_EXCAVATE", { userId = userId, removed = removed, fraction = PileGrid.removedFraction(grid) })
+		return { removed = removed, fraction = PileGrid.removedFraction(grid), eggDepthFraction = runtime.eggDepthFraction }
+	end
+	-- Server-side collect for a simulated (characterless) player standing beside cell (x, z): drives the
+	-- real CollectionService with a temporary position provider, so a same-cell race with the live
+	-- client can be verified in Studio without a second machine.
+	function hooks.simulateCollect(userId: number, cellX: number, cellZ: number)
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return { error = "no_round" }
+		end
+		local session = container.sessions:get(userId)
+		if not session then
+			return { error = "no_session" }
+		end
+		local Shared = game:GetService("ReplicatedStorage").Shared
+		local PileGrid = require(Shared.Domain.PileGrid)
+		local grid = runtime.grid
+		local FeatherLayout = require(Shared.Domain.FeatherLayout)
+		local cell = PileGrid.get(grid, tonumber(cellX) or 0, tonumber(cellZ) or 0)
+		if not cell then
+			return { error = "no_cell" }
+		end
+		local slot = PileGrid.topSlot(cell)
+		if not slot then
+			return { error = "cell_empty" }
+		end
+		local feather = container.collection:featherPosition(runtime, cell, slot)
+		local standing = Vector3.new(feather.X, feather.Y + 2, feather.Z)
+		local origin = standing + Vector3.new(0, 1.5, 0)
+		local direction = (feather - origin).Unit
+		local featherId = FeatherLayout.featherId(cell.index, slot)
+		local collection: any = container.collection
+		local original = collection._getCharacterPosition
+		collection._getCharacterPosition = function(id)
+			if id == userId then
+				return standing
+			end
+			return original(id)
+		end
+		local ok, result = pcall(function()
+			return collection:collect(
+				userId,
+				{ sessionToken = session.sessionToken, origin = origin, direction = direction, toolId = "hand", featherId = featherId }
+			)
+		end)
+		collection._getCharacterPosition = original
+		if not ok then
+			return { error = tostring(result) }
+		end
+		return result
+	end
+	-- Artificial server latency on collects (verification of the client's in-flight guard under lag).
+	function hooks.setCollectLatency(seconds: number?)
+		local collection: any = container.collection
+		local delay = tonumber(seconds) or 0
+		if not container._originalCollect then
+			container._originalCollect = collection.collect
+		end
+		if delay > 0 then
+			local original = container._originalCollect
+			collection.collect = function(self, ...)
+				task.wait(delay)
+				return original(self, ...)
+			end
+		else
+			collection.collect = container._originalCollect
+		end
+		debugLog("SET_COLLECT_LATENCY", { seconds = delay })
+		return { seconds = delay }
+	end
+	-- Same-feather race under latency: the next real collect that names a feather is held for
+	-- `seconds` while simulated player `simUserId` collects that exact record first through the real
+	-- service, so the held request must come back "already_collected" with no award.
+	function hooks.setCollectRace(simUserId: number?, seconds: number?)
+		local collection: any = container.collection
+		if not container._originalCollect then
+			container._originalCollect = collection.collect
+		end
+		local original = container._originalCollect
+		local rival = tonumber(simUserId)
+		if not rival then
+			collection.collect = original
+			debugLog("SET_COLLECT_RACE", { off = true })
+			return { armed = false }
+		end
+		local delay = tonumber(seconds) or 0.8
+		collection.collect = function(self, userId, payload)
+			if userId ~= rival and type(payload) == "table" and payload.featherId then
+				collection.collect = original -- one-shot
+				local runtime = container.rounds:roundOf(rival)
+				local session = container.sessions:get(rival)
+				local rivalResult = nil
+				if runtime and session then
+					local Shared = game:GetService("ReplicatedStorage").Shared
+					local FeatherLayout = require(Shared.Domain.FeatherLayout)
+					local cellIndex, slot = FeatherLayout.decode(payload.featherId)
+					local grid = runtime.grid
+					local cell = cellIndex and grid.cells[cellIndex]
+					if cell and slot then
+						local feather = collection:featherPosition(runtime, cell, slot)
+						local standing = Vector3.new(feather.X, feather.Y + 2, feather.Z)
+						local origin = standing + Vector3.new(0, 1.5, 0)
+						local positions = collection._getCharacterPosition
+						collection._getCharacterPosition = function(id)
+							if id == rival then
+								return standing
+							end
+							return positions(id)
+						end
+						rivalResult = original(self, rival, {
+							sessionToken = session.sessionToken,
+							origin = origin,
+							direction = (feather - origin).Unit,
+							toolId = "hand",
+							featherId = payload.featherId,
+						})
+						collection._getCharacterPosition = positions
+					end
+				end
+				container._lastRace = { featherId = payload.featherId, rival = rivalResult }
+				task.wait(delay)
+				local mine = original(self, userId, payload)
+				container._lastRace.mine = mine
+				return mine
+			end
+			return original(self, userId, payload)
+		end
+		debugLog("SET_COLLECT_RACE", { rival = rival, seconds = delay })
+		return { armed = true }
+	end
+	function hooks.lastRace()
+		return container._lastRace
+	end
+	-- Per-cell remaining/base plus the intended collision surface at a world XZ (verification aid).
+	function hooks.pileCells(userId: number, probeX: number?, probeZ: number?)
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return nil
+		end
+		local snapshot = require(game:GetService("ReplicatedStorage").Shared.Domain.PileGrid).snapshot(runtime.grid)
+		local out =
+			{ remaining = snapshot.remaining, base = snapshot.base, masks = snapshot.masks, width = snapshot.width, depth = snapshot.depth }
+		if probeX and probeZ then
+			out.intendedSurfaceY = container.pileTerrain:intendedSurfaceY(runtime, tonumber(probeX) :: number, tonumber(probeZ) :: number)
+			out.dentDepth = container.pileTerrain:dentDepthAt(runtime, tonumber(probeX) :: number, tonumber(probeZ) :: number)
+		end
+		return out
+	end
+	function hooks.coverCells(userId: number)
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return nil
+		end
+		local PileGrid = require(game:GetService("ReplicatedStorage").Shared.Domain.PileGrid)
+		local ChapterLayout = require(game:GetService("ReplicatedStorage").Shared.Domain.ChapterLayout)
+		local grid = runtime.grid
+		local layout = ChapterLayout[runtime.state.chapter]
+		local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
+		local out = {}
+		for _, index in ipairs(runtime.eggNode.coverIndexes) do
+			local cell = grid.cells[index]
+			local lx, lz = PileGrid.cellCenter(grid, cell)
+			table.insert(out, { index = index, x = minCorner.X + lx, z = minCorner.Z + lz, remaining = cell.remaining })
+		end
+		return {
+			cells = out,
+			phase = runtime.state.phase,
+			eggVisible = workspace:FindFirstChild("SFE_Egg", true) ~= nil,
+			terrain = container.pileTerrain.stats,
+		}
+	end
+
 	-- Phase 4 verification hooks: every action goes through the real services (never remotes); the
 	-- group adapter mock and simulated party members are labelled DEBUG in Output.
 	function hooks.rollClass(userId: number, slot: number?)

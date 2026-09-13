@@ -14,6 +14,7 @@ local ToolSpecs = require(Shared.Domain.ToolSpecs)
 local EconomyMath = require(Shared.EconomyMath)
 local Envelope = require(Shared.Net.Envelope)
 local Signal = require(Shared.Util.Signal)
+local FeatherLayout = require(Shared.Domain.FeatherLayout)
 local PileSurface = require(Shared.Domain.PileSurface)
 local RoundModifiers = require(script.Parent.RoundModifiers)
 local RoundAwards = require(script.Parent.RoundAwards)
@@ -24,6 +25,8 @@ CollectionService.__index = CollectionService
 export type CollectionService = typeof(setmetatable(
 	{} :: {
 		_config: { [string]: any },
+		_lineOfSight: ((runtime: any, origin: Vector3, hit: Vector3) -> boolean)?,
+		_floorHeight: ((x: number, z: number) -> number?)?,
 		_clock: any,
 		_rounds: any,
 		_sessions: any,
@@ -58,10 +61,14 @@ function CollectionService.new(options: {
 	getProfileData: (userId: number) -> any?,
 	getEntitlements: ((userId: number) -> { [string]: boolean }?)?,
 	analytics: any?,
+	lineOfSight: ((runtime: any, origin: Vector3, hit: Vector3) -> boolean)?,
+	floorHeight: ((x: number, z: number) -> number?)?,
 }): CollectionService
 	local counter = 0
 	return setmetatable({
 		_config = options.config,
+		_lineOfSight = options.lineOfSight,
+		_floorHeight = options.floorHeight,
 		_clock = options.clock,
 		_rounds = options.rounds,
 		_sessions = options.sessions,
@@ -201,6 +208,141 @@ function CollectionService.gate(self: CollectionService, userId: number, token: 
 	return runtime, state, characterPosition, nil, nil
 end
 
+-- World position of a feather record: on the current logical surface, never below the map floor
+-- (owner pits are stepped earth, so the nest floor rises toward the rim).
+function CollectionService.featherPosition(
+	self: CollectionService,
+	runtime: any,
+	cell: any,
+	slot: number,
+	field: any?,
+	minCorner: Vector3?
+): Vector3
+	local config = self._config
+	local grid = runtime.grid
+	local layout = ChapterLayout[runtime.state.chapter]
+	local resolvedField = field or PileSurface.buildField(config, PileGrid.snapshot(grid), layout)
+	local corner = minCorner or ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
+	local placement = FeatherLayout.placement(config.pile.visual, cell.index, slot, grid.cellSize)
+	local position = FeatherLayout.worldPosition(resolvedField, corner, cell.x, cell.z, placement)
+	if self._floorHeight then
+		local floor = self._floorHeight(position.X, position.Z)
+		if floor and floor + 0.1 > position.Y then
+			position = Vector3.new(position.X, floor + 0.1, position.Z)
+		end
+	end
+	return position
+end
+
+-- Hand click (owner requirement, single-feather pickup): the payload names ONE feather record
+-- (featherId). The server verifies the record exists, is untaken, and is exposed (one of the top
+-- `visibleSlotsPerCell` untaken slots of its cell, exactly what the client can render and see), that
+-- the player is in range of that feather, aiming at it, and has line of sight, then removes exactly
+-- that record and awards exactly one feather. Everything else in the cell stays untouched.
+function CollectionService._collectFeather(
+	self: CollectionService,
+	userId: number,
+	runtime: any,
+	state: any,
+	characterPosition: Vector3,
+	payload: { [string]: any },
+	now: number
+): Envelope.Envelope<any>
+	local config = self._config
+	local interaction = config.interaction
+	local cellIndex, slot = FeatherLayout.decode(payload.featherId)
+	if not cellIndex or not slot then
+		return reject(self, Envelope.Codes.INVALID_PAYLOAD, "feather_id")
+	end
+	local grid = runtime.grid
+	local cell = grid.cells[cellIndex]
+	if not cell or slot > cell.base then
+		return reject(self, Envelope.Codes.NOT_FOUND, "no_feather")
+	end
+	if PileGrid.isTaken(cell, slot) then
+		return reject(self, Envelope.Codes.ALREADY_DONE, "already_collected")
+	end
+	if not table.find(FeatherLayout.exposedSlots(cell.base, cell.taken, config.pile.visual.visibleSlotsPerCell), slot) then
+		return reject(self, Envelope.Codes.INVALID_STATE, "not_exposed")
+	end
+	local origin, direction = payload.origin, payload.direction
+	if (origin - characterPosition).Magnitude > interaction.serverPositionToleranceStuds then
+		return reject(self, Envelope.Codes.OUT_OF_RANGE, "origin")
+	end
+	if direction.Magnitude < 0.01 then
+		return reject(self, Envelope.Codes.INVALID_PAYLOAD, "direction")
+	end
+	local layout = ChapterLayout[runtime.state.chapter]
+	local field = PileSurface.buildField(config, PileGrid.snapshot(grid), layout)
+	local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
+	local position = self:featherPosition(runtime, cell, slot, field, minCorner)
+	local flat = Vector3.new(position.X - characterPosition.X, 0, position.Z - characterPosition.Z)
+	if flat.Magnitude > interaction.defaultRangeStuds then
+		return reject(self, Envelope.Codes.OUT_OF_RANGE, "range")
+	end
+	-- The aim ray must pass within the miss tolerance of the feather and point toward it (a closest-
+	-- approach test is robust at arm's length where a small angle is a large miss and vice versa).
+	local toFeather = position - origin
+	local along = direction.Unit:Dot(toFeather)
+	if along < 0 or (toFeather - direction.Unit * along).Magnitude > interaction.aimMissToleranceStuds then
+		return reject(self, Envelope.Codes.OUT_OF_RANGE, "aim")
+	end
+	if self._lineOfSight and not self._lineOfSight(runtime, origin, position) then
+		return reject(self, Envelope.Codes.OUT_OF_RANGE, "line_of_sight")
+	end
+	local capacity = self:bagCapacity(runtime, userId)
+	local carried = state.carriedStandard + state.carriedRainbow
+	if not capacity.infinite and capacity.capacity - carried <= 0 then
+		return reject(self, Envelope.Codes.INVALID_STATE, "bag_full")
+	end
+	-- Atomic removal of exactly this record + award of exactly one (single-threaded; no yields).
+	local removal = PileGrid.removeFeather(grid, cell, slot)
+	if not removal then
+		return reject(self, Envelope.Codes.ALREADY_DONE, "already_collected")
+	end
+	self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining, removal.mask)
+	if removal.remaining == 0 then
+		state.contribution.cellsRemoved += 1
+	end
+	local award = RoundAwards.award(state, 1, 0, capacity)
+	local cooldown = self:spec(runtime, userId, "hand").cooldownSeconds
+	state.cooldownUntil = now + cooldown
+	self.stats.accepted += 1
+	if self._analytics then
+		self._analytics:track("feather_collected", { chapter = runtime.state.chapter, amount = award.standard, tool = "hand" }, userId)
+		if award.bagFull then
+			self._analytics:track("bag_full", { chapter = runtime.state.chapter, capacity = capacity.capacity }, userId)
+		end
+	end
+	local result = {
+		toolId = "hand",
+		featherId = payload.featherId,
+		slot = slot,
+		awarded = award.standard,
+		removed = 1,
+		overflow = 0,
+		carried = award.carried,
+		capacity = award.capacity,
+		infinite = award.infinite,
+		cellIndex = cell.index,
+		remaining = cell.remaining,
+		mask = cell.taken,
+		base = cell.base,
+		cells = { removal },
+		cooldownMs = math.floor(cooldown * 1000),
+		hitX = position.X,
+		hitY = position.Y,
+		hitZ = position.Z,
+		removedFraction = PileGrid.removedFraction(grid),
+		bagFull = award.bagFull,
+	}
+	self.collected:Fire(userId, runtime, result)
+	if award.bagFull then
+		self.bagFilled:Fire(userId, runtime)
+	end
+	return Envelope.ok(result)
+end
+
 -- payload: { sessionToken, origin: Vector3, direction: Vector3, toolId }
 function CollectionService.collect(self: CollectionService, userId: number, payload: { [string]: any }): Envelope.Envelope<any>
 	local runtime, state, characterPosition, gateCode, gateMessage = self:gate(userId, payload.sessionToken)
@@ -215,13 +357,27 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 		return reject(self, Envelope.Codes.INVALID_STATE, "not_equipped")
 	end
 	local now = self._clock:monotonic()
+	-- A client retry that repeats the last request id is acknowledged as a duplicate, never re-awarded.
+	local requestId = payload.requestId
+	if requestId ~= nil then
+		if state.lastCollectRequestId == requestId then
+			return reject(self, Envelope.Codes.ALREADY_DONE, "duplicate")
+		end
+		state.lastCollectRequestId = requestId
+	end
 	if now < state.cooldownUntil then
 		return reject(self, Envelope.Codes.RATE_LIMITED, "cooldown")
+	end
+	if toolId == "hand" then
+		return self:_collectFeather(userId, runtime, state, characterPosition, payload, now)
 	end
 	local aim, aimCode, aimMessage =
 		CollectionService.resolveAim(self._config, runtime, characterPosition, payload.origin, payload.direction)
 	if not aim then
 		return reject(self, aimCode :: string, aimMessage)
+	end
+	if self._lineOfSight and not self._lineOfSight(runtime, payload.origin, aim.hit) then
+		return reject(self, Envelope.Codes.OUT_OF_RANGE, "line_of_sight")
 	end
 	local capacity = self:bagCapacity(runtime, userId)
 	local carried = state.carriedStandard + state.carriedRainbow
@@ -250,7 +406,7 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 	local removals, removed = PileGrid.removeSpread(grid, cells, amount)
 	local cellsCleared = 0
 	for _, removal in ipairs(removals) do
-		self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining)
+		self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining, removal.mask)
 		if removal.remaining == 0 then
 			cellsCleared += 1
 		end
@@ -262,8 +418,14 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 	self.stats.accepted += 1
 
 	local primary = cells[1]
+	-- The strike point is the exact surface point the player targeted (clamped into the awarded
+	-- cell), so every client effect and the terrain carve originate where the reticle was.
 	local worldX, worldZ = PileGrid.cellCenter(grid, primary)
-	local hitWorld = Vector3.new(aim.minCorner.X + worldX, aim.layout.nestBaseY, aim.minCorner.Z + worldZ)
+	local cellHalf = grid.cellSize / 2
+	local strikeX = math.clamp(aim.hit.X, aim.minCorner.X + worldX - cellHalf, aim.minCorner.X + worldX + cellHalf)
+	local strikeZ = math.clamp(aim.hit.Z, aim.minCorner.Z + worldZ - cellHalf, aim.minCorner.Z + worldZ + cellHalf)
+	local strikeY = math.max(aim.layout.nestBaseY, aim.hit.Y)
+	local hitWorld = Vector3.new(strikeX, aim.layout.nestBaseY, strikeZ)
 	local bundle = nil
 	if award.overflowStandard > 0 then
 		bundle = RoundAwards.dropBundle(
@@ -302,6 +464,7 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 		cells = removals,
 		cooldownMs = math.floor(cooldown * 1000),
 		hitX = hitWorld.X,
+		hitY = strikeY,
 		hitZ = hitWorld.Z,
 		removedFraction = PileGrid.removedFraction(grid),
 		bagFull = award.bagFull,

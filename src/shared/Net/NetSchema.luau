@@ -109,6 +109,8 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 				origin = Schema.vector3(),
 				direction = Schema.vector3(2),
 				toolId = Schema.id(),
+				requestId = Schema.optional(Schema.number({ min = 0, max = 1e12, integer = true })),
+				featherId = Schema.optional(Schema.number({ min = 0, max = 1e9, integer = true })),
 			}),
 			collectRate,
 			2,

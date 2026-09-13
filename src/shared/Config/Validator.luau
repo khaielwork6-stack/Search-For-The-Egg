@@ -544,10 +544,181 @@ function Validator.validate(raw: any): Report
 			"pile.coverRadiusCells must be a non-negative integer"
 		)
 		check(isPositiveNumber(pile.maxVisualHeightStuds), "pile.maxVisualHeightStuds must be > 0")
+		-- Collision core and visual coat (ASSUMED A-PILE-01..02)
+		local collision = pile.collision
+		check(type(collision) == "table", "pile.collision missing")
+		if type(collision) == "table" then
+			check(collision.kind == "terrain", "pile.collision.kind must be terrain")
+			check(type(collision.material) == "string" and #collision.material > 0, "pile.collision.material must name a terrain material")
+			check(
+				type(collision.color) == "table"
+					and #collision.color == 3
+					and isNonNegativeNumber(collision.color[1])
+					and collision.color[1] <= 255,
+				"pile.collision.color must be an RGB triple"
+			)
+			check(collision.voxelResolution == 4, "pile.collision.voxelResolution must be 4 (Roblox terrain)")
+			for _, key in ipairs({
+				"digRadiusStuds",
+				"sweepDigRadiusStuds",
+				"eggHollowRadiusStuds",
+				"lineOfSightToleranceStuds",
+				"strikeDentDepthStuds",
+				"sweepDentDepthStuds",
+				"eggHollowDepthStuds",
+			}) do
+				check(isPositiveNumber(collision[key]), "pile.collision." .. key .. " must be > 0")
+			end
+			check(isNonNegativeNumber(collision.surfaceInsetStuds), "pile.collision.surfaceInsetStuds must be >= 0")
+			check(
+				isPositiveNumber(collision.rewriteMarginCells)
+					and collision.rewriteMarginCells % 1 == 0
+					and collision.rewriteMarginCells <= 4,
+				"pile.collision.rewriteMarginCells must be an integer 1..4"
+			)
+		end
+		local visual = pile.visual
+		check(type(visual) == "table", "pile.visual missing")
+		if type(visual) == "table" then
+			check(
+				isPositiveNumber(visual.partBudgetDesktop) and isPositiveNumber(visual.partBudgetMobile),
+				"pile.visual part budgets must be > 0"
+			)
+			check(visual.partBudgetMobile <= visual.partBudgetDesktop, "pile.visual.partBudgetMobile must not exceed desktop")
+			local function range(key: string, minimum: number, maximum: number)
+				local value = visual[key]
+				check(
+					type(value) == "table"
+						and #value == 2
+						and type(value[1]) == "number"
+						and type(value[2]) == "number"
+						and value[1] <= value[2]
+						and value[1] >= minimum
+						and value[2] <= maximum,
+					"pile.visual." .. key .. " must be an ascending [min, max] within " .. minimum .. ".." .. maximum
+				)
+			end
+			range("featherLengthRange", 0.2, 12)
+			range("featherWidthRange", 0.1, 6)
+			range("fluffLengthRange", 0.2, 12)
+			range("fluffWidthRange", 0.1, 6)
+			range("tiltRangeDegrees", 0, 90)
+			range("fluffTiltRangeDegrees", 0, 90)
+			check(
+				isPositiveNumber(visual.visibleSlotsPerCell) and visual.visibleSlotsPerCell % 1 == 0 and visual.visibleSlotsPerCell <= 4,
+				"pile.visual.visibleSlotsPerCell must be an integer 1..4"
+			)
+			check(
+				isPositiveNumber(visual.featherSpreadFraction) and visual.featherSpreadFraction <= 1,
+				"pile.visual.featherSpreadFraction must be within (0, 1]"
+			)
+			check(
+				isNonNegativeNumber(visual.rollRangeDegrees) and visual.rollRangeDegrees <= 180,
+				"pile.visual.rollRangeDegrees must be 0..180"
+			)
+			check(isNonNegativeNumber(visual.fluffTintShift) and visual.fluffTintShift <= 1, "pile.visual.fluffTintShift must be 0..1")
+			check(
+				isNonNegativeNumber(visual.fluffPerCellDesktop)
+					and visual.fluffPerCellDesktop % 1 == 0
+					and isNonNegativeNumber(visual.fluffPerCellMobile)
+					and visual.fluffPerCellMobile % 1 == 0
+					and visual.fluffPerCellMobile <= visual.fluffPerCellDesktop,
+				"pile.visual fluff counts must be non-negative integers with mobile <= desktop"
+			)
+			check(type(visual.palette) == "table" and #visual.palette >= 2, "pile.visual.palette needs at least two RGB entries")
+			for index, entry in ipairs(visual.palette or {}) do
+				check(type(entry) == "table" and #entry == 3, "pile.visual.palette[" .. index .. "] must be an RGB triple")
+			end
+			check(
+				type(visual.selectionOutlineColor) == "table" and #visual.selectionOutlineColor == 3,
+				"pile.visual.selectionOutlineColor must be an RGB triple"
+			)
+			check(
+				isNonNegativeNumber(visual.selectionFillTransparency) and visual.selectionFillTransparency <= 1,
+				"pile.visual.selectionFillTransparency must be 0..1"
+			)
+			for _, key in ipairs({
+				"cullDistanceDesktopStuds",
+				"cullDistanceMobileStuds",
+				"targetRateHz",
+				"pullSeconds",
+				"chevronSeconds",
+				"bagFullToastCooldownSeconds",
+				"layerStepStuds",
+			}) do
+				check(isPositiveNumber(visual[key]), "pile.visual." .. key .. " must be > 0")
+			end
+			check(isNonNegativeNumber(visual.surfaceLiftStuds), "pile.visual.surfaceLiftStuds must be >= 0")
+			for _, key in ipairs({ "streakCount", "chevronCount" }) do
+				check(
+					isPositiveNumber(visual[key]) and visual[key] % 1 == 0 and visual[key] <= 12,
+					"pile.visual." .. key .. " must be an integer 1..12"
+				)
+			end
+			for _, key in ipairs({ "cameraImpulseHand", "cameraImpulseRake", "rustleVolume", "pickupVolume" }) do
+				check(isNonNegativeNumber(visual[key]) and visual[key] <= 1, "pile.visual." .. key .. " must be 0..1")
+			end
+		end
 		check(
 			isPositiveNumber(pile.aimPlaneHeightStuds) and pile.aimPlaneHeightStuds <= pile.maxVisualHeightStuds,
 			"pile.aimPlaneHeightStuds must be > 0 and <= maxVisualHeightStuds"
 		)
+		-- Feather ids pack the slot into 6 bits: the densest cell (cover, hard difficulty, max variance)
+		-- must stay below 64 feathers.
+		local densest = pile.baseFeathersPerCell * (1 + pile.surfaceVariance) * pile.coverDepthMultiplier
+		local hardest = 1
+		if type(raw.difficulty) == "table" then
+			for _, difficulty in pairs(raw.difficulty) do
+				if type(difficulty) == "table" and type(difficulty.pileHealthMultiplier) == "number" then
+					hardest = math.max(hardest, difficulty.pileHealthMultiplier)
+				end
+			end
+		end
+		check(densest * hardest < 63.5, "pile: the densest possible cell must hold fewer than 64 feathers (feather id slot bits)")
+	end
+	-- Carried feather stack HUD (ASSUMED A-HUD-04)
+	local carried = type(raw.hud) == "table" and raw.hud.carriedStack or nil
+	check(type(carried) == "table", "hud.carriedStack missing")
+	if type(carried) == "table" then
+		check(type(carried.tiers) == "table" and #carried.tiers >= 2, "hud.carriedStack.tiers needs at least two tiers")
+		local lastMin, lastFeathers = -1, -1
+		for index, tier in ipairs(carried.tiers or {}) do
+			local okTier = type(tier) == "table"
+				and type(tier.name) == "string"
+				and isNonNegativeNumber(tier.minFullness)
+				and tier.minFullness <= 1
+				and isNonNegativeNumber(tier.feathers)
+				and tier.feathers % 1 == 0
+				and tier.feathers <= 16
+			check(okTier, "hud.carriedStack.tiers[" .. index .. "] must have name, minFullness 0..1, integer feathers 0..16")
+			if okTier then
+				check(tier.minFullness >= lastMin and tier.feathers >= lastFeathers, "hud.carriedStack.tiers must be ascending")
+				lastMin, lastFeathers = tier.minFullness, tier.feathers
+			end
+		end
+		if type(carried.tiers) == "table" and type(carried.tiers[1]) == "table" then
+			check(carried.tiers[1].feathers == 0 and carried.tiers[1].minFullness == 0, "hud.carriedStack.tiers[1] must be the empty tier")
+		end
+		for _, key in ipairs({
+			"infiniteReferenceCount",
+			"widthPxDesktop",
+			"heightPxDesktop",
+			"widthPxMobile",
+			"heightPxMobile",
+			"bounceSeconds",
+			"bounceStuds",
+		}) do
+			check(isPositiveNumber(carried[key]), "hud.carriedStack." .. key .. " must be > 0")
+		end
+		check(isNonNegativeNumber(carried.anchorX) and carried.anchorX <= 1, "hud.carriedStack.anchorX must be 0..1")
+		check(isNonNegativeNumber(carried.anchorBottomOffsetPx), "hud.carriedStack.anchorBottomOffsetPx must be >= 0")
+	end
+	if type(raw.interaction) == "table" then
+		check(
+			isPositiveNumber(raw.interaction.aimMissToleranceStuds) and raw.interaction.aimMissToleranceStuds <= 6,
+			"interaction.aimMissToleranceStuds must be within (0, 6]"
+		)
+		check(isPositiveNumber(raw.interaction.collectDebounceSeconds), "interaction.collectDebounceSeconds must be > 0")
 	end
 
 	-- Phase 3 ASSUMED tool mechanics (A-TOOL-01..03)
