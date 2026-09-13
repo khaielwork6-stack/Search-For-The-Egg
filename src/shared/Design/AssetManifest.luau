@@ -25,6 +25,14 @@ AssetManifest.models = table.freeze({
 	egg = "Egg",
 })
 
+-- The canonical mesh asset id per model role. Rojo's rbxm sync drops the MeshId/MeshSize metadata off
+-- MeshParts (the synced template renders as a blank box), so `warm()` rebuilds the mesh from these
+-- ids and applies it to the template in place. These are the ids the owner's source meshes carry.
+AssetManifest.meshAssets = table.freeze({
+	feather = "rbxassetid://439102658",
+	egg = "rbxassetid://873833344",
+})
+
 function AssetManifest.image(role: string): string?
 	local id = (AssetManifest.images :: any)[role]
 	if type(id) ~= "string" or id == "" or string.find(id, "ASSET_", 1, true) then
@@ -38,6 +46,18 @@ local function assetFolder(): Instance?
 	return ReplicatedStorage:FindFirstChild("SFE_Assets")
 end
 
+-- True when the template's mesh actually loaded (non-zero MeshSize). A blank MeshPart (Rojo-stripped
+-- MeshId or unloaded metadata) reports MeshSize (0,0,0) and renders as its bounding box.
+local function meshHealthy(template: Instance): boolean
+	if not template:IsA("MeshPart") then
+		return true
+	end
+	local okProps, meshSize = pcall(function()
+		return (template :: any).MeshSize
+	end)
+	return not okProps or (typeof(meshSize) == "Vector3" and meshSize.Magnitude > 0)
+end
+
 -- Returns the template instance for a model role (or nil when the asset folder is unavailable).
 function AssetManifest.model(role: string): Instance?
 	local name = (AssetManifest.models :: any)[role]
@@ -45,15 +65,19 @@ function AssetManifest.model(role: string): Instance?
 		return nil
 	end
 	local folder = assetFolder()
-	return folder and folder:FindFirstChild(name) or nil
+	local template = folder and folder:FindFirstChild(name)
+	-- Only hand out a mesh template once its mesh is loaded; otherwise callers should use their own
+	-- fallback (a plain part) rather than clone a blank box that renders as a slab.
+	if template and template:IsA("MeshPart") and not meshHealthy(template) then
+		return nil
+	end
+	return template
 end
 
--- A MeshPart whose mesh metadata never loaded (MeshSize 0,0,0) renders its mesh at the mesh's native
--- scale instead of its Size; the repo's Rojo-synced templates ship without that metadata, so a
--- 0.5-stud feather drew as a ~322-stud slab. Warm-up recreates each mesh through InsertService and
--- applies it to the template in place, keeping Size, colour, material, and attributes. Yields once
--- per mesh; safe to call anywhere (no-op outside Roblox, on healthy templates, or when the service
--- is unavailable). Returns the number of templates repaired.
+-- Rebuilds each model role's mesh from `meshAssets` when the synced template is blank, applying the
+-- fresh mesh in place and keeping the template's Size, colour, material, and double-sided flag.
+-- Yields once per repaired mesh. Safe to call on server and client, more than once (idempotent), and
+-- no-ops outside Roblox or when InsertService/asset access is unavailable. Returns the repair count.
 function AssetManifest.warm(): number
 	local folder = assetFolder()
 	if not folder then
@@ -64,32 +88,29 @@ function AssetManifest.warm(): number
 		return 0
 	end
 	local repaired = 0
-	for _, name in pairs(AssetManifest.models) do
+	for role, name in pairs(AssetManifest.models) do
 		local template = folder:FindFirstChild(name)
-		if template and template:IsA("MeshPart") then
-			-- Property reads are guarded: headless hosts may not model MeshPart metadata at all.
-			local okProps, meshId, meshSize, collision, fidelity = pcall(function()
-				local t = template :: any
-				return t.MeshId, t.MeshSize, t.CollisionFidelity, t.RenderFidelity
+		local meshId = (AssetManifest.meshAssets :: any)[role]
+		if template and template:IsA("MeshPart") and type(meshId) == "string" and meshId ~= "" and not meshHealthy(template) then
+			local okCreate, created = pcall(function()
+				return (InsertService :: any):CreateMeshPartAsync(meshId, Enum.CollisionFidelity.Box, Enum.RenderFidelity.Precise)
 			end)
-			local healthy = not okProps
-				or type(meshId) ~= "string"
-				or meshId == ""
-				or (typeof(meshSize) == "Vector3" and meshSize.Magnitude > 0)
-			if not healthy then
-				local okCreate, created = pcall(function()
-					return (InsertService :: any):CreateMeshPartAsync(meshId, collision, fidelity)
+			if okCreate and created then
+				local size = template.Size
+				local okApply = pcall(function()
+					(template :: any):ApplyMesh(created)
 				end)
-				if okCreate and created then
-					local size = template.Size
-					local okApply = pcall(function()
-						(template :: any):ApplyMesh(created)
-					end)
-					template.Size = size
-					created:Destroy()
-					if okApply then
-						repaired += 1
-					end
+				template.Size = size
+				-- Distance LOD and both faces: a big pile of these clones stays cheap and never shows a
+				-- culled back face at a grazing angle.
+				pcall(function()
+					local t = template :: any
+					t.RenderFidelity = Enum.RenderFidelity.Automatic
+					t.DoubleSided = true
+				end)
+				created:Destroy()
+				if okApply and meshHealthy(template) then
+					repaired += 1
 				end
 			end
 		end
