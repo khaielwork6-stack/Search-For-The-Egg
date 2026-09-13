@@ -922,3 +922,10 @@ Play Solo, desktop viewport 1223x658, owner map. Headless: 289 tests pass, check
 - Judged from a first-person camera at the base of the flank looking up the slope (edit render of a
   fresh build with a 2x2 hole dug 12 records deep): solid feathers from foot to crown, no ground or
   sky between them.
+
+## Underlayer sheets (13 Sep 2026, follow-up 6)
+
+- Two gridded sheets of small flat feathers (5x5 at 1.3 studs deep, 4x4 at 1.75 deep, the second
+  offset half a step) sit under every cell's bed: 29,971 instances at high tier. Close-up render from
+  2.6 studs off the flank surface, looking down the slope, after a 2x2 hole dug 40 records: feathers
+  behind every crack, no ground, sky, or darkness.
