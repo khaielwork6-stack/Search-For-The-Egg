@@ -14,6 +14,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
@@ -302,8 +303,6 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 	local field = (self._seatField or self._field) :: PileSurface.Field
 	local minCorner = self._minCorner :: Vector3
 	local exposed = if self._culled then {} else FeatherLayout.exposedSlots(column.base, column.mask, visual.visibleSlotsPerCell)
-	local taken = column.base - column.remaining
-	local sink = taken * column.step
 	local wanted: { [number]: boolean } = {}
 	for _, slot in ipairs(exposed) do
 		wanted[slot] = true
@@ -314,7 +313,7 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 			column.feathers[slot] = nil
 		end
 	end
-	for depth, slot in ipairs(exposed) do
+	for _, slot in ipairs(exposed) do
 		local placement = FeatherLayout.placement(visual, column.index, slot, field.cellSize)
 		local wx, wz = FeatherLayout.worldXZ(minCorner, field.cellSize, column.x, column.z, placement)
 		local scale = self:_rimScale(wx, wz)
@@ -322,7 +321,9 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 			continue
 		end
 		local y, normal = self:_surfaceAt(wx, wz)
-		local seatY = y + visual.surfaceLiftStuds + 0.2 - sink - (depth - 1) * column.step
+		-- Seat by slot, never by rank: a record's place is fixed for the round whatever gets taken
+		-- above or beside it (the server resolves the same point for its aim check).
+		local seatY = y + FeatherLayout.seatOffset(visual, column.base, slot, column.step)
 		local part = column.feathers[slot]
 		if not part then
 			part = acquirePart(self)
@@ -852,17 +853,52 @@ function PileVisualController._step(self: PileVisualController, dt: number)
 		return
 	end
 	self._targetAccumulator = 0
-	local camera = workspace.CurrentCamera
-	if camera then
-		self:_setTarget(self:resolveTarget(camera.CFrame.Position, camera.CFrame.LookVector))
-	end
+	self:resolveUnderCursor()
 end
 
--- The one feather under a ray: the first feather part the ray meets (terrain and fluff never count
--- as a feather; terrain does occlude buried records). Nil when the ray meets nothing collectible.
+-- The pick ray: from the camera through the exact cursor position (the crosshair while the mouse
+-- is locked in first person). Touch and gamepad have no cursor over the world, so they aim through
+-- the viewport centre, where the crosshair is drawn.
+function PileVisualController.aimRay(_self: PileVisualController): (Vector3?, Vector3?)
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return nil, nil
+	end
+	local viewport = camera.ViewportSize
+	local point = viewport * 0.5
+	local lastInput = UserInputService:GetLastInputType()
+	if
+		lastInput == Enum.UserInputType.MouseButton1
+		or lastInput == Enum.UserInputType.MouseMovement
+		or lastInput == Enum.UserInputType.MouseButton2
+		or lastInput == Enum.UserInputType.MouseWheel
+		or lastInput == Enum.UserInputType.Keyboard
+	then
+		local okLocation, location = pcall(UserInputService.GetMouseLocation, UserInputService)
+		if okLocation and typeof(location) == "Vector2" then
+			point = location
+		end
+	end
+	local ray = camera:ViewportPointToRay(point.X, point.Y)
+	return ray.Origin, ray.Direction
+end
+
+-- Re-targets under the cursor right now (the click path calls this so the pick is what the player
+-- sees at that instant, not the last periodic sample) and returns the target.
+function PileVisualController.resolveUnderCursor(self: PileVisualController): Target?
+	local origin, direction = self:aimRay()
+	local target = if origin and direction then self:resolveTarget(origin, direction) else nil
+	self:_setTarget(target)
+	return target
+end
+
+-- The one feather under a ray: the FIRST part the ray meets must itself be a feather record (it
+-- carries SFE_FeatherId); that exact record is the target. A bed strand, underlayer sheet, or the
+-- ground met first means nothing is targeted - the pick is never redirected to a record behind or
+-- beside what the player is actually looking at.
 function PileVisualController.resolveTarget(self: PileVisualController, origin: Vector3, direction: Vector3): Target?
 	local folder = self._folder
-	if not folder then
+	if not folder or direction.Magnitude < 1e-6 then
 		return nil
 	end
 	local range = self._config.interaction.defaultRangeStuds + 10
@@ -876,20 +912,7 @@ function PileVisualController.resolveTarget(self: PileVisualController, origin: 
 	local hitPart = result.Instance
 	local featherId = hitPart:GetAttribute(FEATHER_ID_ATTRIBUTE)
 	if type(featherId) ~= "number" then
-		-- The reticle is on the fluff bed: the pick is that cell's top record (the feather it lies
-		-- under), so a click on the mound always names exactly one feather and highlights it first.
-		local cellIndex = hitPart:GetAttribute(CELL_ATTRIBUTE)
-		local column = type(cellIndex) == "number" and self._columns[cellIndex] or nil
-		if not column then
-			return nil
-		end
-		local top = FeatherLayout.exposedSlots(column.base, column.mask, 1)[1]
-		local part = top and column.feathers[top]
-		if not part then
-			return nil
-		end
-		hitPart = part
-		featherId = FeatherLayout.featherId(column.index, top)
+		return nil
 	end
 	local cell, slot = FeatherLayout.decode(featherId)
 	if not cell or not slot then

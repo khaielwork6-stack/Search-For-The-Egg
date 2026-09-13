@@ -395,11 +395,15 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 	end
 	local featherId: number? = nil
 	if toolId == "hand" then
-		local target = self._deps.pile.target
+		-- Resolve at the instant of the click, through the exact cursor/crosshair: the first feather
+		-- record the ray meets is the one requested, nothing behind or beside it.
+		local target
 		if aimTarget then
 			local camera = workspace.CurrentCamera
 			local eye = if camera then camera.CFrame.Position else origin
 			target = self._deps.pile:resolveTarget(eye, (aimTarget - eye).Unit)
+		else
+			target = self._deps.pile:resolveUnderCursor()
 		end
 		if not target then
 			-- Nothing collectible under the reticle: no request, no feedback spam.

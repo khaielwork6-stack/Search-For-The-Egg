@@ -1,7 +1,8 @@
 --!strict
 -- Held-feather viewmodel (owner requirement; ASSUMED A-HUD-04): a handless first-person bundle in the
 -- lower-right corner of the screen - stems gathered to one point, heads fanned upward and inward so
--- nothing crosses the crosshair. It grows in tiers with bag fullness (never one part per feather),
+-- nothing crosses the crosshair. It grows one feather at a time with bag fullness up to
+-- `maxVisibleFeathers` (logarithmically for an infinite bag; the bag counter shows the true count),
 -- settles when a feather is added, bobs gently while walking, and sways a few degrees with camera
 -- turns, always easing back to rest. Cosmetic only: the server owns the real bag count. Rendered in a
 -- ViewportFrame (no world instances, no hands), hidden behind blocking menus, sized per layout class
@@ -15,6 +16,7 @@ local Shared = ReplicatedStorage.Shared
 local Motion = require(Shared.Design.Motion)
 local AssetManifest = require(Shared.Design.AssetManifest)
 local FeatherLayout = require(Shared.Domain.FeatherLayout)
+local CarriedDisplay = require(Shared.Domain.CarriedDisplay)
 local SafeArea = require(script.Parent.SafeArea)
 
 local CarriedStack = {}
@@ -46,7 +48,10 @@ export type CarriedStack = typeof(setmetatable(
 ))
 
 local TEMPLATE_SIZE = Vector3.new(0.54, 1.44, 0.13)
-local REST_CAMERA = CFrame.lookAt(Vector3.new(0, 0.35, 6.2), Vector3.new(0, 0.15, 0))
+-- Camera framing (FOV 38, aspect 0.66): about 2.4 studs of half-height and 3.6 of half-width at the
+-- bundle's depth, so a twelve-feather fan (quills ~2.4 studs) from the base below-right stays
+-- inside the frame with margin for bob, sway and the pick squash.
+local REST_CAMERA = CFrame.lookAt(Vector3.new(0, 0.2, 7.0), Vector3.new(0, 0, 0))
 local RENDER_NAME = "SFE_CarriedStackSway"
 
 local function makeFeather(index: number, palette: { { number } }): BasePart
@@ -67,8 +72,8 @@ local function makeFeather(index: number, palette: { { number } }): BasePart
 	local h = function(salt: number)
 		return FeatherLayout.hash(index, 7, salt)
 	end
-	local scale = 0.92 + h(1) * 0.2
-	part.Size = Vector3.new(TEMPLATE_SIZE.X * 2.1 * scale, TEMPLATE_SIZE.Y * 2.0 * scale, TEMPLATE_SIZE.Z)
+	local scale = 0.94 + h(1) * 0.12
+	part.Size = Vector3.new(TEMPLATE_SIZE.X * 1.75 * scale, TEMPLATE_SIZE.Y * 1.65 * scale, TEMPLATE_SIZE.Z)
 	local t = h(2)
 	local scaled = math.clamp(t, 0, 0.9999) * (#palette - 1)
 	local i = math.floor(scaled) + 1
@@ -78,21 +83,23 @@ local function makeFeather(index: number, palette: { { number } }): BasePart
 end
 
 -- Rest pose of the k-th feather (of `count`): every stem meets at the bundle's base (lower right of
--- the viewport); heads fan across a controlled arc, each a touch further back so they read as layers.
+-- the viewport); heads fan up and to the left across a fixed arc, each a touch further back so they
+-- read as neatly overlapping layers. The arc is the same for any count, so twelve feathers overlap
+-- more tightly rather than spreading wider, and no head ever reaches the frame edge.
 local function restPose(index: number, count: number): CFrame
 	local h = function(salt: number)
 		return FeatherLayout.hash(index, 11, salt)
 	end
-	local base = Vector3.new(0.55, -1.05, 0.2) -- inside the frame with room for the fanned heads
-	local spread = math.rad(52)
+	local base = Vector3.new(0.4, -1.5, 0.2)
+	local spread = math.rad(64)
 	local t = if count <= 1 then 0.5 else (index - 1) / (count - 1)
-	local fan = -spread / 2 + spread * t + (h(1) - 0.5) * math.rad(6)
-	local lean = math.rad(-30) -- heads lean up-left, away from the crosshair
-	local roll = (h(2) - 0.5) * math.rad(14)
-	local depth = (t - 0.5) * 0.35 + (h(3) - 0.5) * 0.08
+	local fan = -spread / 2 + spread * t + (h(1) - 0.5) * math.rad(3)
+	local lean = math.rad(-38) -- fan centre leans up-left, away from the crosshair
+	local roll = (h(2) - 0.5) * math.rad(12)
+	local depth = (0.5 - t) * 0.4 + (h(3) - 0.5) * 0.06
 	-- Quill (+Y) points from the base up-left; rotate about the view axis to fan.
-	local frame = CFrame.new(base + Vector3.new(0, 0, depth)) * CFrame.Angles(0, 0, lean + fan) * CFrame.Angles(math.rad(12), 0, roll)
-	return frame * CFrame.new(0, 1.05, 0) -- centre the mesh half a length up the quill
+	local frame = CFrame.new(base + Vector3.new(0, 0, depth)) * CFrame.Angles(0, 0, lean + fan) * CFrame.Angles(math.rad(10), 0, roll)
+	return frame * CFrame.new(0, TEMPLATE_SIZE.Y * 1.65 * 0.5, 0) -- centre the mesh half a length up the quill
 end
 
 function CarriedStack.new(
@@ -169,30 +176,28 @@ function CarriedStack._layout(self: CarriedStack)
 	local scale = gui:FindFirstChildOfClass("UIScale")
 	local factor = if scale then scale.Scale else 1
 	local width = math.clamp(gui.AbsoluteSize.X * carried.widthFraction / factor, carried.minWidthPx, carried.maxWidthPx)
-	local height = math.floor(width * carried.aspect)
 	local bottom = if mobile then carried.bottomOffsetPxMobile else carried.bottomOffsetPxDesktop
+	-- The gui already excludes the core UI safe insets; never let the frame outgrow what is left of
+	-- the screen beside and above its offsets on a tiny viewport.
+	width = math.max(
+		1,
+		math.min(width, (gui.AbsoluteSize.X / factor) - carried.rightOffsetPx, ((gui.AbsoluteSize.Y / factor) - bottom) / carried.aspect)
+	)
+	local height = math.floor(width * carried.aspect)
 	self.frame.Size = UDim2.fromOffset(math.floor(width), height)
 	self.frame.Position = UDim2.new(carried.anchorX, -carried.rightOffsetPx, 1, -bottom)
 end
 
--- Tier for a fullness ratio (0..1): the highest tier whose threshold is met.
-function CarriedStack.tierFor(config: { [string]: any }, fullness: number): (string, number)
-	local tiers = config.hud.carriedStack.tiers
-	local name, feathers = tiers[1].name, tiers[1].feathers
-	for _, tier in ipairs(tiers) do
-		if fullness >= tier.minFullness then
-			name, feathers = tier.name, tier.feathers
-		end
-	end
-	return name, feathers
+-- Visible feather count for a bag (pure model in Shared.Domain.CarriedDisplay).
+function CarriedStack.countFor(config: { [string]: any }, carried: number, capacity: number, infinite: boolean): number
+	return CarriedDisplay.count(config, carried, capacity, infinite)
 end
 
--- Mirrors the authoritative bag: carried / capacity (or carried / reference when infinite).
+-- Mirrors the authoritative bag: the displayed count follows carried / capacity (logarithmic when
+-- infinite), capped at `maxVisibleFeathers`; the HUD counter shows the true amount.
 function CarriedStack.setBag(self: CarriedStack, carried: number, capacity: number, infinite: boolean, animate: boolean?)
-	local reference = if infinite then self._config.hud.carriedStack.infiniteReferenceCount else math.max(1, capacity)
-	local fullness = if carried <= 0 then 0 else math.clamp(carried / reference, 0.0001, 1)
-	local tier, count = CarriedStack.tierFor(self._config, fullness)
-	self._tier = tier
+	local count = CarriedDisplay.count(self._config, carried, capacity, infinite)
+	self._tier = CarriedDisplay.tier(count, self._config.hud.carriedStack.maxVisibleFeathers)
 	self:_setCount(count, animate == true)
 end
 

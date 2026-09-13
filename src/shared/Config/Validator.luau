@@ -640,8 +640,8 @@ function Validator.validate(raw: any): Report
 			range("tiltRangeDegrees", 0, 90)
 			range("fluffTiltRangeDegrees", 0, 90)
 			check(
-				isPositiveNumber(visual.visibleSlotsPerCell) and visual.visibleSlotsPerCell % 1 == 0 and visual.visibleSlotsPerCell <= 4,
-				"pile.visual.visibleSlotsPerCell must be an integer 1..4"
+				isPositiveNumber(visual.visibleSlotsPerCell) and visual.visibleSlotsPerCell % 1 == 0 and visual.visibleSlotsPerCell <= 12,
+				"pile.visual.visibleSlotsPerCell must be an integer 1..12"
 			)
 			check(
 				isPositiveNumber(visual.featherSpreadFraction) and visual.featherSpreadFraction <= 1,
@@ -773,27 +773,15 @@ function Validator.validate(raw: any): Report
 	local carried = type(raw.hud) == "table" and raw.hud.carriedStack or nil
 	check(type(carried) == "table", "hud.carriedStack missing")
 	if type(carried) == "table" then
-		check(type(carried.tiers) == "table" and #carried.tiers >= 2, "hud.carriedStack.tiers needs at least two tiers")
-		local lastMin, lastFeathers = -1, -1
-		for index, tier in ipairs(carried.tiers or {}) do
-			local okTier = type(tier) == "table"
-				and type(tier.name) == "string"
-				and isNonNegativeNumber(tier.minFullness)
-				and tier.minFullness <= 1
-				and isNonNegativeNumber(tier.feathers)
-				and tier.feathers % 1 == 0
-				and tier.feathers <= 16
-			check(okTier, "hud.carriedStack.tiers[" .. index .. "] must have name, minFullness 0..1, integer feathers 0..16")
-			if okTier then
-				check(tier.minFullness >= lastMin and tier.feathers >= lastFeathers, "hud.carriedStack.tiers must be ascending")
-				lastMin, lastFeathers = tier.minFullness, tier.feathers
-			end
-		end
-		if type(carried.tiers) == "table" and type(carried.tiers[1]) == "table" then
-			check(carried.tiers[1].feathers == 0 and carried.tiers[1].minFullness == 0, "hud.carriedStack.tiers[1] must be the empty tier")
-		end
+		check(
+			isPositiveNumber(carried.maxVisibleFeathers) and carried.maxVisibleFeathers % 1 == 0 and carried.maxVisibleFeathers <= 16,
+			"hud.carriedStack.maxVisibleFeathers must be an integer 1..16"
+		)
+		check(
+			isPositiveNumber(carried.infiniteCapCount) and carried.infiniteCapCount >= 2,
+			"hud.carriedStack.infiniteCapCount must be a count >= 2"
+		)
 		for _, key in ipairs({
-			"infiniteReferenceCount",
 			"widthPxDesktop",
 			"heightPxDesktop",
 			"widthPxMobile",

@@ -215,16 +215,32 @@ function CollectionService.featherPosition(
 	runtime: any,
 	cell: any,
 	slot: number,
-	field: any?,
+	_field: any?,
 	minCorner: Vector3?
 ): Vector3
 	local config = self._config
 	local grid = runtime.grid
 	local layout = ChapterLayout[runtime.state.chapter]
-	local resolvedField = field or PileSurface.buildField(config, PileGrid.snapshot(grid), layout)
+	-- Seats come from the mound as first built (every cell full), exactly as the client seats them,
+	-- and each record sits a fixed depth below that surface by slot: a pick never moves a seat.
+	local seatField = if runtime.seatFieldGrid == grid then runtime.seatField else nil
+	if not seatField then
+		local snapshot = PileGrid.snapshot(grid)
+		seatField = PileSurface.buildField(config, {
+			width = grid.width,
+			depth = grid.depth,
+			cellSize = grid.cellSize,
+			remaining = table.clone(snapshot.base),
+			base = snapshot.base,
+		}, layout)
+		runtime.seatField = seatField
+		runtime.seatFieldGrid = grid
+	end
 	local corner = minCorner or ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
 	local placement = FeatherLayout.placement(config.pile.visual, cell.index, slot, grid.cellSize)
-	local position = FeatherLayout.worldPosition(resolvedField, corner, cell.x, cell.z, placement)
+	local position = FeatherLayout.worldPosition(seatField, corner, cell.x, cell.z, placement)
+	local step = PileSurface.columnFullHeight(config, grid.width, grid.depth, grid.cellSize, cell.x, cell.z) / math.max(1, cell.base)
+	position = Vector3.new(position.X, position.Y + FeatherLayout.seatOffset(config.pile.visual, cell.base, slot, step), position.Z)
 	if self._floorHeight then
 		local floor = self._floorHeight(position.X, position.Z)
 		if floor and floor + 0.1 > position.Y then
@@ -273,9 +289,8 @@ function CollectionService._collectFeather(
 		return reject(self, Envelope.Codes.INVALID_PAYLOAD, "direction")
 	end
 	local layout = ChapterLayout[runtime.state.chapter]
-	local field = PileSurface.buildField(config, PileGrid.snapshot(grid), layout)
 	local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
-	local position = self:featherPosition(runtime, cell, slot, field, minCorner)
+	local position = self:featherPosition(runtime, cell, slot, nil, minCorner)
 	local flat = Vector3.new(position.X - characterPosition.X, 0, position.Z - characterPosition.Z)
 	if flat.Magnitude > interaction.defaultRangeStuds then
 		return reject(self, Envelope.Codes.OUT_OF_RANGE, "range")

@@ -380,11 +380,17 @@ function GameplayHarness.new(cfg, options)
 		local grid = runtime.grid
 		local cell = PileGrid.get(grid, x, z)
 		local slot = cell and PileGrid.topSlot(cell) or 1
-		local field = PileSurface.buildField(cfg, PileGrid.snapshot(grid), layout)
 		local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
-		local placement =
-			FeatherLayout.placement(cfg.pile.visual, cell and cell.index or PileGrid.index(grid.width, x, z), slot, grid.cellSize)
-		local feather = FeatherLayout.worldPosition(field, minCorner, x, z, placement)
+		-- Aim where the client seats the record (the mound as built, slot depth below it), which is
+		-- what the server resolves too; a bare cell aims at the current surface.
+		local feather
+		if cell then
+			feather = collection:featherPosition(runtime, cell, slot, nil, minCorner)
+		else
+			local field = PileSurface.buildField(cfg, PileGrid.snapshot(grid), layout)
+			local placement = FeatherLayout.placement(cfg.pile.visual, PileGrid.index(grid.width, x, z), slot, grid.cellSize)
+			feather = FeatherLayout.worldPosition(field, minCorner, x, z, placement)
+		end
 		local standing = Vector3.new(feather.X, feather.Y + 2, feather.Z)
 		positions[userId] = standing
 		local origin = standing + Vector3.new(0, 1.5, 0)

@@ -82,6 +82,14 @@ function FeatherLayout.worldPosition(
 	return Vector3.new(x, field.baseY + PileSurface.heightAt(field, x, z), z)
 end
 
+-- Vertical seat offset of a record relative to the mound surface as first built: the top slot of a
+-- column sits just above the surface and every slot below it one `step` deeper. A pure function of
+-- the slot (never of what has been taken), so the client seats a feather once and it never moves,
+-- and the server resolves the same point for range and aim checks.
+function FeatherLayout.seatOffset(visual: { [string]: any }, base: number, slot: number, step: number): number
+	return visual.surfaceLiftStuds + 0.2 - (base - slot) * step
+end
+
 -- The `count` highest untaken slots of a cell, top first (these are the exposed, targetable feathers).
 function FeatherLayout.exposedSlots(base: number, mask: number, count: number): { number }
 	local out = {}

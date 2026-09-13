@@ -181,7 +181,8 @@ return function(describe, it, expect)
 			expect(collectSlot(cell.base).ok).toBe(true)
 			local exposed = FeatherLayout.exposedSlots(cell.base, cell.taken, visible)
 			expect(#exposed).toBe(math.min(visible, cell.remaining))
-			expect(exposed[1]).toBe(cell.base - visible)
+			expect(exposed[1]).toBe(PileGrid.topSlot(cell))
+			expect(exposed[1]).toBe(cell.base - 1)
 			expect(collectSlot(exposed[1]).ok).toBe(true)
 			expect(collectSlot(exposed[1]).message).toBe("already_collected")
 			-- The cell persists until its last record is gone.
@@ -418,7 +419,7 @@ return function(describe, it, expect)
 				p.visual.featherLengthRange = { 3, 1 }
 			end).ok).toBe(false)
 			expect(withPile(function(p)
-				p.visual.visibleSlotsPerCell = 9
+				p.visual.visibleSlotsPerCell = 13
 			end).ok).toBe(false)
 			expect(withPile(function(p)
 				p.recordSpacingStuds = 0

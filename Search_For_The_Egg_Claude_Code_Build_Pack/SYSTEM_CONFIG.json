@@ -190,7 +190,7 @@
       "pickupVolume": 0.7,
       "bagFullToastCooldownSeconds": 1.5,
       "assumption": "ASSUMED",
-      "visibleSlotsPerCell": 2,
+      "visibleSlotsPerCell": 8,
       "featherWidthRange": [
         1.0,
         1.5
@@ -211,8 +211,8 @@
         4,
         34
       ],
-      "fluffPerCellDesktop": 42,
-      "fluffPerCellMobile": 14,
+      "fluffPerCellDesktop": 10,
+      "fluffPerCellMobile": 4,
       "fluffTintShift": 0.35,
       "selectionOutlineColor": [
         255,
@@ -229,9 +229,9 @@
       "rimStrandsDesktop": 1800,
       "rimStrandsMobile": 550,
       "fluffBandDepths": [
-        0.0,
-        0.4,
-        0.8
+        2.6,
+        3.0,
+        3.4
       ],
       "fluffBandShares": [
         0.4,
@@ -1366,34 +1366,8 @@
   },
   "hud": {
     "carriedStack": {
-      "tiers": [
-        {
-          "name": "empty",
-          "minFullness": 0.0,
-          "feathers": 0
-        },
-        {
-          "name": "low",
-          "minFullness": 0.0001,
-          "feathers": 1
-        },
-        {
-          "name": "medium",
-          "minFullness": 0.25,
-          "feathers": 3
-        },
-        {
-          "name": "high",
-          "minFullness": 0.6,
-          "feathers": 6
-        },
-        {
-          "name": "full",
-          "minFullness": 1.0,
-          "feathers": 9
-        }
-      ],
-      "infiniteReferenceCount": 40,
+      "maxVisibleFeathers": 12,
+      "infiniteCapCount": 200,
       "anchorX": 1.0,
       "anchorBottomOffsetPx": 24,
       "widthPxDesktop": 240,
