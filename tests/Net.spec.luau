@@ -172,6 +172,7 @@ return function(describe, it, expect)
 				"PartyLeave",
 				"PartySetDestination",
 				"PartyStart",
+				"PartyCancel",
 				"TutorialAction",
 				"CollectAction",
 				"ToolEquip",
@@ -186,6 +187,8 @@ return function(describe, it, expect)
 				"CodeRedeem",
 				"GroupRewardClaim",
 				"InventoryEquip",
+				"PerkPurchase",
+				"LeaderboardRequest",
 				"ResultsAction",
 				"SettingsUpdate",
 				"PurchasePromptRequest",
@@ -204,6 +207,9 @@ return function(describe, it, expect)
 				"Toast",
 				"ModalDirective",
 				"EntitlementsProjection",
+				"PartyListProjection",
+				"LeaderboardProjection",
+				"RewardGranted",
 			}) do
 				expect(registry.byName[name]).toBeTruthy()
 			end

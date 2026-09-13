@@ -75,6 +75,20 @@ The displayed class weights and roll cost are verified. The renamed target class
 | A-META-04 | Group reward | One-time account grant | Avoids group leave/rejoin farming. | `monetization.groupRewardGems` plus saved claim flag |
 | A-META-05 | Event skin duplicate conversion | 35/50/75/150 tokens by rarity | Prevents dead duplicate rewards. | `monetization.eventChest.duplicateTokenValues` |
 | A-META-06 | ALIEN code availability | Enabled until manually disabled | Public current guides support it; expiry was not official. | `codes.ALIEN` |
+| A-META-07 | Code normalization and rate | Trim, uppercase, strip spaces/separators; 6 attempts per minute, burst 3; max 24 characters | Forgiving entry on phones while keeping brute-force cheap to reject. | `codePolicy` |
+| A-META-08 | Leaderboard cadence and write bounds | Refresh every 60 s; at most one write per player per board per 120 s (latest value wins); top 25 rows; writes only on victory commit and leave | Ordered-store budgets; never per feather. | `leaderboards` |
+| A-META-09 | Tool-skin catalog mapping | Event skin ids map to their tool by suffix (RakeSkin/ChargeSkin/VacSkin/DroneSkin); one classic skin per tool | Keeps the catalog derived from config with no duplicated item table. | `monetization.eventChest.rewards` ids |
+| A-META-10 | Gem Value perk application | Applies once to daily, code, and group Gem grants (never below the base amount) | The perk needs a consumer before Phase 5 gem bundles; premium-currency grants are the natural surface. | `permanentPerks.gemValue` |
+
+## Lobby assumptions (Phase 4)
+
+| ID | `ASSUMED` decision | Current value | Rationale | Configuration key |
+|---|---|---:|---|---|
+| A-LOBBY-01 | Class roll animation | 2.4 s normal, 0.9 s with Fast Rolls; result reveals only after landing | Long enough to read the wheel, short enough for auto roll. | `lobby.classRollAnimationSeconds`, `classRollFastAnimationSeconds` |
+| A-LOBBY-02 | Roll sequencing / auto roll bounds | 0.5 s server minimum interval; 30 rolls per minute remote rate | Auto roll can never outrun result sequencing or spam the server. | `lobby.classRollMinIntervalSeconds`, `autoRollMaxPerMinute` |
+| A-LOBBY-03 | Ambient actor budgets | 12 / 24 / 40 active actors by quality tier | Keeps ambient life within the mobile frame budget. | `lobby.ambientActorsByTier` |
+| A-LOBBY-04 | Station coordinates and prompt range | Portal ahead (+Z), Daily left / Classes right on the primary sightlines, Shop and Event flanking, Inventory beside the path, Stats and Codes behind spawn; 10-stud prompts | Compact, readable-from-spawn composition per MASTER_SPEC 11. | `ChapterLayout.lobby.stations` (presentation), `lobby.stationPromptRangeStuds` |
+| A-LOBBY-05 | Chapter content availability | Chapter 1 Normal/Hard available; Chapter 2 unavailable until Phase 5 | Separates earned unlocks from shipped content so the selector can show locked future destinations. | `chapters.<key>.availableDifficulties` |
 
 ## Chapter 2 assumptions
 
@@ -115,10 +129,13 @@ The hidden key, three colored levers, crystal-count puzzle, four-digit note puzz
 | ID | `ASSUMED` decision | Current value | Configuration key |
 |---|---|---:|---|
 | A-UX-01 | Minimum touch target | 44 px | `polishBudgets.minimumTapTargetPixels` |
-| A-UX-02 | Mobile visual strand budget | 420 | `collection.pileRepresentation.clientVisualStrandPoolMobile` |
+| A-UX-02 | Visual feather budget | 1,400 desktop / 700 mobile feather meshes (raised from 900 / 420 for the dome shingle layer) | `collection.pileRepresentation.clientVisualStrandPool*` |
 | A-UX-03 | Low-tier target | Stable 30 FPS | `polishBudgets.targetFpsMobileLowTier` |
 | A-UX-04 | Reduced motion | 35% camera/UI motion, no essential information removed | `polishBudgets.reducedMotionScale` |
 | A-UX-05 | Controller navigation | Selection groups and explicit focus restoration | UI architecture rule |
+| A-UX-08 | Aim fallback plane | Server aims that start inside the mound or miss the dome resolve against a plane 1.75 studs above the nest base (the pre-dome aim height) | `pile.aimPlaneHeightStuds` |
+| A-UX-07 | Pile dome presentation | Apex 22 studs (`pile.maxVisualHeightStuds`), continuous rounded-cone profile 1 - r^1.5 reaching the floor at 1.15x the footprint radius (the nest base cylinder), skirt hits map to the nearest edge cell, height = apex x profile x interpolated smoothed-3x3 remaining fraction; the client renders one runtime EditableMesh heightfield (SmoothPlastic, vertex-tinted cream) with an ellipsoid fallback when the mesh API is unavailable, invisible per-column colliders keep players outside, feather shingles lie tangent to the surface | `pile.maxVisualHeightStuds`, `Shared/Domain/PileSurface` constants, `PileVisualController` constants |
+| A-UX-06 | UI tween cap | 0.45 s (raised from 0.35 s) so the owner-supplied motion recipes (panel open 0.45 s, Elastic release 0.4 s, notification pop 0.45 s) run uncapped | `polishBudgets.maximumUiTweenSeconds` |
 
 ## Premium presentation assumptions
 

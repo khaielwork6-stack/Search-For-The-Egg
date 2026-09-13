@@ -33,4 +33,8 @@ return {
 		eventChest10 = nil :: number?,
 		skipBagUpgrade = nil :: number?,
 	},
+	-- Roblox group whose members may claim the one-time group reward (MASTER_SPEC 11). Nil = unavailable.
+	social = {
+		groupId = nil :: number?,
+	},
 }

@@ -9,6 +9,7 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Trove = require(Shared.Util.Trove)
+local AssetManifest = require(Shared.Design.AssetManifest)
 
 local Controllers = script:WaitForChild("Controllers")
 local NetClient = require(Controllers.NetClient)
@@ -31,6 +32,8 @@ local ToolVisualController = require(Controllers.ToolVisualController)
 local InteractionController = require(Controllers.InteractionController)
 local ObjectiveController = require(Controllers.ObjectiveController)
 local VictoryController = require(Controllers.VictoryController)
+local PartyController = require(Controllers.PartyController)
+local LobbyController = require(Controllers.LobbyController)
 
 local player = Players.LocalPlayer
 local bootStarted = os.clock()
@@ -43,11 +46,14 @@ end
 
 local config = Config.get()
 local trove = Trove.new()
+-- Mesh templates must carry their mesh metadata before anything clones them (AssetManifest.warm).
+local repairedMeshes = AssetManifest.warm()
 
 -- Order: net -> profile -> settings-derived (accessibility/quality) -> input/modal -> presentation
 -- foundations -> HUD -> round/gameplay controllers -> scene ambience.
 local net = trove:add(NetClient.new(runtime, config))
 local profile = trove:add(ProfileController.new(net))
+local party = trove:add(PartyController.new({ net = net, profile = profile }))
 local accessibility = trove:add(AccessibilityController.new(profile, config))
 local quality = trove:add(QualityController.new(profile, config))
 local input = trove:add(InputController.new())
@@ -133,9 +139,28 @@ local arena = trove:add(
 	)
 )
 
+-- Lobby meta layer (Phase 4): station rail, modals, prompt routing, leaderboards, silhouettes.
+local lobbyMeta = trove:add(LobbyController.new({
+	net = net,
+	profile = profile,
+	party = party,
+	modals = modals,
+	hud = hud,
+	input = input,
+	audio = audio,
+	haptics = haptics,
+	accessibility = accessibility,
+	quality = quality,
+	config = config,
+	round = round,
+	interaction = interaction,
+	lobbyShell = lobby,
+}))
+
 audio:setState("Lobby")
 lobby:start()
 arena:start()
+lobbyMeta.leaderboards.request()
 
 -- Diagnostics for Studio verification: instance/connection snapshots and an exposed container.
 local container = {
@@ -162,6 +187,8 @@ local container = {
 	interaction = interaction,
 	objectives = objectives,
 	victory = victory,
+	party = party,
+	lobbyMeta = lobbyMeta,
 	trove = trove,
 	snapshot = function()
 		return {
@@ -219,7 +246,128 @@ if RunService:IsStudio() then
 			snap.victoryStats = victory.stats
 			snap.cameraMode = tostring(player.CameraMode)
 			snap.eggPosition = round.eggPosition and tostring(round.eggPosition) or nil
+			snap.party = party.party
+			snap.partyList = party.list
+			snap.lobbyStats = lobbyMeta.stats
+			snap.modalTop = modals:topId()
+			snap.blurSize = modals:blurSize()
+			snap.selected = tostring(game:GetService("GuiService").SelectedObject)
+			snap.pileFeathers = pile:featherCount()
+			snap.lobbyLoops = lobby:loopCount()
+			snap.leaderboardBoards = lobbyMeta.leaderboards.snapshot and #lobbyMeta.leaderboards.snapshot.boards or 0
 			return snap
+		end,
+		-- Phase 4 lobby helpers: every action goes through the real controllers/remotes.
+		openStation = function(id)
+			return { opened = lobbyMeta:open(tostring(id)), top = modals:topId() }
+		end,
+		stationPrompt = function(id)
+			interaction:handle("SFE_Station_" .. tostring(id))
+			return { top = modals:topId() }
+		end,
+		partyCreate = function(chapter, difficulty)
+			return party:create(chapter or "chapter1", difficulty or "normal")
+		end,
+		partyJoin = function(partyId)
+			return party:join(partyId)
+		end,
+		partyStart = function()
+			return party:start()
+		end,
+		partyCancel = function()
+			return party:cancel()
+		end,
+		partyLeave = function()
+			return party:leave()
+		end,
+		partySetDestination = function(chapter, difficulty)
+			return party:setDestination(chapter, difficulty)
+		end,
+		rollClass = function(slot)
+			return net:request("ClassRoll", { slot = tonumber(slot) or 1 })
+		end,
+		equipClass = function(classId, slot)
+			return net:request("ClassEquip", { classId = classId, slot = tonumber(slot) or 1 })
+		end,
+		buyPerk = function(perkId)
+			local level = profile.projection and profile.projection.permanentPerks[perkId] or 0
+			return net:request("PerkPurchase", { perkId = perkId, expectedLevel = level })
+		end,
+		claimDaily = function()
+			return net:request("DailyClaim", nil)
+		end,
+		redeemCode = function(code)
+			return net:request("CodeRedeem", { code = tostring(code) })
+		end,
+		claimGroup = function()
+			return net:request("GroupRewardClaim", nil)
+		end,
+		equipSkin = function(category, itemId)
+			return net:request("InventoryEquip", { category = category, itemId = itemId })
+		end,
+		requestLeaderboards = function()
+			return net:request("LeaderboardRequest", nil)
+		end,
+		-- Modal read surface: visible buttons, tap sizes, and the current selection for evidence.
+		modalReport = function()
+			local top = modals:topId()
+			local report =
+				{ top = top, open = modals:openCount(), blocking = modals:isBlocking(), blurSize = modals:blurSize(), buttons = {} }
+			local guiService = game:GetService("GuiService")
+			report.selected = guiService.SelectedObject and guiService.SelectedObject:GetFullName() or nil
+			for _, descendant in ipairs(modals.gui:GetDescendants()) do
+				if descendant:IsA("GuiButton") and descendant.Visible and descendant.AbsoluteSize.X > 0 then
+					table.insert(report.buttons, {
+						name = descendant.Name,
+						text = if descendant:IsA("TextButton") then descendant.Text else "",
+						w = math.floor(descendant.AbsoluteSize.X),
+						h = math.floor(descendant.AbsoluteSize.Y),
+						selectable = descendant.Selectable,
+					})
+				end
+			end
+			return report
+		end,
+		-- Presses a modal button by name through its Activated signal (real GUI activation path).
+		pressButton = function(name)
+			for _, descendant in ipairs(modals.gui:GetDescendants()) do
+				if descendant:IsA("GuiButton") and descendant.Name == name and descendant.Visible then
+					local guiService = game:GetService("GuiService")
+					guiService.SelectedObject = descendant
+					return { found = true, selected = guiService.SelectedObject == descendant }
+				end
+			end
+			return { found = false }
+		end,
+		modalAction = function(id, action, ...)
+			return modals:debugAction(tostring(id), tostring(action), ...) or { error = "no_action" }
+		end,
+		classesState = function()
+			local top = modals.gui:FindFirstChild("Modal_classes", true)
+			local content = top and top:FindFirstChild("Content", true)
+			if not content then
+				return { open = false }
+			end
+			return {
+				open = true,
+				rolling = content:GetAttribute("SFE_ClassesRolling"),
+				auto = content:GetAttribute("SFE_ClassesAuto"),
+				reveals = content:GetAttribute("SFE_ClassesReveals"),
+				lastReveal = content:GetAttribute("SFE_ClassesLastReveal"),
+			}
+		end,
+		railReport = function()
+			local out = {}
+			for _, id in ipairs(LobbyController.stationIds()) do
+				local button = lobbyMeta:railButton(id)
+				if button then
+					table.insert(
+						out,
+						{ id = id, w = math.floor(button.AbsoluteSize.X), h = math.floor(button.AbsoluteSize.Y), visible = button.Visible }
+					)
+				end
+			end
+			return { visible = lobbyMeta.rail.Visible, buttons = out }
 		end,
 		openSettings = function()
 			return hud:openSettings()
@@ -451,7 +599,7 @@ if RunService:IsStudio() then
 					then
 						walk(target + Vector3.new(0, 0, -4))
 					end
-					local aim = Vector3.new(target.X, layout.nestBaseY + config.pile.maxVisualHeightStuds * 0.5, target.Z)
+					local aim = Vector3.new(target.X, layout.nestBaseY + config.pile.aimPlaneHeightStuds, target.Z)
 					local before = hand.stats.accepted
 					hand:tryCollect(aim)
 					if hand.stats.accepted > before then
@@ -568,7 +716,7 @@ if RunService:IsStudio() then
 						end
 					end
 				end
-				return best and Vector3.new(best.X, layout.nestBaseY + config.pile.maxVisualHeightStuds * 0.5, best.Z) or nil
+				return best and Vector3.new(best.X, layout.nestBaseY + config.pile.aimPlaneHeightStuds, best.Z) or nil
 			end
 			local acceptedConn = tools.collected:Connect(function(data)
 				report.accepted += 1
@@ -625,8 +773,9 @@ end
 player:SetAttribute("SFE_ClientReady", true)
 print(
 	string.format(
-		"[SFE][Client] ready in %d ms (build %s)",
+		"[SFE][Client] ready in %d ms (build %s, meshesRepaired %d)",
 		math.floor((os.clock() - bootStarted) * 1000),
-		tostring(runtime:GetAttribute("SFE_BuildLabel"))
+		tostring(runtime:GetAttribute("SFE_BuildLabel")),
+		repairedMeshes
 	)
 )

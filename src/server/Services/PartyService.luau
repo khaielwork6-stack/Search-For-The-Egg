@@ -36,7 +36,32 @@ PartyService.Errors = table.freeze({
 	IN_PARTY = "already_in_party",
 	NOT_FOUND = "party_not_found",
 	FLAG_DISABLED = "chapter_disabled",
+	UNAVAILABLE = "chapter_unavailable",
+	INVALID_DIFFICULTY = "invalid_difficulty",
 })
+
+-- Content availability (chapters.<key>.availableDifficulties, ASSUMED): Phase 5 activates Chapter 2.
+-- Separate from the unlock policy, which decides whether a player has earned the destination.
+function PartyService.isDestinationAvailable(config: { [string]: any }, chapter: string, difficulty: string): (boolean, string?)
+	local entry = config.chapters[chapter]
+	if not entry then
+		return false, PartyService.Errors.NOT_FOUND
+	end
+	if difficulty ~= "normal" and difficulty ~= "hard" then
+		return false, PartyService.Errors.INVALID_DIFFICULTY
+	end
+	if chapter == "chapter2" and not config.featureFlags.chapter2Enabled then
+		return false, PartyService.Errors.FLAG_DISABLED
+	end
+	if difficulty == "hard" and not config.featureFlags.hardModeEnabled then
+		return false, PartyService.Errors.FLAG_DISABLED
+	end
+	local available = entry.availableDifficulties
+	if type(available) ~= "table" or available[difficulty] ~= true then
+		return false, PartyService.Errors.UNAVAILABLE
+	end
+	return true, nil
+end
 
 function PartyService.new(options: {
 	config: { [string]: any },
@@ -75,28 +100,27 @@ local function commit(self: PartyService, state: PartyReducer.PartyState)
 	return state
 end
 
--- Destination validity: chapter exists, feature flag allows it, every member owns the unlock.
-function PartyService.evaluateValidity(self: PartyService, state: PartyReducer.PartyState): (boolean, string?)
-	local chapter = self._config.chapters[state.chapter]
-	if not chapter then
-		return false, PartyService.Errors.NOT_FOUND
-	end
-	if state.chapter == "chapter2" and not self._config.featureFlags.chapter2Enabled then
-		return false, PartyService.Errors.FLAG_DISABLED
-	end
-	if state.difficulty == "hard" and not self._config.featureFlags.hardModeEnabled then
-		return false, PartyService.Errors.FLAG_DISABLED
+-- Destination validity: chapter exists, feature flag allows it, content is available, every member
+-- owns the unlock. Returns (ok, reason, lockedUserIds).
+function PartyService.evaluateValidity(self: PartyService, state: PartyReducer.PartyState): (boolean, string?, { number })
+	local available, reason = PartyService.isDestinationAvailable(self._config, state.chapter, state.difficulty)
+	if not available then
+		return false, reason, {}
 	end
 	local progressions = {}
 	for _, userId in ipairs(state.members) do
 		local progression = self._getProgression(userId)
 		if not progression then
-			return false, PartyService.Errors.NO_SESSION
+			return false, PartyService.Errors.NO_SESSION, {}
 		end
 		table.insert(progressions, progression)
 	end
-	local ok = UnlockPolicy.partyCanStart(self._config.chapters, state.chapter, state.difficulty, progressions)
-	return ok, if ok then nil else PartyReducer.Errors.LOCKED
+	local ok, lockedIndexes = UnlockPolicy.partyCanStart(self._config.chapters, state.chapter, state.difficulty, progressions)
+	local lockedUserIds = {}
+	for _, index in ipairs(lockedIndexes) do
+		table.insert(lockedUserIds, state.members[index])
+	end
+	return ok, if ok then nil else PartyReducer.Errors.LOCKED, lockedUserIds
 end
 
 local function reevaluate(self: PartyService, state: PartyReducer.PartyState): PartyReducer.PartyState
@@ -111,6 +135,10 @@ function PartyService.create(self: PartyService, userId: number, chapter: string
 	local session = self._sessions:get(userId)
 	if not session or session.phase ~= "Lobby" then
 		return nil, PartyService.Errors.NO_SESSION
+	end
+	local available, reason = PartyService.isDestinationAvailable(self._config, chapter, difficulty)
+	if not available then
+		return nil, reason
 	end
 	local partyId = self._idGen()
 	local state = PartyReducer.create(partyId, userId, chapter, difficulty, self._config.project.maxPartyPlayers)
@@ -147,6 +175,9 @@ function PartyService.join(self: PartyService, userId: number, partyId: string):
 		return nil, sessionErr
 	end
 	self._memberParty[userId] = partyId
+	if self._analytics then
+		self._analytics:track("party_joined", { chapter = state.chapter, difficulty = state.difficulty, partySize = #next.members }, userId)
+	end
 	return commit(self, reevaluate(self, next)), nil
 end
 
@@ -181,6 +212,10 @@ function PartyService.setDestination(
 	local state = partyId and self._parties[partyId]
 	if not state then
 		return nil, PartyReducer.Errors.NOT_MEMBER
+	end
+	local available, reason = PartyService.isDestinationAvailable(self._config, chapter, difficulty)
+	if not available then
+		return nil, reason
 	end
 	local next, err = PartyReducer.setDestination(state, userId, chapter, difficulty)
 	if not next then
@@ -289,7 +324,35 @@ function PartyService.project(self: PartyService, state: PartyReducer.PartyState
 	if state.phase == "Countdown" and state.countdownDeadline then
 		remaining = math.max(0, state.countdownDeadline - self._clock:monotonic())
 	end
-	return PartyReducer.project(state, remaining)
+	local projection = PartyReducer.project(state, remaining)
+	if state.phase ~= "Closed" then
+		local ok, reason, lockedUserIds = self:evaluateValidity(state)
+		projection.valid = ok
+		projection.invalidReason = reason
+		projection.lockedUserIds = lockedUserIds
+	end
+	return projection
+end
+
+-- Open parties a lobby player could join (Forming/Ready, not full), for the party list.
+function PartyService.openParties(self: PartyService): { { [string]: any } }
+	local out = {}
+	for _, state in pairs(self._parties) do
+		if (state.phase == "Forming" or state.phase == "Ready") and #state.members < state.maxMembers then
+			table.insert(out, {
+				partyId = state.partyId,
+				leaderUserId = state.leaderUserId,
+				members = table.clone(state.members),
+				chapter = state.chapter,
+				difficulty = state.difficulty,
+				maxMembers = state.maxMembers,
+			})
+		end
+	end
+	table.sort(out, function(a, b)
+		return a.partyId < b.partyId
+	end)
+	return out
 end
 
 function PartyService.count(self: PartyService): number

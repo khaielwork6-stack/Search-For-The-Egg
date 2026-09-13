@@ -24,3 +24,11 @@ Phase 4 inspection findings (12 Sep 2026): no code conflicts; parties, unlocks, 
 perks, rewards, inventory, stats), entitlement service, resolver and luck transform already exist.
 ASSUMED policies to register: code normalization/rate limit, leaderboard refresh cadence and write bounds,
 class roll animation duration, lobby station coordinates and ambient budgets. Codes stay server-only.
+
+## Status (13 Sep 2026, laptop session)
+
+Every item above is done and verified: UI direction folded into `Shared/Design/Tokens`, the pack's motion recipes
+in `Shared/Design/Motion`, the three PNGs uploaded as image assets in `Shared/Design/AssetManifest`, and the pile
+rebuilt as one smooth mound (`Shared/Domain/PileSurface` + `PileVisualController`). The Feather/Egg rbxm files
+shipped without mesh metadata, which is why the first pile attempt covered the whole map; `AssetManifest.warm()`
+repairs the templates at boot. Evidence: `docs/STUDIO_VERIFICATION.md` (Phase 4) and `docs/IMPLEMENTATION_STATUS.md`.

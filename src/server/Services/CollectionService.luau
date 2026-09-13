@@ -14,6 +14,7 @@ local ToolSpecs = require(Shared.Domain.ToolSpecs)
 local EconomyMath = require(Shared.EconomyMath)
 local Envelope = require(Shared.Net.Envelope)
 local Signal = require(Shared.Util.Signal)
+local PileSurface = require(Shared.Domain.PileSurface)
 local RoundModifiers = require(script.Parent.RoundModifiers)
 local RoundAwards = require(script.Parent.RoundAwards)
 
@@ -140,25 +141,38 @@ function CollectionService.resolveAim(
 	end
 	direction = direction.Unit
 	local layout = ChapterLayout[runtime.state.chapter]
-	local planeY = layout.nestBaseY + config.pile.maxVisualHeightStuds * 0.5
-	if direction.Y > -0.02 then
-		return nil, Envelope.Codes.OUT_OF_RANGE, "aim"
-	end
 	local range = rangeStuds or interaction.defaultRangeStuds
-	local t = (planeY - origin.Y) / direction.Y
-	if t < 0 or t > range * 2 then
-		return nil, Envelope.Codes.OUT_OF_RANGE, "aim"
+	-- The mound is a dome (PileSurface, A-UX-07): resolve the aim against the same surface the client
+	-- renders, entering from above. A ray that starts inside the mound or misses it falls back to the
+	-- mid-height plane so aims from the harness and from cleared floors still resolve.
+	local grid = runtime.grid
+	local field = PileSurface.buildField(config, PileGrid.snapshot(grid), layout)
+	local hit = PileSurface.march(field, origin, direction, range * 2, 0.5)
+	if not hit then
+		local planeY = layout.nestBaseY + config.pile.aimPlaneHeightStuds
+		if direction.Y > -0.02 then
+			return nil, Envelope.Codes.OUT_OF_RANGE, "aim"
+		end
+		local t = (planeY - origin.Y) / direction.Y
+		if t < 0 or t > range * 2 then
+			return nil, Envelope.Codes.OUT_OF_RANGE, "aim"
+		end
+		hit = origin + direction * t
 	end
-	local hit = origin + direction * t
 	local flat = Vector3.new(hit.X - characterPosition.X, 0, hit.Z - characterPosition.Z)
 	if flat.Magnitude > range then
 		return nil, Envelope.Codes.OUT_OF_RANGE, "range"
 	end
-	local grid = runtime.grid
 	local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
 	local cx, cz = PileGrid.cellAt(grid, hit.X - minCorner.X, hit.Z - minCorner.Z)
 	if cx < -1 or cz < -1 or cx > grid.width or cz > grid.depth then
-		return nil, Envelope.Codes.OUT_OF_RANGE, "outside_nest"
+		-- The mound's skirt (rim stretch) hangs past the logical footprint; a hit on that visible
+		-- surface belongs to the nearest edge cell rather than being "outside the nest".
+		if PileSurface.heightAt(field, hit.X, hit.Z) <= 0 then
+			return nil, Envelope.Codes.OUT_OF_RANGE, "outside_nest"
+		end
+		cx = math.clamp(cx, 0, grid.width - 1)
+		cz = math.clamp(cz, 0, grid.depth - 1)
 	end
 	return { hit = hit, cx = cx, cz = cz, minCorner = minCorner, layout = layout }, nil, nil
 end

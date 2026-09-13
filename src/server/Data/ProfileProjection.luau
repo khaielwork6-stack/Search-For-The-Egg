@@ -1,13 +1,28 @@
 --!strict
 -- Sanitized profile projection sent to the owning client only. Excludes pendingTransactions,
--- entitlementsCache, migrationHistory, raw timestamps, and claimed code history.
+-- entitlementsCache, migrationHistory, raw timestamps, and claimed code history. Phase 4 adds the
+-- daily evaluation, the entitlement-backed class slot count, live session playtime, and the
+-- remaining personal stats the Stats modal shows.
 
 local ProfileProjection = {}
 
 ProfileProjection.EXCLUDED_KEYS =
 	table.freeze({ "pendingTransactions", "entitlementsCache", "migrationHistory", "createdAt", "updatedAt", "schemaVersion" })
 
-function ProfileProjection.project(data: { [string]: any }, entitlements: { [string]: boolean }, dailyReady: boolean): { [string]: any }
+export type Extras = {
+	daily: { status: string, dayIndex: number, gems: number, nextClaimInSeconds: number, graceRemainingSeconds: number }?,
+	slotCount: number?,
+	sessionSeconds: number?,
+}
+
+function ProfileProjection.project(
+	data: { [string]: any },
+	entitlements: { [string]: boolean },
+	dailyReady: boolean,
+	extras: Extras?
+): { [string]: any }
+	local ex = (extras or {}) :: Extras
+	local daily = ex.daily
 	return {
 		currencies = { gems = data.currencies.gems, eventTokens = data.currencies.eventTokens },
 		progression = {
@@ -20,7 +35,8 @@ function ProfileProjection.project(data: { [string]: any }, entitlements: { [str
 		classes = {
 			owned = table.clone(data.classes.owned),
 			equipped = table.clone(data.classes.equipped),
-			slotCount = data.classes.slotCount,
+			slotCount = ex.slotCount or data.classes.slotCount,
+			rollCount = data.classes.rollCount,
 		},
 		permanentPerks = table.clone(data.permanentPerks),
 		inventory = {
@@ -32,6 +48,15 @@ function ProfileProjection.project(data: { [string]: any }, entitlements: { [str
 			dailyIndex = data.rewards.dailyIndex,
 			dailyReady = dailyReady,
 			groupRewardClaimed = data.rewards.groupRewardClaimed,
+			daily = if daily
+				then {
+					status = daily.status,
+					dayIndex = daily.dayIndex,
+					gems = daily.gems,
+					nextClaimInSeconds = daily.nextClaimInSeconds,
+					graceRemainingSeconds = daily.graceRemainingSeconds,
+				}
+				else nil,
 		},
 		tutorial = {
 			version = data.tutorial.version,
@@ -39,10 +64,13 @@ function ProfileProjection.project(data: { [string]: any }, entitlements: { [str
 			completed = data.tutorial.completed,
 		},
 		stats = {
-			playtimeSeconds = data.stats.playtimeSeconds,
+			playtimeSeconds = data.stats.playtimeSeconds + (ex.sessionSeconds or 0),
 			feathersCollected = data.stats.feathersCollected,
 			eggsFound = data.stats.eggsFound,
 			roundsCompleted = data.stats.roundsCompleted,
+			roundsStarted = data.stats.roundsStarted,
+			cashEarnedLifetime = data.stats.cashEarnedLifetime,
+			deaths = data.stats.deaths,
 		},
 		settings = table.clone(data.settings),
 		entitlements = table.clone(entitlements),
@@ -56,7 +84,11 @@ function ProfileProjection.leaks(projection: { [string]: any }): boolean
 			return true
 		end
 	end
-	return projection.rewards ~= nil and projection.rewards.claimedCodes ~= nil
+	if projection.rewards ~= nil then
+		local rewards = projection.rewards
+		return rewards.claimedCodes ~= nil or rewards.lastDailyClaimTxId ~= nil or rewards.dailyLastClaimAt ~= nil
+	end
+	return false
 end
 
 return ProfileProjection

@@ -53,6 +53,12 @@ local MANIFEST: { [string]: string } = {
 	[Tokens.sound.victoryStem] = "",
 	[Tokens.sound.countdownTick] = "",
 	[Tokens.sound.countdownGo] = "",
+	[Tokens.sound.rewardLand] = "",
+	[Tokens.sound.rollSpin] = "",
+	[Tokens.sound.rollLand] = "",
+	[Tokens.sound.stationHum] = "",
+	[Tokens.sound.stationChime] = "",
+	[Tokens.sound.partyReady] = "",
 	["music.lobby"] = "",
 	["music.search"] = "",
 	["music.discovery"] = "",
@@ -195,6 +201,34 @@ function AudioDirector.play(self: AudioDirector, role: string, options: { at: Ba
 		sound.Ended:Once(release)
 	end
 	return sound
+end
+
+-- Looped positional ambience (station hums). Bounded by the caller through the quality budget;
+-- silent stubs still create the Sound so the loop pipeline is exercised. Returns the Sound.
+function AudioDirector.loop(self: AudioDirector, role: string, at: BasePart): Sound?
+	local assetId = self._manifest[role]
+	if assetId == nil then
+		warn("[SFE][Audio] unknown loop role " .. tostring(role))
+		return nil
+	end
+	local sound = Instance.new("Sound")
+	sound.Name = "Loop_" .. role
+	sound.SoundId = assetId
+	sound.Looped = true
+	sound.Volume = 0.35
+	sound.RollOffMaxDistance = 40
+	sound.SoundGroup = self._buses.Ambience
+	sound.Parent = at
+	if assetId ~= "" then
+		sound:Play()
+	end
+	self._trove:add(sound)
+	return sound
+end
+
+function AudioDirector.stopLoop(_self: AudioDirector, sound: Sound)
+	sound:Stop()
+	sound:Destroy()
 end
 
 function AudioDirector.activeOneShotCount(self: AudioDirector): number

@@ -1,7 +1,8 @@
 --!strict
--- Routes world ProximityPrompts (server-created) to typed requests: the lobby portal creates and
--- starts a solo party, the trading crate sells, the workbench opens the upgrade modal, and the Egg
--- prompt (hold) claims. Prompts give the anticipation/hold affordance; the server owns the outcome.
+-- Routes world ProximityPrompts (server-created) to typed requests and lobby modals: station
+-- prompts (and the portal) open their modal, the trading crate sells, the workbench opens the
+-- upgrade modal, and the Egg prompt (hold) claims. Prompts give the anticipation/hold affordance;
+-- the server owns every outcome.
 
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -20,6 +21,7 @@ export type InteractionController = typeof(setmetatable(
 		sold: any,
 		claimed: any,
 		openUpgrades: any,
+		stationRequested: any,
 		_trove: Trove.Trove,
 		stats: { prompts: number },
 	},
@@ -35,6 +37,7 @@ function InteractionController.new(
 		sold = Signal.new(),
 		claimed = Signal.new(),
 		openUpgrades = Signal.new(),
+		stationRequested = Signal.new(),
 		_trove = Trove.new(),
 		stats = { prompts = 0 },
 	}, InteractionController)
@@ -51,6 +54,12 @@ function InteractionController.new(
 			deps.haptics:pulse(0.3, 0.1)
 		end
 	end))
+	-- Station prompts glow on approach so the interaction target reads at a glance.
+	self._trove:add(ProximityPromptService.PromptShown:Connect(function(prompt)
+		if string.sub(prompt.Name, 1, 12) == "SFE_Station_" or prompt.Name == "SFE_Portal" then
+			deps.audio:play(Tokens.sound.stationChime, { at = prompt.Parent :: any })
+		end
+	end))
 	return self
 end
 
@@ -58,8 +67,15 @@ end
 function InteractionController.handle(self: InteractionController, promptName: string): any
 	self.stats.prompts += 1
 	local deps = self._deps
-	if promptName == "SFE_Portal" then
-		return self:startSoloParty()
+	local station = string.match(promptName, "^SFE_Station_(%w+)$")
+	if station then
+		deps.audio:play(Tokens.sound.uiOpen)
+		self.stationRequested:Fire(station)
+		return nil
+	elseif promptName == "SFE_Portal" then
+		deps.audio:play(Tokens.sound.uiOpen)
+		self.stationRequested:Fire("party")
+		return nil
 	elseif promptName == "SFE_Sell" then
 		local token = deps.round:sessionToken()
 		if not token then
@@ -92,7 +108,8 @@ function InteractionController.handle(self: InteractionController, promptName: s
 	return nil
 end
 
--- Solo party: create then start (leader). Both are validated server-side.
+-- Solo party: create then start (leader). Both are validated server-side. Kept for the automation
+-- harness and the "Set off alone" path.
 function InteractionController.startSoloParty(self: InteractionController): any
 	local deps = self._deps
 	deps.audio:play(Tokens.sound.uiConfirm)
@@ -116,6 +133,7 @@ function InteractionController.destroy(self: InteractionController)
 	self.sold:Destroy()
 	self.claimed:Destroy()
 	self.openUpgrades:Destroy()
+	self.stationRequested:Destroy()
 end
 
 return InteractionController

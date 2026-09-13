@@ -3,9 +3,10 @@
 Cozy first-person collection and hidden-object experience for Roblox. Built in six controlled phases from
 the build pack in `Search_For_The_Egg_Claude_Code_Build_Pack/` (start with `START_HERE.md` there).
 
-Current checkpoint: **Phase 3 - progression and tools** (Hand paths, Bag, Nest Rake, Confetti Charge,
-Feather Vac, Scout Chick, round grants, class/difficulty/entitlement modifiers, hotbar) on top of the Phase 2
-vertical slice. See `docs/IMPLEMENTATION_STATUS.md`.
+Current checkpoint: **Phase 4 - lobby and meta** (parties and chapter selection, classes and rerolls, perks,
+daily rewards, codes, group reward, inventory, stats and leaderboards, the modal system with the owner's visual
+language and motion recipes, and the smooth feather-mound pile) on top of the Phase 3 progression and tools.
+See `docs/IMPLEMENTATION_STATUS.md`.
 
 ## Toolchain
 

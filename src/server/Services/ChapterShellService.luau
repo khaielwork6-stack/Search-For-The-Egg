@@ -234,7 +234,7 @@ function ChapterShellService.build(workspaceService: Workspace, config: { [strin
 	local aimPlane = part(
 		"NestAimPlane",
 		Vector3.new(gridSize, 0.2, gridSize),
-		CFrame.new(layout.nestCenter + Vector3.new(0, layout.nestBaseY + config.pile.maxVisualHeightStuds * 0.5, 0)),
+		CFrame.new(layout.nestCenter + Vector3.new(0, layout.nestBaseY + config.pile.aimPlaneHeightStuds, 0)),
 		cream,
 		Enum.Material.SmoothPlastic,
 		folder,

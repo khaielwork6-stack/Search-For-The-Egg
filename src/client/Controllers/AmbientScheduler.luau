@@ -96,12 +96,14 @@ end
 
 -- Exposed for tests/Studio verification: one scheduler step.
 function AmbientScheduler.step(self: AmbientScheduler, dt: number)
-	self._elapsed += dt
+	-- Reduced motion slows the shared time base, so every sine-driven actor moves less, not just
+	-- the actors that integrate dt.
+	local motionScale = self._accessibility:motionScale()
+	self._elapsed += dt * motionScale
 	local t = self._elapsed
 	local camera = workspace.CurrentCamera
 	local cameraPosition = camera and camera.CFrame.Position or Vector3.zero
 	local maxActive = self._quality:budgets().ambientActors
-	local motionScale = self._accessibility:motionScale()
 	local active = 0
 	for _, actor in ipairs(self._actors) do
 		if t < actor._next then

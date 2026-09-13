@@ -6,6 +6,8 @@
 return table.freeze({
 	profileStoreName = "SFE_PlayerProfile_v1",
 	receiptStoreName = "SFE_ReceiptLedger_v1",
+	globalStatsStoreName = "SFE_GlobalStats_v1", -- ordered stores, one scope per leaderboard board
+	leaderboardTickSeconds = 5, -- flush deferred writes / check the refresh cadence
 	profileKeyPrefix = "player:",
 	receiptKeyPrefix = "receipt:",
 

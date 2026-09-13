@@ -16,6 +16,8 @@ local Toast = require(script.Parent.Parent.UI.Components.Toast)
 local RoundHud = require(script.Parent.Parent.UI.RoundHud)
 local ToolHotbar = require(script.Parent.Parent.UI.ToolHotbar)
 local UpgradeModal = require(script.Parent.Parent.UI.UpgradeModal)
+local Tween = require(script.Parent.Parent.UI.Components.Tween)
+local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
 
 local HUDController = {}
 HUDController.__index = HUDController
@@ -28,6 +30,8 @@ export type HUDController = typeof(setmetatable(
 		hotbar: any,
 		_deps: any,
 		_labels: { [string]: any },
+		_displayed: { [string]: number },
+		_chipScales: { [string]: UIScale },
 		_infiniteBag: boolean?,
 		_timerConnection: RBXScriptConnection?,
 		_trove: Trove.Trove,
@@ -55,9 +59,16 @@ local function chip(parent: Instance, name: string, order: number): TextLabel
 	padding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
 	padding.Parent = label
 	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = Tokens.stroke.standard
-	stroke.Color = Tokens.color.creamDeep
+	stroke.Thickness = Tokens.stroke.bold
+	stroke.Color = Tokens.color.outline
 	stroke.Parent = label
+	local scale = Instance.new("UIScale")
+	scale.Parent = label
+	label.BackgroundColor3 = Tokens.color.creamPill
+	label.Font = Tokens.typography.label.font
+	label.TextSize = Tokens.typography.label.size
+	label.TextStrokeColor3 = Tokens.color.outline
+	label.TextStrokeTransparency = 0.35
 	label.Parent = parent
 	return label
 end
@@ -71,10 +82,18 @@ function HUDController.new(deps: any): HUDController
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	local _, scaleCleanup = SafeArea.applyScale(gui, deps.config)
 
-	local self = setmetatable(
-		{ gui = gui, toasts = nil, round = nil, hotbar = nil, _deps = deps, _labels = {}, _timerConnection = nil, _trove = Trove.new() },
-		HUDController
-	)
+	local self = setmetatable({
+		gui = gui,
+		toasts = nil,
+		round = nil,
+		hotbar = nil,
+		_deps = deps,
+		_labels = {},
+		_displayed = {},
+		_chipScales = {},
+		_timerConnection = nil,
+		_trove = Trove.new(),
+	}, HUDController)
 	self._trove:add(gui)
 	self._trove:add(scaleCleanup)
 
@@ -174,12 +193,35 @@ function HUDController.new(deps: any): HUDController
 	end))
 
 	-- Bindings.
+	-- Currency chips count up only from acknowledged projections (never from client prediction).
+	local chipNames = { gems = "Gems", eventTokens = "Tokens" }
+	local chipLabels = { gems = self._labels.gems, eventTokens = self._labels.tokens }
+	for key, label in pairs(chipLabels) do
+		self._chipScales[key] = label:FindFirstChildOfClass("UIScale") :: UIScale
+	end
 	local function refreshProfile(projection)
 		if not projection then
 			return
 		end
-		self._labels.gems.Text = string.format("Gems  %d", projection.currencies.gems)
-		self._labels.tokens.Text = string.format("Tokens  %d", projection.currencies.eventTokens)
+		for key, label in pairs(chipLabels) do
+			local target = projection.currencies[key] or 0
+			local previous = self._displayed[key]
+			if previous == nil or previous == target then
+				self._displayed[key] = target
+				label.Text = string.format("%s  %d", chipNames[key], target)
+			else
+				local motion = deps.accessibility:motionSettings()
+				Tween.countUp(previous, target, motion, function(value)
+					label.Text = string.format("%s  %d", chipNames[key], value)
+				end)
+				self._displayed[key] = target
+				if target > previous then
+					local scale = self._chipScales[key]
+					scale.Scale = 1.12
+					Tween.scale(scale, "release", motion, 1)
+				end
+			end
+		end
 	end
 	refreshProfile(deps.profile.projection)
 	self._trove:add(deps.profile.changed:Connect(refreshProfile))
@@ -260,6 +302,15 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 	end))
 end
 
+-- Reward celebration after a server-acknowledged grant (RewardGranted): rotation punch on the chip.
+function HUDController.celebrateCurrency(self: HUDController, key: string, amount: number)
+	local label = if key == "gems" then self._labels.gems else self._labels.tokens
+	if not label or amount <= 0 then
+		return
+	end
+	Tween.rotationPunch(label, self._deps.accessibility:motionSettings(), 0)
+end
+
 -- Called by ToolController on each accepted award for the bag squash.
 function HUDController.onCollected(self: HUDController, data: { [string]: any })
 	self._infiniteBag = data.infinite == true
@@ -294,7 +345,12 @@ function HUDController.openSettings(self: HUDController)
 	local opened = deps.modals:open("settings", deps.modals.Priority.Shop, true, function(container, api)
 		local cleanups: { any } = {}
 		local settings = deps.profile:settings() or {}
-		local minimumTap = SafeArea.minimumTapTarget(deps.modals.gui, deps.config)
+		local minimumTap = api.minimumTapTarget or SafeArea.minimumTapTarget(deps.modals.gui, deps.config)
+		local intro = FrameKit.text(container, "Intro", "Comfort settings save to your profile right away.", "caption", {
+			zIndex = container.ZIndex + 1,
+			color = Tokens.color.creamDeep,
+		})
+		intro.LayoutOrder = 0
 		local function toggle(order: number, key: string, labelText: string)
 			local current = settings[key] == true
 			local button, cleanup = Button.create(container, {

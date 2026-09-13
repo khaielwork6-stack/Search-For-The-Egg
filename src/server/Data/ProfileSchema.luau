@@ -41,7 +41,14 @@ function ProfileSchema.default(now: number): { [string]: any }
 			cosmetics = {},
 		},
 		entitlementsCache = { checkedAt = 0, passes = {} },
-		rewards = { dailyIndex = 1, dailyLastClaimAt = nil, dailyStreakStartedAt = nil, claimedCodes = {}, groupRewardClaimed = false },
+		rewards = {
+			dailyIndex = 1,
+			dailyLastClaimAt = nil,
+			dailyStreakStartedAt = nil,
+			lastDailyClaimTxId = nil,
+			claimedCodes = {},
+			groupRewardClaimed = false,
+		},
 		tutorial = { version = ProfileSchema.TUTORIAL_VERSION, completedSteps = {}, completed = false },
 		stats = {
 			playtimeSeconds = 0,
@@ -340,6 +347,10 @@ function ProfileSchema.reconcile(raw: any, cfg: { [string]: any }, now: number):
 		end
 	end
 	reconcileBoolean(rewards, "groupRewardClaimed", false, issues, "rewards.groupRewardClaimed")
+	if rewards.lastDailyClaimTxId ~= nil and type(rewards.lastDailyClaimTxId) ~= "string" then
+		rewards.lastDailyClaimTxId = nil
+		table.insert(issues, "rewards.lastDailyClaimTxId:cleared")
+	end
 
 	-- Tutorial ---------------------------------------------------------------------------------
 	ensureTable(profile, "tutorial", default.tutorial, issues, "tutorial")

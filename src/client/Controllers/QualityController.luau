@@ -87,7 +87,7 @@ function QualityController.budgets(self: QualityController): Budgets
 			strands = rep.clientVisualStrandPoolMobile,
 			oneShotSounds = math.floor(p.maximumConcurrentOneShotSounds / 2),
 			loopingAmbient = math.floor(p.maximumLoopingAmbientSounds / 2),
-			ambientActors = 12,
+			ambientActors = self._config.lobby.ambientActorsByTier.low,
 			targetFps = p.targetFpsMobileLowTier,
 		}
 	elseif self._tier == "medium" then
@@ -96,7 +96,7 @@ function QualityController.budgets(self: QualityController): Budgets
 			strands = math.floor((rep.clientVisualStrandPoolMobile + rep.clientVisualStrandPoolDesktop) / 2),
 			oneShotSounds = p.maximumConcurrentOneShotSounds,
 			loopingAmbient = p.maximumLoopingAmbientSounds,
-			ambientActors = 24,
+			ambientActors = self._config.lobby.ambientActorsByTier.medium,
 			targetFps = p.targetFpsDesktop,
 		}
 	end
@@ -105,7 +105,7 @@ function QualityController.budgets(self: QualityController): Budgets
 		strands = rep.clientVisualStrandPoolDesktop,
 		oneShotSounds = p.maximumConcurrentOneShotSounds,
 		loopingAmbient = p.maximumLoopingAmbientSounds,
-		ambientActors = 40,
+		ambientActors = self._config.lobby.ambientActorsByTier.high,
 		targetFps = p.targetFpsDesktop,
 	}
 end

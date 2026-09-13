@@ -341,3 +341,83 @@ to default afterwards.
 | P3_charge_chick | Charge viewmodel, Chick "Out foraging", chick cash |
 | P3_phone_workbench | iPhone 17 Pro workbench |
 | P3_phone_hud_vac | iPhone 17 Pro HUD with hotbar during Vac/Chick |
+
+# Phase 4 - lobby, meta, and the feather mound
+
+Environment: Mac laptop, Roblox Studio (Play Solo, unpublished place -> `studio-memory` store), Rojo 7.7.0 serve,
+Studio MCP bridge (`ServerStorage.SFE_DebugInvoke`, `PlayerScripts.SFE_ClientDebug`). Build label
+`phase4-lobby-meta`. Play-mode screen captures return blank on this laptop, so UI evidence is recorded as
+measurements and the mound is photographed in edit mode from the same `PileVisualController` source (cloned
+module, stubbed deps, full 16x16 grid, one delta applied).
+
+## Automated
+
+| Command | Result |
+|---|---|
+| `lune run lune/test` | `Tests: 256 passed, 0 failed, 0 skipped, 256 total` - exit 0 (18 spec modules) |
+| `lune run lune/check` | config valid (609 checks), CSV/JSON agree (74 rows), no hard-coded prices/IDs (124 files), stylua ok, selene ok - exit 0 |
+
+Phase 4 evidence mapping: `Meta.spec` (class roll odds/pity/duplicates/slots, perk levels and stale-level refusal,
+daily calendar/streak/grace, code normalisation/rate/one-per-account, group reward once, inventory equip,
+leaderboard bounds) and `Party.spec` (create/join/leave/leader handoff/availability/projection validity);
+`PileSurface.spec` (dome field, hollows, continuous surface, ray march from outside only, server aim from the rim,
+skirt hits mapped to the edge cell); `Design.spec` (motion recipes within `maximumUiTweenSeconds`, image ids,
+mesh warm-up is a no-op headless); `Net.spec` (47 remotes including `PartyCancel`, `PerkPurchase`,
+`LeaderboardRequest`, `PartyListProjection`, `LeaderboardProjection`, `RewardGranted`).
+
+## Studio - desktop (Play Solo, viewport 1223x658)
+
+1. **Boot.** Server `server_ready {bootMs=1275 meshesRepaired=1 remotes=47}`, client `ready in 2109 ms
+   (meshesRepaired 1)`, lobby `actors=124 strands=80 loops=8 tier=high`, `layoutClass=desktop inputMode=mouse`,
+   objective `enter_party`, HUD prompt `LMB Gather / E Interact`, station rail 8 buttons at 64x64 px.
+2. **Every station modal opens through the real prompt path** (`openStation`/`stationPrompt`): party, daily,
+   classes, shop, event, inventory, stats, codes each reported `blocking=true blur=14` (recipe `blurIn`), an
+   initial selection inside the card (e.g. `Modal_Daily Nest...Button_Claim`, `Modal_Forager Ledger...Tabs.Button_Most
+   Eggs Won`, `Modal_Sunlit Henhouse...Button_Set off alone`, `Modal_Nest Mailbox...CodeBox`), every visible
+   button at least 44x44 px except the classes "Auto roll" toggle at 156x40 px (touch target check covers phones
+   through the `SafeArea` scale). After closing all: `modalsOpen=0 blur=0 selected=nil`, ambient connections back to 1.
+3. **Rewards through the real remotes** (`Gems 400` injected with `DEBUG_GRANT_GEMS`): `DailyClaim` day 1
+   `+10` (`gemsBalance 410`), replay `replayed=true` with no second grant; `CodeRedeem ALIEN` `+200` and
+   `eventTokens 200`, second redeem `already_done`, garbage code `not_found`; `GroupRewardClaim` `+25` then
+   `replayed=true`; `PerkPurchase bagSize` level 1 `paidGems=25` (`1.0 -> 1.1`), level 2 `paidGems=43`
+   (`1.1 -> 1.2`), the HUD chip counted up `Gems 400 -> 567` only from acknowledged projections. Server
+   `rewards {daily=1 codes=1 group=1 replays=3 rejected=2}`, `perks {purchases=2 rejected=0}`.
+4. **Classes.** `ClassRoll` x3 from the Class Cards modal: `rollCount=3`, owned `newcomer, eggTrader,
+   blastArtist`, one duplicate refunded per policy (`duplicates=1`), equipped slot 1 `blastArtist`, odds table
+   served from config (`newcomer 40% ... masterForager 0.1%`, `rollGemCost 40`, `animationSeconds 2.4`).
+5. **Parties.** Three simulated members: leader handoff `1001 -> 1002 -> 1003` on successive leaves, projection
+   versions `12 -> 14 -> 16 -> 17`, the party closed when the last member left; open party list emptied.
+   Leaderboards refreshed 8 times on the config cadence with `writes=0 failures=0` (nothing to write in Studio).
+6. **Mound (this session).** Round started from the party modal (`Countdown -> Cutscene -> Countdown ->
+   Searching`). Client pile: `domeKind=mesh`, 256 cells, 1366 shingles, 1623 instances (1 mesh dome + 256
+   colliders + shingles), dome `MeshPart 46 x 22 x 46` at the nest centre, `CanCollide=false CanQuery=true`.
+   Feather template `MeshSize 121.97 x 322.34 x 29.05` after repair (was `0,0,0`: the cause of the giant feathers);
+   lobby drift strands `0.71 x 1.87` studs. Frame time with the pile `16.66 ms` average (60 fps cap), worst frame
+   `18.2 ms`; without the pile `16.66 ms`; Studio memory 4320 MB.
+7. **Digging the flank.** From `z=383` (6 studs off the foot) three `CollectAction`s aimed at the flank
+   (`0, 5, 390`): `sent=3 accepted=3 rejected=0`, client dents `15 -> 18`, shingles `1355 -> 1352`, 18 streamed
+   feathers, bag `18 / 25`; server `registry rejected=0 handlerErrors=0 securityRejections=0`. Walking into the
+   mound stops at the colliders; the navigation helper reached the crown only by jumping the collider steps
+   (`y=26` on `Collider121`), recorded as a limitation.
+8. **Output.** No errors; only the labelled `DEBUG_*` warnings and autosaves.
+
+## Mound captures (edit mode, same client source)
+
+| Id | Content |
+|---|---|
+| ScreenCapture_dome_v4_front | Full mound on the nest base cylinder, rounded-cone silhouette, shingles |
+| ScreenCapture_dome_v4_eye | Eye-level view up the flank: smooth body, tangent shingles, no grid |
+| ScreenCapture_dome_v4_high | High view with the dug hollow on the near face after one delta |
+| ScreenCapture_dome_fixed_front | Earlier column/cap build (rejected: visible bubble grid) |
+| ScreenCapture_mesh_liveupdate | EditableMesh live vertex update test (centre lowered) |
+
+## Not performed by the agent
+
+- Phone preset (StudioDeviceSimulatorService) session for the Phase 4 modals: the device preset is a Studio UI
+  action on this laptop; the layout classes and the touch scale are covered by `Design.spec` and the 44 px
+  minimum was measured on desktop.
+- Real clicks on modal buttons through the virtual mouse (owner checkpoint; in-modal presses were driven through
+  `modalAction`, which calls the same routines). The classes modal roll button is at
+  `PlayerGui.SFE_Modals.Modal_classes.Card.Panel.Content.Controls.RollButton` for that check.
+- Controller D-pad traversal on a real gamepad.
+

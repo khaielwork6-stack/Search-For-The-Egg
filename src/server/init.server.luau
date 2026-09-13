@@ -13,6 +13,7 @@ local Config = require(Shared.Config)
 local Clock = require(Shared.Clock)
 local WeightedRandom = require(Shared.WeightedRandom)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
+local AssetManifest = require(Shared.Design.AssetManifest)
 local Objectives = require(Shared.Domain.Objectives)
 local Envelope = require(Shared.Net.Envelope)
 local RoundReducer = require(Shared.Reducers.RoundReducer)
@@ -48,6 +49,14 @@ local ToolService = require(script.Services.ToolService)
 local EggService = require(script.Services.EggService)
 local VictoryService = require(script.Services.VictoryService)
 local ObjectiveService = require(script.Services.ObjectiveService)
+local ClassService = require(script.Services.ClassService)
+local PerkService = require(script.Services.PerkService)
+local RewardService = require(script.Services.RewardService)
+local InventoryService = require(script.Services.InventoryService)
+local LeaderboardService = require(script.Services.LeaderboardService)
+local OrderedStoreAdapter = require(script.Adapters.OrderedStoreAdapter)
+local GroupAdapter = require(script.Adapters.GroupAdapter)
+local ClassRoll = require(Shared.Domain.ClassRoll)
 local StudioDebug = require(script.Debug.StudioDebug)
 
 local log = Log.new("Server")
@@ -261,9 +270,75 @@ local objectives = ObjectiveService.new({
 	analytics = analytics,
 })
 
+-- 6b. Lobby / meta services (Phase 4): classes, perks, rewards, inventory, leaderboards.
+local function getProfile(userId: number): any?
+	return profiles:get(userId)
+end
+local classes = ClassService.new({
+	config = config,
+	clock = clock,
+	rng = rng,
+	sessions = sessions,
+	getProfile = getProfile,
+	getEntitlements = getEntitlements,
+	analytics = analytics,
+})
+local perks = PerkService.new({ config = config, sessions = sessions, getProfile = getProfile, analytics = analytics })
+local groupAdapter: any = if RunService:IsStudio() and not ProductIds.social.groupId
+	then GroupAdapter.mock(false)
+	else GroupAdapter.real(ProductIds.social.groupId, Players)
+local rewards = RewardService.new({
+	config = config,
+	clock = clock,
+	getProfile = getProfile,
+	getEntitlements = getEntitlements,
+	group = groupAdapter,
+	analytics = analytics,
+	log = log,
+})
+local inventory = InventoryService.new({ config = config, getProfile = getProfile, analytics = analytics })
+local displayNames: { [number]: string } = {}
+local function displayNameOf(userId: number): string
+	local cached = displayNames[userId]
+	if cached then
+		return cached
+	end
+	local player = playerData:playerOf(userId)
+	if player and typeof(player) == "Instance" then
+		displayNames[userId] = (player :: Player).DisplayName
+		return displayNames[userId]
+	elseif player then
+		displayNames[userId] = tostring(player.Name)
+		return displayNames[userId]
+	end
+	local ok, name = pcall(function()
+		return Players:GetNameFromUserIdAsync(userId)
+	end)
+	displayNames[userId] = if ok and type(name) == "string" then name else "Forager"
+	return displayNames[userId]
+end
+local leaderboardStore: any = if dataStoreKind == "studio-memory"
+	then OrderedStoreAdapter.mock()
+	else OrderedStoreAdapter.real(ServerPolicy.globalStatsStoreName)
+local leaderboards = LeaderboardService.new({
+	config = config,
+	clock = clock,
+	store = leaderboardStore,
+	getDisplayName = displayNameOf,
+	log = log,
+})
+playerData:setProjectionExtras(function(userId, data)
+	return {
+		daily = rewards:dailyEvaluation(data),
+		slotCount = ClassRoll.slotCount(config, getEntitlements(userId)),
+	}
+end)
+
 -- 7. World: lobby shell and the Chapter 1 arena (same place; see ChapterLayout).
 Players.CharacterAutoLoads = false
-WorldShellService.build(workspace, workspace:FindFirstChildOfClass("SpawnLocation"))
+-- Repair mesh templates (mesh metadata) before any shell clones them; replicates to every client.
+local repairedMeshes = AssetManifest.warm()
+local lobbyShell = WorldShellService.build(workspace, workspace:FindFirstChildOfClass("SpawnLocation"), config)
 local arena = ChapterShellService.build(workspace, config)
 
 local function placeCharacter(player: Player, position: Vector3, lookAt: Vector3?)
@@ -334,11 +409,33 @@ parties.started:Connect(function(party, reservation)
 		parties:finish(party.partyId, ok)
 	end
 end)
+local function partyListPayload(): { [string]: any }
+	local list = parties:openParties()
+	for _, entry in ipairs(list) do
+		entry.leaderName = displayNameOf(entry.leaderUserId)
+	end
+	return { parties = list }
+end
+local function broadcastPartyList()
+	local payload = partyListPayload()
+	for _, player in ipairs(Players:GetPlayers()) do
+		local session = sessions:get(player.UserId)
+		if session and (session.phase == "Lobby" or session.phase == "Party") then
+			send(player, "PartyListProjection", payload)
+		end
+	end
+end
 parties.changed:Connect(function(party)
 	local projection = parties:project(party)
+	local names = {}
+	for _, memberId in ipairs(party.members) do
+		names[tostring(memberId)] = displayNameOf(memberId)
+	end
+	projection.memberNames = names
 	for _, player in ipairs(memberPlayers(party.members)) do
 		send(player, "PartyProjection", projection)
 	end
+	broadcastPartyList()
 end)
 sessions.changed:Connect(function(userId)
 	local player = playerData:playerOf(userId)
@@ -533,6 +630,10 @@ victory.committed:Connect(function(runtime, results)
 				objectives:complete(player.UserId, "claim_or_complete_round")
 			end
 			playerData:pushProjection(player, config)
+			local profile = profiles:get(player.UserId)
+			if profile then
+				leaderboards:submit(player.UserId, leaderboards:valuesFor(profile.data))
+			end
 		end
 	end
 end)
@@ -590,6 +691,55 @@ end)
 registry:onRequest("PartyStart", function(player, payload)
 	local party, err = parties:start(player.UserId, payload.partyId)
 	return if party then Envelope.ok(parties:project(party)) else fail(err)
+end)
+registry:onRequest("PartyCancel", function(player, payload)
+	local party, err = parties:cancel(player.UserId, payload.partyId)
+	return if party then Envelope.ok(parties:project(party)) else fail(err)
+end)
+-- Lobby / meta handlers (Phase 4). Every grant pushes the profile projection after commit so the
+-- client animates currency changes only from the acknowledged state.
+local function pushAfter(player: Player, result: Envelope.Envelope<any>): Envelope.Envelope<any>
+	if result.ok then
+		playerData:pushProjection(player, config)
+	end
+	return result
+end
+registry:onRequest("ClassRoll", function(player, payload)
+	return pushAfter(player, classes:roll(player.UserId, payload.slot))
+end)
+registry:onRequest("ClassEquip", function(player, payload)
+	return pushAfter(player, classes:equip(player.UserId, payload.classId, payload.slot))
+end)
+registry:onRequest("PerkPurchase", function(player, payload)
+	return pushAfter(player, perks:purchase(player.UserId, payload.perkId, payload.expectedLevel))
+end)
+registry:onRequest("DailyClaim", function(player)
+	return pushAfter(player, rewards:claimDaily(player.UserId))
+end)
+registry:onRequest("CodeRedeem", function(player, payload)
+	return pushAfter(player, rewards:redeemCode(player.UserId, payload.code))
+end)
+registry:onRequest("GroupRewardClaim", function(player)
+	return pushAfter(player, rewards:claimGroupReward(player.UserId))
+end)
+registry:onRequest("InventoryEquip", function(player, payload)
+	return pushAfter(player, inventory:equip(player.UserId, payload.category, payload.itemId))
+end)
+registry:onRequest("LeaderboardRequest", function(player)
+	local snapshot = leaderboards:snapshot()
+	send(player, "LeaderboardProjection", snapshot)
+	return Envelope.ok({ ageSeconds = snapshot.ageSeconds })
+end)
+rewards.granted:Connect(function(userId, grant)
+	local player = playerData:playerOf(userId)
+	if player then
+		send(player, "RewardGranted", grant)
+	end
+end)
+leaderboards.refreshed:Connect(function(snapshot)
+	for _, player in ipairs(Players:GetPlayers()) do
+		send(player, "LeaderboardProjection", snapshot)
+	end
 end)
 registry:onRequest("RoundSkipVote", function(player, payload)
 	local okToken, tokenErr = sessions:validate(player.UserId, payload.sessionToken, "Round")
@@ -697,6 +847,8 @@ end
 local function onPlayerLoaded(player: Player)
 	objectives:load(player.UserId)
 	sendObjective(player.UserId)
+	send(player, "PartyListProjection", partyListPayload())
+	send(player, "LeaderboardProjection", leaderboards:snapshot())
 	player.CharacterAdded:Connect(function(character)
 		onCharacterAdded(player, character)
 	end)
@@ -726,6 +878,13 @@ Players.PlayerRemoving:Connect(function(player)
 	if parties:partyOf(player.UserId) then
 		parties:leave(player.UserId)
 	end
+	local leavingProfile = profiles:get(player.UserId)
+	if leavingProfile then
+		leaderboards:submit(player.UserId, leaderboards:valuesFor(leavingProfile.data), true)
+	end
+	leaderboards:forget(player.UserId)
+	classes:forget(player.UserId)
+	displayNames[player.UserId] = nil
 	playerData:onPlayerRemoving(player)
 	objectives:forget(player.UserId)
 	core:forgetPlayer(player.UserId)
@@ -748,6 +907,12 @@ task.spawn(function()
 		parties:tick()
 		rounds:tick()
 		victory:tick()
+	end
+end)
+task.spawn(function()
+	while true do
+		task.wait(ServerPolicy.leaderboardTickSeconds)
+		leaderboards:tick()
 	end
 end)
 task.spawn(function()
@@ -804,7 +969,16 @@ local container = {
 	victory = victory,
 	objectives = objectives,
 	arena = arena,
+	lobbyShell = lobbyShell,
 	placeCharacter = placeCharacter,
+	classes = classes,
+	perks = perks,
+	rewards = rewards,
+	inventory = inventory,
+	leaderboards = leaderboards,
+	groupAdapter = groupAdapter,
+	broadcastPartyList = broadcastPartyList,
+	displayNameOf = displayNameOf,
 }
 local debugHooks = StudioDebug.install(container)
 
@@ -817,5 +991,6 @@ log:info("server_ready", {
 	dataStoreKind = dataStoreKind,
 	missingDeploymentIds = #productMap:missingKeys(),
 	debugHooks = debugHooks ~= nil,
+	meshesRepaired = repairedMeshes,
 	bootMs = math.floor((os.clock() - bootStarted) * 1000),
 })

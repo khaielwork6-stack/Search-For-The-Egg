@@ -68,7 +68,10 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 	local collectRate = { perSecond = interaction.collectRequestRatePerSecond, burst = burst }
 	local toolRate = { perSecond = interaction.toolRequestRatePerSecond, burst = burst }
 	local uiRate = { perSecond = 2, burst = burst }
+	local rollRate = { perSecond = cfg.lobby.autoRollMaxPerMinute / 60, burst = 2 }
+	local codeRate = { perSecond = cfg.codePolicy.attemptsPerMinute / 60, burst = cfg.codePolicy.burst }
 	local maxParty = cfg.project.maxPartyPlayers
+	local PERK_ID = Schema.id()
 
 	local list: { MessageDef } = {
 		-- Party -------------------------------------------------------------------------------
@@ -93,6 +96,7 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 			1
 		),
 		request("PartyStart", Schema.object({ partyId = TOKEN }), uiRate, 1),
+		request("PartyCancel", Schema.object({ partyId = TOKEN }), uiRate, 4),
 		-- Tutorial / round actions (handlers land in Phase 2+; schemas exist now) --------------
 		request("TutorialAction", Schema.object({ step = Schema.id(), action = Schema.enum({ "complete", "skip" }) }), uiRate, 2),
 		request("RoundSkipVote", Schema.object({ sessionToken = TOKEN }), uiRate, 2),
@@ -134,7 +138,7 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		request(
 			"ClassRoll",
 			Schema.object({ slot = Schema.number({ min = 1, max = cfg.classes.maximumSlots, integer = true }) }),
-			slowRate,
+			rollRate,
 			4
 		),
 		request(
@@ -143,15 +147,22 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 			uiRate,
 			4
 		),
+		request(
+			"PerkPurchase",
+			Schema.object({ perkId = PERK_ID, expectedLevel = Schema.number({ min = 0, max = 100, integer = true }) }),
+			slowRate,
+			4
+		),
 		request("DailyClaim", Schema.none(), slowRate, 4),
 		request(
 			"CodeRedeem",
-			Schema.object({ code = Schema.string({ min = 1, max = 32, pattern = "^[%w%s]+$" }) }),
-			{ perSecond = 0.5, burst = 3 },
+			Schema.object({ code = Schema.string({ min = 1, max = cfg.codePolicy.maxLength + 8, pattern = "^[%w%s%-_]+$" }) }),
+			codeRate,
 			4
 		),
 		request("GroupRewardClaim", Schema.none(), slowRate, 4),
 		request("InventoryEquip", Schema.object({ category = Schema.id(), itemId = Schema.id() }), uiRate, 4),
+		request("LeaderboardRequest", Schema.none(), uiRate, 4),
 		request("ResultsAction", Schema.object({ action = Schema.enum({ "replay", "lobby" }) }), uiRate, 2),
 		request(
 			"SettingsUpdate",
@@ -185,6 +196,9 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		serverEvent("ModalDirective", Schema.object({ modalId = Schema.id(), action = Schema.enum({ "open", "close" }) }), 1),
 		serverEvent("EntitlementsProjection", Schema.object({}), 1),
 		serverEvent("ToolEvent", Schema.object({}), 3),
+		serverEvent("PartyListProjection", Schema.object({}), 4),
+		serverEvent("LeaderboardProjection", Schema.object({}), 4),
+		serverEvent("RewardGranted", Schema.object({}), 4),
 	}
 
 	local byName: { [string]: MessageDef } = {}

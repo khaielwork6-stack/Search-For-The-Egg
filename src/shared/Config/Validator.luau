@@ -336,6 +336,60 @@ function Validator.validate(raw: any): Report
 		end
 	end
 
+	-- Phase 4 ASSUMED lobby/meta policies (A-LOBBY-01..03, A-META-07..08)
+	check(type(raw.lobby) == "table", "lobby block missing")
+	if type(raw.lobby) == "table" then
+		local lobby = raw.lobby
+		check(isPositiveNumber(lobby.classRollAnimationSeconds), "lobby.classRollAnimationSeconds must be > 0")
+		check(
+			isPositiveNumber(lobby.classRollFastAnimationSeconds) and lobby.classRollFastAnimationSeconds <= lobby.classRollAnimationSeconds,
+			"lobby.classRollFastAnimationSeconds must be > 0 and <= classRollAnimationSeconds"
+		)
+		check(isNonNegativeNumber(lobby.classRollMinIntervalSeconds), "lobby.classRollMinIntervalSeconds must be >= 0")
+		check(isPositiveNumber(lobby.autoRollMaxPerMinute), "lobby.autoRollMaxPerMinute must be > 0")
+		check(isPositiveNumber(lobby.stationPromptRangeStuds), "lobby.stationPromptRangeStuds must be > 0")
+		check(type(lobby.ambientActorsByTier) == "table", "lobby.ambientActorsByTier missing")
+		if type(lobby.ambientActorsByTier) == "table" then
+			for _, tier in ipairs({ "low", "medium", "high" }) do
+				check(
+					isPositiveNumber(lobby.ambientActorsByTier[tier]) and lobby.ambientActorsByTier[tier] % 1 == 0,
+					"lobby.ambientActorsByTier." .. tier .. " must be a positive integer"
+				)
+			end
+		end
+	end
+	check(type(raw.codePolicy) == "table", "codePolicy block missing")
+	if type(raw.codePolicy) == "table" then
+		local policy = raw.codePolicy
+		check(isPositiveNumber(policy.maxLength) and policy.maxLength % 1 == 0, "codePolicy.maxLength must be a positive integer")
+		check(isPositiveNumber(policy.attemptsPerMinute), "codePolicy.attemptsPerMinute must be > 0")
+		check(isPositiveNumber(policy.burst) and policy.burst % 1 == 0, "codePolicy.burst must be a positive integer")
+		check(policy.normalization == "trim_uppercase_strip_spaces", "codePolicy.normalization unknown")
+		if type(raw.codes) == "table" then
+			for code in pairs(raw.codes) do
+				check(type(code) == "string" and #code <= policy.maxLength, "code key longer than codePolicy.maxLength: " .. tostring(code))
+			end
+		end
+	end
+	check(type(raw.leaderboards) == "table", "leaderboards block missing")
+	if type(raw.leaderboards) == "table" then
+		local boards = raw.leaderboards
+		check(isPositiveNumber(boards.refreshSeconds), "leaderboards.refreshSeconds must be > 0")
+		check(isPositiveNumber(boards.writeMinIntervalSeconds), "leaderboards.writeMinIntervalSeconds must be > 0")
+		check(isPositiveNumber(boards.topCount) and boards.topCount % 1 == 0, "leaderboards.topCount must be a positive integer")
+		check(type(boards.boards) == "table" and #boards.boards > 0, "leaderboards.boards must be a non-empty list")
+		if type(boards.boards) == "table" then
+			local seen: { [string]: boolean } = {}
+			for index, boardId in ipairs(boards.boards) do
+				check(
+					type(boardId) == "string" and #boardId > 0 and not seen[boardId],
+					"leaderboards.boards[" .. index .. "] invalid or duplicate"
+				)
+				seen[boardId] = true
+			end
+		end
+	end
+
 	-- Chapters and unlock policies
 	check(type(raw.chapters) == "table", "chapters missing")
 	local chapterIds: { [string]: boolean } = {}
@@ -369,6 +423,12 @@ function Validator.validate(raw: any): Report
 				validatePolicy("chapters." .. tostring(chapterKey) .. ".hardUnlock", chapter.hardUnlock)
 				validateRewards("chapters." .. tostring(chapterKey) .. ".normalRewards", chapter.normalRewards)
 				validateRewards("chapters." .. tostring(chapterKey) .. ".hardRewards", chapter.hardRewards)
+				check(
+					type(chapter.availableDifficulties) == "table"
+						and type(chapter.availableDifficulties.normal) == "boolean"
+						and type(chapter.availableDifficulties.hard) == "boolean",
+					"chapters." .. tostring(chapterKey) .. ".availableDifficulties must declare normal/hard booleans"
+				)
 			end
 		end
 		check(chapterIds.chapter1 == true, "chapter1 must exist")
@@ -412,6 +472,10 @@ function Validator.validate(raw: any): Report
 			"pile.coverRadiusCells must be a non-negative integer"
 		)
 		check(isPositiveNumber(pile.maxVisualHeightStuds), "pile.maxVisualHeightStuds must be > 0")
+		check(
+			isPositiveNumber(pile.aimPlaneHeightStuds) and pile.aimPlaneHeightStuds <= pile.maxVisualHeightStuds,
+			"pile.aimPlaneHeightStuds must be > 0 and <= maxVisualHeightStuds"
+		)
 	end
 
 	-- Phase 3 ASSUMED tool mechanics (A-TOOL-01..03)

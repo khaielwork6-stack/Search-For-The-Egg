@@ -327,18 +327,23 @@ function StudioDebug.install(container: any): any?
 		if not profile or not profile:isActive() then
 			return { error = "no_profile" }
 		end
+		local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
 		local ids = {}
 		for id in string.gmatch(tostring(classIdsCsv or ""), "[%w_]+") do
-			if container.config.classes.weights[id] == nil and id ~= "newcomer" then
+			if not Config.class(container.config, id) then
 				return { error = "unknown_class", id = id }
 			end
 			table.insert(ids, id)
+		end
+		if #ids > container.config.classes.maximumSlots then
+			return { error = "too_many_slots", maximum = container.config.classes.maximumSlots }
 		end
 		profile:update(function(data)
 			for _, id in ipairs(ids) do
 				data.classes.owned[id] = true
 			end
 			data.classes.equipped = ids
+			data.classes.slotCount = math.max(data.classes.slotCount or 1, #ids)
 		end)
 		debugLog("SET_CLASSES", { userId = userId, classes = ids })
 		return { equipped = table.clone(profile.data.classes.equipped) }
@@ -404,6 +409,148 @@ function StudioDebug.install(container: any): any?
 			return nil
 		end
 		return { removed = runtime.grid.removed, total = runtime.grid.total, fraction = runtime.grid.removed / runtime.grid.total }
+	end
+
+	-- Phase 4 verification hooks: every action goes through the real services (never remotes); the
+	-- group adapter mock and simulated party members are labelled DEBUG in Output.
+	function hooks.rollClass(userId: number, slot: number?)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		return container.classes:roll(userId, tonumber(slot) or 1)
+	end
+	function hooks.equipClass(userId: number, classId: string, slot: number?)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		return container.classes:equip(userId, classId, tonumber(slot) or 1)
+	end
+	function hooks.classView(userId: number)
+		return container.classes:view(userId)
+	end
+	function hooks.buyPerk(userId: number, perkId: string, expectedLevel: number?)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local profile = container.profiles:get(userId)
+		local level = tonumber(expectedLevel) or (profile and profile.data.permanentPerks[perkId]) or 0
+		return container.perks:purchase(userId, perkId, level)
+	end
+	function hooks.perkPreviews(userId: number)
+		return container.perks:previews(userId)
+	end
+	function hooks.claimDaily(userId: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		return container.rewards:claimDaily(userId)
+	end
+	-- Moves the profile's daily clock so the cadence cases (early / on time / grace / expired) can be
+	-- exercised in one session. Labelled DEBUG; never touches remotes.
+	function hooks.shiftDailyClock(userId: number, seconds: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local profile = container.profiles:get(userId)
+		if not profile or not profile:isActive() then
+			return { error = "no_profile" }
+		end
+		local delta = tonumber(seconds) or 0
+		profile:update(function(data)
+			if data.rewards.dailyLastClaimAt then
+				data.rewards.dailyLastClaimAt -= delta
+			end
+			if data.rewards.dailyStreakStartedAt then
+				data.rewards.dailyStreakStartedAt -= delta
+			end
+		end)
+		debugLog("SHIFT_DAILY_CLOCK", { userId = userId, seconds = delta })
+		return container.rewards:dailyEvaluation(profile.data)
+	end
+	function hooks.redeemCode(userId: number, code: string)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		return container.rewards:redeemCode(userId, code)
+	end
+	function hooks.setGroupMember(userId: number, member: boolean)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local adapter = container.groupAdapter
+		if adapter.kind ~= "mock" then
+			return { error = "real_group_adapter" }
+		end
+		adapter:setConfigured(true)
+		adapter:setMember(userId, member == true or member == "true")
+		debugLog("SET_GROUP_MEMBER", { userId = userId, member = member == true or member == "true" })
+		return { configured = adapter:isConfigured() }
+	end
+	function hooks.claimGroup(userId: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		return container.rewards:claimGroupReward(userId)
+	end
+	function hooks.equipSkin(userId: number, category: string, itemId: string)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		return container.inventory:equip(userId, category, itemId)
+	end
+	function hooks.grantSkin(userId: number, skinId: string)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local profile = container.profiles:get(userId)
+		if not profile or not profile:isActive() then
+			return { error = "no_profile" }
+		end
+		profile:update(function(data)
+			data.inventory.toolSkins[skinId] = true
+		end)
+		debugLog("GRANT_SKIN", { userId = userId, skinId = skinId })
+		local player = container.playerData:playerOf(userId)
+		if player then
+			container.playerData:pushProjection(player, container.config)
+		end
+		return container.inventory:view(userId)
+	end
+	function hooks.inventoryView(userId: number)
+		return container.inventory:view(userId)
+	end
+	function hooks.leaderboards()
+		container.leaderboards:refresh()
+		local snapshot = container.leaderboards:snapshot()
+		snapshot.stats = table.clone(container.leaderboards.stats)
+		snapshot.pending = container.leaderboards:pendingCount()
+		return snapshot
+	end
+	function hooks.partyList()
+		return container.parties:openParties()
+	end
+	function hooks.party(userId: number)
+		local state = container.parties:partyOf(userId)
+		return state and container.parties:project(state) or { inParty = false }
+	end
+	-- Simulated members drive the real PartyService through their live sessions (player doubles).
+	function hooks.simJoinParty(userId: number, partyId: string)
+		local state, err = container.parties:join(userId, partyId)
+		return { ok = state ~= nil, err = err, party = state and container.parties:project(state) or nil }
+	end
+	function hooks.simLeaveParty(userId: number)
+		local state, err = container.parties:leave(userId)
+		return { ok = state ~= nil, err = err, party = state and container.parties:project(state) or nil }
+	end
+	function hooks.metaStats()
+		return {
+			classes = table.clone(container.classes.stats),
+			perks = table.clone(container.perks.stats),
+			rewards = table.clone(container.rewards.stats),
+			inventory = table.clone(container.inventory.stats),
+			leaderboards = table.clone(container.leaderboards.stats),
+			parties = container.parties:count(),
+		}
 	end
 
 	-- selene: allow(global_usage)

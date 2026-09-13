@@ -21,6 +21,7 @@ export type PlayerDataService = typeof(setmetatable(
 		_send: (player: any, name: string, payload: { [string]: any }) -> (),
 		_analytics: any?,
 		_log: any?,
+		_projectionExtras: ((userId: number, data: { [string]: any }) -> ProfileProjection.Extras)?,
 		_players: { [number]: any },
 		stats: { joined: number, loaded: number, held: number, kicked: number, released: number },
 	},
@@ -36,8 +37,10 @@ function PlayerDataService.new(options: {
 	send: (player: any, name: string, payload: { [string]: any }) -> (),
 	analytics: any?,
 	log: any?,
+	projectionExtras: ((userId: number, data: { [string]: any }) -> ProfileProjection.Extras)?,
 }): PlayerDataService
 	return setmetatable({
+		_projectionExtras = options.projectionExtras,
 		_profiles = options.profiles,
 		_sessions = options.sessions,
 		_entitlements = options.entitlements,
@@ -65,7 +68,19 @@ function PlayerDataService.buildProjection(self: PlayerDataService, userId: numb
 		return nil
 	end
 	local entitlements = self._entitlements:snapshot(userId)
-	return ProfileProjection.project(profile.data, entitlements, dailyReady(self, profile.data, cfg))
+	local extras: ProfileProjection.Extras = if self._projectionExtras then self._projectionExtras(userId, profile.data) else {}
+	if extras.sessionSeconds == nil then
+		extras.sessionSeconds = math.max(0, math.floor(self._clock:now() - profile.loadedAt))
+	end
+	return ProfileProjection.project(profile.data, entitlements, dailyReady(self, profile.data, cfg), extras)
+end
+
+-- Sets (or replaces) the projection extras hook after construction (services built later).
+function PlayerDataService.setProjectionExtras(
+	self: PlayerDataService,
+	hook: (userId: number, data: { [string]: any }) -> ProfileProjection.Extras
+)
+	self._projectionExtras = hook
 end
 
 function PlayerDataService.pushProjection(self: PlayerDataService, player: any, cfg: { [string]: any })

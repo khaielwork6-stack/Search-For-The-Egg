@@ -1,23 +1,60 @@
 --!strict
 -- Ambient life for a server-built scene folder (lobby shell or chapter arena). Reads SFE_Ambient
--- attributes and registers actors with the AmbientScheduler: drifting pooled feather strands,
--- portal/sun shimmer, cloth sway, pedestal bob/spin, pecking birds, and dust motes through the VFX
--- pool. Everything is cleaned up through one trove; the scheduler owns the only Heartbeat.
+-- attributes and registers actors with the AmbientScheduler: drifting pooled feathers (the repo
+-- Feather mesh), portal/sun shimmer, cloth sway, pedestal bob/spin, card/leaf sway, moonlight
+-- pulse, page flips, flag waves, pecking birds, and dust motes through the VFX pool. Station audio
+-- anchors get a looped hum. Party silhouettes and the ledger board are filled from projections.
+-- Everything is cleaned up through one trove; the scheduler owns the only Heartbeat.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
 local Tokens = require(Shared.Design.Tokens)
+local AssetManifest = require(Shared.Design.AssetManifest)
 
 local LobbyShellController = {}
 LobbyShellController.__index = LobbyShellController
 
 export type LobbyShellController = typeof(setmetatable(
-	{} :: { _deps: any, _folderName: string, _trove: Trove.Trove, _strands: { Part }, _actors: { any }, started: boolean },
+	{} :: {
+		_deps: any,
+		_folderName: string,
+		_trove: Trove.Trove,
+		_strands: { BasePart },
+		_actors: { any },
+		_loops: { Sound },
+		_shell: Instance?,
+		started: boolean,
+	},
 	LobbyShellController
 ))
 
 local STRANDS_PER_ANCHOR_BY_TIER = { low = 6, medium = 12, high = 20 }
+local FEATHER_TINTS = { Tokens.color.cream, Tokens.color.creamDeep, Tokens.color.straw }
+
+local function makeStrand(parent: Instance, index: number): BasePart
+	local template = AssetManifest.model("feather")
+	local strand: BasePart
+	if template and template:IsA("BasePart") then
+		strand = template:Clone() :: BasePart
+		strand.Size = template.Size * 1.3
+	else
+		local fallback = Instance.new("Part")
+		fallback.Size = Vector3.new(0.12, 0.5, 0.9)
+		fallback.Material = Enum.Material.SmoothPlastic
+		fallback:SetAttribute("SFE_Placeholder", "PHASE_6_VFX")
+		strand = fallback
+	end
+	strand.Name = "FeatherStrand"
+	strand.Anchored = true
+	strand.CanCollide = false
+	strand.CanQuery = false
+	strand.CanTouch = false
+	strand.CastShadow = false
+	strand.Color = FEATHER_TINTS[(index % #FEATHER_TINTS) + 1]
+	strand.Parent = parent
+	return strand
+end
 
 function LobbyShellController.new(deps: any, folderName: string?): LobbyShellController
 	return setmetatable({
@@ -26,24 +63,10 @@ function LobbyShellController.new(deps: any, folderName: string?): LobbyShellCon
 		_trove = Trove.new(),
 		_strands = {},
 		_actors = {},
+		_loops = {},
+		_shell = nil,
 		started = false,
 	}, LobbyShellController)
-end
-
-local function makeStrand(parent: Instance): Part
-	local strand = Instance.new("Part")
-	strand.Name = "FeatherStrand"
-	strand.Anchored = true
-	strand.CanCollide = false
-	strand.CanQuery = false
-	strand.CanTouch = false
-	strand.CastShadow = false
-	strand.Material = Enum.Material.SmoothPlastic
-	strand.Color = Tokens.color.cream
-	strand.Size = Vector3.new(0.12, 0.5, 0.9)
-	strand:SetAttribute("SFE_Placeholder", "PHASE_6_VFX")
-	strand.Parent = parent
-	return strand
 end
 
 function LobbyShellController.start(self: LobbyShellController)
@@ -57,6 +80,7 @@ function LobbyShellController.start(self: LobbyShellController)
 		warn("[SFE][Ambient] scene folder missing: " .. self._folderName)
 		return
 	end
+	self._shell = shell
 	-- The folder replicates before its children; wait for the server-declared child count.
 	local expected = tonumber(shell:GetAttribute("SFE_ChildCount")) or 0
 	local deadline = os.clock() + 10
@@ -70,6 +94,7 @@ function LobbyShellController.start(self: LobbyShellController)
 
 	local tier = deps.quality:tier()
 	local strandsPerAnchor = STRANDS_PER_ANCHOR_BY_TIER[tier] or 12
+	local loopBudget = deps.quality:budgets().loopingAmbient
 
 	local function register(actor)
 		table.insert(self._actors, deps.ambient:register(actor))
@@ -79,6 +104,13 @@ function LobbyShellController.start(self: LobbyShellController)
 		if not part:IsA("BasePart") then
 			continue
 		end
+		local audioRole = part:GetAttribute("SFE_AudioRole")
+		if type(audioRole) == "string" and #self._loops < loopBudget and deps.audio.loop then
+			local loop = deps.audio:loop(audioRole, part)
+			if loop then
+				table.insert(self._loops, loop)
+			end
+		end
 		local kind = part:GetAttribute("SFE_Ambient")
 		local position = function()
 			return part.Position
@@ -86,7 +118,7 @@ function LobbyShellController.start(self: LobbyShellController)
 		if kind == "featherDrift" then
 			local origin = part.Position
 			for i = 1, strandsPerAnchor do
-				local strand = makeStrand(container)
+				local strand = makeStrand(container, i)
 				table.insert(self._strands, strand)
 				local seed = i * 0.37
 				register({
@@ -125,6 +157,17 @@ function LobbyShellController.start(self: LobbyShellController)
 					part.CFrame = baseCFrame * CFrame.Angles(0, 0, math.sin(t * 0.7) * 0.03)
 				end,
 			})
+		elseif kind == "sway" then
+			local baseCFrame = part.CFrame
+			local seed = (#self._actors % 7) * 0.9
+			register({
+				id = part.Name,
+				position = position,
+				interval = 1 / 15,
+				update = function(_dt: number, t: number)
+					part.CFrame = baseCFrame * CFrame.Angles(math.sin(t * 1.1 + seed) * 0.08, 0, math.cos(t * 0.9 + seed) * 0.06)
+				end,
+			})
 		elseif kind == "bob" or kind == "spin" then
 			local baseCFrame = part.CFrame
 			register({
@@ -137,6 +180,37 @@ function LobbyShellController.start(self: LobbyShellController)
 					else
 						part.CFrame = baseCFrame * CFrame.Angles(0, t * 0.8, 0)
 					end
+				end,
+			})
+		elseif kind == "moonPulse" then
+			local base = part.Transparency
+			register({
+				id = part.Name,
+				position = position,
+				interval = 1 / 12,
+				update = function(_dt: number, t: number)
+					part.Transparency = math.clamp(base + math.sin(t * 0.9) * 0.15, 0, 0.95)
+				end,
+			})
+		elseif kind == "pageFlip" then
+			local baseCFrame = part.CFrame
+			register({
+				id = part.Name,
+				position = position,
+				interval = 1 / 15,
+				update = function(_dt: number, t: number)
+					local flip = math.max(0, math.sin(t * 0.8)) ^ 3
+					part.CFrame = baseCFrame * CFrame.Angles(0, flip * 1.2, 0)
+				end,
+			})
+		elseif kind == "flagWave" then
+			local baseCFrame = part.CFrame
+			register({
+				id = part.Name,
+				position = position,
+				interval = 1 / 15,
+				update = function(_dt: number, t: number)
+					part.CFrame = baseCFrame * CFrame.Angles(0, math.sin(t * 2.2) * 0.35, math.sin(t * 3.1) * 0.12)
 				end,
 			})
 		elseif kind == "peck" then
@@ -164,7 +238,80 @@ function LobbyShellController.start(self: LobbyShellController)
 		end
 	end
 	deps.ambient:start()
-	print(string.format("[SFE][Ambient] %s actors=%d strands=%d tier=%s", self._folderName, #self._actors, #self._strands, tier))
+	print(
+		string.format(
+			"[SFE][Ambient] %s actors=%d strands=%d loops=%d tier=%s",
+			self._folderName,
+			#self._actors,
+			#self._strands,
+			#self._loops,
+			tier
+		)
+	)
+end
+
+-- Fills the portal silhouettes from the party projection (nil = empty seats).
+function LobbyShellController.setPartySilhouettes(self: LobbyShellController, party: { [string]: any }?)
+	local shell = self._shell
+	if not shell then
+		return
+	end
+	local count = party and #party.members or 0
+	for _, child in ipairs(shell:GetChildren()) do
+		local slot = child:GetAttribute("SFE_PartySlot")
+		if type(slot) == "number" and child:IsA("BasePart") then
+			local filled = slot <= count
+			child.Transparency = if filled then 0.1 else 0.75
+			child.Color = if filled
+				then (if party and party.members[slot] == party.leaderUserId then Tokens.color.gold else Tokens.color.sky)
+				else Tokens.color.cream
+		end
+	end
+end
+
+-- Fills the ledger SurfaceGui with the first board's rows.
+function LobbyShellController.setLeaderboard(self: LobbyShellController, snapshot: { [string]: any }?)
+	local shell = self._shell
+	if not shell or not snapshot then
+		return
+	end
+	local emblem = shell:FindFirstChild("statsEmblem")
+	local surface = emblem and emblem:FindFirstChild("SFE_LeaderboardSurface")
+	if not surface then
+		return
+	end
+	surface:ClearAllChildren()
+	local board = snapshot.boards and snapshot.boards[1]
+	if not board then
+		return
+	end
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 2)
+	layout.Parent = surface
+	local function line(order: number, text: string, color: Color3, size: number)
+		local label = Instance.new("TextLabel")
+		label.LayoutOrder = order
+		label.Size = UDim2.new(1, 0, 0, size + 4)
+		label.BackgroundTransparency = 1
+		label.Font = Tokens.typography.label.font
+		label.TextSize = size
+		label.TextColor3 = color
+		label.TextStrokeColor3 = Tokens.color.outline
+		label.TextStrokeTransparency = 0.3
+		label.Text = text
+		label.Parent = surface
+	end
+	line(0, board.label, Tokens.color.goldLight, 18)
+	for index, row in ipairs(board.rows) do
+		if index > 5 then
+			break
+		end
+		line(index, string.format("%d. %s  %s", index, row.name, tostring(row.value)), Tokens.color.cream, 14)
+	end
+	if #board.rows == 0 then
+		line(1, "Be the first forager here", Tokens.color.creamDeep, 14)
+	end
 end
 
 function LobbyShellController.stop(self: LobbyShellController)
@@ -176,6 +323,12 @@ function LobbyShellController.stop(self: LobbyShellController)
 		strand:Destroy()
 	end
 	table.clear(self._strands)
+	for _, loop in ipairs(self._loops) do
+		if self._deps.audio.stopLoop then
+			self._deps.audio:stopLoop(loop)
+		end
+	end
+	table.clear(self._loops)
 	self._trove:clean()
 	self.started = false
 end
@@ -186,6 +339,10 @@ end
 
 function LobbyShellController.actorCount(self: LobbyShellController): number
 	return #self._actors
+end
+
+function LobbyShellController.loopCount(self: LobbyShellController): number
+	return #self._loops
 end
 
 function LobbyShellController.destroy(self: LobbyShellController)

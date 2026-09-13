@@ -8,6 +8,7 @@ local Server = game:GetService("ServerScriptService").Server
 local Clock = require(Shared.Clock)
 local WeightedRandom = require(Shared.WeightedRandom)
 local PileGrid = require(Shared.Domain.PileGrid)
+local PileSurface = require(Shared.Domain.PileSurface)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local RoundReducer = require(Shared.Reducers.RoundReducer)
 local MockDataStore = require(Server.Data.MockDataStore)
@@ -29,6 +30,14 @@ local ToolService = require(Server.Services.ToolService)
 local EggService = require(Server.Services.EggService)
 local VictoryService = require(Server.Services.VictoryService)
 local ObjectiveService = require(Server.Services.ObjectiveService)
+local ClassService = require(Server.Services.ClassService)
+local PerkService = require(Server.Services.PerkService)
+local RewardService = require(Server.Services.RewardService)
+local InventoryService = require(Server.Services.InventoryService)
+local LeaderboardService = require(Server.Services.LeaderboardService)
+local OrderedStoreAdapter = require(Server.Adapters.OrderedStoreAdapter)
+local GroupAdapter = require(Server.Adapters.GroupAdapter)
+local ClassRoll = require(Shared.Domain.ClassRoll)
 local ServerPolicy = require(Server.ServerPolicy)
 local Log = require(Server.Log)
 
@@ -189,6 +198,59 @@ function GameplayHarness.new(cfg, options)
 		end,
 		analytics = analytics,
 	})
+	-- Phase 4 meta services (lobby): classes, perks, rewards, inventory, leaderboards.
+	local classRng = WeightedRandom.fromSeed(options.classSeed or 41)
+	local classes = ClassService.new({
+		config = cfg,
+		clock = clock,
+		rng = classRng,
+		sessions = sessions,
+		getProfile = function(userId)
+			return profiles:get(userId)
+		end,
+		getEntitlements = getEntitlements,
+		analytics = analytics,
+	})
+	local perks = PerkService.new({
+		config = cfg,
+		sessions = sessions,
+		getProfile = function(userId)
+			return profiles:get(userId)
+		end,
+		analytics = analytics,
+	})
+	local group = GroupAdapter.mock(true)
+	local rewards = RewardService.new({
+		config = cfg,
+		clock = clock,
+		getProfile = function(userId)
+			return profiles:get(userId)
+		end,
+		getEntitlements = getEntitlements,
+		group = group,
+		analytics = analytics,
+		log = log,
+	})
+	local inventory = InventoryService.new({
+		config = cfg,
+		getProfile = function(userId)
+			return profiles:get(userId)
+		end,
+		analytics = analytics,
+	})
+	local leaderboardStore = OrderedStoreAdapter.mock()
+	local leaderboards = LeaderboardService.new({
+		config = cfg,
+		clock = clock,
+		store = leaderboardStore,
+		getDisplayName = function(userId)
+			return "P" .. tostring(userId)
+		end,
+		log = log,
+	})
+	playerData:setProjectionExtras(function(userId, data)
+		return { daily = rewards:dailyEvaluation(data), slotCount = ClassRoll.slotCount(cfg, getEntitlements(userId)) }
+	end)
 	local toolEvents = {}
 	collection.collected:Connect(function(_userId, runtime)
 		egg:checkReveal(runtime)
@@ -229,6 +291,9 @@ function GameplayHarness.new(cfg, options)
 		collection, selling, upgrades, tools, egg, victory, objectives, analyticsAdapter, sent
 	h.positions = positions
 	h.mockEntitlements = mockEntitlements
+	h.classes, h.perks, h.rewards, h.inventory, h.leaderboards, h.leaderboardStore, h.group, h.classRng =
+		classes, perks, rewards, inventory, leaderboards, leaderboardStore, group, classRng
+	h.entitlements = entitlements
 	h.toolEvents = toolEvents
 	h.toolRng = toolRng
 	function h.setSaveFailing(value)
@@ -286,11 +351,14 @@ function GameplayHarness.new(cfg, options)
 	function h.aimAt(userId, runtime, x, z)
 		local grid = runtime.grid
 		local target = ChapterLayout.cellWorldPosition(layout, grid.width, grid.depth, grid.cellSize, x, z, 0)
-		local standing = target + Vector3.new(0, 2, -4)
+		-- Stand above the target column and aim straight down at its dome surface point so the
+		-- server's surface march resolves to exactly this cell (A-UX-07).
+		local field = PileSurface.buildField(cfg, PileGrid.snapshot(grid), layout)
+		local surface = layout.nestBaseY + PileSurface.heightAt(field, target.X, target.Z)
+		local standing = Vector3.new(target.X, surface + 2, target.Z)
 		positions[userId] = standing
 		local origin = standing + Vector3.new(0, 1.5, 0)
-		local planeY = layout.nestBaseY + cfg.pile.maxVisualHeightStuds * 0.5
-		local aim = Vector3.new(target.X, planeY, target.Z)
+		local aim = Vector3.new(target.X, surface, target.Z)
 		return origin, (aim - origin).Unit
 	end
 	function h.collectAt(userId, runtime, x, z, toolId)
