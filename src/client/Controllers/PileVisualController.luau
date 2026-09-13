@@ -184,6 +184,10 @@ local function acquirePart(self: PileVisualController): BasePart
 	part.CanTouch = false
 	part.CastShadow = false
 	part.Transparency = 0
+	if part:IsA("MeshPart") then
+		-- A single-sided vane vanishes when seen from behind; the coat is viewed from every angle.
+		(part :: any).DoubleSided = true
+	end
 	return part :: BasePart
 end
 
@@ -287,7 +291,7 @@ function PileVisualController._rimScale(self: PileVisualController, wx: number, 
 	if r >= foot then
 		return 0
 	end
-	return math.clamp((foot - r) / visual.rimTaperStuds, 0.35, 1)
+	return math.clamp((foot - r) / visual.rimTaperStuds, visual.rimMinScale, 1)
 end
 
 -- (Re)materialises one column: exposed records as targetable feathers (the stack recedes by one

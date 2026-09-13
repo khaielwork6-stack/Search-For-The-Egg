@@ -684,6 +684,7 @@ function Validator.validate(raw: any): Report
 				check(isPositiveNumber(visual[key]), "pile.visual." .. key .. " must be > 0")
 			end
 			check(isNonNegativeNumber(visual.surfaceLiftStuds), "pile.visual.surfaceLiftStuds must be >= 0")
+			check(isPositiveNumber(visual.rimMinScale) and visual.rimMinScale <= 1, "pile.visual.rimMinScale must be within (0, 1]")
 			check(
 				isPositiveNumber(visual.wallStrandsPerLevel)
 					and visual.wallStrandsPerLevel % 1 == 0

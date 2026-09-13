@@ -140,11 +140,11 @@
       "shellFolderName": "SFE_PileCollision"
     },
     "visual": {
-      "partBudgetDesktop": 19000,
-      "partBudgetMobile": 6500,
+      "partBudgetDesktop": 20000,
+      "partBudgetMobile": 7000,
       "featherLengthRange": [
-        1.6,
-        2.4
+        1.8,
+        2.6
       ],
       "tiltRangeDegrees": [
         3,
@@ -192,27 +192,27 @@
       "assumption": "ASSUMED",
       "visibleSlotsPerCell": 2,
       "featherWidthRange": [
-        0.6,
-        0.9
+        1.0,
+        1.5
       ],
       "featherSpreadFraction": 0.8,
-      "rollRangeDegrees": 30,
+      "rollRangeDegrees": 110,
       "layerStepStuds": 0.35,
       "surfaceLiftStuds": 0.12,
       "fluffLengthRange": [
-        0.8,
-        1.5
+        1.2,
+        2.2
       ],
       "fluffWidthRange": [
-        0.35,
-        0.6
+        0.9,
+        1.6
       ],
       "fluffTiltRangeDegrees": [
-        0,
-        8
+        4,
+        34
       ],
-      "fluffPerCellDesktop": 60,
-      "fluffPerCellMobile": 20,
+      "fluffPerCellDesktop": 64,
+      "fluffPerCellMobile": 22,
       "fluffTintShift": 0.35,
       "selectionOutlineColor": [
         255,
@@ -222,7 +222,7 @@
       "selectionFillTransparency": 0.75,
       "downslopeYawJitterDegrees": 35,
       "rimInsetStuds": -1.2,
-      "rimTaperStuds": 2.0,
+      "rimTaperStuds": 1.2,
       "liftSeconds": 0.09,
       "liftStuds": 0.5,
       "pickScale": 1.25,
@@ -230,18 +230,21 @@
       "rimStrandsMobile": 700,
       "fluffBandDepths": [
         0.0,
-        0.25,
-        0.5
+        0.35,
+        0.7,
+        1.05
       ],
       "fluffBandShares": [
-        0.5,
-        0.3,
-        0.2
+        0.34,
+        0.26,
+        0.22,
+        0.18
       ],
-      "wallStrandsPerLevel": 4,
+      "wallStrandsPerLevel": 5,
       "wallLevelSpacingStuds": 0.5,
-      "floorStrandsPerLevel": 12,
-      "floorLevelSpacingStuds": 0.5
+      "floorStrandsPerLevel": 14,
+      "floorLevelSpacingStuds": 0.5,
+      "rimMinScale": 0.85
     },
     "assumption": "ASSUMED",
     "recordSpacingStuds": 0.55
