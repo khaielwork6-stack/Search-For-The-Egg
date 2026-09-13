@@ -571,7 +571,13 @@ function Validator.validate(raw: any): Report
 		local collision = pile.collision
 		check(type(collision) == "table", "pile.collision missing")
 		if type(collision) == "table" then
-			check(collision.kind == "terrain", "pile.collision.kind must be terrain")
+			check(collision.kind == "terrain" or collision.kind == "parts", 'pile.collision.kind must be "terrain" or "parts"')
+			check(
+				isPositiveNumber(collision.shellOverlap)
+					and isPositiveNumber(collision.shellThicknessStuds)
+					and type(collision.shellFolderName) == "string",
+				"pile.collision shell overlap/thickness/folder name are required"
+			)
 			check(type(collision.material) == "string" and #collision.material > 0, "pile.collision.material must name a terrain material")
 			check(
 				type(collision.color) == "table"
@@ -695,11 +701,22 @@ function Validator.validate(raw: any): Report
 				isNonNegativeNumber(visual.downslopeYawJitterDegrees) and visual.downslopeYawJitterDegrees <= 180,
 				"pile.visual.downslopeYawJitterDegrees must be 0..180"
 			)
-			check(
-				isPositiveNumber(visual.fluffLayers) and visual.fluffLayers % 1 == 0 and visual.fluffLayers <= 6,
-				"pile.visual.fluffLayers must be an integer 1..6"
-			)
-			check(isPositiveNumber(visual.fluffLayerStepStuds), "pile.visual.fluffLayerStepStuds must be > 0")
+			local depths, shares = visual.fluffBandDepths, visual.fluffBandShares
+			local bandsOk = type(depths) == "table" and type(shares) == "table" and #depths >= 1 and #depths == #shares
+			if bandsOk then
+				local total = 0
+				for index = 1, #depths do
+					if not (isNonNegativeNumber(depths[index]) and isPositiveNumber(shares[index])) then
+						bandsOk = false
+					end
+					if index > 1 and depths[index] <= depths[index - 1] then
+						bandsOk = false
+					end
+					total += shares[index] or 0
+				end
+				bandsOk = bandsOk and math.abs(total - 1) < 1e-6
+			end
+			check(bandsOk, "pile.visual fluff bands must be ascending depths with shares summing to 1")
 			for _, key in ipairs({ "streakCount", "chevronCount" }) do
 				check(
 					isPositiveNumber(visual[key]) and visual[key] % 1 == 0 and visual[key] <= 12,

@@ -309,6 +309,107 @@ function PileTerrainService.terrainAdapter(terrain: Terrain): Adapter
 	return (adapter :: any) :: Adapter
 end
 
+-- Invisible part shell (server only; `pile.collision.kind = "parts"`): one anchored, invisible,
+-- non-queryable box per cell, tilted to the local slope with its top face on the logical surface
+-- (minus the inset), overlapping its neighbours so there are no seams. Players stand and walk on
+-- it; nothing of it is ever visible, and it never blocks a pick raycast. Re-writes move the boxes
+-- of the touched region only. Any leftover terrain under the nest is cleared on the first write.
+function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): Adapter
+	local adapter = { kind = "parts" }
+	local folder: Folder? = nil
+	local boxes: { [number]: BasePart } = {}
+	local function ensureFolder(config): Folder
+		if folder and folder.Parent then
+			return folder
+		end
+		local existing = parent:FindFirstChild(config.pile.collision.shellFolderName)
+		if existing and existing:IsA("Folder") then
+			existing:Destroy()
+		end
+		local created = Instance.new("Folder")
+		created.Name = config.pile.collision.shellFolderName
+		created.Parent = parent
+		folder = created
+		boxes = {}
+		return created
+	end
+	local function seat(field, config, dentAt: DentAt, index: number, x: number, z: number): (CFrame, Vector3)
+		local collision = config.pile.collision
+		local cx = field.minX + (x + 0.5) * field.cellSize
+		local cz = field.minZ + (z + 0.5) * field.cellSize
+		local height = PileSurface.heightAt(field, cx, cz) - dentAt(cx, cz) - collision.surfaceInsetStuds
+		local top = field.baseY + math.max(0, height)
+		local normal = PileSurface.normalAt(field, cx, cz)
+		local size = field.cellSize * collision.shellOverlap
+		local thickness = collision.shellThicknessStuds
+		local right = Vector3.new(1, 0, 0)
+		local tangent = (right - normal * right:Dot(normal))
+		if tangent.Magnitude < 0.01 then
+			tangent = Vector3.new(0, 0, 1)
+		end
+		tangent = tangent.Unit
+		local binormal = normal:Cross(tangent)
+		local frame = CFrame.fromMatrix(Vector3.new(cx, top, cz), tangent, normal, -binormal) * CFrame.new(0, -thickness / 2, 0)
+		local _ = index
+		return frame, Vector3.new(size, thickness, size)
+	end
+	local function write(field, config, dentAt: DentAt, minX: number?, minZ: number?, maxX: number?, maxZ: number?): number
+		local container = ensureFolder(config)
+		local written = 0
+		for z = 0, field.depth - 1 do
+			for x = 0, field.width - 1 do
+				local cx = field.minX + (x + 0.5) * field.cellSize
+				local cz = field.minZ + (z + 0.5) * field.cellSize
+				if minX and (cx < minX or cx > maxX or cz < minZ or cz > maxZ) then
+					continue
+				end
+				local index = z * field.width + x + 1
+				local frame, size = seat(field, config, dentAt, index, x, z)
+				local box = boxes[index]
+				if not box then
+					box = Instance.new("Part")
+					box.Name = "Shell" .. index
+					box.Anchored = true
+					box.CanCollide = true
+					box.CanQuery = false
+					box.CanTouch = false
+					box.CastShadow = false
+					box.Transparency = 1
+					box.Material = Enum.Material.SmoothPlastic
+					box.Parent = container
+					boxes[index] = box
+				end
+				box.Size = size
+				box.CFrame = frame
+				written += 1
+			end
+		end
+		return written
+	end
+	function adapter.writeMound(_, field, config, dentAt)
+		if terrain then
+			local rim = field.radius * PileSurface.RIM_STRETCH + 8
+			local region = Region3.new(
+				Vector3.new(field.centreX - rim, field.baseY - 4, field.centreZ - rim),
+				Vector3.new(field.centreX + rim, field.baseY + field.apex + 8, field.centreZ + rim)
+			):ExpandToGrid(4)
+			terrain:FillRegion(region, 4, Enum.Material.Air)
+		end
+		return write(field, config, dentAt)
+	end
+	function adapter.writeRegion(_, field, config, dentAt, minX, minZ, maxX, maxZ)
+		return write(field, config, dentAt, minX, minZ, maxX, maxZ)
+	end
+	function adapter.clear(_, _field)
+		if folder then
+			folder:Destroy()
+			folder = nil
+			boxes = {}
+		end
+	end
+	return (adapter :: any) :: Adapter
+end
+
 -- Mock adapter (tests, headless): records every call.
 function PileTerrainService.mockAdapter(): Adapter
 	local adapter: any = { kind = "mock", writes = 0, regionWrites = {}, clears = 0 }

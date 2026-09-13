@@ -401,7 +401,7 @@ return function(describe, it, expect)
 				return Config.validate(copy)
 			end
 			expect(withPile(function(p)
-				p.collision.kind = "parts"
+				p.collision.kind = "clouds"
 			end).ok).toBe(false)
 			expect(withPile(function(p)
 				p.visual.partBudgetMobile = p.visual.partBudgetDesktop + 1

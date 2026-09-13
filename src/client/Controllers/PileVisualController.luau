@@ -196,36 +196,12 @@ end
 -- Surface sampling: the replicated terrain core first, the shared field as fallback.
 -- ---------------------------------------------------------------------------------------------
 
-local terrainParams = RaycastParams.new()
-terrainParams.FilterType = Enum.RaycastFilterType.Include
-terrainParams.FilterDescendantsInstances = { workspace.Terrain }
-
--- The owner map's pit floor is stepped earth: seat on it wherever it rises above the mound.
-local function refreshSurfaceFilter()
-	local include: { Instance } = { workspace.Terrain }
-	local pit = workspace:FindFirstChild("GroundPit", true)
-	if pit then
-		table.insert(include, pit)
-	end
-	terrainParams.FilterDescendantsInstances = include
-end
-
 -- Seat height: the mound as built. Seats never follow the live terrain or later deltas, so a pick
 -- leaves every other feather exactly where it was; a cell's own stack recedes by `layerStepStuds`
 -- per record taken (applied by the caller), never its neighbours.
 function PileVisualController._surfaceAt(self: PileVisualController, wx: number, wz: number): (number, Vector3)
 	local field = (self._seatField or self._field) :: PileSurface.Field
-	local height = PileSurface.heightAt(field, wx, wz)
-	local normal = PileSurface.normalAt(field, wx, wz)
-	local y = field.baseY + height
-	-- Never under the collision core or the map earth: the voxel surface can bulge above the smooth
-	-- field by up to a stud, and every strand must sit on top of it (seats are taken once, at build).
-	local result =
-		workspace:Raycast(Vector3.new(wx, field.baseY + field.apex + 12, wz), Vector3.new(0, -(field.apex + 20), 0), terrainParams)
-	if result and result.Position.Y > y then
-		return result.Position.Y, if result.Instance == workspace.Terrain then normal else result.Normal
-	end
-	return y, normal
+	return field.baseY + PileSurface.heightAt(field, wx, wz), PileSurface.normalAt(field, wx, wz)
 end
 
 -- Downslope direction (unit XZ) at a point: feathers lie along it so the coat reads as shingled layers.
@@ -386,7 +362,18 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 			end
 			continue
 		end
-		local layer = (k - 1) % visual.fluffLayers
+		-- Depth band: most strands lie on the surface, the rest sit progressively deeper so a dug
+		-- cell's walls and floor are feathers too (never a bare core).
+		local bandDepth = 0
+		local pick = h(10)
+		local acc = 0
+		for band, share in ipairs(visual.fluffBandShares) do
+			acc += share
+			if pick <= acc then
+				bandDepth = visual.fluffBandDepths[band]
+				break
+			end
+		end
 		if not part then
 			part = acquirePart(self)
 			part.Name = "Fluff"
@@ -399,7 +386,7 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 			placeFeather(
 				part,
 				wx,
-				y + lerp(0.12, 0.42, h(3)) - layer * visual.fluffLayerStepStuds - sink,
+				y + lerp(0.1, 0.4, h(3)) - bandDepth - sink,
 				wz,
 				normal,
 				yaw,
@@ -436,7 +423,6 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 	self._lastChapter = chapter
 	self._generation += 1
 	local generation = self._generation
-	refreshSurfaceFilter()
 	local folder = Instance.new("Folder")
 	folder.Name = "SFE_PileVisual"
 	folder.Parent = workspace

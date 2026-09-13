@@ -260,7 +260,12 @@ local function collectFloorHeight(x: number, z: number): number?
 	local result = workspace:Raycast(Vector3.new(x, top, z), Vector3.new(0, -(config.pile.maxVisualHeightStuds + 6), 0), params)
 	return if result then result.Position.Y else nil
 end
-local pileTerrain = PileTerrainService.new({ config = config, adapter = PileTerrainService.terrainAdapter(workspace.Terrain) })
+local pileTerrain = PileTerrainService.new({
+	config = config,
+	adapter = if config.pile.collision.kind == "parts"
+		then PileTerrainService.partsAdapter(workspace, workspace.Terrain)
+		else PileTerrainService.terrainAdapter(workspace.Terrain),
+})
 local collection = CollectionService.new({
 	config = config,
 	clock = clock,
