@@ -16,13 +16,26 @@ export type ObjectiveController = typeof(setmetatable(
 	ObjectiveController
 ))
 
-local TARGETS: { [string]: { folder: string, part: string } } = {
-	enter_party = { folder = "SFE_LobbyShell", part = "PortalDiorama" },
-	collect_25 = { folder = "SFE_Chapter1", part = "NestBase" },
-	sell_first_bag = { folder = "SFE_Chapter1", part = "SellStation" },
-	buy_first_upgrade = { folder = "SFE_Chapter1", part = "UpgradeBoard" },
-	claim_or_complete_round = { folder = "SFE_Chapter1", part = "SFE_Egg" },
+-- Highlight targets: the first path that resolves wins (map-mode anchors and props first, then the
+-- greybox parts), so the highlight lands on whatever the current environment provides.
+local TARGETS: { [string]: { { string } } } = {
+	enter_party = { { "SFE_LobbyShell", "PortalAnchor" }, { "SFE_LobbyShell", "PortalDiorama" } },
+	collect_25 = { { "SFE_PileVisual", "Dome" }, { "SFE_Chapter1", "NestBase" } },
+	sell_first_bag = { { "SearchForTheEgg_Map2", "Processor", "GreenButton" }, { "SFE_Chapter1", "SellStation" } },
+	buy_first_upgrade = { { "SearchForTheEgg_Map2", "SupplyShop", "CounterBody" }, { "SFE_Chapter1", "UpgradeBoard" } },
+	claim_or_complete_round = { { "SFE_Chapter1", "SFE_Egg" } },
 }
+
+local function resolve(path: { string }): Instance?
+	local node: Instance? = workspace
+	for _, name in ipairs(path) do
+		node = node and node:FindFirstChild(name)
+		if not node then
+			return nil
+		end
+	end
+	return node
+end
 
 function ObjectiveController.new(deps: { net: any, hud: any, round: any }): ObjectiveController
 	local self = setmetatable({ _deps = deps, step = nil, inRound = false, _highlight = nil, _trove = Trove.new() }, ObjectiveController)
@@ -62,12 +75,17 @@ function ObjectiveController._highlightTarget(self: ObjectiveController)
 		self._highlight:Destroy()
 		self._highlight = nil
 	end
-	local target = self.step and TARGETS[self.step]
-	if not target then
+	local paths = self.step and TARGETS[self.step]
+	if not paths then
 		return
 	end
-	local folder = workspace:FindFirstChild(target.folder)
-	local part = folder and folder:FindFirstChild(target.part)
+	local part: Instance? = nil
+	for _, path in ipairs(paths) do
+		part = resolve(path)
+		if part then
+			break
+		end
+	end
 	if not part then
 		return
 	end

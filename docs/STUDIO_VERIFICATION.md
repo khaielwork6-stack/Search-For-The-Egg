@@ -749,3 +749,60 @@ mesh warm-up is a no-op headless); `Net.spec` (47 remotes including `PartyCancel
   `PlayerGui.SFE_Modals.Modal_classes.Card.Panel.Content.Controls.RollButton` for that check.
 - Controller D-pad traversal on a real gamepad.
 
+# Map integration pass (13 Sep 2026)
+
+Environment: the published place `xSoryn's Place: 09132026_1` (placeId 89488644743966) with the owner's
+`SearchForTheEgg_Lobby` and `SearchForTheEgg_Map2` models in Workspace, Studio API access off (the server logged
+`StudioAccessToApisNotAllowed` on the probe and correctly fell back to `studio-memory`), "Allow Mesh & Image APIs"
+off (the mound body used its ellipsoid fallback; the coat hides it). Server `server_ready {mapMode=true remotes=52}`.
+
+## Automated
+
+`lune run lune/test`: 269 passed (new `PartyPad.spec`: found/join/leave through zones, independent pads, full-pad
+auto start with sign countdown, modal parties untouched; `PileSurface.spec` re-based on the 1.8-stud cells).
+`lune run lune/check`: OK.
+
+## Lobby (Play Solo)
+
+1. **Boot.** `SFE_LobbyShell` built in map mode with 36 functional/ambient instances: `PortalAnchor` (`SFE_Portal`) in
+   the barn doorway, prompt anchors on the UPGRADES counter (`SFE_Station_shop`), CLASSES counter (`classes`), the
+   middle leaderboard board (`stats`), the two coops (`codes`, `inventory`), the Daily Nest ring and Moonlit Chest
+   on the barn floor (`daily`, `event`), four pad zones and `SFE_PadStart_1..4` on the sign posts, four feather
+   drift anchors and spawn dust. Ambient: `actors=87 strands=80 loops=8`.
+2. **Physical fit (measured).** Every visible prop rests on the barn floor: `DailyNestRing` bottom 2.49 on floor
+   2.49, `MoonChestBody` bottom 2.50, eggs nestled 0.3 into the straw hollow, lid seated on the body; zero overlaps
+   with any map part (`GetPartsInPart` against the whole map). Prompt anchors are invisible and non-colliding.
+3. **Party nest pads.** Walking onto pad 1 founded a party (`Ready`, leader = player) and the map sign changed to
+   `Join Match 1/4  Henhouse`; stepping off left the party (`sessionPhase=Lobby`) and the sign returned to
+   `Join Match 0/4`; stepping back on rejoined; `PartyStart` from the sign post showed `Setting off in 3`, the
+   round began (`Searching`) and the character stood on the map's `MapSpawn` pad at `(0, 55.1, 404)`; the sign reset.
+4. **Station prompts through the real router** (`prompt(name)` debug action from each anchor's approach spot):
+   shop, classes, stats, codes, inventory, portal, daily, event each opened their modal (`top` = the station id;
+   portal = party). All 12 prompts sit within their 10-12 stud activation range of the approach spots.
+5. The map's own `LobbyRuntime` script is disabled (place and boot); it would otherwise overwrite the same signs.
+
+## Chapter 1 (Play Solo, map 2)
+
+1. **Nest in the pit.** Coat built with 9,002 Feather clones (`instances=9261`), lowest feather 45.8 (pit floor 46.5,
+   half-buried kind), highest 65.1 (about 13 studs above the yard), 236 column colliders rise above ground, only
+   1 feather above ground past the pit opening; 135 feathers sit inside the pit's earth below ground (invisible).
+2. **Digging.** From the east rim `(19, 55, 317)` aiming at the flank: 3/3 accepted; from the south edge
+   `(0, 55, 334)`: 3/3 accepted (bag 6/25, 6 dents). From 16 studs back on the south path the server correctly
+   refused with `out_of_range`: players dig from the rim or walk down the steps into the pit.
+3. **Selling and upgrades through the real prompts.** Standing by the conveyor `(41.5, 55, 324)`, `SFE_Sell`
+   reached the server and answered `nothing_to_sell` for an empty bag (in range of the processor button, 12.5
+   studs). Walking through the shop door to the counter `(-44.9, 56.8, 305.8)`, `SFE_Upgrade` opened the
+   workbench modal (`top=upgrades`, 4.9 studs from the counter anchor). Registry `handlerErrors=0`,
+   `securityRejections=0`; the only rejection was the empty-bag sale.
+
+## Captures (edit mode, same builders)
+
+| Id | Content |
+|---|---|
+| ScreenCapture_map_lobby_spawn | Spawn view: barn portal ahead, pads with live signs, coops and stalls flanking |
+| ScreenCapture_map_pad | Pad 1 with `Join Match 2/4  Henhouse` sign and the set-off post |
+| ScreenCapture_map_barn_interior | Barn floor: Daily Nest (left) and Moonlit Chest (right) under the nesting shelves |
+| ScreenCapture_map_pit | Farmyard: the feather mountain rising out of the pit between the supplies shop and the processor |
+| ScreenCapture_map_processor | Processor with the green sell button and conveyors |
+| ScreenCapture_map_supplies | Supplies counter (upgrade prompt anchor) |
+

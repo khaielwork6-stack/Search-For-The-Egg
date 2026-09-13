@@ -107,6 +107,32 @@ Build label: `phase4-lobby-meta` (`src/server/BuildInfo.luau`). Config version 1
   covers the recipes, the asset manifest and the mesh warm-up; `Net.spec` lists the new remotes; the gameplay
   harness aims straight down at each target column's surface point. 18 modules, 256 cases headless.
 
+## Map integration (13 Sep 2026)
+
+The owner placed two final environments in the place file: `Workspace.SearchForTheEgg_Lobby` (fenced farm
+courtyard) and `Workspace.SearchForTheEgg_Map2` (fenced farmyard with an earth pit). Both are place assets, not
+repository files; the code detects them by name and otherwise falls back to the greybox shells, so headless tests
+and an older place keep working.
+
+- `Shared/Domain/ChapterLayout` now carries coordinates measured from the maps (A-LOBBY-04, A-UX-09): spawn pads,
+  the barn doorway portal, the four "Join Match" nest pads, station anchors on the map's props, the three
+  leaderboard boards, and for Chapter 1 the pit centre, the processor's green button (selling) and the FEATHER
+  SUPPLIES counter (upgrades).
+- `WorldShellService.buildFromMap` creates only functional and ambient instances in `SFE_LobbyShell`: prompt
+  anchors on the map's counters/boards/coops, the barn-door threshold (`SFE_Portal`), the two props the map lacks
+  (Daily Nest ring with eggs, Moonlit Chest with a moon glow) on the barn floor, pad zones and `SFE_PadStart_<n>`
+  sign-post prompts, feather-drift anchors. It also writes the map's queue signs and leaderboard boards
+  (`setPadSign`, `applyLeaderboards`) and disables the map's bundled `LobbyRuntime` script, which otherwise
+  fights over the same signs.
+- `ChapterShellService.buildFromMap` creates the invisible aim plane over the pit, `SFE_Sell` on the processor's
+  green button, `SFE_Upgrade` on the supplies counter, and drift anchors. The map's `MapSpawn` pad is the round spawn.
+- `PartyPadService` (A-LOBBY-06): standing inside a pad zone joins/creates that pad's party, stepping off leaves,
+  a full pad sets off after `lobby.padFullAutoStartSeconds`, and the sign mirrors the party ("Join Match 1/4 -
+  Henhouse Normal", "Setting off in 3"). Modal-formed parties keep their own rules.
+- The nest is the pit: cells are 1.8 studs (28.8 x 28.8 footprint) and the mound apex is 16 so the feather
+  mountain fills the pit and rises about 11 studs above the yard; scout chicks path at ground level.
+- `ObjectiveController` highlights resolve through path lists (map prop first, greybox part second).
+
 ## ASSUMED infrastructure values (not gameplay tunables)
 
 `src/server/ServerPolicy.luau`: DataStore names/keys from `DATASTORE_SCHEMA.md` (profiles, receipts, and
@@ -167,6 +193,11 @@ scale 1.35, clump overlap 1.85 x cell.
 - The body is one runtime `EditableMesh`; if creation fails the body falls back to one ellipsoid (no per-cell
   dents in the body, the coat still thins). `stats.domeKind` reports which path ran. The coat never depends on
   the mesh API.
+- The published place has "Allow Mesh & Image APIs" off, so the mound body uses the ellipsoid fallback there
+  (`EditableMesh is not accessible`); the feather coat hides it either way. Enabling the API in Game Settings >
+  Security restores the deformable body.
+- The maps live only in the place file. The bundled `LobbyRuntime` script was disabled in the place and is also
+  disabled at boot; the place must be saved/published for other machines to pick that up.
 - Studio throttles rendering to 15 fps while its window is unfocused, so frame times sampled through the MCP bridge
   read 66.7 ms regardless of scene cost (the 60 Hz heartbeat confirms the simulation is unthrottled); the owner
   should read the in-game frame rate with the window focused. 9,000 anchored clones of one mesh is within what the

@@ -374,7 +374,7 @@ local function station(folder: Instance, config: { [string]: any }, id: string)
 	end
 end
 
-function WorldShellService.build(workspaceService: Workspace, spawnLocation: SpawnLocation?, config: { [string]: any }): Folder
+function WorldShellService.buildGreybox(workspaceService: Workspace, spawnLocation: SpawnLocation?, config: { [string]: any }): Folder
 	local existing = workspaceService:FindFirstChild(WorldShellService.FOLDER_NAME)
 	if existing then
 		existing:Destroy()
@@ -548,6 +548,247 @@ function WorldShellService.build(workspaceService: Workspace, spawnLocation: Spa
 	folder:SetAttribute("SFE_ChildCount", #folder:GetChildren())
 	folder.Parent = workspaceService
 	return folder
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- Map mode: the owner's SearchForTheEgg_Lobby model is the environment. Only functional and ambient
+-- instances are created here (prompt anchors on the map's own props, the two small barn props the
+-- map lacks, feather-drift anchors, the party pad zones), so nothing greybox is dropped on the art.
+-- ---------------------------------------------------------------------------------------------
+
+local function anchor(folder: Instance, name: string, position: Vector3, size: Vector3?): Part
+	local p = part(name, size or Vector3.new(2, 2, 2), CFrame.new(position), PALETTE.cream, Enum.Material.SmoothPlastic, folder, false)
+	p.Transparency = 1
+	p.CanQuery = false
+	return p
+end
+
+-- Daily Nest: a straw ring with three eggs on the barn floor in front of the nesting shelf.
+local function buildDailyNest(folder: Instance, base: Vector3)
+	local ring = part(
+		"DailyNestRing",
+		Vector3.new(1.1, 5.2, 5.2),
+		CFrame.new(base + Vector3.new(0, 0.55, 0)) * CFrame.Angles(0, 0, math.rad(90)),
+		PALETTE.straw,
+		Enum.Material.Grass,
+		folder
+	)
+	ring.Shape = Enum.PartType.Cylinder
+	local hollow = part(
+		"DailyNestHollow",
+		Vector3.new(0.5, 3.4, 3.4),
+		CFrame.new(base + Vector3.new(0, 0.9, 0)) * CFrame.Angles(0, 0, math.rad(90)),
+		PALETTE.strawDeep,
+		Enum.Material.Fabric,
+		folder,
+		false
+	)
+	hollow.Shape = Enum.PartType.Cylinder
+	for i = 1, 3 do
+		local angle = (i / 3) * math.pi * 2
+		local egg = part(
+			"DailyNestEgg" .. i,
+			Vector3.new(1.1, 1.4, 1.1),
+			CFrame.new(base + Vector3.new(math.cos(angle) * 0.9, 1.65, math.sin(angle) * 0.9)) * CFrame.Angles(0, angle, math.rad(12)),
+			PALETTE.cream,
+			Enum.Material.SmoothPlastic,
+			folder,
+			false
+		)
+		egg.Shape = Enum.PartType.Ball
+		egg:SetAttribute("SFE_Ambient", "bob")
+	end
+	local glow = Instance.new("PointLight")
+	glow.Color = PALETTE.gold
+	glow.Range = 9
+	glow.Brightness = 0.8
+	glow.Parent = hollow
+	return ring
+end
+
+-- Moonlit Chest: a teal chest with a gold lid ajar and a moon glow, against the barn's rear shelf.
+local function buildMoonChest(folder: Instance, base: Vector3)
+	local body = part(
+		"MoonChestBody",
+		Vector3.new(3.6, 2.2, 2.4),
+		CFrame.new(base + Vector3.new(0, 1.1, 0)),
+		PALETTE.teal,
+		Enum.Material.Wood,
+		folder
+	)
+	local lid = part(
+		"MoonChestLid",
+		Vector3.new(3.8, 0.7, 2.6),
+		CFrame.new(base + Vector3.new(0, 2.55, -0.55)) * CFrame.Angles(math.rad(-28), 0, 0),
+		PALETTE.goldDeep,
+		Enum.Material.Wood,
+		folder,
+		false
+	)
+	lid:SetAttribute("SFE_Ambient", "bob")
+	local band = part(
+		"MoonChestBand",
+		Vector3.new(3.7, 0.5, 2.5),
+		CFrame.new(base + Vector3.new(0, 1.1, 0)),
+		PALETTE.gold,
+		Enum.Material.SmoothPlastic,
+		folder,
+		false
+	)
+	local _ = band
+	local moon = part(
+		"MoonChestGlow",
+		Vector3.new(1.4, 1.4, 1.4),
+		CFrame.new(base + Vector3.new(0, 2.2, 0.2)),
+		PALETTE.moon,
+		Enum.Material.Neon,
+		folder,
+		false
+	)
+	moon.Shape = Enum.PartType.Ball
+	moon:SetAttribute("SFE_Ambient", "moonPulse")
+	local light = Instance.new("PointLight")
+	light.Color = PALETTE.moon
+	light.Range = 12
+	light.Brightness = 1.2
+	light.Parent = moon
+	return body
+end
+
+function WorldShellService.buildFromMap(workspaceService: Workspace, mapModel: Instance, config: { [string]: any }): Folder
+	local existing = workspaceService:FindFirstChild(WorldShellService.FOLDER_NAME)
+	if existing then
+		existing:Destroy()
+	end
+	local folder = Instance.new("Folder")
+	folder.Name = WorldShellService.FOLDER_NAME
+	folder:SetAttribute("SFE_MapMode", true)
+	folder:SetAttribute("SFE_MapName", mapModel.Name)
+	local lobby = ChapterLayout.lobby
+	local range = config.lobby.stationPromptRangeStuds
+
+	-- The map ships its own queue/leaderboard script; our server owns those signs.
+	local vendorScript = mapModel:FindFirstChild("LobbyRuntime")
+	if vendorScript and vendorScript:IsA("BaseScript") and not vendorScript.Disabled then
+		vendorScript.Disabled = true
+		warn("[SFE][World] disabled the map's LobbyRuntime script (the game server drives pads and boards)")
+	end
+
+	-- Portal: the barn doorway. A thin threshold plate carries the prompt and the objective highlight.
+	local threshold = anchor(folder, "PortalAnchor", lobby.portal, Vector3.new(10, 9, 0.6))
+	threshold.CanQuery = true
+	threshold:SetAttribute("SFE_Ambient", "portalShimmer")
+	threshold:SetAttribute("SFE_Station", "party")
+	prompt(threshold, "SFE_Portal", "Set off to search", STATIONS.party.title, range + 2)
+	local portalAudio = anchor(folder, "partyAudio", lobby.portal + Vector3.new(0, 2, 0))
+	portalAudio:SetAttribute("SFE_AudioRole", "station.hum")
+
+	-- Barn props the map does not provide: the Daily Nest and the Moonlit Chest.
+	local dailyFocus = buildDailyNest(folder, lobby.stations.daily.position - Vector3.new(0, 0.8, 0))
+	local chestFocus = buildMoonChest(folder, lobby.stations.event.position - Vector3.new(0, 1.1, 0))
+
+	-- Station prompts on the map's own props (counters, boards, coops) or on our props.
+	local focusByStation: { [string]: BasePart } = { daily = dailyFocus, event = chestFocus }
+	for _, id in ipairs(lobby.stationOrder) do
+		if id ~= "party" then
+			local spec = STATIONS[id]
+			local layout = ChapterLayout.station(id) :: { [string]: any }
+			local focus = focusByStation[id]
+			if not focus then
+				focus = anchor(folder, id .. "Anchor", layout.position, Vector3.new(4, 3, 2))
+				focus.CanQuery = true
+			end
+			focus:SetAttribute("SFE_Station", id)
+			focus:SetAttribute("SFE_Modal", layout.modal)
+			prompt(focus, "SFE_Station_" .. id, spec.action, spec.title, range)
+			local audioAnchor = anchor(folder, id .. "Audio", layout.position + Vector3.new(0, 2, 0))
+			audioAnchor:SetAttribute("SFE_AudioRole", "station.hum")
+		end
+	end
+
+	-- Party nest pads: zone volumes (server-checked) and a "set off" prompt on each sign post.
+	for _, pad in ipairs(lobby.pads) do
+		local zone = anchor(folder, "PadZone" .. pad.index, pad.center, pad.zoneSize)
+		zone:SetAttribute("SFE_Pad", pad.index)
+		local post = anchor(folder, "PadStart" .. pad.index, pad.signPost + Vector3.new(0, 1.2, 0), Vector3.new(2, 3, 2))
+		post.CanQuery = true
+		prompt(post, "SFE_PadStart_" .. pad.index, "Set off", "Party nest " .. pad.index, range)
+	end
+
+	-- Ambient life: feather drift anchors and dust at spawn.
+	for index, position in ipairs(lobby.ambientAnchors) do
+		local drift = anchor(folder, "FeatherDrift" .. index, position)
+		drift:SetAttribute("SFE_Ambient", "featherDrift")
+	end
+	local dust = anchor(folder, "SpawnDust", lobby.spawn + Vector3.new(0, 2, 0), Vector3.new(6, 1, 6))
+	dust:SetAttribute("SFE_Ambient", "dustMote")
+
+	folder:SetAttribute("SFE_ChildCount", #folder:GetChildren())
+	folder.Parent = workspaceService
+	return folder
+end
+
+-- Builds the lobby: the owner's map when present, the greybox shell otherwise.
+function WorldShellService.build(workspaceService: Workspace, spawnLocation: SpawnLocation?, config: { [string]: any }): Folder
+	local mapModel = workspaceService:FindFirstChild(ChapterLayout.LOBBY_MAP_NAME)
+	if mapModel then
+		-- The map carries its own spawn pad; the stray default SpawnLocation must not win.
+		if spawnLocation and spawnLocation.Parent == workspaceService then
+			spawnLocation.Enabled = false
+		end
+		return WorldShellService.buildFromMap(workspaceService, mapModel, config)
+	end
+	return WorldShellService.buildGreybox(workspaceService, spawnLocation, config)
+end
+
+function WorldShellService.isMapMode(folder: Instance?): boolean
+	return folder ~= nil and folder:GetAttribute("SFE_MapMode") == true
+end
+
+-- Writes the map's queue sign for a pad (map mode only).
+function WorldShellService.setPadSign(workspaceService: Workspace, index: number, text: string)
+	local mapModel = workspaceService:FindFirstChild(ChapterLayout.LOBBY_MAP_NAME)
+	local queues = mapModel and mapModel:FindFirstChild("Queues")
+	local queue = queues and queues:FindFirstChild("Queue" .. index)
+	local sign = queue and queue:FindFirstChild("QueueSign")
+	local display = sign and sign:FindFirstChild("Display")
+	local label = display and display:FindFirstChild("Text")
+	if label and label:IsA("TextLabel") and label.Text ~= text then
+		label.Text = text
+	end
+end
+
+-- Fills the map's three leaderboard boards from a LeaderboardService snapshot (map mode only).
+function WorldShellService.applyLeaderboards(workspaceService: Workspace, snapshot: { [string]: any })
+	local mapModel = workspaceService:FindFirstChild(ChapterLayout.LOBBY_MAP_NAME)
+	local boards = mapModel and mapModel:FindFirstChild("Leaderboards")
+	if not boards then
+		return
+	end
+	local byId: { [string]: any } = {}
+	for _, board in ipairs(snapshot.boards or {}) do
+		byId[board.id] = board
+	end
+	for boardName, boardId in pairs(ChapterLayout.lobby.boards) do
+		local model = boards:FindFirstChild(boardName)
+		local data = byId[boardId]
+		if model and data then
+			for row = 1, 5 do
+				local rowPart = model:FindFirstChild("Row" .. row)
+				local display = rowPart and rowPart:FindFirstChild("Display")
+				local label = display and display:FindFirstChild("Text")
+				if label and label:IsA("TextLabel") then
+					local entry = data.rows[row]
+					local text = if entry
+						then string.format("%02d  %s   %s", row, tostring(entry.name), tostring(entry.value))
+						else string.format("%02d    \u{2014}", row)
+					if label.Text ~= text then
+						label.Text = text
+					end
+				end
+			end
+		end
+	end
 end
 
 function WorldShellService.instanceCount(folder: Instance): number

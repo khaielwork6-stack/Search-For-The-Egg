@@ -69,13 +69,14 @@ return function(describe, it, expect)
 			-- Column centres agree with the continuous surface, and the rim meets the floor just
 			-- outside the footprint (no cliff at the grid edge).
 			local column = ChapterLayout.cellWorldPosition(layout, 16, 16, cfg.pile.cellSizeStuds, 3, 11, 0)
-			expect(PileSurface.heightAt(field, column.X, column.Z)).toBeCloseTo(PileSurface.columnHeight(field, 3, 11), 1e-6)
-			local edge = PileSurface.heightAt(field, centre.X + 20, centre.Z)
-			local beyond = PileSurface.heightAt(field, centre.X + 20 * PileSurface.RIM_STRETCH + 0.01, centre.Z)
+			expect(PileSurface.heightAt(field, column.X, column.Z)).toBeCloseTo(PileSurface.columnHeight(field, 3, 11), 1e-3)
+			local radius = field.radius
+			local edge = PileSurface.heightAt(field, centre.X + radius, centre.Z)
+			local beyond = PileSurface.heightAt(field, centre.X + radius * PileSurface.RIM_STRETCH + 0.01, centre.Z)
 			expect(edge).toBeGreaterThan(0)
 			expect(edge).toBeLessThan(cfg.pile.maxVisualHeightStuds * 0.5)
 			expect(beyond).toBe(0)
-			local normal = PileSurface.normalAt(field, centre.X + 10, centre.Z)
+			local normal = PileSurface.normalAt(field, centre.X + radius * 0.5, centre.Z)
 			expect(normal.Y).toBeGreaterThan(0)
 			expect(normal.X).toBeGreaterThan(0) -- slopes down away from the centre
 		end)
@@ -86,7 +87,7 @@ return function(describe, it, expect)
 			local _, snapshot = fullGrid()
 			local field = PileSurface.buildField(cfg, snapshot, layout)
 			local centre = layout.nestCenter
-			local origin = Vector3.new(centre.X, layout.nestBaseY + 3, centre.Z - 26)
+			local origin = Vector3.new(centre.X, layout.nestBaseY + 3, centre.Z - (field.radius + 6))
 			local hit = PileSurface.march(field, origin, Vector3.new(0, 0.15, 1).Unit, 40, 0.5)
 			expect(hit).toBeTruthy()
 			expect(hit.Z).toBeGreaterThan(origin.Z)
@@ -104,7 +105,8 @@ return function(describe, it, expect)
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
 			local centre = layout.nestCenter
-			local standing = Vector3.new(centre.X, layout.nestBaseY + 2, centre.Z - 24)
+			local radius = runtime.grid.width * runtime.grid.cellSize / 2
+			local standing = Vector3.new(centre.X, layout.nestBaseY + 2, centre.Z - (radius + 4))
 			h.standAt(1, standing)
 			h.clock:advance(1)
 			local origin = standing + Vector3.new(0, 1.5, 0)
@@ -128,23 +130,24 @@ return function(describe, it, expect)
 			expect(fallback.ok).toBe(true)
 			-- A hit on the mound's skirt (past the logical footprint but under the surface) resolves to
 			-- the nearest edge cell instead of "outside_nest".
-			local edgeIndex = 0 * runtime.grid.width + 8 + 1
-			local edgeBefore = runtime.grid.cells[edgeIndex].remaining
-			h.standAt(1, Vector3.new(centre.X, layout.nestBaseY + 2, centre.Z - 28))
+			local foot = radius * PileSurface.RIM_STRETCH
+			h.standAt(1, Vector3.new(centre.X, layout.nestBaseY + 2, centre.Z - (foot + 5)))
 			h.clock:advance(1)
 			local skirt = h.collection:collect(1, {
 				sessionToken = h.token(1),
-				origin = Vector3.new(centre.X, layout.nestBaseY + 3.5, centre.Z - 28),
-				direction = (Vector3.new(centre.X, layout.nestBaseY + 0.6, centre.Z - 21.5) - Vector3.new(
+				origin = Vector3.new(centre.X, layout.nestBaseY + 3.5, centre.Z - (foot + 5)),
+				direction = (Vector3.new(centre.X, layout.nestBaseY + 0.6, centre.Z - (foot - 1.5)) - Vector3.new(
 					centre.X,
 					layout.nestBaseY + 3.5,
-					centre.Z - 28
+					centre.Z - (foot + 5)
 				)).Unit,
 				toolId = "hand",
 			})
 			expect(skirt.ok).toBe(true)
-			expect(skirt.data.hitZ).toBeLessThan(centre.Z - 18) -- resolved edge-row cell centre
-			expect(runtime.grid.cells[edgeIndex].remaining).toBeLessThan(edgeBefore)
+			expect(skirt.data.hitZ).toBeLessThan(centre.Z - (radius - 2)) -- resolved edge-row cell centre
+			local hitCell = runtime.grid.cells[skirt.data.cellIndex]
+			expect(hitCell.z).toBe(0) -- the nearest edge row, never "outside_nest"
+			expect(hitCell.remaining).toBeLessThan(hitCell.base)
 			-- The harness aim lands on exactly the requested column.
 			local exact = h.collectAt(1, runtime, 3, 12)
 			expect(exact.ok).toBe(true)

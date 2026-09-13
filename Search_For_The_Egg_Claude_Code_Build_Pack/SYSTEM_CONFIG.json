@@ -106,12 +106,12 @@
   "pile": {
     "gridWidth": 16,
     "gridDepth": 16,
-    "cellSizeStuds": 2.5,
+    "cellSizeStuds": 1.8,
     "baseFeathersPerCell": 6,
     "surfaceVariance": 0.25,
     "coverDepthMultiplier": 2.0,
     "coverRadiusCells": 1,
-    "maxVisualHeightStuds": 22,
+    "maxVisualHeightStuds": 16,
     "aimPlaneHeightStuds": 1.75,
     "assumption": "ASSUMED"
   },
@@ -874,6 +874,8 @@
       "high": 40
     },
     "stationPromptRangeStuds": 10,
+    "padFullAutoStartSeconds": 5,
+    "padZoneHeightStuds": 6,
     "assumption": "ASSUMED"
   },
   "codePolicy": {

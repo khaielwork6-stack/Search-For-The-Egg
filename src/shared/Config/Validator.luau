@@ -348,6 +348,8 @@ function Validator.validate(raw: any): Report
 		check(isNonNegativeNumber(lobby.classRollMinIntervalSeconds), "lobby.classRollMinIntervalSeconds must be >= 0")
 		check(isPositiveNumber(lobby.autoRollMaxPerMinute), "lobby.autoRollMaxPerMinute must be > 0")
 		check(isPositiveNumber(lobby.stationPromptRangeStuds), "lobby.stationPromptRangeStuds must be > 0")
+		check(isNonNegativeNumber(lobby.padFullAutoStartSeconds), "lobby.padFullAutoStartSeconds must be >= 0")
+		check(isPositiveNumber(lobby.padZoneHeightStuds), "lobby.padZoneHeightStuds must be > 0")
 		check(type(lobby.ambientActorsByTier) == "table", "lobby.ambientActorsByTier missing")
 		if type(lobby.ambientActorsByTier) == "table" then
 			for _, tier in ipairs({ "low", "medium", "high" }) do

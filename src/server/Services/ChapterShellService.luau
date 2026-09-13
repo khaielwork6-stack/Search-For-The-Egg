@@ -69,7 +69,7 @@ local function prompt(parent: BasePart, name: string, actionText: string, object
 	return p
 end
 
-function ChapterShellService.build(workspaceService: Workspace, config: { [string]: any }): Folder
+function ChapterShellService.buildGreybox(workspaceService: Workspace, config: { [string]: any }): Folder
 	local existing = workspaceService:FindFirstChild(ChapterShellService.FOLDER_NAME)
 	if existing then
 		existing:Destroy()
@@ -293,6 +293,68 @@ function ChapterShellService.build(workspaceService: Workspace, config: { [strin
 	folder:SetAttribute("SFE_ChildCount", #folder:GetChildren())
 	folder.Parent = workspaceService
 	return folder
+end
+
+-- Map mode: the owner's SearchForTheEgg_Map2 model is the arena. Only the invisible aim plane, the
+-- station prompts on the map's processor button and supplies counter, and ambient anchors are
+-- created; the pit is the nest and the map's spawn pad is the round spawn.
+function ChapterShellService.buildFromMap(workspaceService: Workspace, mapModel: Instance, config: { [string]: any }): Folder
+	local existing = workspaceService:FindFirstChild(ChapterShellService.FOLDER_NAME)
+	if existing then
+		existing:Destroy()
+	end
+	local layout = ChapterLayout.chapter1
+	local folder = Instance.new("Folder")
+	folder.Name = ChapterShellService.FOLDER_NAME
+	folder:SetAttribute("SFE_MapMode", true)
+	folder:SetAttribute("SFE_MapName", mapModel.Name)
+	local cream = Color3.fromRGB(252, 246, 234)
+
+	local gridSize = config.pile.gridWidth * config.pile.cellSizeStuds
+	local aimPlane = part(
+		"NestAimPlane",
+		Vector3.new(gridSize, 0.2, gridSize),
+		CFrame.new(layout.nestCenter.X, layout.nestBaseY + config.pile.aimPlaneHeightStuds, layout.nestCenter.Z),
+		cream,
+		Enum.Material.SmoothPlastic,
+		folder,
+		false
+	)
+	aimPlane.Transparency = 1
+	aimPlane.CanQuery = true
+
+	local function anchor(name: string, position: Vector3, size: Vector3): Part
+		local p = part(name, size, CFrame.new(position), cream, Enum.Material.SmoothPlastic, folder, false)
+		p.Transparency = 1
+		p.CanQuery = true
+		return p
+	end
+	-- Selling: the processor's green button; the conveyors already tell the story.
+	local sellAnchor = anchor("SellStation", layout.sellPrompt, Vector3.new(1.6, 1.6, 0.8))
+	prompt(sellAnchor, "SFE_Sell", "Trade", "Feather processor", 0, config.interaction.sellRangeStuds)
+	-- Upgrades: the FEATHER SUPPLIES counter inside the shop.
+	local upgradeAnchor = anchor("UpgradeBoard", layout.upgradePrompt, Vector3.new(6, 1.2, 1.2))
+	prompt(upgradeAnchor, "SFE_Upgrade", "Upgrade", "Feather supplies", 0, config.interaction.upgradeRangeStuds)
+	upgradeAnchor:SetAttribute("SFE_Ambient", "bob")
+
+	for index, position in ipairs(layout.ambientAnchors) do
+		local drift = anchor("FeatherDrift" .. index, position, Vector3.new(1, 1, 1))
+		drift.CanQuery = false
+		drift:SetAttribute("SFE_Ambient", "featherDrift")
+	end
+
+	folder:SetAttribute("SFE_ChildCount", #folder:GetChildren())
+	folder.Parent = workspaceService
+	return folder
+end
+
+-- Builds the Chapter 1 arena: the owner's map when present, the greybox otherwise.
+function ChapterShellService.build(workspaceService: Workspace, config: { [string]: any }): Folder
+	local mapModel = workspaceService:FindFirstChild(ChapterLayout.CHAPTER1_MAP_NAME)
+	if mapModel then
+		return ChapterShellService.buildFromMap(workspaceService, mapModel, config)
+	end
+	return ChapterShellService.buildGreybox(workspaceService, config)
 end
 
 -- Creates the Egg part at reveal time (never earlier: clients cannot learn the position from the

@@ -775,7 +775,8 @@ function ToolService._tickChick(self: ToolService, runtime: any, userId: number,
 	local grid = runtime.grid
 	local layout = ChapterLayout[runtime.state.chapter]
 	local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
-	local sellStation = Vector3.new(layout.sellStation.X, layout.nestBaseY, layout.sellStation.Z)
+	local walkY = layout.chickPathY or layout.nestBaseY
+	local sellStation = Vector3.new(layout.sellStation.X, walkY, layout.sellStation.Z)
 	local step = spec.moveSpeed * dt
 	local remaining = {}
 	for _, unit in ipairs(rt.units) do

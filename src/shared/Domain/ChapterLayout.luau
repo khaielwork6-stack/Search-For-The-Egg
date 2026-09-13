@@ -1,45 +1,149 @@
 --!strict
 -- Same-place world layout shared by server (authority, range checks) and client (visuals). These are
 -- presentation constants (studs), not economy tunables; ranges themselves come from
--- SYSTEM_CONFIG.interaction. Chapter areas sit far from the lobby so streaming/teleport later is a
--- drop-in change (MASTER_SPEC section 4: architecture must not assume same-place travel).
--- Lobby station coordinates are ASSUMED (A-LOBBY-04) and live here so the server builder, the
--- station prompts, and the client ambience read one table.
+-- SYSTEM_CONFIG.interaction. Coordinates are measured from the owner's two maps (A-LOBBY-04) and
+-- live here so the server builders, the station prompts, the pads, and the client ambience read one
+-- table. Chapter areas sit far from the lobby so streaming/teleport later is a drop-in change
+-- (MASTER_SPEC section 4: architecture must not assume same-place travel).
 
 local ChapterLayout = {}
 
--- Compact lobby composition (MASTER_SPEC 11 "Layout"): the chapter portal straight ahead of spawn
--- (+Z), Daily and Classes on the primary sightlines flanking the path, Shop (perks) and the Event
--- chest adjacent, Inventory beside the portal path, Stats/leaderboards, Codes and the Group reward
--- on the secondary sightline behind the spawn pad. Every station faces the spawn path.
+-- Lobby: the owner's `SearchForTheEgg_Lobby` map (a fenced farm courtyard; ground top y = 2.1).
+-- Every position below is measured from that model, so stations sit on the props the map already
+-- provides: the two market stalls, the three leaderboard boards behind spawn, the chicken coops and
+-- the barn interior, and the four "Join Match" nest pads that form parties. The chapter portal is
+-- the barn doorway ("SEARCH FOR THE EGG"). Without the map (headless / old place) the greybox shell
+-- builds at the same coordinates so nothing depends on the map being present.
+ChapterLayout.LOBBY_MAP_NAME = "SearchForTheEgg_Lobby"
 ChapterLayout.lobby = table.freeze({
-	origin = Vector3.new(0, 0, 0),
-	spawn = Vector3.new(0, 3, -18),
-	portal = Vector3.new(0, 7, 22),
-	portalTrigger = Vector3.new(0, 3, 19),
+	origin = Vector3.new(-0.5, 0, -136),
+	groundY = 2.1,
+	spawn = Vector3.new(-0.5, 3.3, -99), -- LobbySpawn pad; faces the barn
+	portal = Vector3.new(-0.5, 6, -166), -- barn doorway (prompt anchor just outside the sliding doors)
+	portalTrigger = Vector3.new(-0.5, 3, -163),
+	barnFloorY = 2.5,
 	stations = table.freeze({
-		party = table.freeze({ position = Vector3.new(0, 0, 22), facing = Vector3.new(0, 0, -1), modal = "party" }),
-		daily = table.freeze({ position = Vector3.new(-20, 0, 6), facing = Vector3.new(1, 0, -0.4), modal = "daily" }),
-		classes = table.freeze({ position = Vector3.new(20, 0, 6), facing = Vector3.new(-1, 0, -0.4), modal = "classes" }),
-		shop = table.freeze({ position = Vector3.new(-26, 0, -10), facing = Vector3.new(1, 0, 0), modal = "shop" }),
-		event = table.freeze({ position = Vector3.new(26, 0, -10), facing = Vector3.new(-1, 0, 0), modal = "event" }),
-		inventory = table.freeze({ position = Vector3.new(-12, 0, 20), facing = Vector3.new(0.6, 0, -1), modal = "inventory" }),
-		stats = table.freeze({ position = Vector3.new(14, 0, -30), facing = Vector3.new(-0.5, 0, 1), modal = "stats" }),
-		codes = table.freeze({ position = Vector3.new(-14, 0, -30), facing = Vector3.new(0.5, 0, 1), modal = "codes" }),
+		party = table.freeze({
+			position = Vector3.new(-0.5, 5, -166),
+			facing = Vector3.new(0, 0, 1),
+			modal = "party",
+			host = "ChickenBarn",
+		}),
+		shop = table.freeze({
+			position = Vector3.new(-46.5, 5.9, -87),
+			facing = Vector3.new(0, 0, 1),
+			modal = "shop",
+			host = "UpgradeShop",
+		}),
+		classes = table.freeze({
+			position = Vector3.new(45.5, 5.9, -87),
+			facing = Vector3.new(0, 0, 1),
+			modal = "classes",
+			host = "ClassShop",
+		}),
+		stats = table.freeze({
+			position = Vector3.new(-0.5, 9, -81.2),
+			facing = Vector3.new(0, 0, -1),
+			modal = "stats",
+			host = "Leaderboards",
+		}),
+		daily = table.freeze({
+			position = Vector3.new(-13.5, 3.3, -186.5),
+			facing = Vector3.new(0, 0, 1),
+			modal = "daily",
+			host = "ChickenBarn",
+		}),
+		event = table.freeze({
+			position = Vector3.new(12.5, 3.6, -186.5),
+			facing = Vector3.new(0, 0, 1),
+			modal = "event",
+			host = "ChickenBarn",
+		}),
+		inventory = table.freeze({
+			position = Vector3.new(24.5, 4.5, -162.5),
+			facing = Vector3.new(0, 0, 1),
+			modal = "inventory",
+			host = "ChickenBarn",
+		}),
+		codes = table.freeze({
+			position = Vector3.new(-25.5, 4.5, -162.5),
+			facing = Vector3.new(0, 0, 1),
+			modal = "codes",
+			host = "ChickenBarn",
+		}),
 	}),
 	stationOrder = table.freeze({ "party", "daily", "classes", "shop", "event", "inventory", "stats", "codes" }),
+	-- Party nest pads ("Join Match 0/4" signs). Standing inside a zone joins that pad's party.
+	pads = table.freeze({
+		table.freeze({
+			index = 1,
+			center = Vector3.new(-43.5, 5, -151),
+			zoneSize = Vector3.new(17, 6, 17),
+			sign = Vector3.new(-43.5, 7.2, -160),
+			signPost = Vector3.new(-43.5, 4.6, -160.6),
+		}),
+		table.freeze({
+			index = 2,
+			center = Vector3.new(-43.5, 5, -121),
+			zoneSize = Vector3.new(17, 6, 17),
+			sign = Vector3.new(-43.5, 7.2, -130),
+			signPost = Vector3.new(-43.5, 4.6, -130.6),
+		}),
+		table.freeze({
+			index = 3,
+			center = Vector3.new(42.5, 5, -151),
+			zoneSize = Vector3.new(17, 6, 17),
+			sign = Vector3.new(42.5, 7.2, -160),
+			signPost = Vector3.new(42.5, 4.6, -160.6),
+		}),
+		table.freeze({
+			index = 4,
+			center = Vector3.new(42.5, 5, -121),
+			zoneSize = Vector3.new(17, 6, 17),
+			sign = Vector3.new(42.5, 7.2, -130),
+			signPost = Vector3.new(42.5, 4.6, -130.6),
+		}),
+	}),
+	-- Leaderboard boards behind spawn: map StatName -> our board id.
+	boards = table.freeze({
+		Board1 = "eggsFound",
+		Board2 = "totalWins",
+		Board3 = "feathersCollected",
+	}),
+	ambientAnchors = table.freeze({
+		Vector3.new(-0.5, 12, -164), -- feathers drifting out of the barn door
+		Vector3.new(-43.5, 9, -136), -- over the left pads
+		Vector3.new(42.5, 9, -136), -- over the right pads
+		Vector3.new(-0.5, 8, -110), -- over the spawn path
+	}),
 })
 
--- Sunlit Henhouse (Chapter 1). Nest is a 40x40 stud footprint (16 x 2.5) centred on `nestCenter`.
+-- Sunlit Henhouse (Chapter 1): the owner's `SearchForTheEgg_Map2` map (a fenced farmyard; ground
+-- top y = 52.1). The nest is the map's earth pit (floor y = 46.5, opening 32 x 48 studs) so the
+-- mound rises out of the ground; feathers are sold at the processor's green button (the conveyors
+-- feed it) and upgrades are bought at the FEATHER SUPPLIES counter. The logical grid is 16 x 16
+-- cells of `pile.cellSizeStuds` centred on `nestCenter`.
+ChapterLayout.CHAPTER1_MAP_NAME = "SearchForTheEgg_Map2"
 ChapterLayout.chapter1 = table.freeze({
-	origin = Vector3.new(0, 0, 400),
+	origin = Vector3.new(0, 52, 350),
 	floorSize = Vector3.new(140, 1, 140),
-	spawn = Vector3.new(0, 3, 352), -- faces +Z toward the nest
-	nestCenter = Vector3.new(0, 0, 410),
-	nestBaseY = 1, -- top of the nest base collider (players stand at floor level around it)
-	sellStation = Vector3.new(-26, 0, 372),
-	upgradeBoard = Vector3.new(26, 0, 372),
+	groundY = 52.1,
+	spawn = Vector3.new(0, 53.3, 404), -- MapSpawn at the south gate path; faces the pit
+	nestCenter = Vector3.new(0, 47, 315),
+	nestBaseY = 47, -- pit floor (46.5) plus the feather litter
+	pitOpening = Vector3.new(32, 0, 48),
+	sellStation = Vector3.new(54, 52.1, 324), -- in front of the processor's green button
+	sellPrompt = Vector3.new(54.2, 60.4, 321.4),
+	upgradeBoard = Vector3.new(-45, 53.8, 303), -- in front of the supplies counter (inside the shop)
+	upgradePrompt = Vector3.new(-45, 58.9, 301.2),
+	chickPathY = 52.1, -- scout chicks walk at ground level between the pit rim and the processor
 	roofHeight = 26,
+	ambientAnchors = table.freeze({
+		Vector3.new(0, 62, 315), -- over the mound
+		Vector3.new(-12, 58, 330),
+		Vector3.new(12, 58, 300),
+		Vector3.new(47, 60, 332), -- over the conveyor
+	}),
 })
 
 -- Moonlit Cellar (Chapter 2). A low subterranean hatchery: the debris mound (same 16x16 logical grid)

@@ -76,6 +76,27 @@ function InteractionController.handle(self: InteractionController, promptName: s
 		deps.audio:play(Tokens.sound.uiOpen)
 		self.stationRequested:Fire("party")
 		return nil
+	elseif string.match(promptName, "^SFE_PadStart_(%d+)$") then
+		-- Party nest sign post: the leader sets off; anyone else gets the party options.
+		local party = deps.party and deps.party.party
+		if party and deps.party:isLeader() and (party.phase == "Ready" or party.phase == "Forming") then
+			deps.audio:play(Tokens.sound.uiConfirm)
+			local result = deps.party:start()
+			if not result.ok then
+				deps.hud.toasts:push(
+					if result.message == "destination_locked" or result.message == "not_ready"
+						then "Someone in the party has not unlocked that yet"
+						else "Party is not ready yet",
+					"warning"
+				)
+				self.stationRequested:Fire("party")
+			end
+			self.partyRequested:Fire(result)
+			return result
+		end
+		deps.audio:play(Tokens.sound.uiOpen)
+		self.stationRequested:Fire("party")
+		return nil
 	elseif promptName == "SFE_Sell" then
 		local token = deps.round:sessionToken()
 		if not token then

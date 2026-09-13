@@ -41,6 +41,7 @@ local PartyService = require(script.Services.PartyService)
 local RoundService = require(script.Services.RoundService)
 local PlayerDataService = require(script.Services.PlayerDataService)
 local WorldShellService = require(script.Services.WorldShellService)
+local PartyPadService = require(script.Services.PartyPadService)
 local ChapterShellService = require(script.Services.ChapterShellService)
 local CollectionService = require(script.Services.CollectionService)
 local SellingService = require(script.Services.SellingService)
@@ -343,6 +344,38 @@ Players.CharacterAutoLoads = false
 local repairedMeshes = AssetManifest.warm()
 local lobbyShell = WorldShellService.build(workspace, workspace:FindFirstChildOfClass("SpawnLocation"), config)
 local arena = ChapterShellService.build(workspace, config)
+local mapMode = WorldShellService.isMapMode(lobbyShell)
+
+-- Party nest pads (A-LOBBY-06): the map's "Join Match" nests form parties by standing on them.
+local pads = PartyPadService.new({
+	config = config,
+	parties = parties,
+	sessions = sessions,
+	clock = clock,
+	getCharacterPosition = function(userId)
+		local player = playerData:playerOf(userId)
+		local character = player and typeof(player) == "Instance" and (player :: Player).Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		return if root then (root :: BasePart).Position else nil
+	end,
+	players = function()
+		local ids = {}
+		for _, player in ipairs(Players:GetPlayers()) do
+			table.insert(ids, player.UserId)
+		end
+		return ids
+	end,
+	setSign = function(index, text)
+		if mapMode then
+			WorldShellService.setPadSign(workspace, index, text)
+		end
+	end,
+})
+leaderboards.refreshed:Connect(function(snapshot)
+	if mapMode then
+		WorldShellService.applyLeaderboards(workspace, snapshot)
+	end
+end)
 
 local function placeCharacter(player: Player, position: Vector3, lookAt: Vector3?)
 	local character = player.Character
@@ -907,6 +940,7 @@ end)
 task.spawn(function()
 	while true do
 		task.wait(0.25)
+		pads:tick()
 		parties:tick()
 		rounds:tick()
 		victory:tick()
@@ -982,6 +1016,8 @@ local container = {
 	groupAdapter = groupAdapter,
 	broadcastPartyList = broadcastPartyList,
 	displayNameOf = displayNameOf,
+	pads = pads,
+	mapMode = mapMode,
 }
 local debugHooks = StudioDebug.install(container)
 
@@ -995,5 +1031,6 @@ log:info("server_ready", {
 	missingDeploymentIds = #productMap:missingKeys(),
 	debugHooks = debugHooks ~= nil,
 	meshesRepaired = repairedMeshes,
+	mapMode = mapMode,
 	bootMs = math.floor((os.clock() - bootStarted) * 1000),
 })

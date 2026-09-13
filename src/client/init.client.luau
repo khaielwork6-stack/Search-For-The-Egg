@@ -104,8 +104,9 @@ local tools = trove:add(ToolController.new({
 	config = config,
 }))
 local hand = tools -- Phase 2 automation helpers keep working through the tool controller
-local interaction =
-	trove:add(InteractionController.new({ net = net, round = round, audio = audio, haptics = haptics, hud = hud, config = config }))
+local interaction = trove:add(
+	InteractionController.new({ net = net, round = round, party = party, audio = audio, haptics = haptics, hud = hud, config = config })
+)
 local objectives = trove:add(ObjectiveController.new({ net = net, hud = hud, round = round }))
 local victory = trove:add(VictoryController.new({
 	net = net,
@@ -264,6 +265,11 @@ if RunService:IsStudio() then
 		stationPrompt = function(id)
 			interaction:handle("SFE_Station_" .. tostring(id))
 			return { top = modals:topId() }
+		end,
+		-- Fires any world prompt by name through the real prompt router (pads, portal, sell, upgrade, egg).
+		prompt = function(name)
+			local result = interaction:handle(tostring(name))
+			return { result = result, top = modals:topId() }
 		end,
 		partyCreate = function(chapter, difficulty)
 			return party:create(chapter or "chapter1", difficulty or "normal")

@@ -6,7 +6,8 @@ the build pack in `Search_For_The_Egg_Claude_Code_Build_Pack/` (start with `STAR
 Current checkpoint: **Phase 4 - lobby and meta** (parties and chapter selection, classes and rerolls, perks,
 daily rewards, codes, group reward, inventory, stats and leaderboards, the modal system with the owner's visual
 language and motion recipes, and the smooth feather-mound pile) on top of the Phase 3 progression and tools.
-See `docs/IMPLEMENTATION_STATUS.md`.
+The lobby and Chapter 1 now run inside the owner's two map models (`SearchForTheEgg_Lobby`, `SearchForTheEgg_Map2`,
+place assets) with a greybox fallback when they are absent. See `docs/IMPLEMENTATION_STATUS.md`.
 
 ## Toolchain
 
