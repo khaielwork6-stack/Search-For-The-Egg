@@ -453,14 +453,20 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 		local function destination(): Vector3
 			return self._deps.hud:carriedStackWorldPoint() or hitPosition
 		end
-		if toolId == "hand" and data.featherId then
-			self._deps.pile:collectFeather(data.featherId, hitPosition, destination)
-		else
-			for _, removal in ipairs(data.cells or {}) do
-				for _, slot in ipairs(removal.slots or {}) do
-					self._deps.pile:collectFeather(FeatherLayout.featherId(removal.index, slot), hitPosition, destination)
+		-- Visual feedback can never block the next request: the award is already authoritative.
+		local okVisual, visualError = pcall(function()
+			if toolId == "hand" and data.featherId then
+				self._deps.pile:collectFeather(data.featherId, hitPosition, destination)
+			else
+				for _, removal in ipairs(data.cells or {}) do
+					for _, slot in ipairs(removal.slots or {}) do
+						self._deps.pile:collectFeather(FeatherLayout.featherId(removal.index, slot), hitPosition, destination)
+					end
 				end
 			end
+		end)
+		if not okVisual then
+			warn("[SFE][Tool] pick feedback failed: " .. tostring(visualError))
 		end
 		self._deps.audio:play(Tokens.sound.collectRelease, { pitchVariance = 0.12 })
 		self._deps.haptics:pulse(if toolId == "nestRake" then 0.4 else 0.25, 0.05)

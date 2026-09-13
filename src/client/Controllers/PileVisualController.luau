@@ -458,6 +458,83 @@ function PileVisualController._exposeFloor(self: PileVisualController, column: C
 	end
 end
 
+-- Current top of a column (studs above the base): the built surface minus its recession.
+function PileVisualController._columnTop(self: PileVisualController, column: Column): number
+	local field = self._seatField :: PileSurface.Field
+	local minCorner = self._minCorner :: Vector3
+	local cx = minCorner.X + (column.x + 0.5) * field.cellSize
+	local cz = minCorner.Z + (column.z + 0.5) * field.cellSize
+	return PileSurface.heightAt(field, cx, cz) - (column.base - column.remaining) * column.step
+end
+
+-- The interior is feathers too: when a dug column drops below a neighbour, that neighbour's newly
+-- exposed side gets strands down to the new depth (added once, never moved or removed), so a pit's
+-- walls are layered feathers all the way to its floor.
+function PileVisualController._exposeWalls(self: PileVisualController, dug: Column)
+	local folder = self._folder
+	local field = self._seatField
+	local minCorner = self._minCorner
+	if not folder or not field or not minCorner then
+		return
+	end
+	local visual = self._config.pile.visual
+	local grid = self._grid :: { [string]: any }
+	local dugTop = self:_columnTop(dug)
+	for _, offset in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+		local nx, nz = dug.x + offset[1], dug.z + offset[2]
+		if nx < 0 or nz < 0 or nx >= grid.width or nz >= grid.depth then
+			continue
+		end
+		local neighbour = self._columns[nz * grid.width + nx + 1]
+		local exposure = self:_columnTop(neighbour) - dugTop
+		if exposure <= neighbour.wallDepth + visual.wallLevelSpacingStuds then
+			continue
+		end
+		-- Strands along the shared edge, just inside the neighbour, from its built-up depth down.
+		local edgeX = minCorner.X + (nx + 0.5) * field.cellSize - offset[1] * field.cellSize * 0.42
+		local edgeZ = minCorner.Z + (nz + 0.5) * field.cellSize - offset[2] * field.cellSize * 0.42
+		local topY = field.baseY + self:_columnTop(neighbour)
+		local depthFrom = neighbour.wallDepth
+		local levelsAdded = 0
+		local depthNow = depthFrom + visual.wallLevelSpacingStuds
+		while depthNow <= exposure and levelsAdded < 40 do
+			for k = 1, visual.wallStrandsPerLevel do
+				local salt = math.floor(depthNow * 100) * 7 + k
+				local h = function(s2: number)
+					return FeatherLayout.hash(neighbour.index, salt, s2)
+				end
+				local along = (h(1) - 0.5) * field.cellSize * 0.9
+				local wx = edgeX + (if offset[1] == 0 then along else 0)
+				local wz = edgeZ + (if offset[2] == 0 then along else 0)
+				local part = acquirePart(self)
+				part.Name = "Fluff"
+				part.CanQuery = true
+				part:SetAttribute(CELL_ATTRIBUTE, neighbour.index)
+				part.Color = paletteColor(self._config, math.min(1, h(9) * 0.6 + visual.fluffTintShift))
+				-- Lying along the wall face (not bridging the pit), with a little scatter.
+				local yaw = math.atan2(-offset[1], offset[2]) + (h(4) - 0.5) * 0.6
+				placeFeather(
+					part,
+					wx,
+					topY - depthNow + (h(3) - 0.5) * 0.2,
+					wz,
+					Vector3.new(0, 1, 0),
+					yaw,
+					math.rad(lerp(4, 18, h(5))),
+					(h(6) - 0.5) * math.rad(visual.rollRangeDegrees),
+					lerp(visual.fluffLengthRange[1], visual.fluffLengthRange[2], h(7)),
+					lerp(visual.fluffWidthRange[1], visual.fluffWidthRange[2], h(8))
+				)
+				part.Parent = folder
+				table.insert(neighbour.walls, part)
+			end
+			levelsAdded += 1
+			depthNow += visual.wallLevelSpacingStuds
+		end
+		neighbour.wallDepth = math.max(neighbour.wallDepth, exposure)
+	end
+end
+
 -- ---------------------------------------------------------------------------------------------
 -- Build / delta
 -- ---------------------------------------------------------------------------------------------
