@@ -140,11 +140,11 @@
       "shellFolderName": "SFE_PileCollision"
     },
     "visual": {
-      "partBudgetDesktop": 13000,
-      "partBudgetMobile": 4200,
+      "partBudgetDesktop": 19000,
+      "partBudgetMobile": 6500,
       "featherLengthRange": [
-        1.9,
-        2.8
+        1.6,
+        2.4
       ],
       "tiltRangeDegrees": [
         3,
@@ -192,27 +192,27 @@
       "assumption": "ASSUMED",
       "visibleSlotsPerCell": 2,
       "featherWidthRange": [
-        0.75,
-        1.1
+        0.6,
+        0.9
       ],
       "featherSpreadFraction": 0.8,
       "rollRangeDegrees": 30,
       "layerStepStuds": 0.35,
       "surfaceLiftStuds": 0.12,
       "fluffLengthRange": [
-        1.1,
-        2.0
+        0.8,
+        1.5
       ],
       "fluffWidthRange": [
-        0.45,
-        0.8
+        0.35,
+        0.6
       ],
       "fluffTiltRangeDegrees": [
         0,
-        10
+        8
       ],
-      "fluffPerCellDesktop": 46,
-      "fluffPerCellMobile": 14,
+      "fluffPerCellDesktop": 60,
+      "fluffPerCellMobile": 20,
       "fluffTintShift": 0.35,
       "selectionOutlineColor": [
         255,
@@ -226,23 +226,22 @@
       "liftSeconds": 0.09,
       "liftStuds": 0.5,
       "pickScale": 1.25,
-      "settleSeconds": 0.22,
-      "rimStrandsDesktop": 1600,
-      "rimStrandsMobile": 500,
+      "rimStrandsDesktop": 2400,
+      "rimStrandsMobile": 700,
       "fluffBandDepths": [
         0.0,
-        0.9,
-        1.8,
-        2.8
+        0.25,
+        0.5
       ],
       "fluffBandShares": [
-        0.6,
-        0.2,
-        0.12,
-        0.08
+        0.5,
+        0.3,
+        0.2
       ],
-      "wallStrandsPerLevel": 3,
-      "wallLevelSpacingStuds": 0.55
+      "wallStrandsPerLevel": 4,
+      "wallLevelSpacingStuds": 0.5,
+      "floorStrandsPerLevel": 12,
+      "floorLevelSpacingStuds": 0.5
     },
     "assumption": "ASSUMED",
     "recordSpacingStuds": 0.55

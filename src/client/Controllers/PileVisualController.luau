@@ -36,11 +36,11 @@ type Column = {
 	mask: number,
 	feathers: { [number]: BasePart }, -- slot -> part (exposed records only)
 	fluff: { BasePart },
-	fluffRest: { CFrame }, -- each strand's pose as built; sinks are measured from here
 	fluffCount: number,
 	step: number, -- studs the column recedes per record
 	walls: { BasePart },
 	wallDepth: number, -- studs of interior wall already materialised
+	floorDepth: number, -- studs of interior floor layers already materialised
 }
 
 export type Target = { featherId: number, part: BasePart, position: Vector3, cell: number, slot: number }
@@ -292,7 +292,7 @@ end
 
 -- (Re)materialises one column: exposed records as targetable feathers (the stack recedes by one
 -- layer per record taken), fluff underneath (permanent, sinks with the cell). Touches nothing else.
-function PileVisualController._applyColumn(self: PileVisualController, column: Column, folder: Folder, animateSink: boolean?)
+function PileVisualController._applyColumn(self: PileVisualController, column: Column, folder: Folder)
 	local visual = self._config.pile.visual
 	local field = (self._seatField or self._field) :: PileSurface.Field
 	local minCorner = self._minCorner :: Vector3
@@ -366,8 +366,7 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 			end
 			continue
 		end
-		-- Depth band: most strands lie on the surface, the rest sit progressively deeper so a dug
-		-- cell's walls and floor are feathers too (never a bare core).
+		-- Depth band: most strands lie on the surface, the rest tucked just under it (packed layers).
 		local bandDepth = 0
 		local pick = h(10)
 		local acc = 0
@@ -379,6 +378,7 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 			end
 		end
 		if not part then
+			-- Placed once, anchored for the round: the bed never moves, whatever gets picked.
 			part = acquirePart(self)
 			part.Name = "Fluff"
 			part.CanQuery = true
@@ -390,7 +390,7 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 			placeFeather(
 				part,
 				wx,
-				y + lerp(0.1, 0.4, h(3)) - bandDepth - sink,
+				y + lerp(0.1, 0.4, h(3)) - bandDepth,
 				wz,
 				normal,
 				yaw,
@@ -400,31 +400,14 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 				lerp(visual.fluffWidthRange[1], visual.fluffWidthRange[2], h(8)) * scale
 			)
 			part.Parent = folder
-			column.fluffRest[k] = part.CFrame + Vector3.new(0, sink, 0) -- pose with no records taken
-		elseif animateSink then
-			-- The cell settles to its absolute depth for the records taken (0.2 s, nothing else moves);
-			-- measured from the built pose so rapid picks never lose a step.
-			local goal = (column.fluffRest[k] or part.CFrame) - Vector3.new(0, sink, 0)
-			TweenService
-				:Create(part, TweenInfo.new(visual.settleSeconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = goal })
-				:Play()
 		end
 	end
 end
 
--- Current top of a column (studs above the base): the built surface minus its recession.
-function PileVisualController._columnTop(self: PileVisualController, column: Column): number
-	local field = self._seatField :: PileSurface.Field
-	local minCorner = self._minCorner :: Vector3
-	local cx = minCorner.X + (column.x + 0.5) * field.cellSize
-	local cz = minCorner.Z + (column.z + 0.5) * field.cellSize
-	return PileSurface.heightAt(field, cx, cz) - (column.base - column.remaining) * column.step
-end
-
--- The interior is feathers too: when a dug column drops below a neighbour, that neighbour's newly
--- exposed side gets strands down to the new depth (added once, never moved or removed), so a pit's
--- walls are layered feathers all the way to its floor.
-function PileVisualController._exposeWalls(self: PileVisualController, dug: Column)
+-- The column's interior is packed layers too: as records leave and the top recedes, the layer at
+-- the new depth is materialised (fixed, hashed positions; added once, never moved or removed), so
+-- the pit floor is feathers at every depth down to the ground.
+function PileVisualController._exposeFloor(self: PileVisualController, column: Column)
 	local folder = self._folder
 	local field = self._seatField
 	local minCorner = self._minCorner
@@ -432,60 +415,46 @@ function PileVisualController._exposeWalls(self: PileVisualController, dug: Colu
 		return
 	end
 	local visual = self._config.pile.visual
-	local grid = self._grid :: { [string]: any }
-	local dugTop = self:_columnTop(dug)
-	for _, offset in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
-		local nx, nz = dug.x + offset[1], dug.z + offset[2]
-		if nx < 0 or nz < 0 or nx >= grid.width or nz >= grid.depth then
-			continue
-		end
-		local neighbour = self._columns[nz * grid.width + nx + 1]
-		local exposure = self:_columnTop(neighbour) - dugTop
-		if exposure <= neighbour.wallDepth + visual.wallLevelSpacingStuds then
-			continue
-		end
-		-- Strands along the shared edge, just inside the neighbour, from its built-up depth down.
-		local edgeX = minCorner.X + (nx + 0.5) * field.cellSize - offset[1] * field.cellSize * 0.42
-		local edgeZ = minCorner.Z + (nz + 0.5) * field.cellSize - offset[2] * field.cellSize * 0.42
-		local topY = field.baseY + self:_columnTop(neighbour)
-		local depthFrom = neighbour.wallDepth
-		local levelsAdded = 0
-		local depthNow = depthFrom + visual.wallLevelSpacingStuds
-		while depthNow <= exposure and levelsAdded < 40 do
-			for k = 1, visual.wallStrandsPerLevel do
-				local salt = math.floor(depthNow * 100) * 7 + k
-				local h = function(s2: number)
-					return FeatherLayout.hash(neighbour.index, salt, s2)
-				end
-				local along = (h(1) - 0.5) * field.cellSize * 0.9
-				local wx = edgeX + (if offset[1] == 0 then along else 0)
-				local wz = edgeZ + (if offset[2] == 0 then along else 0)
+	local depthNow = (column.base - column.remaining) * column.step
+	local spacing = visual.floorLevelSpacingStuds
+	local spread = field.cellSize * 0.98
+	local level = column.floorDepth + spacing
+	local added = 0
+	while level <= depthNow + 0.01 and added < 40 do
+		for k = 1, visual.floorStrandsPerLevel do
+			local salt = math.floor(level * 100) * 11 + k
+			local h = function(s2: number)
+				return FeatherLayout.hash(column.index, salt, s2)
+			end
+			local wx = minCorner.X + (column.x + 0.5) * field.cellSize + (h(1) - 0.5) * spread
+			local wz = minCorner.Z + (column.z + 0.5) * field.cellSize + (h(2) - 0.5) * spread
+			local scale = self:_rimScale(wx, wz)
+			if scale > 0 then
 				local part = acquirePart(self)
 				part.Name = "Fluff"
 				part.CanQuery = true
-				part:SetAttribute(CELL_ATTRIBUTE, neighbour.index)
+				part:SetAttribute(CELL_ATTRIBUTE, column.index)
 				part.Color = paletteColor(self._config, math.min(1, h(9) * 0.6 + visual.fluffTintShift))
-				-- Lying along the wall face (not bridging the pit), with a little scatter.
-				local yaw = math.atan2(-offset[1], offset[2]) + (h(4) - 0.5) * 0.6
+				local y, normal = self:_surfaceAt(wx, wz)
 				placeFeather(
 					part,
 					wx,
-					topY - depthNow + (h(3) - 0.5) * 0.2,
+					y - level + (h(3) - 0.5) * 0.2,
 					wz,
-					Vector3.new(0, 1, 0),
-					yaw,
-					math.rad(lerp(4, 18, h(5))),
+					normal,
+					h(4) * math.pi * 2,
+					math.rad(lerp(visual.fluffTiltRangeDegrees[1], visual.fluffTiltRangeDegrees[2], h(5))),
 					(h(6) - 0.5) * math.rad(visual.rollRangeDegrees),
-					lerp(visual.fluffLengthRange[1], visual.fluffLengthRange[2], h(7)),
-					lerp(visual.fluffWidthRange[1], visual.fluffWidthRange[2], h(8))
+					lerp(visual.fluffLengthRange[1], visual.fluffLengthRange[2], h(7)) * scale,
+					lerp(visual.fluffWidthRange[1], visual.fluffWidthRange[2], h(8)) * scale
 				)
 				part.Parent = folder
-				table.insert(neighbour.walls, part)
+				table.insert(column.walls, part)
 			end
-			levelsAdded += 1
-			depthNow += visual.wallLevelSpacingStuds
 		end
-		neighbour.wallDepth = math.max(neighbour.wallDepth, exposure)
+		added += 1
+		column.floorDepth = level
+		level += spacing
 	end
 end
 
@@ -542,11 +511,11 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 			mask = masks[index] or 0,
 			feathers = {},
 			fluff = {},
-			fluffRest = {},
 			fluffCount = 0,
 			step = 0,
 			walls = {},
 			wallDepth = 0,
+			floorDepth = 0,
 		}
 	end
 	self:_buildRimBed(folder)
@@ -670,7 +639,6 @@ function PileVisualController.applyDelta(self: PileVisualController, payload: { 
 		if not column then
 			continue
 		end
-		local before = column.remaining
 		if change.r ~= column.remaining or (change.m ~= nil and change.m ~= column.mask) then
 			self.stats.dents += 1
 			column.remaining = change.r
@@ -678,7 +646,8 @@ function PileVisualController.applyDelta(self: PileVisualController, payload: { 
 				column.mask = change.m
 			end
 			grid.remaining[change.i] = change.r
-			self:_applyColumn(column, self._folder :: Folder, change.r < before)
+			self:_applyColumn(column, self._folder :: Folder)
+			self:_exposeFloor(column)
 			self:_exposeWalls(column)
 			changed = true
 		end
@@ -919,7 +888,8 @@ function PileVisualController.collectFeather(self: PileVisualController, feather
 		if self._grid then
 			(self._grid :: any).remaining[column.index] = column.remaining
 		end
-		self:_applyColumn(column, folder, true)
+		self:_applyColumn(column, folder)
+		self:_exposeFloor(column)
 		self:_exposeWalls(column)
 		self:_recount()
 	end
@@ -1011,7 +981,6 @@ function PileVisualController.clear(self: PileVisualController)
 			releasePart(self, part)
 		end
 		table.clear(column.fluff)
-		table.clear(column.fluffRest)
 		for _, part in ipairs(column.walls) do
 			releasePart(self, part)
 		end

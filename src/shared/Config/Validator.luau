@@ -691,12 +691,18 @@ function Validator.validate(raw: any): Report
 				"pile.visual wall strand rule must be a positive integer count and spacing"
 			)
 			check(
+				isPositiveNumber(visual.floorStrandsPerLevel)
+					and visual.floorStrandsPerLevel % 1 == 0
+					and isPositiveNumber(visual.floorLevelSpacingStuds),
+				"pile.visual floor strand rule must be a positive integer count and spacing"
+			)
+			check(
 				isNonNegativeNumber(visual.rimStrandsDesktop)
 					and isNonNegativeNumber(visual.rimStrandsMobile)
 					and visual.rimStrandsMobile <= visual.rimStrandsDesktop,
 				"pile.visual rim strand counts must be non-negative with mobile <= desktop"
 			)
-			for _, key in ipairs({ "liftSeconds", "settleSeconds", "liftStuds", "pickScale", "rimTaperStuds" }) do
+			for _, key in ipairs({ "liftSeconds", "liftStuds", "pickScale", "rimTaperStuds" }) do
 				check(isPositiveNumber(visual[key]), "pile.visual." .. key .. " must be > 0")
 			end
 			check(
