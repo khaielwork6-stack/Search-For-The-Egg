@@ -66,6 +66,7 @@ export type PileVisualController = typeof(setmetatable(
 		_culled: boolean,
 		_chevronGui: BillboardGui?,
 		_streakPool: { BasePart },
+		_rimBed: { BasePart },
 		_bound: boolean,
 		_lastPile: { [string]: any }?,
 		_lastChapter: string?,
@@ -116,6 +117,7 @@ function PileVisualController.new(
 		_culled = false,
 		_chevronGui = nil,
 		_streakPool = {},
+		_rimBed = {},
 		_bound = false,
 		_lastPile = nil,
 		_lastChapter = nil,
@@ -474,6 +476,7 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 			fluffCount = 0,
 		}
 	end
+	self:_buildRimBed(folder)
 	local fluffPerCell = self:_fluffPerCell()
 	for _, column in pairs(self._columns) do
 		-- Vary the bed a little per cell so no row reads as a grid.
@@ -514,6 +517,55 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 	end)
 end
 
+-- The terrain mound's foot reaches past the logical square (rim stretch); those four skirt caps get
+-- their own permanent bed so no core shows at the base from any side.
+function PileVisualController._buildRimBed(self: PileVisualController, folder: Folder)
+	local visual = self._config.pile.visual
+	local field = self._seatField :: PileSurface.Field
+	local count = if self._quality:tier() == "low" then visual.rimStrandsMobile else visual.rimStrandsDesktop
+	local half = field.width * field.cellSize / 2
+	local foot = field.radius * PileSurface.RIM_STRETCH - visual.rimInsetStuds
+	local placed = 0
+	local attempt = 0
+	while placed < count and attempt < count * 8 do
+		attempt += 1
+		local h = function(salt: number)
+			return FeatherLayout.hash(attempt, 3, salt)
+		end
+		local angle = h(1) * math.pi * 2
+		local r = foot - h(2) * h(2) * 3.2
+		local dx, dz = math.cos(angle) * r, math.sin(angle) * r
+		if math.abs(dx) <= half - 0.3 and math.abs(dz) <= half - 0.3 then
+			continue -- inside the grid: the cells' own bed covers it
+		end
+		local wx, wz = field.centreX + dx, field.centreZ + dz
+		local scale = self:_rimScale(wx, wz)
+		if scale <= 0 then
+			continue
+		end
+		local part = acquirePart(self)
+		part.Name = "Fluff"
+		part.CanQuery = false
+		part.Color = paletteColor(self._config, math.min(1, h(9) * 0.6 + visual.fluffTintShift))
+		local y, normal = self:_surfaceAt(wx, wz)
+		placeFeather(
+			part,
+			wx,
+			y + lerp(0.1, 0.3, h(3)),
+			wz,
+			normal,
+			self:_downslope(wx, wz) + (h(4) - 0.5) * math.rad(visual.downslopeYawJitterDegrees) * 2,
+			math.rad(lerp(visual.fluffTiltRangeDegrees[1], visual.fluffTiltRangeDegrees[2], h(5))),
+			(h(6) - 0.5) * math.rad(visual.rollRangeDegrees),
+			lerp(visual.fluffLengthRange[1], visual.fluffLengthRange[2], h(7)) * math.max(scale, 0.6),
+			lerp(visual.fluffWidthRange[1], visual.fluffWidthRange[2], h(8)) * math.max(scale, 0.6)
+		)
+		part.Parent = folder
+		table.insert(self._rimBed, part)
+		placed += 1
+	end
+end
+
 function PileVisualController._recount(self: PileVisualController)
 	local feathers, fluff = 0, 0
 	for _, column in pairs(self._columns) do
@@ -523,7 +575,7 @@ function PileVisualController._recount(self: PileVisualController)
 		fluff += #column.fluff
 	end
 	self.stats.feathersPlaced = feathers
-	self.stats.fluffPlaced = fluff
+	self.stats.fluffPlaced = fluff + #self._rimBed
 end
 
 -- Applies an authoritative delta ({ i, r, m } per cell): only the touched cells change (a taken
@@ -884,6 +936,10 @@ function PileVisualController.clear(self: PileVisualController)
 		table.clear(column.fluff)
 	end
 	table.clear(self._columns)
+	for _, part in ipairs(self._rimBed) do
+		releasePart(self, part)
+	end
+	table.clear(self._rimBed)
 	self._grid = nil
 	self._field = nil
 	self._seatField = nil

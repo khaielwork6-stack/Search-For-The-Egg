@@ -678,6 +678,12 @@ function Validator.validate(raw: any): Report
 				check(isPositiveNumber(visual[key]), "pile.visual." .. key .. " must be > 0")
 			end
 			check(isNonNegativeNumber(visual.surfaceLiftStuds), "pile.visual.surfaceLiftStuds must be >= 0")
+			check(
+				isNonNegativeNumber(visual.rimStrandsDesktop)
+					and isNonNegativeNumber(visual.rimStrandsMobile)
+					and visual.rimStrandsMobile <= visual.rimStrandsDesktop,
+				"pile.visual rim strand counts must be non-negative with mobile <= desktop"
+			)
 			for _, key in ipairs({ "liftSeconds", "settleSeconds", "liftStuds", "pickScale", "rimInsetStuds", "rimTaperStuds" }) do
 				check(isPositiveNumber(visual[key]), "pile.visual." .. key .. " must be > 0")
 			end

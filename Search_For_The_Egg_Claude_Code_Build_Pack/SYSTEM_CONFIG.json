@@ -225,7 +225,9 @@
       "liftSeconds": 0.09,
       "liftStuds": 0.5,
       "pickScale": 1.25,
-      "settleSeconds": 0.22
+      "settleSeconds": 0.22,
+      "rimStrandsDesktop": 1100,
+      "rimStrandsMobile": 360
     },
     "assumption": "ASSUMED",
     "depthPerFeatherStuds": 0.6
