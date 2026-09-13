@@ -226,7 +226,9 @@ local function collectLineOfSight(_runtime: any, origin: Vector3, hit: Vector3):
 			table.insert(exclude, player.Character)
 		end
 	end
-	for _, name in ipairs({ "SFE_PileVisual", "SFE_ToolVisuals", "SFE_Chapter1", "SFE_LobbyShell" }) do
+	-- The pile's own instances never block sight of a record: the coat is what the player aims
+	-- through, and the invisible collision shell sits above every seat below the surface.
+	for _, name in ipairs({ "SFE_PileVisual", "SFE_ToolVisuals", "SFE_PileCollision", "SFE_Chapter1", "SFE_LobbyShell" }) do
 		local folder = workspace:FindFirstChild(name)
 		if folder then
 			table.insert(exclude, folder)
