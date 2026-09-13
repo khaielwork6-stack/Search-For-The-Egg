@@ -206,15 +206,18 @@ local function refreshSurfaceFilter()
 	terrainParams.FilterDescendantsInstances = include
 end
 
+-- Seat height: the smooth logical surface, never below the collision terrain or the pit earth (so a
+-- feather can sit a hair above the voxel surface but never inside it).
 function PileVisualController._surfaceAt(self: PileVisualController, wx: number, wz: number): (number, Vector3)
 	local field = self._field :: PileSurface.Field
 	local analytic = field.baseY + PileSurface.heightAt(field, wx, wz)
+	local normal = PileSurface.normalAt(field, wx, wz)
 	local result =
 		workspace:Raycast(Vector3.new(wx, field.baseY + field.apex + 12, wz), Vector3.new(0, -(field.apex + 20), 0), terrainParams)
-	if result and result.Position.Y >= field.baseY - 0.5 then
+	if result and result.Position.Y >= field.baseY - 0.5 and result.Position.Y > analytic then
 		return result.Position.Y, result.Normal
 	end
-	return analytic, PileSurface.normalAt(field, wx, wz)
+	return analytic, normal
 end
 
 -- Places a feather-shaped part with its base at (wx, y, wz), lying along the surface (normal) with the
@@ -313,8 +316,10 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 		end
 		self.stats.reseats += 1
 	end
-	-- Fluff bed: present while the cell has any record left (never thins per pick).
-	local fluffWanted = if column.remaining > 0 and not self._culled then column.fluffCount else 0
+	-- Fluff bed: several dense layers of smaller overlapping strands that follow the surface down as
+	-- the area is dug, so there are always feathers under feathers - never bare core. Not tied to the
+	-- cell's records, never removed by a pick.
+	local fluffWanted = if self._culled then 0 else column.fluffCount
 	while #column.fluff > fluffWanted do
 		releasePart(self, table.remove(column.fluff) :: BasePart)
 	end
@@ -334,10 +339,13 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 		local wx = minCorner.X + (column.x + 0.5) * field.cellSize + (h(1) - 0.5) * spread
 		local wz = minCorner.Z + (column.z + 0.5) * field.cellSize + (h(2) - 0.5) * spread
 		local y, normal = self:_surfaceAt(wx, wz)
+		-- Layer k of `fluffLayers`: the top layer lies on the surface, deeper layers a step further in
+		-- (their tips still break the surface between the strands above).
+		local layer = (k - 1) % visual.fluffLayers
 		placeFeather(
 			part,
 			wx,
-			y + lerp(-0.12, 0.1, h(3)),
+			y + lerp(0.04, 0.2, h(3)) - layer * visual.fluffLayerStepStuds,
 			wz,
 			normal,
 			h(4) * math.pi * 2,

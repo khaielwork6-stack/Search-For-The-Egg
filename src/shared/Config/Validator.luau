@@ -649,6 +649,11 @@ function Validator.validate(raw: any): Report
 				check(isPositiveNumber(visual[key]), "pile.visual." .. key .. " must be > 0")
 			end
 			check(isNonNegativeNumber(visual.surfaceLiftStuds), "pile.visual.surfaceLiftStuds must be >= 0")
+			check(
+				isPositiveNumber(visual.fluffLayers) and visual.fluffLayers % 1 == 0 and visual.fluffLayers <= 6,
+				"pile.visual.fluffLayers must be an integer 1..6"
+			)
+			check(isPositiveNumber(visual.fluffLayerStepStuds), "pile.visual.fluffLayerStepStuds must be > 0")
 			for _, key in ipairs({ "streakCount", "chevronCount" }) do
 				check(
 					isPositiveNumber(visual[key]) and visual[key] % 1 == 0 and visual[key] <= 12,
@@ -659,6 +664,10 @@ function Validator.validate(raw: any): Report
 				check(isNonNegativeNumber(visual[key]) and visual[key] <= 1, "pile.visual." .. key .. " must be 0..1")
 			end
 		end
+		check(
+			isPositiveNumber(pile.depthPerFeatherStuds) and pile.depthPerFeatherStuds <= 4,
+			"pile.depthPerFeatherStuds must be within (0, 4]"
+		)
 		check(
 			isPositiveNumber(pile.aimPlaneHeightStuds) and pile.aimPlaneHeightStuds <= pile.maxVisualHeightStuds,
 			"pile.aimPlaneHeightStuds must be > 0 and <= maxVisualHeightStuds"

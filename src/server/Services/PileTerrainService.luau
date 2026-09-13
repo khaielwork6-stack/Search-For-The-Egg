@@ -172,7 +172,15 @@ end
 -- Opens a hollow around the Egg the moment it is revealed so it never clips through the core.
 function PileTerrainService.openEggHollow(self: PileTerrainService, runtime: any, position: Vector3)
 	local collision = self._config.pile.collision
-	self:carveAt(runtime, position.X, position.Z, collision.eggHollowRadiusStuds, collision.eggHollowDepthStuds)
+	local field = self._fields[runtime.state.roundId]
+	local remainingHeight = if field then PileSurface.heightAt(field, position.X, position.Z) else 0
+	self:carveAt(
+		runtime,
+		position.X,
+		position.Z,
+		collision.eggHollowRadiusStuds,
+		math.max(collision.eggHollowDepthStuds, remainingHeight + 1)
+	)
 	self.stats.hollows += 1
 	local r = collision.eggHollowRadiusStuds
 	self:rewrite(runtime, position.X - r, position.Z - r, position.X + r, position.Z + r)

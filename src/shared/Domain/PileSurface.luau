@@ -1,11 +1,12 @@
 --!strict
--- Pure pile surface model shared by the server (aim resolution) and the client (mound visual): the
+-- Pure pile surface model shared by the server (aim resolution, collision) and the client (coat): the
 -- authoritative 16x16 cells become one smooth dome. The surface height at any world XZ is
---   apex * domeProfile(normalised radius) * fraction(x, z)
+--   max(0, apex * domeProfile(normalised radius) - depth(x, z))
 -- where the dome profile is a continuous rounded cone (1 at the centre, 0 at the rim stretch) and
--- the fraction is the bilinear interpolation of each cell's smoothed 3x3 remaining/base, so cleared
--- cells read as soft hollows and the mound shrinks as a whole. Column heights are the same formula
--- sampled at cell centres. `march` walks a ray until it enters the surface from above.
+-- depth is the bilinear interpolation of each cell's smoothed 3x3 removed-record count times
+-- `pile.depthPerFeatherStuds`, so one pick barely moves the surface and a well-dug area becomes a
+-- bowl a few studs deep - never a collapse to the floor. `march` walks a ray until it enters the
+-- surface from above.
 -- Presentation constants are ASSUMED (A-UX-07); the logical grid, yields, and cells are untouched.
 
 local PileSurface = {}
@@ -23,6 +24,7 @@ export type Field = {
 	baseY: number,
 	heights: { number }, -- per cell index (1-based, x + z * width + 1)
 	fractions: { number }, -- smoothed remaining/base per cell
+	depths: { number }, -- smoothed removed-record depth (studs) per cell
 }
 
 PileSurface.RIM_STRETCH = 1.15 -- the mound reaches the floor at the edge of the nest base cylinder
@@ -34,21 +36,34 @@ function PileSurface.domeProfile(rNorm: number): number
 	return 1 - r ^ PileSurface.PROFILE_POWER
 end
 
--- Weighted 3x3 average of remaining/base (centre 4, edges 2, corners 1).
-function PileSurface.smoothedFraction(width: number, depth: number, remaining: { number }, base: { number }, x: number, z: number): number
+-- Weighted 3x3 average (centre 4, edges 2, corners 1) of `value(index)`.
+local function smoothed(width: number, depth: number, x: number, z: number, value: (number) -> number): number
 	local total, weightSum = 0, 0
 	for dz = -1, 1 do
 		for dx = -1, 1 do
 			local nx, nz = x + dx, z + dz
 			if nx >= 0 and nz >= 0 and nx < width and nz < depth then
-				local index = nz * width + nx + 1
 				local weight = if dx == 0 and dz == 0 then 4 elseif dx == 0 or dz == 0 then 2 else 1
-				total += weight * (remaining[index] / math.max(1, base[index]))
+				total += weight * value(nz * width + nx + 1)
 				weightSum += weight
 			end
 		end
 	end
 	return if weightSum > 0 then total / weightSum else 0
+end
+
+-- Smoothed remaining/base around a cell.
+function PileSurface.smoothedFraction(width: number, depth: number, remaining: { number }, base: { number }, x: number, z: number): number
+	return smoothed(width, depth, x, z, function(index)
+		return remaining[index] / math.max(1, base[index])
+	end)
+end
+
+-- Smoothed removed-record count around a cell.
+function PileSurface.smoothedRemoved(width: number, depth: number, remaining: { number }, base: { number }, x: number, z: number): number
+	return smoothed(width, depth, x, z, function(index)
+		return math.max(0, base[index] - remaining[index])
+	end)
 end
 
 -- Builds the field from a grid-like table { width, depth, cellSize, remaining[], base[] } and the
@@ -59,17 +74,18 @@ function PileSurface.buildField(cfg: { [string]: any }, grid: { [string]: any },
 	local centre = layout.nestCenter
 	local apex = cfg.pile.maxVisualHeightStuds
 	local radius = math.min(halfW, halfD)
-	local heights, fractions = table.create(width * depth, 0), table.create(width * depth, 0)
+	local step = cfg.pile.depthPerFeatherStuds
+	local heights, fractions, depths = table.create(width * depth, 0), table.create(width * depth, 0), table.create(width * depth, 0)
 	for z = 0, depth - 1 do
 		for x = 0, width - 1 do
 			local index = z * width + x + 1
 			local cx = (x + 0.5) * cellSize - halfW
 			local cz = (z + 0.5) * cellSize - halfD
 			local rNorm = math.sqrt(cx * cx + cz * cz) / radius
-			local fraction = PileSurface.smoothedFraction(width, depth, grid.remaining, grid.base, x, z)
-			fractions[index] = fraction
-			local height = apex * PileSurface.domeProfile(rNorm) * fraction
-			heights[index] = if grid.remaining[index] <= 0 and fraction < 0.05 then 0 else height
+			fractions[index] = PileSurface.smoothedFraction(width, depth, grid.remaining, grid.base, x, z)
+			local dug = PileSurface.smoothedRemoved(width, depth, grid.remaining, grid.base, x, z) * step
+			depths[index] = dug
+			heights[index] = math.max(0, apex * PileSurface.domeProfile(rNorm) - dug)
 		end
 	end
 	return {
@@ -85,6 +101,7 @@ function PileSurface.buildField(cfg: { [string]: any }, grid: { [string]: any },
 		baseY = layout.nestBaseY,
 		heights = heights,
 		fractions = fractions,
+		depths = depths,
 	}
 end
 
@@ -96,36 +113,40 @@ function PileSurface.columnHeight(field: Field, x: number, z: number): number
 	return field.heights[z * field.width + x + 1]
 end
 
-local function fractionOf(field: Field, x: number, z: number): number
-	x = math.clamp(x, 0, field.width - 1)
-	z = math.clamp(z, 0, field.depth - 1)
-	return field.fractions[z * field.width + x + 1]
-end
-
--- Smoothed remaining fraction at a world XZ, bilinear between cell centres (edge-clamped).
-function PileSurface.fractionAt(field: Field, worldX: number, worldZ: number): number
+local function bilinear(field: Field, values: { number }, worldX: number, worldZ: number): number
 	local fx = math.clamp((worldX - field.minX) / field.cellSize - 0.5, 0, field.width - 1)
 	local fz = math.clamp((worldZ - field.minZ) / field.cellSize - 0.5, 0, field.depth - 1)
 	local x0, z0 = math.floor(fx), math.floor(fz)
 	local tx, tz = fx - x0, fz - z0
-	local f00 = fractionOf(field, x0, z0)
-	local f10 = fractionOf(field, x0 + 1, z0)
-	local f01 = fractionOf(field, x0, z0 + 1)
-	local f11 = fractionOf(field, x0 + 1, z0 + 1)
-	local top = f00 + (f10 - f00) * tx
-	local bottom = f01 + (f11 - f01) * tx
+	local function at(x: number, z: number): number
+		x = math.clamp(x, 0, field.width - 1)
+		z = math.clamp(z, 0, field.depth - 1)
+		return values[z * field.width + x + 1]
+	end
+	local top = at(x0, z0) + (at(x0 + 1, z0) - at(x0, z0)) * tx
+	local bottom = at(x0, z0 + 1) + (at(x0 + 1, z0 + 1) - at(x0, z0 + 1)) * tx
 	return top + (bottom - top) * tz
 end
 
--- Surface height (above baseY) at a world XZ: continuous dome profile times the interpolated
--- fraction; 0 outside the rim stretch.
+-- Smoothed remaining fraction at a world XZ, bilinear between cell centres (edge-clamped).
+function PileSurface.fractionAt(field: Field, worldX: number, worldZ: number): number
+	return bilinear(field, field.fractions, worldX, worldZ)
+end
+
+-- Dug depth (studs) at a world XZ.
+function PileSurface.depthAt(field: Field, worldX: number, worldZ: number): number
+	return bilinear(field, field.depths, worldX, worldZ)
+end
+
+-- Surface height (above baseY) at a world XZ: continuous dome profile minus the dug depth; 0 outside
+-- the rim stretch.
 function PileSurface.heightAt(field: Field, worldX: number, worldZ: number): number
 	local dx, dz = worldX - field.centreX, worldZ - field.centreZ
 	local profile = PileSurface.domeProfile(math.sqrt(dx * dx + dz * dz) / field.radius)
 	if profile <= 0 then
 		return 0
 	end
-	return field.apex * profile * PileSurface.fractionAt(field, worldX, worldZ)
+	return math.max(0, field.apex * profile - PileSurface.depthAt(field, worldX, worldZ))
 end
 
 -- Undepleted mound height at a world XZ (the dome with every cell full).

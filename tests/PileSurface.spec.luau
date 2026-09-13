@@ -36,23 +36,31 @@ return function(describe, it, expect)
 			expect(PileSurface.domeProfile(2)).toBe(0)
 		end)
 
-		it("clearing cells lowers a soft hollow and an empty grid is flat", function()
+		it("clearing cells lowers a soft hollow by a fixed depth per record and never collapses the mound", function()
 			local grid, snapshot = fullGrid()
 			local before = PileSurface.buildField(cfg, snapshot, layout)
 			local centreIndex = 8 * grid.width + 8 + 1
 			local cell = grid.cells[centreIndex]
+			PileGrid.remove(grid, cell, 1)
+			local one = PileSurface.buildField(cfg, PileGrid.snapshot(grid), layout)
+			-- One record: the centre column drops by the centre weight of one step (barely visible).
+			local drop = PileSurface.columnHeight(before, 8, 8) - PileSurface.columnHeight(one, 8, 8)
+			expect(drop).toBeCloseTo(cfg.pile.depthPerFeatherStuds * 4 / 16, 1e-9)
+			expect(PileSurface.columnHeight(one, 12, 8)).toBeCloseTo(PileSurface.columnHeight(before, 12, 8), 1e-9)
 			PileGrid.remove(grid, cell, cell.remaining)
 			local after = PileSurface.buildField(cfg, PileGrid.snapshot(grid), layout)
-			expect(PileSurface.columnHeight(after, 8, 8)).toBeLessThan(PileSurface.columnHeight(before, 8, 8))
+			expect(PileSurface.columnHeight(after, 8, 8)).toBeLessThan(PileSurface.columnHeight(one, 8, 8))
 			expect(PileSurface.columnHeight(after, 9, 8)).toBeLessThan(PileSurface.columnHeight(before, 9, 8))
-			expect(PileSurface.columnHeight(after, 12, 8)).toBeCloseTo(PileSurface.columnHeight(before, 12, 8), 1e-9)
+			-- An empty grid is a mound lowered everywhere by base x step, never flat at the centre.
 			for _, c in ipairs(grid.cells) do
 				PileGrid.remove(grid, c, c.remaining)
 			end
 			local empty = PileSurface.buildField(cfg, PileGrid.snapshot(grid), layout)
-			for x = 0, grid.width - 1 do
-				expect(PileSurface.columnHeight(empty, x, 8)).toBe(0)
-			end
+			local emptySnapshot = PileGrid.snapshot(grid)
+			local dug = PileSurface.smoothedRemoved(grid.width, grid.depth, emptySnapshot.remaining, emptySnapshot.base, 8, 8)
+			local expected = PileSurface.columnHeight(before, 8, 8) - dug * cfg.pile.depthPerFeatherStuds
+			expect(PileSurface.columnHeight(empty, 8, 8)).toBeCloseTo(expected, 1e-6)
+			expect(PileSurface.columnHeight(empty, 8, 8)).toBeGreaterThan(0)
 		end)
 
 		it("interpolates a continuous height between columns and returns 0 outside the nest", function()
