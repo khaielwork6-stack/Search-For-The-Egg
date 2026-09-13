@@ -869,3 +869,13 @@ Play Solo, desktop viewport 1223x658, owner map. Headless: 289 tests pass, check
   Sale attempts while away: `nothing_to_sell` x4 (empty), `crate_busy` with 3 feathers kept; after the
   run the sale succeeded ($0.14 total); three runs, none overlapping.
 - Output: no SFE errors.
+
+## Coat coverage and bundle fit (13 Sep 2026, follow-up)
+
+- Coat parts seat on max(smooth field, voxel surface) at build; terrain inset 1.6 studs; bed 44
+  strands per cell in 4 layers plus a 1,600-strand rim bed that spills 1.2 studs past the foot.
+  Coverage from above over the footprint: 26 of 560 rays met terrain before the previous rim fix, all
+  on the ground-level skirt; after the rim bed the edit-mode render shows no core from a 3/4 view.
+- One pick: 1 part removed, 1 exposed, parts before/after 11,820 -> 11,821 (the flying feather).
+- Bundle frame 232 x 153 at (973, 355) in a 1223 x 658 viewport, all feather corners inside the
+  viewport camera frustum; size follows 19 % of the viewport width clamped 130..260 px.
