@@ -244,7 +244,9 @@ local function collectFloorHeight(x: number, z: number): number?
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	local exclude: { Instance } = { workspace.Terrain }
-	for _, name in ipairs({ "SFE_PileVisual", "SFE_ToolVisuals" }) do
+	-- The pile's own instances are never the floor: the client coat, tool visuals, and the invisible
+	-- collision shell (which would otherwise clamp every seat below its top up to the mound surface).
+	for _, name in ipairs({ "SFE_PileVisual", "SFE_ToolVisuals", "SFE_PileCollision" }) do
 		local inst = workspace:FindFirstChild(name)
 		if inst then
 			table.insert(exclude, inst)
