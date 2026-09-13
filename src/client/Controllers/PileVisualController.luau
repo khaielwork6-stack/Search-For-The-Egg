@@ -36,6 +36,7 @@ type Column = {
 	mask: number,
 	feathers: { [number]: BasePart }, -- slot -> part (exposed records only)
 	fluff: { BasePart },
+	fluffRest: { CFrame }, -- each strand's pose as built; sinks are measured from here
 	fluffCount: number,
 	step: number, -- studs the column recedes per record
 	walls: { BasePart },
@@ -399,9 +400,11 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 				lerp(visual.fluffWidthRange[1], visual.fluffWidthRange[2], h(8)) * scale
 			)
 			part.Parent = folder
+			column.fluffRest[k] = part.CFrame + Vector3.new(0, sink, 0) -- pose with no records taken
 		elseif animateSink then
-			-- The cell settles by one layer under the feather that just left (0.2 s, nothing else moves).
-			local goal = part.CFrame - Vector3.new(0, column.step, 0)
+			-- The cell settles to its absolute depth for the records taken (0.2 s, nothing else moves);
+			-- measured from the built pose so rapid picks never lose a step.
+			local goal = (column.fluffRest[k] or part.CFrame) - Vector3.new(0, sink, 0)
 			TweenService
 				:Create(part, TweenInfo.new(visual.settleSeconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = goal })
 				:Play()
@@ -539,6 +542,7 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 			mask = masks[index] or 0,
 			feathers = {},
 			fluff = {},
+			fluffRest = {},
 			fluffCount = 0,
 			step = 0,
 			walls = {},
@@ -1007,6 +1011,7 @@ function PileVisualController.clear(self: PileVisualController)
 			releasePart(self, part)
 		end
 		table.clear(column.fluff)
+		table.clear(column.fluffRest)
 		for _, part in ipairs(column.walls) do
 			releasePart(self, part)
 		end
