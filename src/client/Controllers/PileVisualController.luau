@@ -465,8 +465,8 @@ function PileVisualController._exposeWalls(self: PileVisualController, dug: Colu
 				part.CanQuery = true
 				part:SetAttribute(CELL_ATTRIBUTE, neighbour.index)
 				part.Color = paletteColor(self._config, math.min(1, h(9) * 0.6 + visual.fluffTintShift))
-				-- Lying horizontally along the wall face, tips poking toward the pit.
-				local yaw = math.atan2(-offset[2], -offset[1]) + (h(4) - 0.5) * 0.7
+				-- Lying along the wall face (not bridging the pit), with a little scatter.
+				local yaw = math.atan2(-offset[1], offset[2]) + (h(4) - 0.5) * 0.6
 				placeFeather(
 					part,
 					wx,
