@@ -144,6 +144,23 @@ Owner decision needed: hand grasp upgrades (`handUpgrades.grasp[*].amount` 2..8)
 yield because every click collects exactly one feather. Options: re-purpose grasp (cooldown, rake yield) or
 remove it from the shop. The config and shop are untouched pending that call.
 
+## Crate sale run and precise picks (13 Sep 2026)
+
+- The nest mound sits on the open yard centre (`ChapterLayout.chapter1.nestCenter` 0, 52, 372); the
+  map's earth pit is the black hole and the conveyor exit path is clear.
+- Selling is the map's `Crates.CollectionCrate`: server `ClickDetector`s on its slats (trusted sale, no
+  token) plus the `SFE_Sell` prompt; `CrateService` gates one run at a time (`crate_busy`), broadcasts
+  `CrateRun`, and frees the crate after the timeline (`selling.crate`, ASSUMED). `CrateController`
+  replays the run on every client: lift, front belt, processor, turn, side belt, pit approach, tip,
+  fall, vanish, reset; rollers spin and belt stripes scroll; sold feathers ride inside.
+- A pick changes only its own cell: the record leaves, the next is exposed, that cell's fluff settles
+  one layer; seats come from the mound as built (`_seatField`); terrain re-writes every
+  `pile.collision.rewriteEveryRecords` records. Pick animation: lift + enlarge (0.09 s) then arc to the
+  bundle (0.16 s). A reticle on the fluff bed targets that cell's top feather.
+- Held bundle (`CarriedStack`): lower-right, stems gathered, heads fanned, walk bob and turn sway,
+  hidden behind menus. Permanent first person; blocking menus and the cutscene free the cursor
+  (`ModalController._applyMouseLock`).
+
 ## Map integration (13 Sep 2026)
 
 The owner placed two final environments in the place file: `Workspace.SearchForTheEgg_Lobby` (fenced farm

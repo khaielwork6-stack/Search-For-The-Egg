@@ -850,3 +850,22 @@ literals, stylua, selene).
   stack hidden, gameplay input suspended; closed: stack visible again.
 - Mobile density: quality low -> 2,322 instances (fluff 7/cell), high -> 6,194.
 - Output: no errors or warnings from SFE code in either round (DataStore Studio-access notice only).
+
+# Crate sale run, precise picks, held bundle, mouse lock (13 Sep 2026)
+
+Play Solo, desktop viewport 1223x658, owner map. Headless: 289 tests pass, check runner OK.
+
+- Mouse lock: lobby and Searching `LockFirstPerson` + `LockCenter`, icon hidden; cutscene and the
+  Settings modal `Classic` + `Default`, icon shown; relocked after close. Bundle hidden behind the menu.
+- Nest relocated: coat spans x -15..14, z 357..386 (centre 0, 372), zero parts within 20 studs of the
+  pit; terrain crown 68, no terrain in the pit or on the conveyor exit line.
+- One pick: 1 part gone, 1 new record exposed, 0 other feathers moved, 36 fluff strands of that cell
+  settled 0.5 studs, 7,702 parts identical; bag 0 -> 1, bundle 1 feather.
+- Targeting: 19 of 20 random reticle points on the mound yield a target (bed clicks resolve to the
+  cell's top feather); 12 rapid picks accepted in 12 attempts.
+- Sale: 7 feathers -> $0.07, bag 0, bundle cleared, 7 feathers shown inside the crate; the crate rode
+  the front belt (z 341 -> 320 at 7 studs/s), through the processor, west along the side belt
+  (x 42 -> 15.7), across to the pit (y 57.9 -> 49.5), and was back home at 12.6 s; rollers turned.
+  Sale attempts while away: `nothing_to_sell` x4 (empty), `crate_busy` with 3 feathers kept; after the
+  run the sale succeeded ($0.14 total); three runs, none overlapping.
+- Output: no SFE errors.
