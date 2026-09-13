@@ -147,6 +147,11 @@ function PileTerrainService.onAwarded(self: PileTerrainService, runtime: any, re
 		minX, minZ = math.min(minX, x), math.min(minZ, z)
 		maxX, maxZ = math.max(maxX, x), math.max(maxZ, z)
 	end
+	-- Voxels are re-written only when a touched cell crosses a record threshold (every N records
+	-- or empty), so a single pick never shifts the collision surface under the coat; dents are
+	-- recorded every time and land with the next rewrite.
+	local every = collision.rewriteEveryRecords
+	local due = false
 	local cells = result.cells
 	if type(cells) == "table" then
 		for _, removal in ipairs(cells) do
@@ -157,6 +162,10 @@ function PileTerrainService.onAwarded(self: PileTerrainService, runtime: any, re
 				if cell.index ~= result.cellIndex then
 					self:carveAt(runtime, minCorner.X + lx, minCorner.Z + lz, collision.sweepDigRadiusStuds, collision.sweepDentDepthStuds)
 				end
+				local removedSoFar = cell.base - cell.remaining
+				if cell.remaining == 0 or removedSoFar % every == 0 or removal.removed >= every then
+					due = true
+				end
 			end
 		end
 	end
@@ -164,7 +173,7 @@ function PileTerrainService.onAwarded(self: PileTerrainService, runtime: any, re
 		include(result.hitX, result.hitZ)
 		self:carveAt(runtime, result.hitX, result.hitZ, collision.digRadiusStuds, collision.strikeDentDepthStuds)
 	end
-	if minX < math.huge then
+	if minX < math.huge and due then
 		self:rewrite(runtime, minX, minZ, maxX, maxZ)
 	end
 end
@@ -202,10 +211,10 @@ end
 -- Surface height (world Y) the collision core intends at a world XZ: analytic field minus dents,
 -- never below the base. Used by tests and the Studio debug hooks.
 function PileTerrainService.intendedSurfaceY(self: PileTerrainService, runtime: any, x: number, z: number): number
-	local field = self._fields[runtime.state.roundId]
-	if not field then
+	if not self._fields[runtime.state.roundId] then
 		return 0
 	end
+	local field = self:fieldFor(runtime) -- the live logical surface, not the last voxel write
 	local height = PileSurface.heightAt(field, x, z) - self:dentDepthAt(runtime, x, z)
 	return field.baseY + math.max(0, height)
 end

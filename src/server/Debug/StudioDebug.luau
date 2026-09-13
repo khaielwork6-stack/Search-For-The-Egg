@@ -591,6 +591,17 @@ function StudioDebug.install(container: any): any?
 	function hooks.lastRace()
 		return container._lastRace
 	end
+	function hooks.crateStatus()
+		local crateService = container.crate
+		if not crateService then
+			return { error = "no_crate" }
+		end
+		return {
+			busy = crateService:isBusy(),
+			stats = table.clone(crateService.stats),
+			totalSeconds = crateService:totalSeconds("chapter1"),
+		}
+	end
 	-- Per-cell remaining/base plus the intended collision surface at a world XZ (verification aid).
 	function hooks.pileCells(userId: number, probeX: number?, probeZ: number?)
 		local runtime = container.rounds:roundOf(userId)

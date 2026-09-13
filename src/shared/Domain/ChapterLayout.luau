@@ -119,37 +119,48 @@ ChapterLayout.lobby = table.freeze({
 })
 
 -- Sunlit Henhouse (Chapter 1): the owner's `SearchForTheEgg_Map2` map (a fenced farmyard; ground
--- top y = 52.1). The nest is the map's earth pit (floor y = 46.5, opening 32 x 48 studs) so the
--- mound rises out of the ground; feathers are sold at the processor's green button (the conveyors
--- feed it) and upgrades are bought at the FEATHER SUPPLIES counter. The logical grid is 16 x 16
--- cells of `pile.cellSizeStuds` centred on `nestCenter`.
+-- top y = 52.1). The nest is a mound on the open ground in the centre of the yard (measured clear of
+-- every prop for 17 studs around); the map's earth pit (floor y = 46.5, opening 32 x 48 studs at
+-- z 315) is the black hole the sold crates fall into, so the path from the side conveyor's exit
+-- (x 14.5, z 311) to the pit stays clear. Feathers are sold at the collection crate parked in front
+-- of the front conveyor; upgrades are bought at the FEATHER SUPPLIES counter. The logical grid is
+-- 16 x 16 cells of `pile.cellSizeStuds` centred on `nestCenter`.
 ChapterLayout.CHAPTER1_MAP_NAME = "SearchForTheEgg_Map2"
 ChapterLayout.chapter1 = table.freeze({
 	origin = Vector3.new(0, 52, 350),
 	floorSize = Vector3.new(140, 1, 140),
 	groundY = 52.1,
-	spawn = Vector3.new(0, 53.3, 404), -- MapSpawn at the south gate path; faces the pit
-	nestCenter = Vector3.new(0, 47, 315),
-	nestBaseY = 47, -- pit floor (46.5) plus the feather litter
+	spawn = Vector3.new(0, 53.3, 404), -- MapSpawn at the south gate path; faces the mound
+	nestCenter = Vector3.new(0, 52, 372),
+	nestBaseY = 52, -- flat yard ground under the mound
 	pitOpening = Vector3.new(32, 0, 48),
-	sellStation = Vector3.new(54, 52.1, 324), -- in front of the processor's green button
-	sellPrompt = Vector3.new(54.2, 60.4, 321.4),
+	blackHole = Vector3.new(0, 46.3, 315), -- the earth pit's dark floor: crates vanish below it
+	sellStation = Vector3.new(47, 53.8, 348.5), -- the collection crate (CollectionCrate pivot)
+	sellPrompt = Vector3.new(47, 55.6, 348.5),
+	crate = table.freeze({
+		modelPath = table.freeze({ "Crates", "CollectionCrate" }),
+		home = Vector3.new(47, 53.75, 348.51), -- CollectionCrate pivot as authored
+		beltTopY = 56.1, -- DarkBelt top face of both conveyors
+		crateBottomOffset = 1.85, -- pivot y minus the crate's bottom face
+		frontBeltStart = Vector3.new(47, 0, 344), -- south roller of the front conveyor
+		machineEntry = Vector3.new(47, 0, 319), -- front portal of the processor
+		machineTurn = Vector3.new(47, 0, 311), -- inside, on the side conveyor's line
+		sideBeltStart = Vector3.new(39, 0, 311), -- side portal / east roller
+		sideBeltEnd = Vector3.new(14.5, 0, 311), -- west roller: the exit
+		pitRim = Vector3.new(6, 0, 313.5),
+	}),
 	upgradeBoard = Vector3.new(-45, 53.8, 303), -- in front of the supplies counter (inside the shop)
 	upgradePrompt = Vector3.new(-45, 58.9, 301.2),
-	chickPathY = 52.1, -- scout chicks walk at ground level between the pit rim and the processor
+	chickPathY = 52.1, -- scout chicks walk at ground level between the mound and the crate
 	roofHeight = 26,
 	ambientAnchors = table.freeze({
-		Vector3.new(0, 62, 315), -- over the mound
-		Vector3.new(-12, 58, 330),
-		Vector3.new(12, 58, 300),
+		Vector3.new(0, 67, 372), -- over the mound
+		Vector3.new(-12, 62, 385),
+		Vector3.new(12, 62, 360),
 		Vector3.new(47, 60, 332), -- over the conveyor
 	}),
 })
 
--- Moonlit Cellar (Chapter 2). A low subterranean hatchery: the debris mound (same 16x16 logical grid)
--- sits under a moon shaft, the three mechanisms line the left wall, the crystal alcove and the code
--- door share the right wall, the mosaic wall closes the far end, and the hatchling cage guards the
--- barrier in front of the exit ladder where the Egg appears. Original layout (A-CH2-01).
 ChapterLayout.chapter2 = table.freeze({
 	origin = Vector3.new(0, 0, 800),
 	floorSize = Vector3.new(150, 1, 150),

@@ -1,13 +1,16 @@
 --!strict
--- Carried feather stack (owner requirement; ASSUMED A-HUD-04): a small, unsupported pile of feathers
--- near the bottom of the screen that grows with bag fullness so the player reads "I am piling these
--- up" - with no hands, arms, gloves, or tools anywhere. Cosmetic only: the server owns the real bag
--- count; this just mirrors it in tiers (empty/low/medium/high/full) so a full bag never means one
--- rendered feather per inventory unit. Rendered in a ViewportFrame (no world instances), positioned
--- below the reticle and above the hotbar, sized per layout class so it never covers the mobile controls.
+-- Held-feather viewmodel (owner requirement; ASSUMED A-HUD-04): a handless first-person bundle in the
+-- lower-right corner of the screen - stems gathered to one point, heads fanned upward and inward so
+-- nothing crosses the crosshair. It grows in tiers with bag fullness (never one part per feather),
+-- settles when a feather is added, bobs gently while walking, and sways a few degrees with camera
+-- turns, always easing back to rest. Cosmetic only: the server owns the real bag count. Rendered in a
+-- ViewportFrame (no world instances, no hands), hidden behind blocking menus, sized per layout class
+-- and kept clear of the mobile jump button.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Motion = require(Shared.Design.Motion)
 local AssetManifest = require(Shared.Design.AssetManifest)
@@ -33,11 +36,18 @@ export type CarriedStack = typeof(setmetatable(
 		_scale: UIScale,
 		_bottomOffset: () -> number,
 		_connections: { RBXScriptConnection },
+		_bobPhase: number,
+		_bob: number,
+		_sway: number,
+		_lastYaw: number?,
+		_bound: boolean,
 	},
 	CarriedStack
 ))
 
 local TEMPLATE_SIZE = Vector3.new(0.54, 1.44, 0.13)
+local REST_CAMERA = CFrame.lookAt(Vector3.new(0.4, 0.55, 4.4), Vector3.new(0.15, 0.25, 0))
+local RENDER_NAME = "SFE_CarriedStackSway"
 
 local function makeFeather(index: number, palette: { { number } }): BasePart
 	local template = AssetManifest.model("feather")
@@ -57,8 +67,8 @@ local function makeFeather(index: number, palette: { { number } }): BasePart
 	local h = function(salt: number)
 		return FeatherLayout.hash(index, 7, salt)
 	end
-	local scale = 0.9 + h(1) * 0.25
-	part.Size = Vector3.new(TEMPLATE_SIZE.X * 2.2 * scale, TEMPLATE_SIZE.Y * 1.9 * scale, TEMPLATE_SIZE.Z)
+	local scale = 0.92 + h(1) * 0.2
+	part.Size = Vector3.new(TEMPLATE_SIZE.X * 2.1 * scale, TEMPLATE_SIZE.Y * 2.0 * scale, TEMPLATE_SIZE.Z)
 	local t = h(2)
 	local scaled = math.clamp(t, 0, 0.9999) * (#palette - 1)
 	local i = math.floor(scaled) + 1
@@ -67,18 +77,22 @@ local function makeFeather(index: number, palette: { { number } }): BasePart
 	return part
 end
 
--- Rest pose of the k-th carried feather: layered, fanned, slightly offset (controlled variation).
-local function restPose(index: number): CFrame
+-- Rest pose of the k-th feather (of `count`): every stem meets at the bundle's base (lower right of
+-- the viewport); heads fan across a controlled arc, each a touch further back so they read as layers.
+local function restPose(index: number, count: number): CFrame
 	local h = function(salt: number)
 		return FeatherLayout.hash(index, 11, salt)
 	end
-	local x = (h(1) - 0.5) * 1.1
-	local y = -0.55 + index * 0.16
-	local z = (h(2) - 0.5) * 0.35
-	local yaw = math.rad(-28 + h(3) * 56)
-	local roll = math.rad(-18 + h(4) * 36)
-	local pitch = math.rad(62 + h(5) * 16) -- lying nearly flat, tips toward the camera
-	return CFrame.new(x, y, z) * CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, roll)
+	local base = Vector3.new(0.9, -1.15, 0.2)
+	local spread = math.rad(56)
+	local t = if count <= 1 then 0.5 else (index - 1) / (count - 1)
+	local fan = -spread / 2 + spread * t + (h(1) - 0.5) * math.rad(6)
+	local lean = math.rad(-38) -- heads lean up-left, away from the crosshair
+	local roll = (h(2) - 0.5) * math.rad(14)
+	local depth = (t - 0.5) * 0.35 + (h(3) - 0.5) * 0.08
+	-- Quill (+Y) points from the base up-left; rotate about the view axis to fan.
+	local frame = CFrame.new(base + Vector3.new(0, 0, depth)) * CFrame.Angles(0, 0, lean + fan) * CFrame.Angles(math.rad(12), 0, roll)
+	return frame * CFrame.new(0, 1.05, 0) -- centre the mesh half a length up the quill
 end
 
 function CarriedStack.new(
@@ -102,8 +116,8 @@ function CarriedStack.new(
 	viewport.LightDirection = Vector3.new(-0.3, -1, -0.6)
 	viewport.Parent = frame
 	local camera = Instance.new("Camera")
-	camera.FieldOfView = 40
-	camera.CFrame = CFrame.lookAt(Vector3.new(0, 0.9, 4.2), Vector3.new(0, -0.1, 0))
+	camera.FieldOfView = 38
+	camera.CFrame = REST_CAMERA
 	camera.Parent = viewport
 	viewport.CurrentCamera = camera
 	local world = Instance.new("Model")
@@ -128,6 +142,11 @@ function CarriedStack.new(
 		_scale = scale,
 		_bottomOffset = bottomOffset,
 		_connections = {},
+		_bobPhase = 0,
+		_bob = 0,
+		_sway = 0,
+		_lastYaw = nil,
+		_bound = false,
 	}, CarriedStack)
 	self:_layout()
 	table.insert(
@@ -147,8 +166,9 @@ function CarriedStack._layout(self: CarriedStack)
 	local mobile = class ~= "desktop"
 	local width = if mobile then carried.widthPxMobile else carried.widthPxDesktop
 	local height = if mobile then carried.heightPxMobile else carried.heightPxDesktop
+	local bottom = if mobile then carried.bottomOffsetPxMobile else carried.bottomOffsetPxDesktop
 	self.frame.Size = UDim2.fromOffset(width, height)
-	self.frame.Position = UDim2.new(carried.anchorX, 0, 1, -(self._bottomOffset() + carried.anchorBottomOffsetPx))
+	self.frame.Position = UDim2.new(carried.anchorX, -carried.rightOffsetPx, 1, -bottom)
 end
 
 -- Tier for a fullness ratio (0..1): the highest tier whose threshold is met.
@@ -176,36 +196,94 @@ function CarriedStack._setCount(self: CarriedStack, count: number, animate: bool
 	local palette = self._config.pile.visual.palette
 	local carried = self._config.hud.carriedStack
 	local motion = self._motion()
+	local previous = #self._feathers
 	while #self._feathers > count do
 		local part = table.remove(self._feathers) :: BasePart
 		part:Destroy()
 	end
 	for index = #self._feathers + 1, count do
 		local part = makeFeather(index, palette)
-		local rest = restPose(index)
 		part.Parent = self._world
 		table.insert(self._feathers, part)
-		if animate then
-			-- Settle: drop in from above with a small overshoot, then rest.
+	end
+	-- Re-fan the whole bundle so stems stay gathered as it grows; new feathers settle in from above.
+	local seconds = Motion.clampSeconds(carried.bounceSeconds, motion)
+	for index, part in ipairs(self._feathers) do
+		local rest = restPose(index, count)
+		if animate and index > previous then
 			part.CFrame = rest * CFrame.new(0, carried.bounceStuds * 3, 0)
-			local seconds = Motion.clampSeconds(carried.bounceSeconds, motion)
 			TweenService:Create(part, TweenInfo.new(seconds, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { CFrame = rest }):Play()
+		elseif animate then
+			TweenService:Create(part, TweenInfo.new(seconds * 0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = rest })
+				:Play()
 		else
 			part.CFrame = rest
 		end
 	end
 	if animate and count > self._count then
-		-- Whole-stack squash so even a same-tier pick reads on the stack.
-		local seconds = Motion.clampSeconds(carried.bounceSeconds * 0.6, motion)
-		self._scale.Scale = 1.08
-		TweenService:Create(self._scale, TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+		local squash = Motion.clampSeconds(carried.bounceSeconds * 0.6, motion)
+		self._scale.Scale = 1.06
+		TweenService:Create(self._scale, TweenInfo.new(squash, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 	end
 	self._count = count
+end
+
+-- A pick landed: a small settle even when the tier did not change.
+function CarriedStack.pulse(self: CarriedStack)
+	local carried = self._config.hud.carriedStack
+	local squash = Motion.clampSeconds(carried.bounceSeconds * 0.5, self._motion())
+	self._scale.Scale = 1.05
+	TweenService:Create(self._scale, TweenInfo.new(squash, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 end
 
 function CarriedStack.clear(self: CarriedStack)
 	self._tier = "empty"
 	self:_setCount(0, false)
+end
+
+-- Walking bob and camera sway, eased back to rest. Bound only while visible.
+function CarriedStack._bind(self: CarriedStack)
+	if self._bound then
+		return
+	end
+	self._bound = true
+	RunService:BindToRenderStep(RENDER_NAME, Enum.RenderPriority.Camera.Value + 5, function(dt)
+		local carried = self._config.hud.carriedStack
+		local settings = self._motion()
+		local amplitude = if settings.reducedMotion then 0 else carried.bobAmplitudeStuds
+		local character = Players.LocalPlayer.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local moving = humanoid and humanoid.MoveDirection.Magnitude > 0.1
+		local ease = math.clamp(dt / math.max(0.016, carried.easeSeconds), 0, 1)
+		self._bobPhase += dt * carried.bobHz * math.pi * 2
+		local bobTarget = if moving then amplitude else 0
+		self._bob += (bobTarget - self._bob) * ease
+		local camera = workspace.CurrentCamera
+		local yaw = if camera then math.atan2(-camera.CFrame.LookVector.X, -camera.CFrame.LookVector.Z) else 0
+		local delta = 0
+		if self._lastYaw then
+			delta = yaw - self._lastYaw
+			if delta > math.pi then
+				delta -= math.pi * 2
+			elseif delta < -math.pi then
+				delta += math.pi * 2
+			end
+		end
+		self._lastYaw = yaw
+		local swayLimit = if settings.reducedMotion then 0 else math.rad(carried.swayDegrees)
+		local swayTarget = math.clamp(-delta / math.max(0.001, dt) * 0.02, -swayLimit, swayLimit)
+		self._sway += (swayTarget - self._sway) * ease
+		local bobY = math.sin(self._bobPhase) * self._bob
+		local bobX = math.cos(self._bobPhase * 0.5) * self._bob * 0.6
+		self._camera.CFrame = REST_CAMERA * CFrame.new(-bobX, -bobY, 0) * CFrame.Angles(0, self._sway, self._sway * 0.35)
+	end)
+end
+
+function CarriedStack._unbind(self: CarriedStack)
+	if self._bound then
+		self._bound = false
+		RunService:UnbindFromRenderStep(RENDER_NAME)
+	end
 end
 
 -- Gameplay visibility (in a searching round) and UI suppression (menus, results) are separate gates.
@@ -220,7 +298,13 @@ function CarriedStack.setHiddenByUi(self: CarriedStack, hidden: boolean)
 end
 
 function CarriedStack._applyVisibility(self: CarriedStack)
-	self.frame.Visible = self._visible and not self._hiddenByUi
+	local shown = self._visible and not self._hiddenByUi
+	self.frame.Visible = shown
+	if shown then
+		self:_bind()
+	else
+		self:_unbind()
+	end
 end
 
 function CarriedStack.count(self: CarriedStack): number
@@ -231,12 +315,13 @@ function CarriedStack.tier(self: CarriedStack): string
 	return self._tier
 end
 
--- Screen-space centre of the stack (for the flying-feather destination).
+-- Screen-space point of the bundle's base (for the flying-feather destination).
 function CarriedStack.screenCentre(self: CarriedStack): Vector2
-	return self.frame.AbsolutePosition + self.frame.AbsoluteSize / 2
+	return self.frame.AbsolutePosition + Vector2.new(self.frame.AbsoluteSize.X * 0.72, self.frame.AbsoluteSize.Y * 0.8)
 end
 
 function CarriedStack.destroy(self: CarriedStack)
+	self:_unbind()
 	for _, connection in ipairs(self._connections) do
 		connection:Disconnect()
 	end

@@ -133,18 +133,19 @@
       "eggHollowRadiusStuds": 6.0,
       "surfaceInsetStuds": 0.8,
       "lineOfSightToleranceStuds": 1.5,
-      "assumption": "ASSUMED"
+      "assumption": "ASSUMED",
+      "rewriteEveryRecords": 3
     },
     "visual": {
       "partBudgetDesktop": 9000,
       "partBudgetMobile": 3200,
       "featherLengthRange": [
-        2.6,
-        4.2
+        1.8,
+        2.8
       ],
       "tiltRangeDegrees": [
-        6,
-        30
+        3,
+        14
       ],
       "palette": [
         [
@@ -176,7 +177,7 @@
       "cullDistanceDesktopStuds": 220,
       "cullDistanceMobileStuds": 120,
       "targetRateHz": 20,
-      "pullSeconds": 0.34,
+      "pullSeconds": 0.16,
       "streakCount": 3,
       "chevronCount": 3,
       "chevronSeconds": 0.38,
@@ -188,24 +189,24 @@
       "assumption": "ASSUMED",
       "visibleSlotsPerCell": 2,
       "featherWidthRange": [
-        1.0,
-        1.5
+        0.8,
+        1.2
       ],
       "featherSpreadFraction": 0.8,
-      "rollRangeDegrees": 60,
+      "rollRangeDegrees": 30,
       "layerStepStuds": 0.5,
       "surfaceLiftStuds": 0.12,
       "fluffLengthRange": [
-        1.2,
-        2.6
+        1.0,
+        2.0
       ],
       "fluffWidthRange": [
-        0.6,
-        1.3
+        0.55,
+        1.1
       ],
       "fluffTiltRangeDegrees": [
         0,
-        14
+        10
       ],
       "fluffPerCellDesktop": 33,
       "fluffPerCellMobile": 10,
@@ -217,7 +218,14 @@
       ],
       "selectionFillTransparency": 0.75,
       "fluffLayers": 3,
-      "fluffLayerStepStuds": 0.12
+      "fluffLayerStepStuds": 0.12,
+      "downslopeYawJitterDegrees": 35,
+      "rimInsetStuds": 1.2,
+      "rimTaperStuds": 2.5,
+      "liftSeconds": 0.09,
+      "liftStuds": 0.5,
+      "pickScale": 1.25,
+      "settleSeconds": 0.22
     },
     "assumption": "ASSUMED",
     "depthPerFeatherStuds": 0.6
@@ -241,7 +249,21 @@
     "minimumTransaction": 0.01,
     "cashRounding": "round_half_up_to_cent",
     "sellAllOnInteract": true,
-    "assumption": "VERIFIED baseline, ASSUMED rainbow and rounding"
+    "assumption": "VERIFIED baseline, ASSUMED rainbow and rounding",
+    "crate": {
+      "liftSeconds": 0.55,
+      "beltStudsPerSecond": 7.0,
+      "machineSeconds": 1.6,
+      "turnSeconds": 0.5,
+      "toPitSeconds": 1.3,
+      "tipSeconds": 0.6,
+      "fallSeconds": 0.9,
+      "fallDepthStuds": 9,
+      "resetDelaySeconds": 0.4,
+      "featherVisualMax": 24,
+      "rollerSpinDegreesPerSecond": 240,
+      "assumption": "ASSUMED"
+    }
   },
   "bags": {
     "maxLevel": 5,
@@ -1331,15 +1353,22 @@
         }
       ],
       "infiniteReferenceCount": 40,
-      "anchorX": 0.5,
+      "anchorX": 1.0,
       "anchorBottomOffsetPx": 24,
-      "widthPxDesktop": 220,
-      "heightPxDesktop": 120,
-      "widthPxMobile": 150,
-      "heightPxMobile": 84,
+      "widthPxDesktop": 240,
+      "heightPxDesktop": 150,
+      "widthPxMobile": 160,
+      "heightPxMobile": 100,
       "bounceSeconds": 0.28,
       "bounceStuds": 0.22,
-      "assumption": "ASSUMED"
+      "assumption": "ASSUMED",
+      "rightOffsetPx": 16,
+      "bottomOffsetPxDesktop": 92,
+      "bottomOffsetPxMobile": 150,
+      "bobAmplitudeStuds": 0.05,
+      "bobHz": 1.9,
+      "swayDegrees": 3.5,
+      "easeSeconds": 0.18
     }
   }
 }

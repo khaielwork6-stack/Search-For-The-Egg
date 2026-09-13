@@ -6,8 +6,9 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GuiService = game:GetService("GuiService")
-local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
@@ -39,6 +40,8 @@ export type ModalController = typeof(setmetatable(
 		_config: { [string]: any },
 		_views: { [string]: any },
 		_focusMemory: { [string]: GuiObject? },
+		_externalUnlock: boolean?,
+		mouseUnlocked: boolean?,
 		_debug: { [string]: { [string]: (...any) -> any } },
 		_blur: BlurEffect,
 		gui: ScreenGui,
@@ -103,6 +106,33 @@ local function firstSelectable(root: Instance): GuiObject?
 		end
 	end
 	return nil
+end
+
+-- First-person mouse lock (owner requirement): the player stays in first person at all times; a
+-- blocking menu unlocks the mouse and shows the cursor, closing it hides the cursor and re-centres.
+-- Passive HUD never touches this. Classic camera at zoom 0.5 keeps the first-person view while the
+-- cursor is free (LockFirstPerson would re-lock the mouse every frame).
+function ModalController._applyMouseLock(self: ModalController)
+	local player = Players.LocalPlayer
+	local blocking = ModalReducer.isBlocking(self._state) or self._externalUnlock == true
+	if blocking then
+		player.CameraMinZoomDistance = 0.5
+		player.CameraMaxZoomDistance = 0.5
+		player.CameraMode = Enum.CameraMode.Classic
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		UserInputService.MouseIconEnabled = true
+	else
+		player.CameraMode = Enum.CameraMode.LockFirstPerson
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		UserInputService.MouseIconEnabled = false
+	end
+	self.mouseUnlocked = blocking
+end
+
+-- Non-modal blocking surfaces (the cutscene overlay with its Skip button) borrow the same unlock.
+function ModalController.setExternalUnlock(self: ModalController, unlocked: boolean)
+	self._externalUnlock = unlocked
+	self:_applyMouseLock()
 end
 
 function ModalController._applyBlur(self: ModalController)
@@ -185,6 +215,7 @@ function ModalController.open(
 	GuiService.SelectedObject = focusTarget or shell.closeButton
 	shell.open()
 	self:_applyBlur()
+	self:_applyMouseLock()
 	self.changed:Fire(self._state)
 	self.opened:Fire(id)
 	return true, nil
@@ -217,6 +248,7 @@ function ModalController.close(self: ModalController, id: string): boolean
 	end
 	self._focusMemory[id] = nil
 	self:_applyBlur()
+	self:_applyMouseLock()
 	self.changed:Fire(self._state)
 	self.closed:Fire(id)
 	return true

@@ -42,6 +42,7 @@ local RoundService = require(script.Services.RoundService)
 local PlayerDataService = require(script.Services.PlayerDataService)
 local WorldShellService = require(script.Services.WorldShellService)
 local PartyPadService = require(script.Services.PartyPadService)
+local CrateService = require(script.Services.CrateService)
 local PileTerrainService = require(script.Services.PileTerrainService)
 local ChapterShellService = require(script.Services.ChapterShellService)
 local CollectionService = require(script.Services.CollectionService)
@@ -281,6 +282,10 @@ local selling = SellingService.new({
 	getProfileData = getProfileData,
 	analytics = analytics,
 })
+local crate = CrateService.new({ config = config, clock = clock })
+local function crateGate()
+	return crate:gate()
+end
 local upgrades = UpgradeService.new({
 	config = config,
 	rounds = rounds,
@@ -651,6 +656,66 @@ upgrades.acquired:Connect(function(userId, runtime, toolId)
 	end
 end)
 
+-- The map's collection crate: clicking/tapping it sells (server-side ClickDetector, no token
+-- needed), the prompt stays for E / gamepad, and both are disabled while a run is in flight.
+local crateDetectors: { ClickDetector } = {}
+local function crateInteractionEnabled(enabled: boolean)
+	for _, detector in ipairs(crateDetectors) do
+		detector.MaxActivationDistance = if enabled then config.interaction.sellRangeStuds else 0
+	end
+	local shell = workspace:FindFirstChild(ChapterShellService.FOLDER_NAME)
+	local anchor = shell and shell:FindFirstChild("SellStation")
+	local prompt = anchor and anchor:FindFirstChildOfClass("ProximityPrompt")
+	if prompt then
+		prompt.Enabled = enabled
+	end
+end
+local function wireCrate()
+	local map = workspace:FindFirstChild(ChapterLayout.CHAPTER1_MAP_NAME)
+	local geometry = ChapterLayout.chapter1.crate
+	if not map or not geometry then
+		return
+	end
+	local node: Instance? = map
+	for _, segment in ipairs(geometry.modelPath) do
+		node = node and node:FindFirstChild(segment)
+	end
+	if not node or not node:IsA("Model") then
+		return
+	end
+	for _, descendant in ipairs(node:GetDescendants()) do
+		if descendant:IsA("BasePart") and descendant.CanCollide then
+			local detector = Instance.new("ClickDetector")
+			detector.Name = "SFE_SellClick"
+			detector.MaxActivationDistance = config.interaction.sellRangeStuds
+			detector.MouseClick:Connect(function(player)
+				local result = selling:sell(player.UserId, nil, { trusted = true, gate = crateGate })
+				if not result.ok then
+					send(player, "SaleResult", { ok = false, code = result.code, message = result.message })
+				end
+			end)
+			detector.Parent = descendant
+			table.insert(crateDetectors, detector)
+		end
+	end
+end
+if mapMode then
+	wireCrate()
+end
+crate.runStarted:Connect(function(roundId, payload)
+	local state = rounds:get(roundId)
+	if not state then
+		return
+	end
+	crateInteractionEnabled(false)
+	for _, player in ipairs(memberPlayers(state.members)) do
+		send(player, "CrateRun", payload)
+	end
+end)
+crate.runFinished:Connect(function()
+	crateInteractionEnabled(true)
+end)
+
 selling.sold:Connect(function(userId, runtime, sale)
 	local player = playerData:playerOf(userId)
 	if player then
@@ -659,6 +724,7 @@ selling.sold:Connect(function(userId, runtime, sale)
 		send(player, "SaleResult", payload)
 		pushPreviews(player :: Player)
 	end
+	crate:start(runtime.state.roundId, runtime.state.chapter, sale.standardCount + sale.rainbowCount, userId)
 	if objectives:current(userId) == "sell_first_bag" then
 		objectives:complete(userId, "sell_first_bag")
 		sendObjective(userId)
@@ -735,6 +801,8 @@ end)
 
 -- Round returned: characters back to the lobby, remove the Egg, refresh projections, replay.
 rounds.returned:Connect(function(state, runtime)
+	crate:reset()
+	crateInteractionEnabled(true)
 	pileTerrain:clear(runtime)
 	local eggPart = arena:FindFirstChild("SFE_Egg")
 	if eggPart then
@@ -865,7 +933,7 @@ registry:onRequest("ToolActionEnd", function(player, payload)
 	return tools:actionEnd(player.UserId, payload)
 end)
 registry:onRequest("SellRequest", function(player, payload)
-	return selling:sell(player.UserId, payload.sessionToken)
+	return selling:sell(player.UserId, payload.sessionToken, { gate = crateGate })
 end)
 registry:onRequest("UpgradePurchase", function(player, payload)
 	return upgrades:purchase(player.UserId, payload.sessionToken, payload.upgradeId, payload.expectedLevel)
@@ -1078,6 +1146,7 @@ local container = {
 	displayNameOf = displayNameOf,
 	pads = pads,
 	mapMode = mapMode,
+	crate = crate,
 	pileTerrain = pileTerrain,
 }
 local debugHooks = StudioDebug.install(container)

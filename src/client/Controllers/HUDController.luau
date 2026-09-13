@@ -332,6 +332,7 @@ function HUDController.onCollected(self: HUDController, data: { [string]: any })
 	self._infiniteBag = data.infinite == true
 	self.round:setBag(data.carried, data.capacity, data.infinite == true, true)
 	self.carriedStack:setBag(data.carried, data.capacity, data.infinite == true, true)
+	self.carriedStack:pulse()
 end
 
 -- World point a couple of studs in front of the camera at the carried stack's screen position: the

@@ -280,6 +280,11 @@ return function(describe, it, expect)
 			local result = h.collectAt(1, runtime, 8, 8)
 			expect(result.ok).toBe(true)
 			expect(h.pileTerrain.stats.carves).toBe(1)
+			-- Voxels re-write at record thresholds, never on every pick.
+			expect(#h.terrainAdapter.regionWrites).toBe(if cfg.pile.collision.rewriteEveryRecords == 1 then 1 else 0)
+			for _ = 2, cfg.pile.collision.rewriteEveryRecords do
+				expect(h.collectAt(1, runtime, 8, 8).ok).toBe(true)
+			end
 			expect(#h.terrainAdapter.regionWrites).toBe(1)
 			-- The re-written region covers the strike plus the configured margin.
 			local region = h.terrainAdapter.regionWrites[1]
@@ -288,13 +293,14 @@ return function(describe, it, expect)
 			expect(region.maxX).toBeGreaterThanOrEqual(result.data.hitX + margin - 1e-6)
 			-- Cell health became geometry: the field the adapter received is depleted at the struck cell.
 			expect(h.terrainAdapter.field.fractions[result.data.cellIndex]).toBeLessThan(1)
-			-- The intended surface at the strike is the analytic surface minus one strike dent.
+			-- Every accepted strike recorded a dent at its own point (dents overlap within the dig radius).
 			local depthOne = h.pileTerrain:dentDepthAt(runtime, result.data.hitX, result.data.hitZ)
-			expect(depthOne).toBeCloseTo(cfg.pile.collision.strikeDentDepthStuds, 1e-9)
+			expect(depthOne).toBeGreaterThanOrEqual(cfg.pile.collision.strikeDentDepthStuds)
+			expect(depthOne).toBeLessThanOrEqual(cfg.pile.collision.strikeDentDepthStuds * cfg.pile.collision.rewriteEveryRecords + 1e-9)
 			local surfaceOne = h.pileTerrain:intendedSurfaceY(runtime, result.data.hitX, result.data.hitZ)
 			expect(surfaceOne).toBeLessThan(result.data.hitY)
 			-- Repeated strikes at one spot deepen the pit (every feather of the cell, then its neighbours).
-			local strikes = 1
+			local strikes = cfg.pile.collision.rewriteEveryRecords
 			for _, offset in ipairs({ { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } }) do
 				local cell = runtime.grid.cells[(8 + offset[2]) * 16 + (8 + offset[1]) + 1]
 				while cell.remaining > 0 and strikes < 10 do

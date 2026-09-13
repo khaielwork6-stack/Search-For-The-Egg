@@ -54,14 +54,23 @@ local function reject(self: SellingService, code: string, message: string?): Env
 	return Envelope.fail(code, message)
 end
 
-function SellingService.sell(self: SellingService, userId: number, token: any): Envelope.Envelope<any>
+function SellingService.sell(
+	self: SellingService,
+	userId: number,
+	token: any,
+	options: { trusted: boolean?, gate: (() -> Envelope.Envelope<any>?)? }?
+): Envelope.Envelope<any>
 	local runtime = self._rounds:roundOf(userId)
 	if not runtime then
 		return reject(self, Envelope.Codes.INVALID_STATE, "no_round")
 	end
-	local okToken, tokenErr = self._sessions:validate(userId, token, "Round")
-	if not okToken then
-		return reject(self, Envelope.Codes.STALE_TOKEN, tokenErr)
+	-- A server-side click (ClickDetector) carries no session token; the server already knows the
+	-- player, so only remote requests must present one.
+	if not (options and options.trusted) then
+		local okToken, tokenErr = self._sessions:validate(userId, token, "Round")
+		if not okToken then
+			return reject(self, Envelope.Codes.STALE_TOKEN, tokenErr)
+		end
 	end
 	if not RoundReducer.acceptsGameplay(runtime.state) then
 		return reject(self, Envelope.Codes.INVALID_STATE, "phase")
@@ -82,6 +91,14 @@ function SellingService.sell(self: SellingService, userId: number, token: any): 
 	end
 	if state.carriedStandard + state.carriedRainbow == 0 then
 		return reject(self, Envelope.Codes.ALREADY_DONE, "nothing_to_sell")
+	end
+	-- The crate must be parked (one run at a time; never two rewards for one bag).
+	if options and options.gate then
+		local refused = options.gate()
+		if refused then
+			self.stats.rejected += 1
+			return refused
+		end
 	end
 	local modifiers = RoundModifiers.resolve(self._config, self._getProfileData(userId), runtime.state.difficulty, nil)
 	local sale = EconomyMath.computeSale({ standardCount = state.carriedStandard, rainbowCount = state.carriedRainbow }, {

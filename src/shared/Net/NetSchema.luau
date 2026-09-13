@@ -205,6 +205,7 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		serverEvent("ObjectiveChanged", Schema.object({}), 2),
 		serverEvent("ActionResult", Schema.object({}), 2),
 		serverEvent("SaleResult", Schema.object({}), 2),
+		serverEvent("CrateRun", Schema.object({}), 2),
 		serverEvent("UpgradeResult", Schema.object({}), 2),
 		serverEvent("EggRevealed", Schema.object({}), 2),
 		serverEvent("VictoryStarted", Schema.object({}), 2),

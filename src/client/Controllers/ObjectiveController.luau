@@ -21,7 +21,7 @@ export type ObjectiveController = typeof(setmetatable(
 local TARGETS: { [string]: { { string } } } = {
 	enter_party = { { "SFE_LobbyShell", "PortalAnchor" }, { "SFE_LobbyShell", "PortalDiorama" } },
 	collect_25 = { { "SFE_PileVisual", "Dome" }, { "SFE_Chapter1", "NestBase" } },
-	sell_first_bag = { { "SearchForTheEgg_Map2", "Processor", "GreenButton" }, { "SFE_Chapter1", "SellStation" } },
+	sell_first_bag = { { "SearchForTheEgg_Map2", "Crates", "CollectionCrate" }, { "SFE_Chapter1", "SellStation" } },
 	buy_first_upgrade = { { "SearchForTheEgg_Map2", "SupplyShop", "CounterBody" }, { "SFE_Chapter1", "UpgradeBoard" } },
 	claim_or_complete_round = { { "SFE_Chapter1", "SFE_Egg" } },
 }

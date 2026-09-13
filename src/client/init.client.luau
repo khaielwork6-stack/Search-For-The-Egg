@@ -27,6 +27,7 @@ local HUDController = require(Controllers.HUDController)
 local LobbyShellController = require(Controllers.LobbyShellController)
 local RoundController = require(Controllers.RoundController)
 local PileVisualController = require(Controllers.PileVisualController)
+local CrateController = require(Controllers.CrateController)
 local ToolController = require(Controllers.ToolController)
 local ToolVisualController = require(Controllers.ToolVisualController)
 local InteractionController = require(Controllers.InteractionController)
@@ -123,6 +124,19 @@ local victory = trove:add(VictoryController.new({
 	config = config,
 }))
 hud:bindRound(round, interaction)
+local crateRun = trove:add(CrateController.new({ net = net, audio = audio, vfx = vfx, config = config }))
+-- Permanent first person: locked from boot; menus unlock through the modal controller.
+modals:setExternalUnlock(false)
+trove:add(round.saleRefused:Connect(function(payload)
+	hud.toasts:push(
+		if payload.message == "nothing_to_sell"
+			then "Your bag is empty"
+			elseif payload.message == "crate_busy" then "The crate is on its way - wait for it to come back"
+			else "Trade unavailable",
+		"warning"
+	)
+	audio:play("ui.error")
+end))
 trove:add(hand.collected:Connect(function(data)
 	hud:onCollected(data)
 end))
@@ -445,6 +459,20 @@ if RunService:IsStudio() then
 				feathers = pile:featherCount(),
 				fluff = pile:fluffCount(),
 				instances = pile:instanceCount(),
+			}
+		end,
+		crateReport = function()
+			local crate = crateRun:crateModel()
+			return {
+				running = crateRun:isRunning(),
+				stats = crateRun.stats,
+				pivot = crate and tostring(crate:GetPivot().Position) or "none",
+				mouse = {
+					behavior = tostring(game:GetService("UserInputService").MouseBehavior),
+					icon = game:GetService("UserInputService").MouseIconEnabled,
+					cameraMode = tostring(player.CameraMode),
+					unlocked = modals.mouseUnlocked == true,
+				},
 			}
 		end,
 		pileReport = function()

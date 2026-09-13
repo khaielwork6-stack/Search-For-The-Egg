@@ -138,6 +138,29 @@ function Validator.validate(raw: any): Report
 		type(raw.selling) == "table" and isPositiveNumber(raw.selling.rainbowFeatherMultiplier),
 		"selling.rainbowFeatherMultiplier must be > 0"
 	)
+	-- Crate run (the sold crate rides the conveyors into the machine and falls into the pit) - ASSUMED
+	local crate = type(raw.selling) == "table" and raw.selling.crate or nil
+	check(type(crate) == "table", "selling.crate missing")
+	if type(crate) == "table" then
+		for _, key in ipairs({
+			"liftSeconds",
+			"beltStudsPerSecond",
+			"machineSeconds",
+			"turnSeconds",
+			"toPitSeconds",
+			"tipSeconds",
+			"fallSeconds",
+			"fallDepthStuds",
+			"rollerSpinDegreesPerSecond",
+		}) do
+			check(isPositiveNumber(crate[key]), "selling.crate." .. key .. " must be > 0")
+		end
+		check(isNonNegativeNumber(crate.resetDelaySeconds), "selling.crate.resetDelaySeconds must be >= 0")
+		check(
+			isPositiveNumber(crate.featherVisualMax) and crate.featherVisualMax % 1 == 0 and crate.featherVisualMax <= 64,
+			"selling.crate.featherVisualMax must be an integer 1..64"
+		)
+	end
 	if type(raw.collection) == "table" and type(raw.selling) == "table" then
 		check(
 			raw.collection.baseFeatherCashValue == raw.selling.cashPerStandardFeather,
@@ -571,6 +594,12 @@ function Validator.validate(raw: any): Report
 			end
 			check(isNonNegativeNumber(collision.surfaceInsetStuds), "pile.collision.surfaceInsetStuds must be >= 0")
 			check(
+				isPositiveNumber(collision.rewriteEveryRecords)
+					and collision.rewriteEveryRecords % 1 == 0
+					and collision.rewriteEveryRecords <= 12,
+				"pile.collision.rewriteEveryRecords must be an integer 1..12"
+			)
+			check(
 				isPositiveNumber(collision.rewriteMarginCells)
 					and collision.rewriteMarginCells % 1 == 0
 					and collision.rewriteMarginCells <= 4,
@@ -649,6 +678,13 @@ function Validator.validate(raw: any): Report
 				check(isPositiveNumber(visual[key]), "pile.visual." .. key .. " must be > 0")
 			end
 			check(isNonNegativeNumber(visual.surfaceLiftStuds), "pile.visual.surfaceLiftStuds must be >= 0")
+			for _, key in ipairs({ "liftSeconds", "settleSeconds", "liftStuds", "pickScale", "rimInsetStuds", "rimTaperStuds" }) do
+				check(isPositiveNumber(visual[key]), "pile.visual." .. key .. " must be > 0")
+			end
+			check(
+				isNonNegativeNumber(visual.downslopeYawJitterDegrees) and visual.downslopeYawJitterDegrees <= 180,
+				"pile.visual.downslopeYawJitterDegrees must be 0..180"
+			)
 			check(
 				isPositiveNumber(visual.fluffLayers) and visual.fluffLayers % 1 == 0 and visual.fluffLayers <= 6,
 				"pile.visual.fluffLayers must be an integer 1..6"
@@ -720,6 +756,17 @@ function Validator.validate(raw: any): Report
 			check(isPositiveNumber(carried[key]), "hud.carriedStack." .. key .. " must be > 0")
 		end
 		check(isNonNegativeNumber(carried.anchorX) and carried.anchorX <= 1, "hud.carriedStack.anchorX must be 0..1")
+		for _, key in ipairs({
+			"rightOffsetPx",
+			"bottomOffsetPxDesktop",
+			"bottomOffsetPxMobile",
+			"bobAmplitudeStuds",
+			"bobHz",
+			"swayDegrees",
+			"easeSeconds",
+		}) do
+			check(isNonNegativeNumber(carried[key]), "hud.carriedStack." .. key .. " must be >= 0")
+		end
 		check(isNonNegativeNumber(carried.anchorBottomOffsetPx), "hud.carriedStack.anchorBottomOffsetPx must be >= 0")
 	end
 	if type(raw.interaction) == "table" then

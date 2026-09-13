@@ -105,7 +105,13 @@ function InteractionController.handle(self: InteractionController, promptName: s
 		deps.audio:play(Tokens.sound.uiTap)
 		local result = deps.net:request("SellRequest", { sessionToken = token })
 		if not result.ok then
-			deps.hud.toasts:push(if result.message == "nothing_to_sell" then "Your bag is empty" else "Trade unavailable", "warning")
+			deps.hud.toasts:push(
+				if result.message == "nothing_to_sell"
+					then "Your bag is empty"
+					elseif result.message == "crate_busy" then "The crate is on its way - wait for it to come back"
+					else "Trade unavailable",
+				"warning"
+			)
 			deps.audio:play(Tokens.sound.uiError)
 		end
 		self.sold:Fire(result)

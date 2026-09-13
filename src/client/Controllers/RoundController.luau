@@ -37,6 +37,7 @@ export type RoundController = typeof(setmetatable(
 		delta: any,
 		playerChanged: any,
 		sale: any,
+		saleRefused: any,
 		upgrade: any,
 		eggRevealed: any,
 		victory: any,
@@ -69,6 +70,7 @@ function RoundController.new(
 		delta = Signal.new(),
 		playerChanged = Signal.new(),
 		sale = Signal.new(),
+		saleRefused = Signal.new(),
 		upgrade = Signal.new(),
 		eggRevealed = Signal.new(),
 		victory = Signal.new(),
@@ -89,6 +91,10 @@ function RoundController.new(
 		end
 	end))
 	self._trove:add(deps.net:on("SaleResult", function(payload)
+		if payload.ok == false then
+			self.saleRefused:Fire(payload)
+			return
+		end
 		if payload.player then
 			self.player = payload.player
 			self.playerChanged:Fire(payload.player)
@@ -137,17 +143,18 @@ function RoundController._onSnapshot(self: RoundController, payload: { [string]:
 end
 
 function RoundController._applyPhase(self: RoundController, phase: string, previous: string?)
-	local localPlayer = Players.LocalPlayer
 	if phase == "Cutscene" then
 		self.eggPosition = nil
-		localPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
 		self._audio:setState("Search")
 		self:_showCutscene()
+		self._modals:setExternalUnlock(true)
 	elseif phase == "Countdown" then
 		self:_hideCutscene()
+		self._modals:setExternalUnlock(false)
 		self._countdownShown = -1
 	elseif phase == "Searching" then
 		self:_hideCutscene()
+		self._modals:setExternalUnlock(false)
 		if previous == "Countdown" then
 			self._audio:play(Tokens.sound.countdownGo)
 		end
@@ -159,7 +166,7 @@ function RoundController._applyPhase(self: RoundController, phase: string, previ
 		self._audio:setState("Results")
 	elseif phase == "Returning" or phase == "Abandoned" then
 		self:_hideCutscene()
-		localPlayer.CameraMode = Enum.CameraMode.Classic
+		self._modals:setExternalUnlock(false)
 		self._audio:setState("Lobby")
 		self.round = nil
 		self.pile = nil
