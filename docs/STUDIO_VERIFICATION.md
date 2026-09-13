@@ -879,3 +879,14 @@ Play Solo, desktop viewport 1223x658, owner map. Headless: 289 tests pass, check
 - One pick: 1 part removed, 1 exposed, parts before/after 11,820 -> 11,821 (the flying feather).
 - Bundle frame 232 x 153 at (973, 355) in a 1223 x 658 viewport, all feather corners inside the
   viewport camera frustum; size follows 19 % of the viewport width clamped 130..260 px.
+
+## Invisible shell, feathers all the way down (13 Sep 2026, follow-up 2)
+
+- Collision is now `pile.collision.kind = "parts"`: 256 anchored, invisible, non-queryable boxes
+  (one per cell, tilted to the slope, 1.3x overlap, top face 0.3 under the coat). No terrain is
+  written (0 voxel cells). Character stands on the crown at y 70.7 and walks down to 63.6 on the shell.
+- Only feathers are visible: rays from above over the footprint hit a coat part first in 477 of 478
+  cases (the one miss is at the foot ring), 144 of 144 from the sides at six heights.
+- Bed strands sit in four depth bands (0, 0.9, 1.8, 2.8 studs) so a dug cell shows feathers on its
+  walls and floor. One pick: 1 record gone, 1 exposed, 0 other feathers moved, 51 bed strands of
+  that cell settled 0.34 studs, 13,403 parts unchanged; bag 0 -> 1.
