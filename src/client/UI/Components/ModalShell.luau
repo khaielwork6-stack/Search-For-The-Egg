@@ -243,11 +243,9 @@ function ModalShell.create(
 	end
 	footer:GetPropertyChangedSignal("Visible"):Connect(relayout)
 	footer:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
-	content
-		:GetPropertyChangedSignal("AbsoluteCanvasSize")
-		:Connect(relayout)(gui :: GuiBase2d)
-		:GetPropertyChangedSignal("AbsoluteSize")
-		:Connect(relayout)
+	content:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(relayout)
+	local host = gui :: GuiBase2d
+	host:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
 
 	root.Parent = gui
 
