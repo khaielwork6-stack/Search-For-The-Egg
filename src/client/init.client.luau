@@ -65,6 +65,11 @@ local party = trove:add(PartyController.new({ net = net, profile = profile }))
 local accessibility = trove:add(AccessibilityController.new(profile, config))
 local quality = trove:add(QualityController.new(profile, config))
 local input = trove:add(InputController.new())
+-- Tab opens the upgrade book: the core player list (which also toggles on Tab) is switched off;
+-- nameplates and the lobby boards carry the same information.
+pcall(function()
+	game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+end)
 local modals = trove:add(ModalController.new(input, accessibility, config))
 local audio = trove:add(AudioDirector.new(profile, config))
 local vfx = trove:add(VFXDirector.new(quality, config))
@@ -262,12 +267,16 @@ local lobby = trove:add(LobbyShellController.new({
 	config = config,
 	strandsPerAnchor = 0,
 }, "SFE_LobbyShell"))
-local arena = trove:add(
-	LobbyShellController.new(
-		{ ambient = ambient, vfx = vfx, quality = quality, camera = camera, haptics = haptics, audio = audio, config = config },
-		"SFE_Chapter1"
-	)
-)
+local arena = trove:add(LobbyShellController.new({
+	ambient = ambient,
+	vfx = vfx,
+	quality = quality,
+	camera = camera,
+	haptics = haptics,
+	audio = audio,
+	config = config,
+	strandsPerAnchor = 0, -- no loose feathers drifting round the mound: every feather is a record
+}, "SFE_Chapter1"))
 
 -- Lobby meta layer (Phase 4): station rail, modals, prompt routing, leaderboards, silhouettes.
 local lobbyMeta = trove:add(LobbyController.new({

@@ -33,6 +33,7 @@ export type ToolService = typeof(setmetatable(
 		_idGen: () -> string,
 		_getCharacterPosition: (userId: number) -> Vector3?,
 		_getEntitlements: ((userId: number) -> { [string]: boolean }?)?,
+		_crateBusy: (() -> boolean)?,
 		_analytics: any?,
 		_log: any?,
 		_lastTick: number?,
@@ -75,6 +76,7 @@ function ToolService.new(
 		idGen: (() -> string)?,
 		getCharacterPosition: (userId: number) -> Vector3?,
 		getEntitlements: ((userId: number) -> { [string]: boolean }?)?,
+		crateBusy: (() -> boolean)?,
 		analytics: any?,
 		log: any?,
 	}
@@ -93,6 +95,7 @@ function ToolService.new(
 		end,
 		_getCharacterPosition = options.getCharacterPosition,
 		_getEntitlements = options.getEntitlements,
+		_crateBusy = options.crateBusy,
 		_analytics = options.analytics,
 		_log = options.log,
 		_lastTick = nil,
@@ -886,13 +889,29 @@ function ToolService._tickChick(self: ToolService, runtime: any, userId: number,
 			end
 		elseif unit.state == "ToSeller" then
 			if moveToward(unit, sellStation, step) then
+				unit.timer = 0
+				if self._crateBusy and self._crateBusy() then
+					-- The crate is away on its run: perch and wait for it to come back.
+					unit.state = "Waiting"
+					self:_chickEvent(runtime, userId, unit, {})
+				else
+					unit.state = "Depositing"
+					self:_chickEvent(runtime, userId, unit, { depositSeconds = spec.depositSeconds })
+				end
+			end
+		elseif unit.state == "Waiting" then
+			if not (self._crateBusy and self._crateBusy()) then
 				unit.state = "Depositing"
 				unit.timer = 0
 				self:_chickEvent(runtime, userId, unit, { depositSeconds = spec.depositSeconds })
 			end
 		elseif unit.state == "Depositing" then
 			unit.timer += dt
-			if unit.timer >= spec.depositSeconds then
+			if self._crateBusy and self._crateBusy() and unit.timer < spec.depositSeconds then
+				-- A run started under it: hold the trade until the crate is back.
+				unit.state = "Waiting"
+				self:_chickEvent(runtime, userId, unit, {})
+			elseif unit.timer >= spec.depositSeconds then
 				local sale = self:_deposit(runtime, userId, state, unit)
 				unit.trips += 1
 				rt.trips += 1

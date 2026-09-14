@@ -173,6 +173,13 @@ ChapterLayout.chapter1 = table.freeze({
 	farmer = Vector3.new(-28, 52.1, 338), -- the Farmer stands between the barn door and the mound
 	farmerFacing = Vector3.new(0, 52.1, 372),
 	chickPathY = 52.1, -- scout chicks walk at ground level between the mound and the crate
+	-- Perches the chick hops between while the crate is away (ASSUMED 14 Sep 2026: crate lid,
+	-- fence post beside the crate, conveyor rail). World points, feet height.
+	chickPerches = table.freeze({
+		Vector3.new(47, 57.2, 348.5),
+		Vector3.new(52.5, 56.2, 352),
+		Vector3.new(41, 57.4, 344.5),
+	}),
 	roofHeight = 26,
 	ambientAnchors = table.freeze({
 		Vector3.new(0, 67, 372), -- over the mound

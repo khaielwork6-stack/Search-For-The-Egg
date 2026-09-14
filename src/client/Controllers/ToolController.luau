@@ -50,6 +50,8 @@ export type ToolController = typeof(setmetatable(
 		_chargeLitAt: number?,
 		_lastAimAt: number,
 		_aimInFlight: boolean,
+		_inFlightSince: number?,
+		_aimInFlightSince: number?,
 		_trove: Trove.Trove,
 		stats: {
 			sent: number,
@@ -91,6 +93,8 @@ function ToolController.new(deps: {
 		_deps = deps,
 		_swing = 0,
 		_inFlight = false,
+		_inFlightSince = nil,
+		_aimInFlightSince = nil,
 		_nextAllowedAt = 0,
 		_bound = false,
 		_enabled = false,
@@ -136,8 +140,8 @@ function ToolController.new(deps: {
 			self:_stopHold()
 			self:_setVacRunning(false)
 			self._chickActive = false
-			self._chargeLitAt = nil
 		end
+		self:_resetActionState("phase")
 		if phase == "Cutscene" then
 			self._equipped = "hand"
 			self._owned = { hand = true }
@@ -346,9 +350,34 @@ function ToolController.setEnabled(self: ToolController, enabled: boolean)
 	end
 end
 
+-- Every gate a request can leave behind, cleared together: a tool swap, a phase change, a refused
+-- request or a stuck reply must never leave collection locked.
+function ToolController._resetActionState(self: ToolController, reason: string?)
+	self._inFlight = false
+	self._inFlightSince = nil
+	self._aimInFlight = false
+	self._aimInFlightSince = nil
+	self._chargeLitAt = nil
+	self._lastAttemptAt = nil
+	self._nextAllowedAt = math.min(self._nextAllowedAt, os.clock() + 0.25)
+	if reason == "phase" then
+		self._nextAllowedAt = 0
+	end
+end
+
 function ToolController._render(self: ToolController, dt: number)
 	self._swing = math.max(0, self._swing - dt * 4)
 	local now = os.clock()
+	-- Watchdog: a reply that never lands (remote dropped, handler error) cannot hold the gate.
+	if self._inFlight and now - (self._inFlightSince or now) > 3 then
+		warn("[SFE][Tool] collect request never returned; releasing the gate")
+		self._inFlight = false
+		self._inFlightSince = nil
+	end
+	if self._aimInFlight and now - (self._aimInFlightSince or now) > 3 then
+		self._aimInFlight = false
+		self._aimInFlightSince = nil
+	end
 	-- Dynamite: a lit stick leaves the hand after the light beat even if the button is held on.
 	local litAt = self._chargeLitAt
 	if litAt and self._equipped == "confettiCharge" then
@@ -409,7 +438,7 @@ function ToolController.equip(self: ToolController, toolId: string): boolean
 	end
 	self._equipped = toolId
 	self:_setVacRunning(false)
-	self._chargeLitAt = nil
+	self:_resetActionState("equip")
 	self.stats.equips += 1
 	self._deps.hud.hotbar:setEquipped(toolId)
 	self._deps.audio:play(Tokens.sound.uiTap)
@@ -502,18 +531,28 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 	self.stats.sent += 1
 	self._requestCounter = (self._requestCounter or 0) + 1
 	self._inFlight = true
+	self._inFlightSince = now
 	if toolId == "nestRake" then
-		self.swung:Fire()
+		pcall(function()
+			self.swung:Fire()
+		end)
 	end
-	local result = self._deps.net:request("CollectAction", {
-		sessionToken = token,
-		origin = origin,
-		direction = direction,
-		toolId = toolId,
-		requestId = self._requestCounter,
-		featherId = featherId,
-	})
+	local okRequest, result = pcall(function()
+		return self._deps.net:request("CollectAction", {
+			sessionToken = token,
+			origin = origin,
+			direction = direction,
+			toolId = toolId,
+			requestId = self._requestCounter,
+			featherId = featherId,
+		})
+	end)
 	self._inFlight = false
+	self._inFlightSince = nil
+	if not okRequest or type(result) ~= "table" then
+		warn("[SFE][Tool] collect request failed: " .. tostring(result))
+		result = { ok = false, code = "unavailable", message = "request_failed" }
+	end
 	if result.ok and result.data then
 		local data = result.data
 		local visual = self._deps.config.pile.visual
@@ -550,13 +589,22 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 			self._deps.audio:play(Tokens.sound.bagFull)
 			self._deps.haptics:pulse(0.6, 0.12)
 		end
-		self.collected:Fire(data)
+		pcall(function()
+			self.collected:Fire(data)
+		end)
 		return true
 	end
 	self.stats.rejected += 1
-	-- A refused request never re-sends immediately: hold the debounce window before the next try.
-	self._nextAllowedAt = math.max(self._nextAllowedAt, os.clock() + self._deps.config.interaction.collectDebounceSeconds)
-	self.rejected:Fire(result)
+	-- A refused request never re-sends immediately: hold the debounce window before the next try,
+	-- and a server cooldown refusal waits out that cooldown instead of hammering it.
+	local debounce = self._deps.config.interaction.collectDebounceSeconds
+	self._nextAllowedAt = math.max(self._nextAllowedAt, os.clock() + debounce)
+	if result.message == "cooldown" then
+		self._nextAllowedAt = math.max(self._nextAllowedAt, os.clock() + math.max(debounce, (self._lastCooldownSeconds or 0.3) * 0.5))
+	end
+	pcall(function()
+		self.rejected:Fire(result)
+	end)
 	return false
 end
 
@@ -697,14 +745,21 @@ function ToolController._sendVacAim(self: ToolController)
 		return
 	end
 	self._aimInFlight = true
+	self._aimInFlightSince = os.clock()
 	task.spawn(function()
-		local result = self._deps.net:request("ToolActionAim", {
-			sessionToken = token,
-			toolId = "featherVac",
-			origin = origin,
-			direction = direction,
-		})
+		local ok, result = pcall(function()
+			return self._deps.net:request("ToolActionAim", {
+				sessionToken = token,
+				toolId = "featherVac",
+				origin = origin,
+				direction = direction,
+			})
+		end)
 		self._aimInFlight = false
+		self._aimInFlightSince = nil
+		if not ok or type(result) ~= "table" then
+			return
+		end
 		if result.ok and result.data and result.data.running == false then
 			self:_setVacRunning(false)
 			self:_refreshStatus()
@@ -826,6 +881,8 @@ function ToolController.status(self: ToolController): { [string]: any }
 		vac = table.clone(self._vac),
 		vacRunning = self._vacRunning,
 		chickActive = self._chickActive,
+		inFlight = self._inFlight,
+		nextAllowedIn = math.max(0, self._nextAllowedAt - os.clock()),
 		chargeLit = self._chargeLitAt ~= nil,
 		chargeReadyIn = math.max(0, self._chargeReadyAt - os.clock()),
 		holdEnabled = self:_holdEnabled(),

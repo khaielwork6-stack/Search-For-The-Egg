@@ -343,6 +343,9 @@ local tools = ToolService.new({
 	idGen = idGen,
 	getCharacterPosition = getCharacterPosition,
 	getEntitlements = getEntitlements,
+	crateBusy = function()
+		return crate:isBusy()
+	end,
 	analytics = analytics,
 	log = log,
 })

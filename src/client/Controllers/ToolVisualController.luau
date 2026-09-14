@@ -16,6 +16,7 @@ local Signal = require(Shared.Util.Signal)
 local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
 local FeatherLayout = require(Shared.Domain.FeatherLayout)
+local ChapterLayout = require(Shared.Domain.ChapterLayout)
 
 local ToolVisualController = {}
 ToolVisualController.__index = ToolVisualController
@@ -38,11 +39,18 @@ type Bird = {
 	wingR: Bone?,
 	tail: Bone?,
 	halfHeight: number,
+	footOffset: number, -- pivot height above the model's lowest point, so the feet sit on the ground
 	flapUntil: number,
 	nextFlapAt: number,
 	hop: number,
 	peck: number,
 	yaw: number,
+	perchIndex: number,
+	perchFrom: Vector3?,
+	perchTo: Vector3?,
+	perchStartedAt: number,
+	perchSeconds: number,
+	nextPerchAt: number,
 }
 type Unit =
 	{ model: Model, bird: Bird?, target: Vector3?, speed: number, state: string, userId: number, position: Vector3, facing: Vector3 }
@@ -527,7 +535,9 @@ function ToolVisualController._buildUnit(self: ToolVisualController, position: V
 	local model = cloneStaged("DodoBird", feel.modelScale or 0.34)
 	if model then
 		model.Name = "SFE_ScoutChick"
-		local _, size = model:GetBoundingBox()
+		local box, size = model:GetBoundingBox()
+		-- The pivot is not the box centre: measure how far the feet sit under it so nothing clips.
+		local footOffset = model:GetPivot().Position.Y - (box.Position.Y - size.Y * 0.5) + 0.12
 		local bird: Bird = {
 			head = findBone(model, "head"),
 			neck = findBone(model, "neck"),
@@ -535,13 +545,20 @@ function ToolVisualController._buildUnit(self: ToolVisualController, position: V
 			wingR = findBone(model, "wing.R"),
 			tail = findBone(model, "tail"),
 			halfHeight = size.Y * 0.5,
+			footOffset = footOffset,
 			flapUntil = 0,
 			nextFlapAt = os.clock() + 1 + math.random() * 3,
 			hop = 0,
 			peck = 0,
 			yaw = 0,
+			perchIndex = 0,
+			perchFrom = nil,
+			perchTo = nil,
+			perchStartedAt = 0,
+			perchSeconds = 1,
+			nextPerchAt = 0,
 		}
-		model:PivotTo(CFrame.new(position + Vector3.new(0, bird.halfHeight, 0)))
+		model:PivotTo(CFrame.new(position + Vector3.new(0, footOffset, 0)))
 		model.Parent = self._folder
 		return model, bird
 	end
@@ -584,19 +601,53 @@ function ToolVisualController._stepUnit(
 	local hopHeight = (feel.hopHeightStuds or 0.32) * motionScale
 	local hopHz = feel.hopHz or 2.6
 	local bounce = 0
+	local flying = false
+	if bird and unit.state == "Waiting" then
+		-- Crate away: fly between the intentional perches (crate lid, fence post, rail) with a
+		-- pause on each, wings working for the whole flight.
+		local perches = ChapterLayout.chapter1.chickPerches
+		if perches and #perches > 0 then
+			if bird.perchTo == nil and now >= bird.nextPerchAt then
+				bird.perchIndex = (bird.perchIndex % #perches) + 1
+				bird.perchFrom = unit.position
+				bird.perchTo = perches[bird.perchIndex]
+				bird.perchStartedAt = now
+				bird.perchSeconds = math.clamp((bird.perchTo - unit.position).Magnitude / 9, 0.6, 1.6)
+				bird.flapUntil = now + bird.perchSeconds + 0.2
+			end
+			if bird.perchTo and bird.perchFrom then
+				flying = true
+				local t = math.clamp((now - bird.perchStartedAt) / bird.perchSeconds, 0, 1)
+				local e = t * t * (3 - 2 * t)
+				local point = bird.perchFrom:Lerp(bird.perchTo, e) + Vector3.new(0, math.sin(t * math.pi) * 2.2 * motionScale, 0)
+				local flat = Vector3.new(bird.perchTo.X - bird.perchFrom.X, 0, bird.perchTo.Z - bird.perchFrom.Z)
+				if flat.Magnitude > 0.05 then
+					unit.facing = flat.Unit
+				end
+				unit.position = point
+				if t >= 1 then
+					unit.position = bird.perchTo
+					bird.perchTo = nil
+					bird.perchFrom = nil
+					bird.nextPerchAt = now + 2.5 + math.random() * 2.5
+					self._deps.vfx:burst("featherPuff", unit.position + Vector3.new(0, 0.5, 0), 0.15)
+				end
+			end
+		end
+	end
 	if bird then
 		-- Hop while moving; a settle-down bob when arriving.
 		if moving or bird.hop % 1 > 0.02 then
 			bird.hop += dt * hopHz
 		end
-		bounce = math.abs(math.sin(bird.hop * math.pi)) * hopHeight * (if moving then 1 else 0.4)
+		bounce = if flying then 0 else math.abs(math.sin(bird.hop * math.pi)) * hopHeight * (if moving then 1 else 0.4)
 		-- Face the travel direction, easing the yaw.
 		local wantedYaw = math.atan2(-unit.facing.X, -unit.facing.Z)
 		local diff = (wantedYaw - bird.yaw + math.pi) % (math.pi * 2) - math.pi
 		bird.yaw += diff * math.min(1, dt * 8)
-		local lean = if moving then math.rad(8) * math.sin(bird.hop * math.pi * 2) else 0
+		local lean = if flying then math.rad(-12) elseif moving then math.rad(8) * math.sin(bird.hop * math.pi * 2) else 0
 		unit.model:PivotTo(
-			CFrame.new(unit.position + Vector3.new(0, bird.halfHeight + bounce, 0))
+			CFrame.new(unit.position + Vector3.new(0, bird.footOffset + bounce, 0))
 				* CFrame.Angles(0, bird.yaw, 0)
 				* CFrame.Angles(lean, 0, 0)
 		)
@@ -624,7 +675,10 @@ function ToolVisualController._stepUnit(
 			bird.flapUntil = now + flapSeconds
 			bird.nextFlapAt = now + interval[1] + math.random() * (interval[2] - interval[1])
 		end
-		local flap = if now < bird.flapUntil then math.abs(math.sin((bird.flapUntil - now) / flapSeconds * math.pi * 3)) else 0
+		local flap = if flying
+			then math.abs(math.sin(now * 14))
+			elseif now < bird.flapUntil then math.abs(math.sin((bird.flapUntil - now) / flapSeconds * math.pi * 3))
+			else 0
 		local wingAngle = flap * math.rad(45) * motionScale + (if moving then math.rad(6) else math.rad(2))
 		if bird.wingL then
 			bird.wingL.Transform = CFrame.Angles(0, 0, wingAngle)
@@ -679,9 +733,14 @@ function ToolVisualController._upsertUnit(self: ToolVisualController, payload: {
 	if payload.speed then
 		unit.speed = payload.speed
 	end
-	-- Snap correction if the client drifted more than a couple of studs, else keep smoothing.
-	if (unit.position - serverPosition).Magnitude > 3 then
+	-- Snap correction if the client drifted more than a couple of studs, else keep smoothing
+	-- (perching while the crate is away is client-side motion around the server's crate point).
+	if payload.state ~= "Waiting" and (unit.position - serverPosition).Magnitude > 3 then
 		unit.position = serverPosition
+	end
+	if payload.state ~= "Waiting" and unit.bird then
+		unit.bird.perchTo = nil
+		unit.bird.perchFrom = nil
 	end
 	if payload.targetX then
 		unit.target = Vector3.new(payload.targetX, payload.targetY, payload.targetZ)

@@ -488,16 +488,20 @@ local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, sc
 		name = "Infinite Bag",
 		scale = 0.8,
 	},
+	-- Tools hang on the left wall (x -62) on the boards moved there, leaving the counter to the bags.
 	{
 		key = "nestRake",
 		model = "Pitchfork",
-		cframe = CFrame.new(-54, 60.2, 291.65) * CFrame.Angles(0, 0, math.rad(-62)) * CFrame.new(0, -4.2, 0),
+		cframe = CFrame.new(-60.3, 60.2, 299.5)
+			* CFrame.Angles(0, math.rad(90), 0)
+			* CFrame.Angles(0, 0, math.rad(-62))
+			* CFrame.new(0, -4.2, 0),
 		name = "Nest Rake",
 	},
 	{
 		key = "confettiCharge",
 		model = "Dynamite",
-		cframe = CFrame.new(-40, 58.4, 292.1) * CFrame.Angles(0, 0, math.rad(-8)),
+		cframe = CFrame.new(-60.4, 58.4, 310) * CFrame.Angles(0, math.rad(90), 0) * CFrame.Angles(0, 0, math.rad(-8)),
 		name = "Confetti Charge",
 	},
 	-- The Scout Chick (owner's Bird) perches on a rope-tied crate beside the counter.
@@ -533,9 +537,31 @@ function ChapterShellService.placeDisplays(workspaceService: Workspace, config: 
 	local map = workspaceService:FindFirstChild(ChapterLayout.CHAPTER1_MAP_NAME)
 	local shop = map and map:FindFirstChild("SupplyShop")
 	if shop then
+		-- The two board+frame pairs leave the rear wall for the left wall (inner face x -61.5),
+		-- at eye level, one behind each tool.
+		local slots = { 299.5, 310 }
+		local boards, frames = {}, {}
 		for _, part in ipairs(shop:GetChildren()) do
-			if part:IsA("BasePart") and (part.Name == "EmptyDisplayBoard" or part.Name == "EmptyDisplayFrame") then
-				part.Position = Vector3.new(part.Position.X, BOARD_Y, part.Position.Z)
+			if part:IsA("BasePart") and part.Name == "EmptyDisplayBoard" then
+				table.insert(boards, part)
+			elseif part:IsA("BasePart") and part.Name == "EmptyDisplayFrame" then
+				table.insert(frames, part)
+			end
+		end
+		table.sort(boards, function(a, b)
+			return a.Position.X < b.Position.X
+		end)
+		table.sort(frames, function(a, b)
+			return a.Position.X < b.Position.X
+		end)
+		for index, z in ipairs(slots) do
+			local frame, board = frames[index], boards[index]
+			if frame then
+				frame.CFrame = CFrame.new(-61.5 + frame.Size.Z * 0.5, BOARD_Y, z) * CFrame.Angles(0, math.rad(90), 0)
+			end
+			if board then
+				board.CFrame = CFrame.new(-61.5 + (frame and frame.Size.Z or 0.45) + board.Size.Z * 0.5, BOARD_Y, z)
+					* CFrame.Angles(0, math.rad(90), 0)
 			end
 		end
 	end

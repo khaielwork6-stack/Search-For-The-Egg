@@ -109,20 +109,23 @@ return function(describe, it, expect)
 			expect(runtime.state.phase).toBe("Searching")
 			local capacity = cfg.collection.startingBagCapacity
 			local carried, hits = 0, 0
+			-- Interior block: rim columns hold only a record or two, the crown holds dozens.
+			local bx, bz = runtime.grid.width // 2 - 2, runtime.grid.depth // 2 - 2
 			while carried < capacity and hits < 200 do
 				-- Every hand click collects exactly one feather (owner requirement); walk a 4x4 block.
-				local result = h.collectAt(1, runtime, 4 + (hits % 4), 4 + math.floor(hits / 4) % 4)
+				local result = h.collectAt(1, runtime, bx + (hits % 4), bz + math.floor(hits / 4) % 4)
 				expect(result.ok).toBe(true)
-				expect(result.data.awarded).toBe(1)
+				-- Exactly one record per click: a standard feather, or a Rainbow Feather from the seed.
+				expect(result.data.awarded + (result.data.rainbow or 0)).toBe(1)
 				carried = result.data.carried
 				hits += 1
 			end
 			expect(carried).toBe(capacity)
 			expect(runtime.grid.removed).toBe(capacity)
-			local full = h.collectAt(1, runtime, 4, 4)
+			local full = h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			expect(full.ok).toBe(false)
 			expect(full.message).toBe("bag_full")
-			expect(runtime.players[1].carriedStandard).toBe(capacity)
+			expect(runtime.players[1].carriedStandard + runtime.players[1].carriedRainbow).toBe(capacity)
 			expect(runtime.players[1].contribution.feathersCollected).toBe(capacity)
 			expect(h.analyticsAdapter:countOf("bag_full")).toBe(1)
 		end)
@@ -222,8 +225,9 @@ return function(describe, it, expect)
 			local _, runtime = h.startRound({ 1 })
 			local carried = 0
 			local i = 0
+			local bx, bz = runtime.grid.width // 2 - 2, runtime.grid.depth // 2 - 2
 			while carried < cfg.collection.startingBagCapacity do
-				carried = h.collectAt(1, runtime, 3 + (i % 4), 3 + math.floor(i / 4) % 4).data.carried
+				carried = h.collectAt(1, runtime, bx + (i % 4), bz + math.floor(i / 4) % 4).data.carried
 				i += 1
 			end
 			h.standAt(1, layout.spawn)
@@ -232,14 +236,17 @@ return function(describe, it, expect)
 			h.standAt(1, layout.sellStation + Vector3.new(0, 3, 6))
 			local sale = h.selling:sell(1, h.token(1))
 			expect(sale.ok).toBe(true)
-			expect(sale.data.standardCount).toBe(25)
-			expect(sale.data.finalCents).toBe(25)
-			expect(sale.data.cashCents).toBe(25)
-			expect(EconomyMath.formatCents(sale.data.cashCents)).toBe("$0.25")
+			-- One cent per standard feather; a Rainbow Feather the seed put in the block pays 10x.
+			local rainbowCount = sale.data.rainbowCount or 0
+			expect(sale.data.standardCount + rainbowCount).toBe(25)
+			local expectedCents = sale.data.standardCount + rainbowCount * cfg.selling.rainbowFeatherMultiplier
+			expect(sale.data.finalCents).toBe(expectedCents)
+			expect(sale.data.cashCents).toBe(expectedCents)
+			expect(EconomyMath.formatCents(sale.data.cashCents)).toBe(EconomyMath.formatCents(expectedCents))
 			local duplicate = h.selling:sell(1, h.token(1))
 			expect(duplicate.ok).toBe(false)
 			expect(duplicate.code).toBe("already_done")
-			expect(runtime.players[1].cashCents).toBe(25)
+			expect(runtime.players[1].cashCents).toBe(expectedCents)
 			expect(runtime.players[1].carriedStandard).toBe(0)
 			expect(h.analyticsAdapter:countOf("sell_completed")).toBe(1)
 		end)
@@ -601,8 +608,9 @@ return function(describe, it, expect)
 			h.rounds.deltaFlushed:Connect(function(_, delta)
 				table.insert(flushed, delta)
 			end)
-			h.collectAt(1, runtime, 4, 4)
-			h.collectAt(1, runtime, 4, 4)
+			local ix, iz = runtime.grid.width // 2 - 4, runtime.grid.depth // 2 - 4
+			h.collectAt(1, runtime, ix, iz)
+			h.collectAt(1, runtime, ix, iz)
 			h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			expect(h.rounds:flushDeltas()).toBe(1)
 			expect(#flushed).toBe(1)

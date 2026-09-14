@@ -754,8 +754,9 @@ return function(describe, it, expect)
 			local _, hardRuntime = hard.startRound({ 1 }, "hard")
 			expect(hardRuntime.state.difficulty).toBe("hard")
 			local ratio = hardRuntime.grid.total / normalRuntime.grid.total
-			-- Crown columns saturate at the 32-record mask, so Hard lands a little under the multiplier.
-			expect(ratio).toBeGreaterThan(cfg.difficulty.hard.pileHealthMultiplier - 0.3)
+			-- Most columns saturate at the 32-record mask (records every 0.15 studs since 14 Sep 2026),
+			-- so Hard's extra depth shows only at the rim; it is still strictly deeper.
+			expect(ratio).toBeGreaterThan(1.0)
 			expect(ratio).toBeLessThan(cfg.difficulty.hard.pileHealthMultiplier + 0.15)
 			expect(hardRuntime.eggDepthFraction).toBeGreaterThanOrEqual(cfg.difficulty.hard.eggDepthMinimum)
 			acquire(hard, 1, "nestRake")

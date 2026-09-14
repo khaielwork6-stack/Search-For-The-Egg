@@ -97,7 +97,7 @@
     "personalBag": true,
     "personalCash": true,
     "pileRepresentation": {
-      "serverGridCells": 1024,
+      "serverGridCells": 2304,
       "clientVisualStrandPoolDesktop": 9000,
       "clientVisualStrandPoolMobile": 3200,
       "replicationHz": 8,
@@ -106,9 +106,9 @@
     }
   },
   "pile": {
-    "gridWidth": 32,
-    "gridDepth": 32,
-    "cellSizeStuds": 0.9,
+    "gridWidth": 48,
+    "gridDepth": 48,
+    "cellSizeStuds": 0.6,
     "baseFeathersPerCell": 6,
     "surfaceVariance": 0.25,
     "coverDepthMultiplier": 2.0,
@@ -136,7 +136,7 @@
       "surfaceInsetStuds": 0.3,
       "lineOfSightToleranceStuds": 1.5,
       "assumption": "ASSUMED",
-      "rewriteEveryRecords": 3,
+      "rewriteEveryRecords": 6,
       "shellOverlap": 1.3,
       "shellThicknessStuds": 3.0,
       "shellFolderName": "SFE_PileCollision"
@@ -192,8 +192,8 @@
       "pickupVolume": 0.7,
       "bagFullToastCooldownSeconds": 1.5,
       "assumption": "ASSUMED",
-      "visibleSlotsPerCell": 12,
-      "visibleSlotsPerCellMobile": 4,
+      "visibleSlotsPerCell": 10,
+      "visibleSlotsPerCellMobile": 3,
       "featherWidthRange": [
         1.3,
         1.9
@@ -272,7 +272,8 @@
       ]
     },
     "assumption": "ASSUMED",
-    "recordSpacingStuds": 0.45
+    "recordSpacingStuds": 0.15,
+    "depthEvidence": "ASSUMED 14 Sep 2026: 48x48 cells of 0.6 studs (same 28.8-stud footprint), records every 0.15 studs of column height capped at 32 per cell (~55k records) so the mound reads ~20-25 min of tool digging to the egg at minimumRemovalFraction; visible coat is the top 10 records per cell"
   },
   "eggSpawn": {
     "spawnNodeCountTarget": 24,

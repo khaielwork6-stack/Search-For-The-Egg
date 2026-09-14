@@ -22,6 +22,7 @@ export type InputController = typeof(setmetatable(
 		_mode: Mode,
 		_held: { [string]: boolean },
 		_suspended: boolean,
+		_menuFromAction: (() -> ())?,
 		modeChanged: any,
 		actionBegan: any,
 		actionEnded: any,
@@ -70,13 +71,38 @@ function InputController.new(): InputController
 
 	for action, keys in pairs(BINDINGS) do
 		local actionName = "SFE_" .. action
-		ContextActionService:BindAction(actionName, function(_, state)
+		-- Menu binds above the core scripts: Tab is otherwise claimed by the player list toggle.
+		local priority = if action == "Menu" then Enum.ContextActionPriority.High.Value + 100 else Enum.ContextActionPriority.Medium.Value
+		ContextActionService:BindActionAtPriority(actionName, function(_, state)
 			return self:_handle(action, state)
-		end, false, table.unpack(keys))
+		end, false, priority, table.unpack(keys))
 		self._trove:add(function()
 			ContextActionService:UnbindAction(actionName)
 		end)
 	end
+	-- Belt and braces for Tab / backtick: if a core script still swallows the key before the
+	-- action fires, the raw key event drives Menu instead (never while typing in a text box).
+	local lastMenuAt = 0
+	self._menuFromAction = function()
+		lastMenuAt = os.clock()
+	end
+	self._trove:add(UserInputService.InputBegan:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.Keyboard then
+			return
+		end
+		if input.KeyCode ~= Enum.KeyCode.Tab and input.KeyCode ~= Enum.KeyCode.Backquote then
+			return
+		end
+		if UserInputService:GetFocusedTextBox() then
+			return
+		end
+		if os.clock() - lastMenuAt < 0.15 then
+			return -- the ContextAction binding already handled this press
+		end
+		lastMenuAt = os.clock()
+		self:_handle("Menu", Enum.UserInputState.Begin)
+		self:_handle("Menu", Enum.UserInputState.End)
+	end))
 
 	self._trove:add(UserInputService.LastInputTypeChanged:Connect(function(inputType)
 		local mode = modeFor(inputType)
@@ -102,6 +128,9 @@ function InputController._handle(self: InputController, action: Action, state: E
 		return Enum.ContextActionResult.Pass
 	end
 	if state == Enum.UserInputState.Begin then
+		if action == "Menu" and self._menuFromAction then
+			self._menuFromAction()
+		end
 		self._held[action] = true
 		self.actionBegan:Fire(action)
 	elseif state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then

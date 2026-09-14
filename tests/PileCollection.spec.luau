@@ -298,7 +298,8 @@ return function(describe, it, expect)
 			expect(#h.terrainAdapter.regionWrites).toBe(1)
 			-- The re-written region covers the strike plus the configured margin.
 			local region = h.terrainAdapter.regionWrites[1]
-			local margin = cfg.pile.collision.rewriteMarginCells * runtime.grid.cellSize
+			-- The region grows from cell centres; the strike point sits up to half a cell from one.
+			local margin = cfg.pile.collision.rewriteMarginCells * runtime.grid.cellSize - runtime.grid.cellSize * 0.5
 			expect(region.minX).toBeLessThanOrEqual(result.data.hitX - margin + 1e-6)
 			expect(region.maxX).toBeGreaterThanOrEqual(result.data.hitX + margin - 1e-6)
 			-- Cell health became geometry: the field the adapter received is depleted at the struck cell.
