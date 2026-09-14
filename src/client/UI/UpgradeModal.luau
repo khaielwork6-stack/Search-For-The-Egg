@@ -202,6 +202,7 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 				pipLayout.FillDirection = Enum.FillDirection.Horizontal
 				pipLayout.Padding = UDim.new(0, 3)
 				pipLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+				pipLayout.SortOrder = Enum.SortOrder.LayoutOrder
 				pipLayout.Parent = pips
 				local pipDots: { Frame } = {}
 				for index = 1, math.clamp(preview.maxLevel or 0, 0, 8) do

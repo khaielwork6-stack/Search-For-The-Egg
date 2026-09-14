@@ -54,8 +54,8 @@ local COPY: { [string]: { title: string, what: string, icon: string, art: string
 		what = "Gem rewards",
 		icon = "gem",
 		art = "hud.gem",
-		fill = Tokens.color.gem,
-		deep = Tokens.color.gemDeep,
+		fill = Tokens.color.tealAccent,
+		deep = Tokens.color.tealDeep,
 	},
 	featherValue = {
 		title = "Feather Value",
@@ -76,7 +76,7 @@ local function offers(cfg: { [string]: any }): { Offer }
 	for index, bundle in ipairs(bundles) do
 		table.insert(list, {
 			key = "gemBundle" .. tostring(bundle.gems),
-			name = string.format("%d Gems", bundle.gems),
+			name = string.format("%s Gems", (tostring(bundle.gems):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", ""))),
 			caption = "Added at once",
 			art = "hud.gem",
 			icon = "gem",
@@ -279,6 +279,8 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		pipLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 		pipLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 		pipLayout.Padding = UDim.new(0, 3)
+		-- Explicit order: sorted by name "Pip10" lands between "Pip1" and "Pip2" and hides a level.
+		pipLayout.SortOrder = Enum.SortOrder.LayoutOrder
 		pipLayout.Parent = pips
 		pips.Parent = face
 		local pipDots: { Frame } = {}
@@ -306,7 +308,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		-- Price button across the bottom.
 		local buy = Button.build(face, {
 			text = "",
-			variant = "gem",
+			variant = "primary",
 			minimumTapTarget = tap,
 			motion = motion,
 			size = UDim2.new(1, -Tokens.spacing.md, 0, tap + Tokens.spacing.xs),

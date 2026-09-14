@@ -182,6 +182,7 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 		pipLayout.FillDirection = Enum.FillDirection.Horizontal
 		pipLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 		pipLayout.Padding = UDim.new(0, 2)
+		pipLayout.SortOrder = Enum.SortOrder.LayoutOrder
 		pipLayout.Parent = pips
 		pips.Parent = tile
 		local maxLevel = preview and preview.maxLevel or 0
