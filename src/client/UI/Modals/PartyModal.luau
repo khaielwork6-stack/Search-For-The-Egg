@@ -332,6 +332,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			minimumTapTarget = tap,
 			motion = motion,
 			size = UDim2.fromOffset(tap, if compact then tap else tap + Tokens.spacing.xs),
+			round = true,
 			zIndex = z + 3,
 			textSize = if compact then Tokens.typography.title.size else Tokens.typography.display.size,
 			sound = function()
