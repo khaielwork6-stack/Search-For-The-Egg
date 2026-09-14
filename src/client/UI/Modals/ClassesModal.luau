@@ -153,17 +153,6 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		if art then
 			stroke.Enabled = false
 		end
-		-- Rarity ribbon along the top edge.
-		local ribbon = Instance.new("Frame")
-		ribbon.Name = "Ribbon"
-		ribbon.Size = UDim2.new(1, 0, 0, 6)
-		ribbon.BackgroundColor3 = rarity.fill
-		ribbon.BorderSizePixel = 0
-		ribbon.ZIndex = z + 2
-		local ribbonCorner = Instance.new("UICorner")
-		ribbonCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
-		ribbonCorner.Parent = ribbon
-		ribbon.Parent = frame
 		-- Content sits in a padded child so the art frame keeps the card's full size.
 		local content = Instance.new("Frame")
 		content.Name = "Content"

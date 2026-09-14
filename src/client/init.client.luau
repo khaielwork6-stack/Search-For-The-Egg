@@ -479,6 +479,19 @@ if RunService:IsStudio() then
 				},
 			}
 		end,
+		-- Device emulation: shrinks every UI stage to the given size (nil restores the viewport).
+		emulate = function(width, height)
+			local SafeArea = require(script.UI.SafeArea)
+			if width and height then
+				SafeArea.setViewportOverride(Vector2.new(tonumber(width) or 812, tonumber(height) or 375))
+			else
+				SafeArea.setViewportOverride(nil)
+			end
+			return {
+				override = tostring(SafeArea.viewportOverride()),
+				class = SafeArea.layoutClass(SafeArea.viewport().X, SafeArea.viewport().Y),
+			}
+		end,
 		pileReport = function()
 			local report: any = table.clone(pile.stats)
 			report.feathers = pile:featherCount()
