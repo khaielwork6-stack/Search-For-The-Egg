@@ -1084,7 +1084,7 @@ function PileVisualController.collectFeather(
 		part.CanQuery = false
 		if self._rainbowParts[part] then
 			-- A Rainbow Feather leaves with a shimmer burst and keeps its colour flow in flight.
-			self._deps.vfx:burst("sparkle", part.Position + Vector3.new(0, 0.6, 0), 1.0)
+			self._vfx:burst("sparkle", part.Position + Vector3.new(0, 0.6, 0), 1.0)
 		end
 	else
 		part = acquirePart(self)
