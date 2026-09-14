@@ -125,7 +125,7 @@ Tokens.recipes = table.freeze({
 	lift = table.freeze({ seconds = 0.22, style = "Quad", direction = "Out" }),
 })
 
--- Semantic sound roles. Actual asset ids resolve through AudioDirector's manifest so UI code never
+-- Semantic sound roles (owner ids mapped in AudioDirector, 13 Sep 2026). Actual asset ids resolve through AudioDirector's manifest so UI code never
 -- references an asset id. PLACEHOLDER: manifest ids are stand-ins until Phase 6 audio pass.
 Tokens.sound = table.freeze({
 	uiTap = "ui.tap",
