@@ -3,6 +3,6 @@
 -- verified phase checkpoint; the commit SHA is recorded in docs, not here (no runtime git access).
 
 return table.freeze({
-	buildLabel = "phase4-lobby-meta",
-	phase = 4,
+	buildLabel = "phase5-live-shops",
+	phase = 5,
 })

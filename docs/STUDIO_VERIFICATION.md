@@ -1139,3 +1139,37 @@ level. Verified in the edit-mode probe (Studio viewport) and Play Solo.
   was exactly 1, so no stem had ever started.
 - Rojo plugin was disconnected during this pass; the six changed sources were patched into Studio
   directly and match the repository.
+
+## Phase 5 wrap: SFX, queue pads, nameplates, Farmer delivery, Rainbow Feathers, inspection, book (14 Sep 2026)
+
+Build label `phase5-live-shops`. Verified in Play Solo (map mode) on this laptop; 297 headless
+tests; selene / stylua clean; console clean.
+
+- **Pile untouched.** `pileReport` after this work: `feathers=9665 fluff=0 coatKind=feathers`
+  (records only; the placed count moves with the camera window, the record set does not).
+- **SFX.** Owner ids: click / close / collect `75757588904639`, denied `133211074702094`, sell
+  `100822837900340`, buy + upgrade `134116566819117`, class roll `96666005075540`. All five load.
+- **Studio commerce gate.** Only missing pass / product ids force the mock Marketplace; the three
+  missing place ids no longer do. (Earlier purchase checks ran on the mock.)
+- **Pickup floats.** `+1` rose from the pick point on a real hand collect (`SFE_PickupFloat`).
+- **Nameplates.** Every character carries display name + "Record mm:ss.cc" / "No record yet"
+  from the `SFE_BestTimeMs` attribute (set on load and after each victory).
+- **Queue pads.** Stepping on an empty pad opened the party screen (`PadPrompt`); Create with size 1
+  -> pad board and banner counted `Setting off in 5 ... 1` -> round started. Pad: neon disc, gold
+  rim, 12 light posts (gold while a party holds the pad), floating `0/4 / Touch to create a party`
+  board. Pad tests rewritten (5 cases).
+- **Farmer delivery.** Claim = pick up: egg welded above the carrier, prompt hidden, carrier glow,
+  banner "Bring the Egg to the Farmer". `EggDeliver` next to the Farmer won the round (profile:
+  `totalWins 1, eggsFound 1`); refused with `not_carrier` / `out_of_range` otherwise (tests).
+- **Rainbow Feathers.** 148 of 9665 coat records carried `SFE_Rainbow` (1.53 %, config 1.5 %).
+  A server collect of a client-marked rainbow record (cell 610 slot 10) awarded `rainbow=1`,
+  `carriedRainbow 0 -> 1`: client and server agree on the seed. Sale value 10x (CSV + tests).
+- **Inspection.** `SFE_Display_bag`: camera Scriptable, bars 11 %, HUD hidden, "Bag Upgrade",
+  "★ LEVEL 1 / 5 ★", headline `25 → 50`, options `UPGRADE $1.00` / `SKIP UPGRADE R$ 9`; Backspace
+  closed it with camera Custom and HUD back. `SFE_Display_nestRake`: `ONE ROUND R$ 19` / `CASH
+  $8.00` / `PERMANENT R$ 99`, "DIGS DEEPER", skins Default / Alien.
+- **Upgrade book.** `openUpgrades` opened the book: left page Hand (Hold $1.00 / Speed $0.50 /
+  Grasp $0.25, story `off → every 0.32s`, `BUY ($1.00)`), right page Bag (`25 feathers → 50
+  feathers`, `BUY ($1.00)`), money line; `closeBook` removed it.
+- Not verified here: phone-preset session for the book / inspection (owner checkpoint), real
+  Robux dialogs (need a published place), multi-player pad joins (Play Solo only).

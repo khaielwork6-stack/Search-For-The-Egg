@@ -1,6 +1,6 @@
 # Implementation Status
 
-Build label: `phase4-lobby-meta` (`src/server/BuildInfo.luau`). Config version 1.
+Build label: `phase5-live-shops` (`src/server/BuildInfo.luau`). Config version 1.
 
 | Phase | Status | Checkpoint |
 |---|---|---|
@@ -9,7 +9,7 @@ Build label: `phase4-lobby-meta` (`src/server/BuildInfo.luau`). Config version 1
 | 3 - Progression and tools (Hand paths, Bag, Nest Rake, Confetti Charge, Feather Vac, Scout Chick, grants, modifiers) | Verified | `6e2a8e0b02ed78f7d5c08ef61b1e99498c78708f` |
 | 4 - Lobby / meta (parties, chapter selection, classes, perks, daily, codes, group reward, inventory, stats, leaderboards, modals, pile rebuild) | **Verified** (headless + Studio Play Solo desktop and phone) | see git log / `docs/STUDIO_VERIFICATION.md` |
 | 4b - Feather pile rebuild (per-feather pickup, terrain collision, carried stack) | **Verified** (headless + Studio Play, 13 Sep 2026) | see `docs/STUDIO_VERIFICATION.md` |
-| 5 - Hard, Chapter 2, monetization | Groundwork committed, not wired | |
+| 5 - Monetization, lobby queue, Farmer delivery, Rainbow Feathers, barn inspection, upgrade book | **Wrapped** (14 Sep 2026: CommerceService wired with live pass/product ids, Studio test purchases; Hard mode and Chapter 2 stay behind feature flags) | see `docs/STUDIO_VERIFICATION.md` |
 | 6 - Release QA | Not started | |
 
 ## Phase 4 - what exists
@@ -293,6 +293,19 @@ cream panel with a studs weave, gold header bands (`FrameKit.headerBand`) with o
 lipped buttons (`Button.luau`, face drops on press) and chips (`FrameKit.chip`). Pack icons, station
 tiles, glyphs and the rays / studs textures are still used. The owner's dropped pack ScreenGui and
 its LocalScript are disabled in the place, not deleted.
+
+**Phase 5 systems (14 Sep 2026).** Queue pads (`PartyPadService` prompts the party screen on an
+empty pad; `PartyCreate` takes a `size`; a full pad sets off after 0.5 s into the 5 s
+`round.countdownSeconds`; pad glow / posts / board built in `WorldShellService.buildFromMap`).
+Farmer delivery (`EggService.claim` = pick up, `EggService.deliver` at the Farmer = win,
+`drop` on death / leave; Farmer is a clone of the Cow Boy rig spawned by
+`ChapterShellService.spawnFarmer`). Rainbow Feathers (`FeatherLayout.isRainbow` from
+`runtime.rainbowSeed` + `pile.rainbowChance` ASSUMED 0.015; `selling.rainbowFeatherMultiplier` 10;
+client colour flow in `PileVisualController`). Barn inspection (`InspectController`), the upgrade
+book (`UpgradeBookController`, Tab / book button / supplies counter), nameplates
+(`NameplateController` + `SFE_BestTimeMs` player attribute), pickup floats (`HUDController.floatPickup`).
+Known gaps: bag level 6 and a one-round Infinite Bag product are not in the config (owner input
+needed); real Robux prompts have only been exercised through the mock in Play Solo.
 
 **Lobby vendors and shops (14 Sep 2026).** The permanent menu is a right-hand stack (Stats,
 Inventory, Codes); Classes and the Perk Shop open only through the owner's Cow Boy vendors
