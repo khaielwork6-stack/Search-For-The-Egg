@@ -337,7 +337,7 @@ function Button.build(parent: Instance, options: Options): Handle
 				then GHOST_FILL_TRANSPARENCY + (if dim then 0.25 else 0)
 				else (if dim then 0.35 else 0)
 		end
-		button.TextTransparency = if dim then 0.45 elseif pending then 0.3 else 0
+		button.TextTransparency = if dim and selected then 0.15 elseif dim then 0.45 elseif pending then 0.3 else 0
 		stroke.Transparency = if dim then 0.5 else 0
 		if selected then
 			stroke.Color = Tokens.color.tealAccent
