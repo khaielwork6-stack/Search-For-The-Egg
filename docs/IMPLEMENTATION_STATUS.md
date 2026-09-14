@@ -205,7 +205,7 @@ inset 0.35, line-of-sight tolerance 1.5); `pile.visual` (part budgets 9000 / 320
 feather length 2.6-4.2, width 1.0-1.5, spread 0.8, tilt 6-30, roll 60, layer step 0.5, lift 0.12, fluff
 0.9-2.0 x 0.35-0.7, tilt 2-22, 22 / 7 per cell, palette of five warm whites, cull 220 / 120, target rate 20 Hz,
 pull 0.34 s, 3 streaks, 3 chevrons); `interaction.aimMissToleranceStuds` 2.0, `collectDebounceSeconds` 0.12;
-`hud.carriedStack` (maxVisibleFeathers 12 scaled by bag fullness, infiniteCapCount 200 for the logarithmic infinite-bag curve, bounce 0.28 s).
+`pile` is a 32x32 grid of 0.9-stud columns with every rendered strand a collectible record (no cosmetic strands); `hud.carriedStack` (maxVisibleFeathers 12 scaled by bag fullness, infiniteCapCount 200 for the logarithmic infinite-bag curve, bounce 0.28 s).
 
 ## Deviations from the pack
 

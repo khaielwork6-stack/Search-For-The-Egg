@@ -966,3 +966,25 @@ Commits 524cac8, 24396bf, 8fd3f43, d7f555d, b20f3b6. Verified in Studio Play (th
   while the bundle shows 7 = `floor(1 + 11 * ln(26) / ln(200))`. Every bundle feather projected through
   the viewport camera at 12 feathers stays within 87% of the frame's half-extents (no cropping); the
   frame sits 18 px inside the right edge and 92 px above the bottom of the safe-area gui (1223x600).
+
+
+## Follow-up: nothing cosmetic, everything pickable (13 Sep 2026, later)
+
+Commits c3bd219 .. bdc58c0. Owner direction after the exact-pick work: the mound looked thin once the
+bed was sunk, and a strand under the dot that is not the outlined one is unacceptable - "nothing
+should be cosmetic, everything should be pickable".
+
+- **Grid** 32x32 columns of 0.9 studs (was 16x16 at 1.8), records 0.45 studs apart, 15,916 records
+  in a chapter-1 mound, twelve rendered per column on desktop (9,703 parts) and four on the low tier.
+  Bed, underlayer, rim bed and wall/floor filler are off; the pile folder holds only `Feather`
+  records (0 blank meshes in a 3,000-part sample). Edit-mode render from the near flank: solid,
+  layered coat with no ground visible.
+- **Reticle** drawn on the raw viewport centre (611,329 of 1223x658), where the locked mouse and the
+  pick ray are; previously the inset-adjusted gui centre sat it below the aim point.
+- **Exact pick**: a box test over every part on the crosshair ray found the outlined record first
+  (`firstVisibleIsTarget = true`); the server hit the same cell (909); 1 part removed, 0 moved,
+  1 added (the next record entering the window); bag +1.
+- **Regressions checked in the same Play round**: 22 of 22 aimed picks accepted with no rejection
+  codes; stack 2..12 tracked bag 3..23 of 25 exactly; settings menu unlocks the mouse (Default +
+  icon, stack hidden) and re-locks on close; sale of 23 feathers started the crate run and cleared
+  the bag and the bundle; camera stayed LockFirstPerson; 295 headless tests pass.
