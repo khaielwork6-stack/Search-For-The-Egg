@@ -286,3 +286,10 @@ Components: Button (variants primary / secondary / ghost / teal / pill / danger,
 state), Tabs, Switch, Dialog, Confetti, Toast, ModalShell, Frame kit, Icons. UI sounds are Roblox
 built-ins mapped in `AudioDirector` with per-role pitch / volume / minimum gap; world and music roles
 remain silent stubs for the audio pass.
+
+**v2 re-skin (14 Sep 2026).** The pack's frame art is retired (`Skin.frameArtEnabled = false`) in
+favour of vector "cookie" surfaces drawn by `UI/Components/Frame.luau`: cocoa outline, bottom lip,
+cream panel with a studs weave, gold header bands (`FrameKit.headerBand`) with outlined titles,
+lipped buttons (`Button.luau`, face drops on press) and chips (`FrameKit.chip`). Pack icons, station
+tiles, glyphs and the rays / studs textures are still used. The owner's dropped pack ScreenGui and
+its LocalScript are disabled in the place, not deleted.

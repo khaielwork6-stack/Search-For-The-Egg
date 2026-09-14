@@ -1032,3 +1032,28 @@ this laptop) at desktop (Studio viewport), phone (812x375 override, touch mode) 
   Note: after the edit-mode probe renamed `ReplicatedStorage.Shared`, Rojo stopped delivering that
   subtree to Studio; `Tokens` was patched in place and the Rojo plugin should be reconnected before
   the next `Shared` change.
+
+## UI v2 "cookie" re-skin (14 Sep 2026)
+
+The owner rejected the pasted-kit look ("everything about it screams UI pack"). Every screen was
+re-drawn as vector "cookie" UI: cocoa outline, bottom lip, cream panel with a faint studs weave, gold
+header band with rays and an outlined FredokaOne title, lipped buttons whose face drops 4 px on press,
+teal only as an accent. The pack's frame art is retired (`Skin.frameArtEnabled = false`); icons,
+station tiles, glyphs and the two textures stay. Verified through the edit-mode probe at the Studio
+viewport (939x659) and the 812x375 phone override, touch mode:
+
+- **Round HUD.** Timer / bag / cash chips, bag fill with the ember FULL state, hotbar tiles with the
+  status text on a cream band over the bar, keycap prompt only while Searching / EggRevealed, toasts
+  hug their text under the banner.
+- **Lobby.** Station rail with hover nameplates (title rises above the tile); the prompt chip no
+  longer sits on the rail.
+- **Modals.** Shop, classes, daily, settings (tabs share the track, lipless faces), party (wide card
+  at 0.9 / 860 px, empty member and party lists hidden, action buttons fill the row), stats
+  (friendly leaderboard tab names before the snapshot arrives), codes (feedback line only when set),
+  tool rack (two-line rows, Moonlit Chest badge, gold stroke when equipped), workbench (level pips,
+  current -> next detail, price on the button, MAX / OWNED badges). Phone: the shop card scrolls
+  inside 90 % of 375 px with no cropping.
+- **Play pass.** Console clean apart from the music asset permission. The dropped pack
+  `StarterGui.ScreenGui` is disabled and its `LocalScript` is now disabled too: it installs a
+  `UIBlur` in Lighting and hides every other ScreenGui when one of its frames opens.
+- 295 headless tests pass; selene / stylua clean.
