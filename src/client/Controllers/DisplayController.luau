@@ -31,8 +31,8 @@ export type DisplayController = typeof(setmetatable(
 local DISPLAYS: { [string]: { name: string, upgradeId: string?, productKey: string?, pass: string? } } = {
 	bag = { name = "Upgrade Bag", upgradeId = "bag" },
 	infiniteBag = { name = "Infinite Bag", productKey = "infiniteBag", pass = "infiniteBag" },
-	nestRake = { name = "Nest Rake", upgradeId = "nestRake" },
-	confettiCharge = { name = "Confetti Charge", upgradeId = "confettiCharge" },
+	nestRake = { name = "Nest Rake", upgradeId = "tool:nestRake" },
+	confettiCharge = { name = "Confetti Charge", upgradeId = "tool:confettiCharge" },
 }
 
 function DisplayController.new(deps: any): DisplayController
