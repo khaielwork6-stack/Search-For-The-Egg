@@ -16,6 +16,7 @@ local Button = require(script.Parent.Parent.Components.Button)
 local Dialog = require(script.Parent.Parent.Components.Dialog)
 local Skin = require(script.Parent.Parent.Components.Skin)
 local Icons = require(script.Parent.Parent.Components.Icons)
+local SafeArea = require(script.Parent.Parent.SafeArea)
 
 local PartyModal = {}
 
@@ -70,6 +71,8 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local selected = { chapter = "chapter1", difficulty = "normal", size = 1 }
 	local maxSize = cfg.project.maxPartyPlayers
 	local pending = false
+	-- Landscape phones get a shorter card so CREATE stays on screen without scrolling.
+	local compact = SafeArea.classOf(container) == "phone"
 
 	local function toast(text: string, tone: string?)
 		deps.toasts:push(text, tone or "warning")
@@ -115,7 +118,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	end
 
 	-- Layout: left card + right column ------------------------------------------------------------
-	local layoutHeight = tap * 9 + Tokens.spacing.lg
+	local layoutHeight = if compact then tap * 6 + Tokens.spacing.md else tap * 9 + Tokens.spacing.lg
 	local layout = Instance.new("Frame")
 	layout.Name = "Layout"
 	layout.BackgroundTransparency = 1
@@ -145,7 +148,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	rightLayout.Parent = right
 
 	-- Preview band on the left card.
-	local previewHeight = tap * 3 + Tokens.spacing.md
+	local previewHeight = if compact then tap * 2 else tap * 3 + Tokens.spacing.md
 	local preview = Instance.new("Frame")
 	preview.Name = "Preview"
 	preview.Size = UDim2.new(1, 0, 0, previewHeight)
@@ -166,10 +169,10 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	previewGradient.Parent = preview
 	preview.Parent = leftFace
 	Skin.texture(preview, "texture.rays", { zIndex = z + 2, transparency = 0.8, color = Tokens.color.featherWhite })
-	local previewArt = Skin.icon(preview, CHAPTER_LOOK.chapter1.art, tap * 2 + Tokens.spacing.lg, z + 3)
+	local previewArt = Skin.icon(preview, CHAPTER_LOOK.chapter1.art, if compact then tap else tap * 2 + Tokens.spacing.lg, z + 3)
 	if previewArt then
 		previewArt.AnchorPoint = Vector2.new(0.5, 0.5)
-		previewArt.Position = UDim2.fromScale(0.5, 0.42)
+		previewArt.Position = UDim2.fromScale(0.5, if compact then 0.3 else 0.42)
 	end
 	local previewTitle = FrameKit.text(preview, "Title", "", "display", {
 		zIndex = z + 4,
@@ -179,7 +182,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	previewTitle.AnchorPoint = Vector2.new(0.5, 1)
 	previewTitle.Position = UDim2.new(0.5, 0, 1, -(Tokens.typography.label.size + Tokens.spacing.md))
 	previewTitle.Size = UDim2.new(1, 0, 0, Tokens.typography.display.size + 4)
-	previewTitle.TextSize = Tokens.typography.display.size - 2
+	previewTitle.TextSize = if compact then Tokens.typography.title.size else Tokens.typography.display.size - 2
 	FrameKit.outline(previewTitle, 3)
 	local previewSub = FrameKit.text(preview, "Sub", "CREATE PARTY", "label", {
 		zIndex = z + 4,
@@ -337,15 +340,16 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	})
 	hint.Position = UDim2.fromOffset(0, tap * 2 + Tokens.typography.title.size + Tokens.spacing.lg + Tokens.spacing.sm)
 	hint.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size * 2 + 4)
+	hint.Visible = not compact
 
 	local createHandle = Button.build(createPanel, {
 		text = "CREATE",
 		variant = "success",
 		minimumTapTarget = tap,
 		motion = motion,
-		size = UDim2.new(0.8, 0, 0, tap + Tokens.spacing.sm),
+		size = UDim2.new(0.8, 0, 0, if compact then tap else tap + Tokens.spacing.sm),
 		zIndex = z + 3,
-		textSize = Tokens.typography.display.size - 6,
+		textSize = if compact then Tokens.typography.title.size else Tokens.typography.display.size - 6,
 		sound = function()
 			deps.audio:play(Tokens.sound.uiTap)
 		end,
@@ -502,7 +506,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		})
 		tile.LayoutOrder = index
 		Skin.texture(face, "texture.rays", { zIndex = z + 3, transparency = 0.82, color = Tokens.color.featherWhite })
-		local art = Skin.icon(face, look.art, tap * 2, z + 4)
+		local art = Skin.icon(face, look.art, if compact then tap + Tokens.spacing.md else tap * 2, z + 4)
 		if art then
 			art.AnchorPoint = Vector2.new(0.5, 0.5)
 			art.Position = UDim2.fromScale(0.5, 0.42)
@@ -520,7 +524,8 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		lockBadge.Name = "Lock"
 		lockBadge.AnchorPoint = Vector2.new(0.5, 0.5)
 		lockBadge.Position = UDim2.fromScale(0.5, 0.4)
-		lockBadge.Size = UDim2.fromOffset(tap + Tokens.spacing.xs, tap + Tokens.spacing.xs)
+		local badgePx = if compact then tap - Tokens.spacing.sm else tap + Tokens.spacing.xs
+		lockBadge.Size = UDim2.fromOffset(badgePx, badgePx)
 		lockBadge.BackgroundColor3 = Tokens.color.gold
 		lockBadge.ZIndex = z + 6
 		local lockCorner = Instance.new("UICorner")
@@ -540,9 +545,9 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			align = Enum.TextXAlignment.Center,
 		})
 		lockText.AnchorPoint = Vector2.new(0.5, 0)
-		lockText.Position = UDim2.new(0.5, 0, 0.4, tap / 2 + Tokens.spacing.sm)
+		lockText.Position = UDim2.new(0.5, 0, 0.4, badgePx / 2 + Tokens.spacing.xs)
 		lockText.Size = UDim2.new(1, 0, 0, Tokens.typography.display.size + 4)
-		lockText.TextSize = Tokens.typography.display.size - 4
+		lockText.TextSize = if compact then Tokens.typography.title.size else Tokens.typography.display.size - 4
 		FrameKit.outline(lockText, 3)
 		local lockNote = FrameKit.text(face, "LockNote", "Coming soon", "caption", {
 			zIndex = z + 6,
@@ -550,7 +555,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			align = Enum.TextXAlignment.Center,
 		})
 		lockNote.AnchorPoint = Vector2.new(0.5, 0)
-		lockNote.Position = UDim2.new(0.5, 0, 0.4, tap / 2 + Tokens.spacing.sm + Tokens.typography.display.size + 2)
+		lockNote.Position = UDim2.new(0.5, 0, 0.4, badgePx / 2 + Tokens.spacing.xs + Tokens.typography.display.size + 2)
 		lockNote.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 4)
 		FrameKit.outline(lockNote, 2)
 		local hit = Instance.new("TextButton")
