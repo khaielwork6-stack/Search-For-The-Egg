@@ -365,12 +365,8 @@ function ToolController._render(self: ToolController, dt: number)
 			self._lastAimAt = now
 			self:_sendVacAim()
 		end
-		local player = self._deps.round.player
-		if player and player.bagCapacity and not player.bagInfinite then
-			if (player.carriedStandard or 0) + (player.carriedRainbow or 0) >= player.bagCapacity then
-				self:endAction()
-			end
-		end
+		-- Bag-full stops come from the server's vac_state (its capacity is the truth); a stale local
+		-- projection must never cut the suction short.
 	end
 	-- Local heat interpolation between authoritative vac events (the server owns the real value).
 	if self._owned.featherVac and self._vac.runtimeSeconds > 0 then
