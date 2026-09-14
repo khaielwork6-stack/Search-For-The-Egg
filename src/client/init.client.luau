@@ -124,6 +124,9 @@ local victory = trove:add(VictoryController.new({
 	config = config,
 }))
 hud:bindRound(round, interaction)
+trove:add(pile.targetChanged:Connect(function(targeting)
+	hud:setTargeting(targeting)
+end))
 local crateRun = trove:add(CrateController.new({ net = net, audio = audio, vfx = vfx, config = config }))
 -- Permanent first person: locked from boot; menus unlock through the modal controller.
 modals:setExternalUnlock(false)

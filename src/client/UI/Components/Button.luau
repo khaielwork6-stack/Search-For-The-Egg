@@ -227,6 +227,22 @@ function Button.build(parent: Instance, options: Options): Handle
 		skin = Skin.label(button, skinRole .. ".normal", { zIndex = z + 1, inset = skinInset, name = "ArtFrame" })
 		stroke.Enabled = false
 		wash.ZIndex = z + 2
+		-- The art supplies the frame and its own gradient: the face underneath is a flat centre.
+		gradient.Enabled = false
+		button.BackgroundColor3 = if variantName == "primary" or variantName == "gold"
+			then Tokens.color.creamPill
+			elseif variantName == "danger" then Tokens.color.cream
+			elseif variantName == "pill" then Tokens.color.creamPill
+			else Tokens.color.featherWhite
+		button.TextColor3 = if variantName == "danger"
+			then Tokens.color.danger
+			elseif variantName == "pill" then Tokens.color.goldDeep
+			else Tokens.color.inkStrong
+		button.TextStrokeTransparency = 1
+		if shadow then
+			shadow.Visible = false
+			shadow = nil
+		end
 	end
 	local function skinState(state: string)
 		if not skin then

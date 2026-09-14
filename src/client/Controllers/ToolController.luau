@@ -453,6 +453,7 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 		local visual = self._deps.config.pile.visual
 		self.stats.accepted += 1
 		self._nextAllowedAt = os.clock() + (data.cooldownMs / 1000)
+		self._lastCooldownSeconds = data.cooldownMs / 1000
 		local hitPosition = Vector3.new(data.hitX, data.hitY or (origin.Y - 1), data.hitZ)
 		local function destination(): Vector3
 			return self._deps.hud:carriedStackWorldPoint() or hitPosition
@@ -510,7 +511,12 @@ function ToolController._startHold(self: ToolController)
 	self:_stopHold()
 	self._holdThread = task.spawn(function()
 		while self._enabled and self._deps.input:isHeld("Primary") do
-			local wait = math.max(0.03, self._nextAllowedAt - os.clock())
+			local remaining = math.max(0, self._nextAllowedAt - os.clock())
+			local cooldown = math.max(0.05, self._lastCooldownSeconds or 0.3)
+			if self._deps.hud and self._deps.hud.setHold then
+				self._deps.hud:setHold(true, 1 - math.clamp(remaining / cooldown, 0, 1))
+			end
+			local wait = math.max(0.03, math.min(0.05, remaining))
 			task.wait(wait)
 			if not self._deps.input:isHeld("Primary") then
 				break
@@ -529,6 +535,9 @@ function ToolController._stopHold(self: ToolController)
 	if self._holdThread then
 		task.cancel(self._holdThread)
 		self._holdThread = nil
+	end
+	if self._deps.hud and self._deps.hud.setHold then
+		self._deps.hud:setHold(false)
 	end
 end
 

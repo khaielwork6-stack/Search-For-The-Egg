@@ -186,6 +186,9 @@ function Frame.pill(
 	padding.Parent = label
 	if opts.art ~= false and skinLabel(label, "modal.title", label.ZIndex + 1, 2) then
 		stroke.Enabled = false
+		-- The art's rounded ends are wider than the drawn stroke: keep the text clear of them.
+		padding.PaddingLeft = UDim.new(0, Tokens.spacing.xl + Tokens.spacing.xs)
+		padding.PaddingRight = UDim.new(0, Tokens.spacing.xl + Tokens.spacing.xs)
 	end
 	label.Parent = parent
 	return label
@@ -409,9 +412,10 @@ function Frame.row(
 	padding.PaddingLeft = UDim.new(0, pad)
 	padding.PaddingRight = UDim.new(0, pad)
 	padding.Parent = row
-	if opts.art ~= false and skinLabel(row, if opts.muted then "modal.row.muted" else "modal.row.normal", row.ZIndex, 1) then
-		stroke.Enabled = false
-		row.BackgroundTransparency = 0.15
+	-- The supplied row art carries a filled teal centre; cream rows stay token-drawn.
+	if opts.muted then
+		row.BackgroundColor3 = Tokens.color.surfaceAlt
+		stroke.Transparency = 0.7
 	end
 	row.Parent = parent
 	return row

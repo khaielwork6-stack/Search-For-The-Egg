@@ -232,7 +232,13 @@ function ModalController.open(
 	if not focusTarget or not focusTarget.Selectable or not focusTarget.Visible then
 		focusTarget = firstSelectable(shell.content)
 	end
-	GuiService.SelectedObject = focusTarget or shell.closeButton
+	-- Controller focus is set only while a gamepad drives the UI; a mouse or touch never shows the
+	-- console selection box. Gamepad players get the same first-control landing on every modal.
+	if self._input:mode() == "gamepad" then
+		GuiService.SelectedObject = focusTarget or shell.closeButton
+	else
+		GuiService.SelectedObject = nil
+	end
 	shell.open()
 	self:_applyBlur()
 	self:_applyMouseLock()
@@ -259,7 +265,9 @@ function ModalController.close(self: ModalController, id: string): boolean
 	self._input:setSuspended(ModalReducer.isBlocking(self._state))
 	-- Restore focus to the previous modal's first control, else the remembered selection.
 	local top = ModalReducer.top(self._state)
-	if top and self._views[top.id] then
+	if self._input:mode() ~= "gamepad" then
+		GuiService.SelectedObject = nil
+	elseif top and self._views[top.id] then
 		local topShell = self._views[top.id].shell
 		GuiService.SelectedObject = firstSelectable(topShell.content) or topShell.closeButton
 	else

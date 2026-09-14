@@ -85,7 +85,6 @@ function ModalShell.create(
 	else
 		FrameKit.leaves(card, card.ZIndex)
 	end
-	FrameKit.feathers(card, card.ZIndex)
 
 	local layout = Instance.new("UIListLayout")
 	layout.SortOrder = Enum.SortOrder.LayoutOrder

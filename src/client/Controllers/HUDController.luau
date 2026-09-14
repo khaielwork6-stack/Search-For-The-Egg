@@ -5,12 +5,13 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local GuiService = game:GetService("GuiService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Motion = require(Shared.Design.Motion)
 local Trove = require(Shared.Util.Trove)
-local EconomyMath = require(Shared.EconomyMath)
 local SafeArea = require(script.Parent.Parent.UI.SafeArea)
 local Button = require(script.Parent.Parent.UI.Components.Button)
 local Toast = require(script.Parent.Parent.UI.Components.Toast)
@@ -20,6 +21,10 @@ local ToolHotbar = require(script.Parent.Parent.UI.ToolHotbar)
 local UpgradeModal = require(script.Parent.Parent.UI.UpgradeModal)
 local Tween = require(script.Parent.Parent.UI.Components.Tween)
 local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
+local Icons = require(script.Parent.Parent.UI.Components.Icons)
+local Skin = require(script.Parent.Parent.UI.Components.Skin)
+local SalePopup = require(script.Parent.Parent.UI.SalePopup)
+local SettingsModal = require(script.Parent.Parent.UI.Modals.SettingsModal)
 
 local HUDController = {}
 HUDController.__index = HUDController
@@ -38,44 +43,17 @@ export type HUDController = typeof(setmetatable(
 		_chipScales: { [string]: UIScale },
 		_infiniteBag: boolean?,
 		_timerConnection: RBXScriptConnection?,
+		_bannerScale: UIScale?,
+		_reticleArt: ImageLabel?,
+		_reticleScale: UIScale,
+		_holdRing: GuiObject?,
+		_targeting: boolean?,
+		_veil: Frame?,
+		_dropVeil: (() -> ())?,
 		_trove: Trove.Trove,
 	},
 	HUDController
 ))
-
-local function chip(parent: Instance, name: string, order: number): TextLabel
-	local label = Instance.new("TextLabel")
-	label.Name = name
-	label.LayoutOrder = order
-	label.AutomaticSize = Enum.AutomaticSize.X
-	label.Size = UDim2.fromOffset(0, Tokens.layout.minimumTapTargetPx)
-	label.BackgroundColor3 = Tokens.color.surface
-	label.TextColor3 = Tokens.color.inkStrong
-	label.Font = Tokens.typography.numeral.font
-	label.TextSize = Tokens.typography.numeral.size
-	label.Text = name
-	label.ZIndex = Tokens.zIndex.hud
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, Tokens.radius.pill)
-	corner.Parent = label
-	local padding = Instance.new("UIPadding")
-	padding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
-	padding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
-	padding.Parent = label
-	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = Tokens.stroke.bold
-	stroke.Color = Tokens.color.outline
-	stroke.Parent = label
-	local scale = Instance.new("UIScale")
-	scale.Parent = label
-	label.BackgroundColor3 = Tokens.color.creamPill
-	label.Font = Tokens.typography.label.font
-	label.TextSize = Tokens.typography.label.size
-	label.TextStrokeColor3 = Tokens.color.outline
-	label.TextStrokeTransparency = 0.35
-	label.Parent = parent
-	return label
-end
 
 function HUDController.new(deps: any): HUDController
 	local gui = Instance.new("ScreenGui")
@@ -98,12 +76,19 @@ function HUDController.new(deps: any): HUDController
 		_displayed = {},
 		_chipScales = {},
 		_timerConnection = nil,
+		_bannerScale = nil,
+		_reticleArt = nil,
+		_reticleScale = nil :: any,
+		_holdRing = nil,
+		_targeting = false,
+		_veil = nil,
+		_dropVeil = nil,
 		_trove = Trove.new(),
 	}, HUDController)
 	self._trove:add(gui)
 	self._trove:add(scaleCleanup)
 
-	-- Top-left currency row.
+	-- Top-left currency row: art chips with a gem / token glyph and a live count.
 	local row = Instance.new("Frame")
 	row.Name = "Currencies"
 	row.BackgroundTransparency = 1
@@ -116,71 +101,216 @@ function HUDController.new(deps: any): HUDController
 	rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	rowLayout.Parent = row
 	row.Parent = stage
-	self._labels.gems = chip(row, "Gems", 1)
-	self._labels.tokens = chip(row, "Tokens", 2)
+	local function currencyChip(name: string, order: number, iconRole: string, fallback: string): TextLabel
+		local frame, label, iconSlot = FrameKit.chip(row, name, { zIndex = Tokens.zIndex.hud })
+		frame.LayoutOrder = order
+		iconSlot.Visible = true
+		local art = Skin.icon(iconSlot, iconRole, Tokens.icon.md, frame.ZIndex + 2)
+		if not art then
+			Icons.build(fallback, iconSlot, Tokens.icon.md, { zIndex = frame.ZIndex + 2 })
+		end
+		label.Text = "0"
+		label.Font = Tokens.typography.numeral.font
+		label.TextSize = Tokens.typography.numeral.size - 2
+		return label
+	end
+	self._labels.gems = currencyChip("Gems", 1, "hud.gem", "gem")
+	self._labels.tokens = currencyChip("Tokens", 2, "hud.token", "coin")
 
-	-- Top-center objective banner: title + detail on two lines, never covering the reticle.
-	local banner = chip(stage, "Banner", 1)
+	-- Top-center objective banner: art frame, title + detail on two lines, never over the reticle.
+	local banner = Instance.new("Frame")
+	banner.Name = "Banner"
 	banner.AnchorPoint = Vector2.new(0.5, 0)
 	banner.Position = UDim2.new(0.5, 0, 0, Tokens.layout.safeAreaPaddingPx)
-	banner.Size = UDim2.fromOffset(0, Tokens.layout.minimumTapTargetPx + Tokens.typography.caption.size + Tokens.spacing.sm)
-	banner.Font = Tokens.typography.heading.font
-	banner.TextSize = Tokens.typography.heading.size
-	banner.TextYAlignment = Enum.TextYAlignment.Top
-	banner.Text = "Loading your nest..."
-	local bannerPadding = banner:FindFirstChildOfClass("UIPadding") :: UIPadding
+	banner.Size = UDim2.fromOffset(0, Tokens.layout.minimumTapTargetPx + Tokens.typography.caption.size + Tokens.spacing.md)
+	banner.AutomaticSize = Enum.AutomaticSize.X
+	banner.BackgroundColor3 = Tokens.color.featherWhite
+	banner.ZIndex = Tokens.zIndex.hud
+	local bannerCorner = Instance.new("UICorner")
+	bannerCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
+	bannerCorner.Parent = banner
+	local bannerStroke = Instance.new("UIStroke")
+	bannerStroke.Thickness = Tokens.stroke.bold
+	bannerStroke.Color = Tokens.color.outline
+	bannerStroke.Parent = banner
+	local bannerScale = Instance.new("UIScale")
+	bannerScale.Parent = banner
+	FrameKit.shadow(banner, { radius = Tokens.radius.lg })
+	local bannerPadding = Instance.new("UIPadding")
+	bannerPadding.PaddingLeft = UDim.new(0, Tokens.spacing.xl)
+	bannerPadding.PaddingRight = UDim.new(0, Tokens.spacing.xl)
 	bannerPadding.PaddingTop = UDim.new(0, Tokens.spacing.sm)
-	self._labels.banner = banner
+	bannerPadding.Parent = banner
+	if Skin.label(banner, "hud.banner", { zIndex = banner.ZIndex + 1, inset = 3, name = "ArtFrame" }) then
+		bannerStroke.Enabled = false
+		banner.BackgroundTransparency = 0.08
+		bannerPadding.PaddingLeft = UDim.new(0, Tokens.spacing.xxl)
+		bannerPadding.PaddingRight = UDim.new(0, Tokens.spacing.xxl)
+	end
+	local bannerTitle = Instance.new("TextLabel")
+	bannerTitle.Name = "Text"
+	bannerTitle.AutomaticSize = Enum.AutomaticSize.X
+	bannerTitle.Size = UDim2.fromOffset(0, Tokens.typography.heading.size + Tokens.spacing.xs)
+	bannerTitle.BackgroundTransparency = 1
+	bannerTitle.Font = Tokens.typography.label.font
+	bannerTitle.TextSize = Tokens.typography.label.size + 1
+	bannerTitle.TextColor3 = Tokens.color.inkStrong
+	bannerTitle.Text = "Loading your nest..."
+	bannerTitle.ZIndex = banner.ZIndex + 2
+	bannerTitle.Parent = banner
+	local minBanner = Instance.new("UISizeConstraint")
+	minBanner.MinSize = Vector2.new(240, 0)
+	minBanner.Parent = banner
+	self._labels.banner = bannerTitle
 	local detail = Instance.new("TextLabel")
 	detail.Name = "Detail"
 	detail.AnchorPoint = Vector2.new(0.5, 1)
-	detail.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.xs)
+	detail.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.sm)
 	detail.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 2)
 	detail.BackgroundTransparency = 1
 	detail.Font = Tokens.typography.caption.font
 	detail.TextSize = Tokens.typography.caption.size
 	detail.TextColor3 = Tokens.color.inkMuted
 	detail.Text = ""
-	detail.ZIndex = Tokens.zIndex.hud + 1
+	detail.ZIndex = banner.ZIndex + 2
 	detail.Parent = banner
 	self._labels.detail = detail
+	self._bannerScale = bannerScale
 
-	-- Bottom-right input prompt chip (swaps per input mode) and settings button.
-	local prompt = chip(stage, "Prompt", 1)
+	-- Bottom-right input prompt: keycaps + verbs, swapped per input mode.
+	local prompt = Instance.new("Frame")
+	prompt.Name = "Prompt"
 	prompt.AnchorPoint = Vector2.new(1, 1)
 	prompt.Position = UDim2.new(1, -Tokens.layout.safeAreaPaddingPx, 1, -Tokens.layout.safeAreaPaddingPx)
-	prompt.Font = Tokens.typography.caption.font
-	prompt.TextSize = Tokens.typography.caption.size
+	prompt.Size = UDim2.fromOffset(0, Tokens.layout.minimumTapTargetPx - Tokens.spacing.sm)
+	prompt.AutomaticSize = Enum.AutomaticSize.X
+	prompt.BackgroundColor3 = Tokens.color.featherWhite
+	prompt.BackgroundTransparency = 0.15
+	prompt.ZIndex = Tokens.zIndex.hud
+	local promptCorner = Instance.new("UICorner")
+	promptCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
+	promptCorner.Parent = prompt
+	local promptStroke = Instance.new("UIStroke")
+	promptStroke.Thickness = Tokens.stroke.standard
+	promptStroke.Color = Tokens.color.outline
+	promptStroke.Transparency = 0.2
+	promptStroke.Parent = prompt
+	local promptLayout = Instance.new("UIListLayout")
+	promptLayout.FillDirection = Enum.FillDirection.Horizontal
+	promptLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	promptLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	promptLayout.Padding = UDim.new(0, Tokens.spacing.sm)
+	promptLayout.Parent = prompt
+	local promptPadding = Instance.new("UIPadding")
+	promptPadding.PaddingLeft = UDim.new(0, Tokens.spacing.md)
+	promptPadding.PaddingRight = UDim.new(0, Tokens.spacing.md)
+	promptPadding.Parent = prompt
+	prompt.Parent = stage
 	self._labels.prompt = prompt
+	local function promptItem(order: number, key: string, verb: string)
+		local cap = Icons.keycap(prompt, key, Tokens.icon.md, { zIndex = prompt.ZIndex + 1 })
+		cap.LayoutOrder = order
+		local label = Instance.new("TextLabel")
+		label.Name = "Verb_" .. verb
+		label.LayoutOrder = order + 1
+		label.AutomaticSize = Enum.AutomaticSize.X
+		label.Size = UDim2.fromOffset(0, Tokens.icon.md)
+		label.BackgroundTransparency = 1
+		label.Font = Tokens.typography.heading.font
+		label.TextSize = Tokens.typography.caption.size
+		label.TextColor3 = Tokens.color.inkStrong
+		label.Text = verb
+		label.ZIndex = prompt.ZIndex + 1
+		label.Parent = prompt
+	end
+	local function refreshPrompt(mode)
+		for _, child in ipairs(prompt:GetChildren()) do
+			if child:IsA("GuiObject") then
+				child:Destroy()
+			end
+		end
+		local prompts = Tokens.prompts[mode]
+		promptItem(1, prompts.primary, "Gather")
+		promptItem(3, prompts.interact, "Interact")
+		prompt.Visible = mode ~= "touch"
+	end
 
+	-- Settings: round gear button, top-right.
 	local minimumTap = SafeArea.minimumTapTarget(gui, deps.config)
-	local settingsButton, settingsCleanup = Button.create(stage, {
+	local settingsHandle = Button.build(stage, {
 		text = "Settings",
 		variant = "secondary",
 		minimumTapTarget = minimumTap,
 		motion = deps.accessibility:motionSettings(),
+		size = UDim2.fromOffset(minimumTap, minimumTap),
+		zIndex = Tokens.zIndex.hud,
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTap)
+		end,
+		hoverSound = function()
+			deps.audio:play(Tokens.sound.uiHover)
+		end,
 		onActivated = function()
 			self:openSettings()
 		end,
 	})
+	local settingsButton = settingsHandle.button
+	settingsButton.Name = "Button_Settings"
+	settingsButton.Text = ""
 	settingsButton.AnchorPoint = Vector2.new(1, 0)
 	settingsButton.Position = UDim2.new(1, -Tokens.layout.safeAreaPaddingPx, 0, Tokens.layout.safeAreaPaddingPx)
-	self._trove:add(settingsCleanup)
+	local gear = Skin.icon(settingsButton, "hud.gear", Tokens.icon.md + 2, settingsButton.ZIndex + 3)
+		or Icons.gear(settingsButton, Tokens.icon.md + 2, { zIndex = settingsButton.ZIndex + 3 })
+	gear.AnchorPoint = Vector2.new(0.5, 0.5)
+	gear.Position = UDim2.fromScale(0.5, 0.5)
+	self._trove:add(settingsHandle.destroy)
 
-	-- Centre reticle (first-person aim aid), tiny and non-blocking.
+	-- Centre reticle: art dot, a locked variant while a feather is targeted, and a hold ring.
 	local reticle = Instance.new("Frame")
 	reticle.Name = "Reticle"
 	reticle.AnchorPoint = Vector2.new(0.5, 0.5)
 	reticle.Position = UDim2.fromScale(0.5, 0.5)
-	reticle.Size = UDim2.fromOffset(6, 6)
+	reticle.Size = UDim2.fromOffset(12, 12)
 	reticle.BackgroundColor3 = Tokens.color.cream
 	reticle.BackgroundTransparency = 0.2
 	reticle.Visible = false
+	reticle.ZIndex = Tokens.zIndex.hud
 	local reticleCorner = Instance.new("UICorner")
 	reticleCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
 	reticleCorner.Parent = reticle
+	local reticleScale = Instance.new("UIScale")
+	reticleScale.Parent = reticle
+	local reticleArt = Skin.label(reticle, "hud.reticle", { zIndex = reticle.ZIndex + 1, name = "Art" })
+	if reticleArt then
+		reticle.BackgroundTransparency = 1
+	end
+	local holdRing = Skin.icon(reticle, "prompt.holdRing", 34, reticle.ZIndex + 2)
+	if not holdRing then
+		local ring = Instance.new("Frame")
+		ring.Name = "HoldRing"
+		ring.BackgroundTransparency = 1
+		ring.Size = UDim2.fromOffset(34, 34)
+		local ringStroke = Instance.new("UIStroke")
+		ringStroke.Thickness = 3
+		ringStroke.Color = Tokens.color.gold
+		ringStroke.Parent = ring
+		local ringCorner = Instance.new("UICorner")
+		ringCorner.CornerRadius = UDim.new(1, 0)
+		ringCorner.Parent = ring
+		ring.ZIndex = reticle.ZIndex + 2
+		ring.Parent = reticle
+		holdRing = ring :: any
+	end
+	local ring = holdRing :: GuiObject
+	ring.Name = "HoldRing"
+	ring.AnchorPoint = Vector2.new(0.5, 0.5)
+	ring.Position = UDim2.fromScale(0.5, 0.5)
+	ring.Visible = false
 	reticle.Parent = stage
 	self._labels.reticle = reticle
+	self._reticleArt = reticleArt
+	self._reticleScale = reticleScale
+	self._holdRing = ring
 	-- The reticle sits on the true viewport centre (where the locked first-person mouse is and where
 	-- the pick ray goes), not the centre of the inset-adjusted gui: this gui excludes the core UI
 	-- inset, so its own centre would draw the dot below the aim point.
@@ -206,6 +336,103 @@ function HUDController.new(deps: any): HUDController
 		self._trove:add(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(placeReticle))
 	end
 
+	-- Loading veil: cream curtain with the game name and three bobbing eggs until the profile lands.
+	local veil = Instance.new("Frame")
+	veil.Name = "LoadingVeil"
+	veil.Size = UDim2.fromScale(1, 1)
+	veil.Position = UDim2.fromOffset(-64, -64)
+	veil.Size = UDim2.new(1, 128, 1, 128)
+	veil.BackgroundColor3 = Tokens.color.cream
+	veil.ZIndex = Tokens.zIndex.veil
+	local veilGradient = Instance.new("UIGradient")
+	veilGradient.Rotation = 90
+	veilGradient.Color =
+		ColorSequence.new({ ColorSequenceKeypoint.new(0, Tokens.color.featherWhite), ColorSequenceKeypoint.new(1, Tokens.color.creamDeep) })
+	veilGradient.Parent = veil
+	local veilTitle = FrameKit.pill(veil, "Title", "Search for the Egg", {
+		size = UDim2.fromOffset(0, Tokens.layout.minimumTapTargetPx + Tokens.spacing.md),
+		textSize = Tokens.typography.display.size,
+		zIndex = veil.ZIndex + 1,
+	})
+	veilTitle.AutomaticSize = Enum.AutomaticSize.X
+	veilTitle.AnchorPoint = Vector2.new(0.5, 0.5)
+	veilTitle.Position = UDim2.fromScale(0.5, 0.44)
+	veilTitle.TextXAlignment = Enum.TextXAlignment.Center
+	local veilNote = FrameKit.text(
+		veil,
+		"Note",
+		"Loading your nest...",
+		"heading",
+		{ zIndex = veil.ZIndex + 1, align = Enum.TextXAlignment.Center, color = Tokens.color.inkMuted }
+	)
+	veilNote.AnchorPoint = Vector2.new(0.5, 0)
+	veilNote.Position = UDim2.fromScale(0.5, 0.52)
+	veilNote.Size = UDim2.new(0.6, 0, 0, Tokens.typography.heading.size + Tokens.spacing.sm)
+	local eggs = {}
+	for index = 1, 3 do
+		local egg = Skin.icon(veil, "icon.egg", Tokens.icon.lg, veil.ZIndex + 1)
+			or Icons.egg(veil, Tokens.icon.lg, { zIndex = veil.ZIndex + 1 })
+		egg.AnchorPoint = Vector2.new(0.5, 0.5)
+		egg.Position = UDim2.new(0.5, (index - 2) * (Tokens.icon.lg + Tokens.spacing.md), 0.6, 0)
+		table.insert(eggs, egg)
+	end
+	veil.Parent = stage
+	self._veil = veil
+	local veilAlive = true
+	task.spawn(function()
+		local phase = 0
+		while veilAlive and veil.Parent do
+			phase += RunService.RenderStepped:Wait() * 4
+			for index, egg in ipairs(eggs) do
+				egg.Position =
+					UDim2.new(0.5, (index - 2) * (Tokens.icon.lg + Tokens.spacing.md), 0.6, -math.abs(math.sin(phase + index * 0.9)) * 10)
+			end
+		end
+	end)
+	local function dropVeil()
+		if not veilAlive then
+			return
+		end
+		veilAlive = false
+		local motion = deps.accessibility:motionSettings()
+		local fade = TweenService:Create(
+			veil,
+			TweenInfo.new(Motion.duration("slow", motion), Tokens.motion.easeInOut),
+			{ BackgroundTransparency = 1 }
+		)
+		for _, child in ipairs(veil:GetDescendants()) do
+			if child:IsA("TextLabel") then
+				TweenService:Create(
+					child,
+					TweenInfo.new(Motion.duration("quick", motion)),
+					{ TextTransparency = 1, TextStrokeTransparency = 1, BackgroundTransparency = 1 }
+				):Play()
+			elseif child:IsA("ImageLabel") then
+				TweenService:Create(child, TweenInfo.new(Motion.duration("quick", motion)), { ImageTransparency = 1 }):Play()
+			elseif child:IsA("Frame") and child.Name ~= "Shadow" and child.Name ~= "Halo" then
+				TweenService:Create(child, TweenInfo.new(Motion.duration("quick", motion)), { BackgroundTransparency = 1 }):Play()
+			elseif child:IsA("UIStroke") then
+				TweenService:Create(child, TweenInfo.new(Motion.duration("quick", motion)), { Transparency = 1 }):Play()
+			end
+		end
+		fade:Play()
+		fade.Completed:Once(function()
+			veil:Destroy()
+		end)
+	end
+	self._dropVeil = dropVeil
+	if deps.profile.projection then
+		task.delay(0.6, dropVeil)
+	else
+		local once
+		once = deps.profile.changed:Connect(function()
+			once:Disconnect()
+			task.delay(0.4, dropVeil)
+		end)
+		self._trove:add(once)
+	end
+	task.delay(12, dropVeil)
+
 	self.toasts = Toast.new(stage, function()
 		return deps.accessibility:motionSettings()
 	end, function(tone)
@@ -216,9 +443,18 @@ function HUDController.new(deps: any): HUDController
 		return deps.accessibility:motionSettings()
 	end)
 	self._trove:add(self.round)
-	self.hotbar = ToolHotbar.new(stage, deps.config, function()
-		return deps.accessibility:motionSettings()
-	end, minimumTap, deps.input:mode())
+	self.hotbar = ToolHotbar.new(
+		stage,
+		deps.config,
+		function()
+			return deps.accessibility:motionSettings()
+		end,
+		minimumTap,
+		deps.input:mode(),
+		function(role)
+			deps.audio:play(role)
+		end
+	)
 	self._trove:add(self.hotbar)
 	-- Carried feather stack: below the reticle, above the hotbar, hidden whenever a modal blocks.
 	self.carriedStack = CarriedStack.new(stage, deps.config, function()
@@ -236,7 +472,6 @@ function HUDController.new(deps: any): HUDController
 
 	-- Bindings.
 	-- Currency chips count up only from acknowledged projections (never from client prediction).
-	local chipNames = { gems = "Gems", eventTokens = "Tokens" }
 	local chipLabels = { gems = self._labels.gems, eventTokens = self._labels.tokens }
 	for key, label in pairs(chipLabels) do
 		self._chipScales[key] = label:FindFirstChildOfClass("UIScale") :: UIScale
@@ -250,11 +485,11 @@ function HUDController.new(deps: any): HUDController
 			local previous = self._displayed[key]
 			if previous == nil or previous == target then
 				self._displayed[key] = target
-				label.Text = string.format("%s  %d", chipNames[key], target)
+				label.Text = tostring(target)
 			else
 				local motion = deps.accessibility:motionSettings()
 				Tween.countUp(previous, target, motion, function(value)
-					label.Text = string.format("%s  %d", chipNames[key], value)
+					label.Text = tostring(value)
 				end)
 				self._displayed[key] = target
 				if target > previous then
@@ -268,10 +503,6 @@ function HUDController.new(deps: any): HUDController
 	refreshProfile(deps.profile.projection)
 	self._trove:add(deps.profile.changed:Connect(refreshProfile))
 
-	local function refreshPrompt(mode)
-		local prompts = Tokens.prompts[mode]
-		prompt.Text = string.format("%s  Gather   %s  Interact", prompts.primary, prompts.interact)
-	end
 	refreshPrompt(deps.input:mode())
 	self._trove:add(deps.input.modeChanged:Connect(refreshPrompt))
 
@@ -332,10 +563,13 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 		if sale.finalCents >= 100 then
 			deps.audio:play(Tokens.sound.sellBurst)
 		end
-		self.toasts:push(
-			string.format("Traded %d feathers for %s", sale.standardCount + sale.rainbowCount, EconomyMath.formatCents(sale.finalCents)),
-			"success"
-		)
+		SalePopup.show(self.stage, {
+			feathers = sale.standardCount + sale.rainbowCount,
+			cents = sale.finalCents,
+			motion = deps.accessibility:motionSettings(),
+			tier = if deps.quality then deps.quality:tier() else nil,
+		})
+		deps.audio:play(Tokens.sound.uiConfetti)
 	end))
 	self._trove:add(round.upgrade:Connect(function(result)
 		if result.paidCents then
@@ -377,8 +611,54 @@ function HUDController.carriedStackWorldPoint(self: HUDController): Vector3?
 end
 
 function HUDController.setObjective(self: HUDController, title: string, detail: string?)
+	local changed = self._labels.banner.Text ~= title
 	self._labels.banner.Text = title
 	self._labels.detail.Text = detail or ""
+	if changed and self._bannerScale and not string.find(title, "^Get ready") then
+		self._bannerScale.Scale = 1 + Motion.amplitude(0.06, self._deps.accessibility:motionSettings())
+		TweenService:Create(
+			self._bannerScale,
+			TweenInfo.new(Motion.duration("standard", self._deps.accessibility:motionSettings()), Tokens.motion.easeBack),
+			{ Scale = 1 }
+		):Play()
+	end
+end
+
+-- Targeting state from the pile: the reticle swaps to its locked art and grows a touch while a
+-- feather is under the crosshair.
+function HUDController.setTargeting(self: HUDController, targeting: boolean)
+	if self._targeting == targeting then
+		return
+	end
+	self._targeting = targeting
+	if self._reticleArt then
+		Skin.apply(self._reticleArt, if targeting then "hud.reticle.locked" else "hud.reticle")
+	else
+		self._labels.reticle.BackgroundColor3 = if targeting then Tokens.color.gold else Tokens.color.cream
+	end
+	local motion = self._deps.accessibility:motionSettings()
+	TweenService:Create(
+		self._reticleScale,
+		TweenInfo.new(Motion.duration("quick", motion), Tokens.motion.easeBack),
+		{ Scale = if targeting then 1.35 else 1 }
+	):Play()
+end
+
+-- Hold-to-gather progress around the reticle: the ring closes in as the next pull readies.
+function HUDController.setHold(self: HUDController, active: boolean, fraction: number?)
+	local ring = self._holdRing
+	if not ring then
+		return
+	end
+	ring.Visible = active
+	if active then
+		local f = math.clamp(fraction or 0, 0, 1)
+		local size = math.floor(34 + (1 - f) * 22)
+		ring.Size = UDim2.fromOffset(size, size)
+		if ring:IsA("ImageLabel") then
+			ring.ImageTransparency = 0.6 - f * 0.5
+		end
+	end
 end
 
 function HUDController.openUpgrades(self: HUDController, round: any)
@@ -395,98 +675,23 @@ function HUDController.openUpgrades(self: HUDController, round: any)
 			toasts = self.toasts,
 			profile = deps.profile,
 		})
-	end, "Workbench")
+	end, "Workbench", { icon = "header.workbench" })
 end
 
--- Settings modal: four toggles + quality selector, each round-tripped through SettingsUpdate.
+-- Settings modal (UI/Modals/SettingsModal): switches, quality tabs, Done.
 function HUDController.openSettings(self: HUDController)
 	local deps = self._deps
-	local opened = deps.modals:open("settings", deps.modals.Priority.Shop, true, function(container, api)
-		local cleanups: { any } = {}
-		local settings = deps.profile:settings() or {}
-		local minimumTap = api.minimumTapTarget or SafeArea.minimumTapTarget(deps.modals.gui, deps.config)
-		local intro = FrameKit.text(container, "Intro", "Comfort settings save to your profile right away.", "caption", {
-			zIndex = container.ZIndex + 1,
-			color = Tokens.color.inkMuted,
+	return deps.modals:open("settings", deps.modals.Priority.Shop, true, function(container, api)
+		return SettingsModal.build(container, api, {
+			net = deps.net,
+			profile = deps.profile,
+			audio = deps.audio,
+			accessibility = deps.accessibility,
+			config = deps.config,
+			minimumTapTarget = api.minimumTapTarget or SafeArea.minimumTapTarget(deps.modals.gui, deps.config),
+			toasts = self.toasts,
 		})
-		intro.LayoutOrder = 0
-		local function toggle(order: number, key: string, labelText: string)
-			local current = settings[key] == true
-			local button, cleanup = Button.create(container, {
-				text = string.format("%s: %s", labelText, current and "On" or "Off"),
-				variant = "ghost",
-				minimumTapTarget = minimumTap,
-				motion = deps.accessibility:motionSettings(),
-				size = UDim2.new(1, 0, 0, minimumTap),
-			})
-			button.LayoutOrder = order
-			table.insert(cleanups, cleanup)
-			table.insert(
-				cleanups,
-				button.Activated:Connect(function()
-					current = not current
-					local result = deps.net:request("SettingsUpdate", { [key] = current })
-					if result.ok then
-						button.Text = string.format("%s: %s", labelText, current and "On" or "Off")
-						deps.audio:play(Tokens.sound.uiConfirm)
-					else
-						current = not current
-						self.toasts:push("Could not save setting", "warning")
-						deps.audio:play(Tokens.sound.uiError)
-					end
-				end)
-			)
-		end
-		toggle(1, "reducedMotion", "Reduced motion")
-		toggle(2, "cameraShake", "Camera shake")
-		toggle(3, "haptics", "Haptics")
-
-		local modes = { "auto", "low", "medium", "high" }
-		local modeIndex = table.find(modes, settings.qualityMode or "auto") or 1
-		local qualityButton, qualityCleanup = Button.create(container, {
-			text = "Quality: " .. modes[modeIndex],
-			variant = "ghost",
-			minimumTapTarget = minimumTap,
-			motion = deps.accessibility:motionSettings(),
-			size = UDim2.new(1, 0, 0, minimumTap),
-		})
-		qualityButton.LayoutOrder = 4
-		table.insert(cleanups, qualityCleanup)
-		table.insert(
-			cleanups,
-			qualityButton.Activated:Connect(function()
-				modeIndex = modeIndex % #modes + 1
-				local result = deps.net:request("SettingsUpdate", { qualityMode = modes[modeIndex] })
-				if result.ok then
-					qualityButton.Text = "Quality: " .. modes[modeIndex]
-					deps.audio:play(Tokens.sound.uiConfirm)
-				end
-			end)
-		)
-
-		local doneButton, doneCleanup = Button.create(container, {
-			text = "Done",
-			variant = "primary",
-			minimumTapTarget = minimumTap,
-			motion = deps.accessibility:motionSettings(),
-			size = UDim2.new(1, 0, 0, minimumTap),
-			onActivated = api.close,
-		})
-		doneButton.LayoutOrder = 5
-		table.insert(cleanups, doneCleanup)
-		deps.audio:play(Tokens.sound.uiOpen)
-		return function()
-			for _, cleanup in ipairs(cleanups) do
-				if typeof(cleanup) == "RBXScriptConnection" then
-					cleanup:Disconnect()
-				else
-					cleanup()
-				end
-			end
-			deps.audio:play(Tokens.sound.uiClose)
-		end
-	end, "Settings")
-	return opened
+	end, "Settings", { icon = "header.settings" })
 end
 
 function HUDController.destroy(self: HUDController)

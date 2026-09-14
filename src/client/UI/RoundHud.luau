@@ -1,6 +1,7 @@
 --!strict
--- Round HUD strip: bag meter (fill bar + count with squash on award and a stronger full pulse),
--- cash chip with accelerating count-up, and the count-up timer. Hidden outside rounds.
+-- Round HUD strip: timer chip, bag meter (art track + art fill that grows with the bag, squash on
+-- award, a FULL - DEPOSIT state that pulses gently until the bag is emptied), and the cash chip
+-- with an accelerating count-up and a floating "+$" delta. Hidden outside rounds.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -8,6 +9,10 @@ local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
 local EconomyMath = require(Shared.EconomyMath)
+local FrameKit = require(script.Parent.Components.Frame)
+local Icons = require(script.Parent.Components.Icons)
+local Skin = require(script.Parent.Components.Skin)
+local Tween = require(script.Parent.Components.Tween)
 
 local RoundHud = {}
 RoundHud.__index = RoundHud
@@ -15,47 +20,48 @@ RoundHud.__index = RoundHud
 export type RoundHud = typeof(setmetatable(
 	{} :: {
 		root: Frame,
-		bagFill: Frame,
+		bagFill: GuiObject,
 		bagText: TextLabel,
 		cashText: TextLabel,
 		timerText: TextLabel,
+		_bagFrame: Frame,
 		_bagScale: UIScale,
+		_bagArt: boolean,
 		_motion: () -> Motion.MotionSettings,
 		_displayedCents: number,
 		_targetCents: number,
 		_countThread: thread?,
+		_stopPulse: (() -> ())?,
+		_full: boolean,
+		_fullThread: thread?,
+		_lastBagText: string,
 	},
 	RoundHud
 ))
 
-local function chip(parent: Instance, name: string, order: number, width: number): (Frame, TextLabel)
-	local frame = Instance.new("Frame")
-	frame.Name = name
+local TIMER_WIDTH = 132
+local BAG_WIDTH = 196
+local CASH_WIDTH = 136
+
+local function chip(parent: Instance, name: string, order: number, width: number, art: string, icon: string?): (Frame, TextLabel)
+	local frame, text, iconSlot = FrameKit.chip(parent, name, { width = width, art = art, zIndex = Tokens.zIndex.hud })
 	frame.LayoutOrder = order
-	frame.Size = UDim2.fromOffset(width, Tokens.layout.minimumTapTargetPx)
-	frame.BackgroundColor3 = Tokens.color.surface
-	frame.ZIndex = Tokens.zIndex.hud
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, Tokens.radius.pill)
-	corner.Parent = frame
-	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = Tokens.stroke.standard
-	stroke.Color = Tokens.color.creamDeep
-	stroke.Parent = frame
-	local text = Instance.new("TextLabel")
-	text.Name = "Text"
-	text.Size = UDim2.fromScale(1, 1)
-	text.BackgroundTransparency = 1
 	text.Font = Tokens.typography.numeral.font
-	text.TextSize = Tokens.typography.numeral.size
-	text.TextColor3 = Tokens.color.inkStrong
-	text.ZIndex = Tokens.zIndex.hud + 2
-	text.Parent = frame
-	frame.Parent = parent
+	text.TextSize = Tokens.typography.numeral.size - 1
+	text.AutomaticSize = Enum.AutomaticSize.None
+	text.Size = UDim2.new(1, -(Tokens.icon.md + Tokens.spacing.sm), 1, 0)
+	text.TextXAlignment = Enum.TextXAlignment.Center
+	if icon then
+		iconSlot.Visible = true
+		local built = Icons.build(icon, iconSlot, Tokens.icon.md, { zIndex = frame.ZIndex + 2 })
+		built.Position = UDim2.fromScale(0, 0)
+	else
+		text.Size = UDim2.fromScale(1, 1)
+	end
 	return frame, text
 end
 
-function RoundHud.new(gui: ScreenGui, motion: () -> Motion.MotionSettings): RoundHud
+function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): RoundHud
 	local root = Instance.new("Frame")
 	root.Name = "RoundHud"
 	root.AnchorPoint = Vector2.new(0.5, 1)
@@ -72,26 +78,44 @@ function RoundHud.new(gui: ScreenGui, motion: () -> Motion.MotionSettings): Roun
 	layout.Parent = root
 	root.Parent = gui
 
-	local timerFrame, timerText = chip(root, "Timer", 1, 130)
+	local _timerFrame, timerText = chip(root, "Timer", 1, TIMER_WIDTH, "hud.timer", "clock")
 	timerText.Text = "00:00.00"
-	local _ = timerFrame
 
-	local bagFrame, bagText = chip(root, "Bag", 2, 190)
-	local bagFill = Instance.new("Frame")
-	bagFill.Name = "Fill"
-	bagFill.Size = UDim2.fromScale(0, 1)
-	bagFill.BackgroundColor3 = Tokens.color.straw
-	bagFill.BorderSizePixel = 0
-	bagFill.ZIndex = Tokens.zIndex.hud + 1
-	local fillCorner = Instance.new("UICorner")
-	fillCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
-	fillCorner.Parent = bagFill
-	bagFill.Parent = bagFrame
+	-- Bag: art track (or cream track) with an art fill that grows from the left.
+	local bagFrame, bagText = chip(root, "Bag", 2, BAG_WIDTH, "hud.bag.track", nil)
+	bagText.ZIndex = bagFrame.ZIndex + 3
+	local bagFill: GuiObject
+	local bagArt = Skin.has("hud.bag.fill.normal")
+	if bagArt then
+		local fill = Instance.new("ImageLabel")
+		fill.Name = "Fill"
+		fill.BackgroundTransparency = 1
+		fill.AnchorPoint = Vector2.new(0, 0.5)
+		fill.Position = UDim2.new(0, -Tokens.spacing.md, 0.5, 0)
+		fill.Size = UDim2.fromScale(0, 1)
+		fill.ZIndex = bagFrame.ZIndex + 2
+		Skin.apply(fill, "hud.bag.fill.normal")
+		fill.Parent = bagFrame
+		bagFill = fill
+	else
+		local fill = Instance.new("Frame")
+		fill.Name = "Fill"
+		fill.AnchorPoint = Vector2.new(0, 0.5)
+		fill.Position = UDim2.new(0, -Tokens.spacing.md, 0.5, 0)
+		fill.Size = UDim2.new(0, 0, 1, -6)
+		fill.BackgroundColor3 = Tokens.color.straw
+		fill.BorderSizePixel = 0
+		fill.ZIndex = bagFrame.ZIndex + 2
+		local fillCorner = Instance.new("UICorner")
+		fillCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
+		fillCorner.Parent = fill
+		fill.Parent = bagFrame
+		bagFill = fill
+	end
 	bagText.Text = "Bag 0 / 25"
-	local bagScale = Instance.new("UIScale")
-	bagScale.Parent = bagFrame
+	local bagScale = bagFrame:FindFirstChildOfClass("UIScale") :: UIScale
 
-	local _cashFrame, cashText = chip(root, "Cash", 3, 130)
+	local _cashFrame, cashText = chip(root, "Cash", 3, CASH_WIDTH, "hud.cash", "coin")
 	cashText.Text = "$0.00"
 	cashText.TextColor3 = Tokens.color.leafDeep
 
@@ -101,11 +125,17 @@ function RoundHud.new(gui: ScreenGui, motion: () -> Motion.MotionSettings): Roun
 		bagText = bagText,
 		cashText = cashText,
 		timerText = timerText,
+		_bagFrame = bagFrame,
 		_bagScale = bagScale,
+		_bagArt = bagArt,
 		_motion = motion,
 		_displayedCents = 0,
 		_targetCents = 0,
 		_countThread = nil,
+		_stopPulse = nil,
+		_full = false,
+		_fullThread = nil,
+		_lastBagText = "",
 	}, RoundHud)
 end
 
@@ -118,23 +148,72 @@ function RoundHud.setTimer(self: RoundHud, ms: number)
 	self.timerText.Text = string.format("%02d:%02d.%02d", math.floor(totalSeconds / 60), totalSeconds % 60, math.floor((ms % 1000) / 10))
 end
 
+-- FULL - DEPOSIT: the bag chip alternates its count with the deposit prompt and breathes gently;
+-- the pulse stops the moment the bag has room again (attention only while it is useful).
+function RoundHud._setFull(self: RoundHud, full: boolean)
+	if full == self._full then
+		return
+	end
+	self._full = full
+	if full then
+		self._stopPulse = Tween.pulseLoop(self._bagScale, self._motion(), 0.04)
+		self.bagText.TextColor3 = Tokens.color.emberDeep
+		self._fullThread = task.spawn(function()
+			local showPrompt = true
+			while self._full do
+				self.bagText.Text = if showPrompt then "FULL - DEPOSIT" else self._lastBagText
+				showPrompt = not showPrompt
+				task.wait(1.1)
+			end
+		end)
+	else
+		if self._stopPulse then
+			self._stopPulse()
+			self._stopPulse = nil
+		end
+		if self._fullThread then
+			task.cancel(self._fullThread)
+			self._fullThread = nil
+		end
+		self.bagText.TextColor3 = Tokens.color.inkStrong
+		self.bagText.Text = self._lastBagText
+	end
+end
+
 -- Bag meter with restrained squash; a stronger pulse when full.
 function RoundHud.setBag(self: RoundHud, carried: number, capacity: number, infinite: boolean, animate: boolean?)
+	local fraction: number
 	if infinite then
-		self.bagText.Text = string.format("Bag %d / Infinite", carried)
-		self.bagFill.Size = UDim2.fromScale(1, 1)
+		self._lastBagText = string.format("Bag %d / Infinite", carried)
+		fraction = 1
 	else
-		self.bagText.Text = string.format("Bag %d / %d", carried, capacity)
-		local fraction = if capacity > 0 then math.clamp(carried / capacity, 0, 1) else 0
-		TweenService:Create(
-			self.bagFill,
-			TweenInfo.new(Motion.duration("quick", self._motion()), Tokens.motion.easeOut),
-			{ Size = UDim2.fromScale(fraction, 1) }
-		):Play()
-		self.bagFill.BackgroundColor3 = if fraction >= 1 then Tokens.color.ember else Tokens.color.straw
+		self._lastBagText = string.format("Bag %d / %d", carried, capacity)
+		fraction = if capacity > 0 then math.clamp(carried / capacity, 0, 1) else 0
 	end
+	local full = not infinite and carried >= capacity and capacity > 0
+	local width = self._bagFrame.AbsoluteSize.X / math.max(0.01, self._bagScale.Scale)
+	local fillWidth = math.floor((BAG_WIDTH + Tokens.spacing.md * 2) * fraction)
+	local _ = width
+	local target = if self._bagArt then UDim2.new(0, fillWidth, 1, 0) else UDim2.new(0, fillWidth, 1, -6)
 	if animate then
-		local full = not infinite and carried >= capacity
+		TweenService:Create(self.bagFill, TweenInfo.new(Motion.duration("quick", self._motion()), Tokens.motion.easeOut), { Size = target })
+			:Play()
+	else
+		self.bagFill.Size = target
+	end
+	if self._bagArt then
+		Skin.apply(
+			self.bagFill :: ImageLabel,
+			if infinite then "hud.bag.fill.infinite" elseif full then "hud.bag.fill.full" else "hud.bag.fill.normal"
+		)
+	else
+		(self.bagFill :: Frame).BackgroundColor3 = if full then Tokens.color.ember else Tokens.color.straw
+	end
+	if not self._full or not full then
+		self.bagText.Text = self._lastBagText
+	end
+	self:_setFull(full)
+	if animate then
 		local amplitude = Motion.amplitude(if full then 0.12 else 0.05, self._motion())
 		self._bagScale.Scale = 1 + amplitude
 		TweenService:Create(
@@ -147,11 +226,20 @@ end
 
 -- Cash count-up with a short accelerating tick; `onTick` lets the caller play a capped tick sound.
 function RoundHud.setCash(self: RoundHud, cents: number, animate: boolean?, onTick: (() -> ())?)
+	local previous = self._targetCents
 	self._targetCents = cents
 	if not animate then
 		self._displayedCents = cents
 		self.cashText.Text = EconomyMath.formatCents(cents)
 		return
+	end
+	if cents > previous then
+		Tween.floatText(
+			self.cashText.Parent :: GuiObject,
+			"+" .. EconomyMath.formatCents(cents - previous),
+			Tokens.color.leafDeep,
+			self._motion()
+		)
 	end
 	if self._countThread then
 		task.cancel(self._countThread)
@@ -184,6 +272,7 @@ function RoundHud.destroy(self: RoundHud)
 	if self._countThread then
 		task.cancel(self._countThread)
 	end
+	self:_setFull(false)
 	self.root:Destroy()
 end
 

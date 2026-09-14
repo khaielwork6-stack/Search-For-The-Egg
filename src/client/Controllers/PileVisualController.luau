@@ -20,6 +20,7 @@ local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
 local Tokens = require(Shared.Design.Tokens)
+local Signal = require(Shared.Util.Signal)
 local Motion = require(Shared.Design.Motion)
 local AssetManifest = require(Shared.Design.AssetManifest)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
@@ -63,6 +64,7 @@ export type PileVisualController = typeof(setmetatable(
 		_grid: { [string]: any }?,
 		_field: PileSurface.Field?,
 		_seatField: PileSurface.Field?,
+		targetChanged: any,
 		_minCorner: Vector3?,
 		_building: boolean,
 		_pendingDeltas: { { [string]: any } },
@@ -114,6 +116,7 @@ function PileVisualController.new(
 		_grid = nil,
 		_field = nil,
 		_seatField = nil,
+		targetChanged = Signal.new(),
 		_minCorner = nil,
 		_building = false,
 		_pendingDeltas = {},
@@ -967,6 +970,10 @@ function PileVisualController._setTarget(self: PileVisualController, target: Tar
 		self._highlight = highlight
 	end
 	local highlight = self._highlight :: Highlight
+	local had = self.target ~= nil
+	if (target ~= nil) ~= had then
+		self.targetChanged:Fire(target ~= nil)
+	end
 	if target then
 		if highlight.Adornee ~= target.part then
 			highlight.Adornee = target.part
