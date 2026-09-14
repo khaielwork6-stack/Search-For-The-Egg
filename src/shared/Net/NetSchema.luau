@@ -126,6 +126,14 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 			512
 		),
 		request("ToolActionEnd", Schema.object({ sessionToken = TOKEN, toolId = Schema.id() }), toolRate, 3, 256),
+		-- Continuous tools re-aim from the reticle while held (the vac follows the player's aim).
+		request(
+			"ToolActionAim",
+			Schema.object({ sessionToken = TOKEN, toolId = Schema.id(), origin = Schema.vector3(), direction = Schema.vector3(2) }),
+			toolRate,
+			3,
+			512
+		),
 		request("SellRequest", Schema.object({ sessionToken = TOKEN }), slowRate, 2),
 		request(
 			"UpgradePurchase",

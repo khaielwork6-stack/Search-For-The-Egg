@@ -332,6 +332,31 @@ function ToolService.actionEnd(self: ToolService, userId: number, payload: { [st
 	return reject(self, Envelope.Codes.INVALID_PAYLOAD, "tool")
 end
 
+-- payload: { sessionToken, toolId, origin, direction }. The Feather Vac follows the reticle: every
+-- update re-resolves the aim against the nest; an aim that leaves the nest or the player's range
+-- stops the suction at once (the client never pulls from a stale point).
+function ToolService.actionAim(self: ToolService, userId: number, payload: { [string]: any }): Envelope.Envelope<any>
+	local runtime, state, characterPosition, gateCode, gateMessage = self._collection:gate(userId, payload.sessionToken)
+	if not runtime or not state or not characterPosition then
+		return reject(self, gateCode :: string, gateMessage)
+	end
+	if payload.toolId ~= "featherVac" then
+		return reject(self, Envelope.Codes.INVALID_PAYLOAD, "tool")
+	end
+	local rt = vacRuntime(state)
+	if not rt.running then
+		return Envelope.ok({ running = false })
+	end
+	local aim = CollectionService.resolveAim(self._config, runtime, characterPosition, payload.origin, payload.direction)
+	if not aim then
+		self:_stopVac(runtime, userId, state, "range")
+		return Envelope.ok({ running = false, reason = "range", heat = rt.heat })
+	end
+	rt.aimX, rt.aimZ = aim.cx, aim.cz
+	rt.aimHitX, rt.aimHitZ = aim.hit.X, aim.hit.Z
+	return Envelope.ok({ running = true, aimX = aim.hit.X, aimZ = aim.hit.Z, heat = rt.heat })
+end
+
 -- Confetti Charge ---------------------------------------------------------------------------
 
 function ToolService._throwCharge(
@@ -431,7 +456,15 @@ function ToolService._explode(self: ToolService, runtime: any, charge: any, now:
 	local layout = ChapterLayout[runtime.state.chapter]
 	local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
 	local cells = PileGrid.cellsWithinStuds(grid, charge.position.X - minCorner.X, charge.position.Z - minCorner.Z, charge.radiusStuds)
-	local removals, total = PileGrid.removeSpread(grid, cells, charge.yield)
+	-- Only what fits in the owner's bag leaves the nest: a full bag never destroys feathers it cannot
+	-- carry (owner requirement); an infinite bag takes the whole yield. A dead owner's blast still
+	-- clears and bundles (nothing is awarded, nothing is lost).
+	local amount = charge.yield
+	local capacity = if state then self._collection:bagCapacity(runtime, charge.userId) else nil
+	if state and state.alive and capacity and not capacity.infinite then
+		amount = math.max(0, math.min(amount, capacity.capacity - (state.carriedStandard + state.carriedRainbow)))
+	end
+	local removals, total = PileGrid.removeSpread(grid, cells, amount)
 	local cleared = 0
 	for _, removal in ipairs(removals) do
 		self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining, removal.mask)
@@ -449,9 +482,8 @@ function ToolService._explode(self: ToolService, runtime: any, charge: any, now:
 	self.stats.explosions += 1
 	self.stats.rainbow += rainbow
 	local award = nil
-	if state and state.alive and total > 0 then
+	if state and state.alive and total > 0 and capacity then
 		state.contribution.cellsRemoved += cleared
-		local capacity = self._collection:bagCapacity(runtime, charge.userId)
 		award = RoundAwards.award(state, standard, rainbow, capacity)
 		if award.overflowStandard + award.overflowRainbow > 0 then
 			dropBundle(self, runtime, charge.position, award.overflowStandard, award.overflowRainbow)
@@ -539,6 +571,7 @@ function ToolService._startVac(
 	local spec = self:spec(runtime, userId, "featherVac")
 	rt.running = true
 	rt.aimX, rt.aimZ = aim.cx, aim.cz
+	rt.aimHitX, rt.aimHitZ = aim.hit.X, aim.hit.Z
 	rt.startedAt = now
 	self.event:Fire(runtime.state.roundId, {
 		kind = "vac_state",
@@ -630,15 +663,12 @@ function ToolService._tickVac(self: ToolService, runtime: any, userId: number, s
 			self:_stopVac(runtime, userId, state, "bag_full")
 			return
 		end
+		-- Only the cells under the reticle feed the nozzle: the vac never wanders to a fuller patch
+		-- on its own (the player re-aims; the client re-sends the aim while the button is held).
 		local cells = PileGrid.cellsWithin(grid, rt.aimX, rt.aimZ, spec.radiusCells)
 		if #cells == 0 then
-			local next = PileGrid.findTarget(grid, rt.aimX, rt.aimZ, spec.radiusCells + 2)
-			if not next then
-				self:_stopVac(runtime, userId, state, "empty")
-				return
-			end
-			rt.aimX, rt.aimZ = next.x, next.z
-			cells = { next }
+			rt.carry = 0
+			return
 		end
 		local amount = math.min(whole, if free == math.huge then whole else free)
 		local removals, total = PileGrid.removeSpread(grid, cells, amount)
@@ -656,6 +686,16 @@ function ToolService._tickVac(self: ToolService, runtime: any, userId: number, s
 		local award = RoundAwards.award(state, total, 0, capacity)
 		rt.pulled += award.standard
 		self.stats.vacFeathers += award.standard
+		-- Every pulled record by id, for the nozzle animation on every client in the round.
+		self.event:Fire(runtime.state.roundId, {
+			kind = "vac_pull",
+			userId = userId,
+			cells = removals,
+			awarded = award.standard,
+			x = rt.aimHitX or aimWorld.X,
+			y = aimWorld.Y,
+			z = rt.aimHitZ or aimWorld.Z,
+		})
 		self.awarded:Fire(userId, runtime, {
 			toolId = "featherVac",
 			awarded = award.standard,

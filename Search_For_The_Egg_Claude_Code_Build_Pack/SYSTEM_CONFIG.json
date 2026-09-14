@@ -1397,5 +1397,61 @@
       "maxWidthPx": 260,
       "aspect": 0.66
     }
+  },
+  "toolFeel": {
+    "assumption": "ASSUMED",
+    "evidence": "ASSUMED first-person tool feel (owner clips not attached on 14 Sep 2026); tune per clip",
+    "viewmodel": {
+      "swayAmplitudeStuds": 0.035,
+      "bobHz": 1.9,
+      "lagDegrees": 4.0,
+      "lagSpringHz": 6.0
+    },
+    "nestRake": {
+      "viewmodelScale": 0.3,
+      "thrustSeconds": 0.11,
+      "thrustStuds": 1.7,
+      "thrustDropStuds": 0.55,
+      "returnSeconds": 0.36,
+      "impactShake": 0.14,
+      "dentRadiusStuds": 1.4,
+      "dentSeconds": 0.22,
+      "swingSoundVolume": 0.4
+    },
+    "confettiCharge": {
+      "viewmodelScale": 0.42,
+      "lightSeconds": 0.28,
+      "maxHoldSeconds": 1.1,
+      "throwSpeedStudsPerSecond": 26,
+      "arcHeightStuds": 4.5,
+      "flashSeconds": 0.14,
+      "blastShake": 0.5,
+      "blastShakeRangeStuds": 40,
+      "debrisCount": 10,
+      "debrisSeconds": 0.9,
+      "craterTransparency": 0.35
+    },
+    "featherVac": {
+      "viewmodelScale": 0.4,
+      "pullSeconds": 0.24,
+      "pullStaggerSeconds": 0.035,
+      "aimUpdateHz": 6,
+      "streakCount": 6,
+      "streakSeconds": 0.22,
+      "recoilStuds": 0.12,
+      "jitterStuds": 0.02
+    },
+    "scoutChick": {
+      "modelScale": 0.34,
+      "hopHeightStuds": 0.32,
+      "hopHz": 2.6,
+      "headTurnDegrees": 35,
+      "flapIntervalSeconds": [
+        3.0,
+        7.0
+      ],
+      "flapSeconds": 0.55,
+      "peckDegrees": 40
+    }
   }
 }

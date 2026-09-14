@@ -456,6 +456,9 @@ Players.CharacterAutoLoads = false
 -- Repair mesh templates (mesh metadata) before any shell clones them; replicates to every client.
 local repairedMeshes = AssetManifest.warm()
 local lobbyShell = WorldShellService.build(workspace, workspace:FindFirstChildOfClass("SpawnLocation"), config)
+-- Owner tool models (Toolbox assets) staged for the client's first-person viewmodels and the Scout
+-- Chick body: script-free, anchored clones under ReplicatedStorage so streaming never hides them.
+ChapterShellService.stageToolModels(workspace, ReplicatedStorage)
 local arena = ChapterShellService.build(workspace, config)
 local mapMode = WorldShellService.isMapMode(lobbyShell)
 
@@ -1021,6 +1024,9 @@ registry:onRequest("ToolActionBegin", function(player, payload)
 end)
 registry:onRequest("ToolActionEnd", function(player, payload)
 	return tools:actionEnd(player.UserId, payload)
+end)
+registry:onRequest("ToolActionAim", function(player, payload)
+	return tools:actionAim(player.UserId, payload)
 end)
 registry:onRequest("SellRequest", function(player, payload)
 	return selling:sell(player.UserId, payload.sessionToken, { gate = crateGate })

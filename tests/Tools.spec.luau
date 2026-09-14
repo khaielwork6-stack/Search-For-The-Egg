@@ -366,8 +366,10 @@ return function(describe, it, expect)
 			expect(h.tools.stats.explosions).toBe(1)
 			local exploded = h.eventsOfKind("charge_exploded")
 			expect(#exploded).toBe(1)
-			expect(exploded[1].removed).toBe(spec.yield)
-			expect(before - gridSum(runtime.grid)).toBe(spec.yield)
+			-- Only what fits in the bag leaves the nest (a blast never destroys feathers it cannot carry).
+			local capacity = cfg.collection.startingBagCapacity
+			expect(exploded[1].removed).toBe(math.min(spec.yield, capacity))
+			expect(before - gridSum(runtime.grid)).toBe(math.min(spec.yield, capacity))
 			-- Radius: every touched cell centre lies within the blast radius of the landing point.
 			local minCorner = ChapterLayout.gridMinCorner(layout, runtime.grid.width, runtime.grid.depth, runtime.grid.cellSize)
 			for _, removal in ipairs(exploded[1].cells) do
@@ -377,12 +379,9 @@ return function(describe, it, expect)
 				expect(distance).toBeLessThanOrEqual(spec.radiusStuds)
 				expect(snapshotBefore[removal.index] - cell.remaining).toBe(removal.removed)
 			end
-			-- Award clamps to the bag; the rest is a bundle at the blast point.
-			local capacity = cfg.collection.startingBagCapacity
+			-- The bag is exactly full and nothing was bundled or wasted.
 			expect(state.carriedStandard + state.carriedRainbow).toBe(capacity)
-			local bundles = h.eventsOfKind("bundle_dropped")
-			expect(#bundles).toBe(1)
-			expect(bundles[1].standard + bundles[1].rainbow).toBe(spec.yield - capacity)
+			expect(#h.eventsOfKind("bundle_dropped")).toBe(0)
 			expect(exploded[1].rainbow).toBe(0) -- luckyBlast level 0: rainbowChance 0
 			-- No duplicate award on later ticks.
 			h.advanceTools(2)
@@ -498,6 +497,59 @@ return function(describe, it, expect)
 				end
 			end
 			expect(readyEvents).toBe(1)
+		end)
+
+		it("follows the reticle while running, pulls real records under the aim, and stops when the aim leaves the nest", function()
+			local h = harness()
+			h.join(1)
+			h.setEntitlement(1, "infiniteBag", true)
+			local _, runtime = h.startRound({ 1 })
+			acquire(h, 1, "featherVac")
+			h.equip(1, "featherVac")
+			local state = runtime.players[1]
+			expect(h.beginAt(1, runtime, "featherVac", 8, 8).ok).toBe(true)
+			local rt = state.toolRuntime.featherVac
+			expect(math.abs(rt.aimX - 8)).toBeLessThanOrEqual(1)
+			-- Re-aim at another patch: the runtime follows the new hit, not the start point.
+			local origin, direction = h.aimAt(1, runtime, 12, 6)
+			local aimed = h.tools:actionAim(1, { sessionToken = h.token(1), toolId = "featherVac", origin = origin, direction = direction })
+			expect(aimed.ok).toBe(true)
+			expect(aimed.data.running).toBe(true)
+			expect(math.abs(rt.aimX - 12)).toBeLessThanOrEqual(1)
+			expect(math.abs(rt.aimZ - 6)).toBeLessThanOrEqual(1)
+			h.advanceTools(1)
+			local pulls = h.eventsOfKind("vac_pull")
+			expect(#pulls).toBeGreaterThan(0)
+			local spec = h.collection:spec(runtime, 1, "featherVac")
+			local total = 0
+			for _, pull in ipairs(pulls) do
+				expect(pull.userId).toBe(1)
+				for _, removal in ipairs(pull.cells) do
+					local cell = runtime.grid.cells[removal.index]
+					expect(math.abs(cell.x - 12)).toBeLessThanOrEqual(spec.radiusCells + 1)
+					expect(math.abs(cell.z - 6)).toBeLessThanOrEqual(spec.radiusCells + 1)
+					total += #removal.slots
+				end
+			end
+			expect(total).toBe(state.carriedStandard)
+			-- An aim that misses the nest stops the suction at once.
+			local far = h.tools:actionAim(
+				1,
+				{ sessionToken = h.token(1), toolId = "featherVac", origin = origin, direction = Vector3.new(0, 1, 0) }
+			)
+			expect(far.ok).toBe(true)
+			expect(far.data.running).toBe(false)
+			expect(rt.running).toBe(false)
+			local states = h.eventsOfKind("vac_state")
+			expect(states[#states].state).toBe("idle")
+			expect(states[#states].reason).toBe("range")
+			-- Aim updates while idle are harmless; a wrong tool is refused.
+			expect(
+				h.tools:actionAim(1, { sessionToken = h.token(1), toolId = "featherVac", origin = origin, direction = direction }).data.running
+			).toBe(false)
+			expect(h.tools:actionAim(1, { sessionToken = h.token(1), toolId = "nestRake", origin = origin, direction = direction }).code).toBe(
+				"invalid_payload"
+			)
 		end)
 
 		it("stops on death, on equip change, and when the bag fills; never exceeds capacity", function()

@@ -509,6 +509,69 @@ function ChapterShellService.placeDisplays(workspaceService: Workspace, config: 
 	return placed
 end
 
+ChapterShellService.TOOL_MODELS_FOLDER = "SFE_ToolModels"
+-- Workspace paths of the owner's Toolbox models that become first-person viewmodels and the chick.
+local TOOL_MODEL_SOURCES: { [string]: { string } } = {
+	Pitchfork = { "Pitchfork" },
+	Dynamite = { "Dynamite" },
+	Vacuum = { "Vacuum" },
+	DodoBird = { "Bird", "DodoBird" },
+}
+
+-- Clones the owner's tool models into ReplicatedStorage with every script, prompt, sound and
+-- emitter removed and every part anchored/non-colliding: the client animates them procedurally.
+function ChapterShellService.stageToolModels(workspaceService: Workspace, replicated: Instance): number
+	local folder = replicated:FindFirstChild(ChapterShellService.TOOL_MODELS_FOLDER)
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = ChapterShellService.TOOL_MODELS_FOLDER
+		folder.Parent = replicated
+	end
+	local staged = 0
+	for name, path in pairs(TOOL_MODEL_SOURCES) do
+		local source: Instance? = workspaceService
+		for _, segment in ipairs(path) do
+			source = source and source:FindFirstChild(segment)
+		end
+		if not (source and source:IsA("Model")) then
+			continue
+		end
+		local old = folder:FindFirstChild(name)
+		if old then
+			old:Destroy()
+		end
+		local clone = source:Clone()
+		clone.Name = name
+		for _, descendant in ipairs(clone:GetDescendants()) do
+			if
+				descendant:IsA("LuaSourceContainer")
+				or descendant:IsA("ProximityPrompt")
+				or descendant:IsA("Sound")
+				or descendant:IsA("ParticleEmitter")
+				or descendant:IsA("LayerCollector")
+				or descendant:IsA("Seat")
+				or descendant:IsA("Constraint")
+				or descendant:IsA("BodyMover")
+			then
+				descendant:Destroy()
+			elseif descendant:IsA("BasePart") then
+				descendant.Anchored = true
+				descendant.CanCollide = false
+				descendant.CanQuery = false
+				descendant.CanTouch = false
+				descendant.CastShadow = false
+				descendant.Massless = true
+			end
+		end
+		for attribute in pairs(clone:GetAttributes()) do
+			clone:SetAttribute(attribute, nil)
+		end
+		clone.Parent = folder
+		staged += 1
+	end
+	return staged
+end
+
 -- Builds the Chapter 1 arena: the owner's map when present, the greybox otherwise.
 function ChapterShellService.build(workspaceService: Workspace, config: { [string]: any }): Folder
 	local mapModel = workspaceService:FindFirstChild(ChapterLayout.CHAPTER1_MAP_NAME)
