@@ -294,7 +294,7 @@ if RunService:IsStudio() then
 			snap.gemsChip = hud._labels.gems.Text
 			snap.banner = hud._labels.banner.Text
 			snap.detail = hud._labels.detail.Text
-			snap.prompt = hud._labels.prompt.Text
+			snap.prompt = hud._labels.prompt.Visible
 			snap.layoutClass = hud.gui:GetAttribute("SFE_LayoutClass")
 			snap.viewport = tostring(workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize)
 			snap.strands = lobby:strandCount() + arena:strandCount()
