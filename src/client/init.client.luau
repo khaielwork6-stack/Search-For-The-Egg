@@ -177,6 +177,17 @@ local displays = trove:add(DisplayController.new({
 	config = config,
 	interaction = interaction,
 }))
+-- Alt frees the cursor while held (first person stays), like the reference game.
+trove:add(input.actionBegan:Connect(function(action)
+	if action == "Cursor" then
+		modals:setExternalUnlock(true)
+	end
+end))
+trove:add(input.actionEnded:Connect(function(action)
+	if action == "Cursor" and not book:isOpen() and not inspect:isOpen() then
+		modals:setExternalUnlock(false)
+	end
+end))
 trove:add(pile.targetChanged:Connect(function(targeting)
 	hud:setTargeting(targeting)
 end))

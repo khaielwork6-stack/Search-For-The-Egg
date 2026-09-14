@@ -142,4 +142,25 @@ function NpcPlate.build(adornee: BasePart, name: string, role: string, heightStu
 	}
 end
 
+-- Speaks through an existing vendor's bubble (built by NpcPlate.build) from anywhere on the client.
+function NpcPlate.sayOn(adornee: Instance?, line: string, seconds: number?)
+	local speech = adornee and adornee:FindFirstChild("Speech")
+	local card = speech and speech:FindFirstChild("Card")
+	local text = card and card:FindFirstChild("Line")
+	local scale = card and card:FindFirstChildOfClass("UIScale")
+	if not (speech and speech:IsA("BillboardGui") and text and text:IsA("TextLabel") and scale) then
+		return false
+	end
+	text.Text = line
+	speech.Enabled = true
+	scale.Scale = 0.6
+	TweenService:Create(scale, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+	task.delay(seconds or 2.6, function()
+		if speech.Parent and text.Text == line then
+			speech.Enabled = false
+		end
+	end)
+	return true
+end
+
 return NpcPlate

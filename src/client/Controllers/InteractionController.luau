@@ -10,6 +10,7 @@ local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
 local Signal = require(Shared.Util.Signal)
 local Tokens = require(Shared.Design.Tokens)
+local NpcPlate = require(script.Parent.Parent.UI.NpcPlate)
 
 local InteractionController = {}
 InteractionController.__index = InteractionController
@@ -156,14 +157,24 @@ function InteractionController.handle(self: InteractionController, promptName: s
 		end
 		local result = deps.net:request("EggDeliver", { sessionToken = token })
 		if not result.ok then
-			deps.audio:play(Tokens.sound.uiError)
-			deps.hud.toasts:push(
-				if result.message == "not_carrier"
-					then "Bring the Egg to the Farmer first"
-					elseif result.code == "out_of_range" then "Stand next to the Farmer"
-					else "The Farmer is not ready",
-				"warning"
-			)
+			local arena = workspace:FindFirstChild("SFE_Chapter1")
+			local farmer = arena and arena:FindFirstChild("Farmer")
+			local farmerRoot = farmer and farmer:FindFirstChild("HumanoidRootPart")
+			if result.message == "not_revealed" or result.message == "not_carrier" then
+				-- The Farmer answers in his own words; no error tone for asking early.
+				deps.audio:play(Tokens.sound.uiTap)
+				NpcPlate.sayOn(
+					farmerRoot,
+					if result.message == "not_revealed" then "Find me the egg buddy!" else "Bring me the Egg first, buddy!",
+					2.8
+				)
+			else
+				deps.audio:play(Tokens.sound.uiError)
+				deps.hud.toasts:push(
+					if result.code == "out_of_range" then "Stand next to the Farmer" else "The Farmer is not ready",
+					"warning"
+				)
+			end
 		end
 		self.claimed:Fire(result)
 		return result

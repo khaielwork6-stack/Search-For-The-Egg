@@ -15,7 +15,7 @@ local InputController = {}
 InputController.__index = InputController
 
 export type Mode = "mouse" | "touch" | "gamepad"
-export type Action = "Primary" | "Interact" | "Cancel" | "Back" | "Menu"
+export type Action = "Primary" | "Interact" | "Cancel" | "Back" | "Menu" | "Cursor"
 
 export type InputController = typeof(setmetatable(
 	{} :: {
@@ -35,7 +35,8 @@ local BINDINGS: { [Action]: { any } } = {
 	Interact = { Enum.KeyCode.E, Enum.KeyCode.ButtonX },
 	Cancel = { Enum.KeyCode.Escape, Enum.KeyCode.ButtonB },
 	Back = { Enum.KeyCode.Backspace, Enum.KeyCode.ButtonB },
-	Menu = { Enum.KeyCode.Tab, Enum.KeyCode.ButtonY },
+	Menu = { Enum.KeyCode.Tab, Enum.KeyCode.Backquote, Enum.KeyCode.ButtonY },
+	Cursor = { Enum.KeyCode.LeftAlt, Enum.KeyCode.RightAlt },
 }
 
 local function modeFor(inputType: Enum.UserInputType): Mode?
