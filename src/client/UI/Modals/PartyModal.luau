@@ -131,8 +131,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 					end
 					-- Re-render is driven by projections; update selection styling immediately.
 					for cardKey, card in pairs(cards) do
-						card.handle.button.BackgroundColor3 = if cardKey == key then Tokens.color.gold else Tokens.color.tealLight
-						card.handle.button.TextColor3 = if cardKey == key then Tokens.color.inkStrong else Tokens.color.cream
+						card.handle.setSelected(cardKey == key)
 					end
 				end,
 			})
@@ -144,7 +143,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				"Sub",
 				"",
 				"caption",
-				{ align = Enum.TextXAlignment.Center, zIndex = z + 2, color = Tokens.color.goldLight }
+				{ align = Enum.TextXAlignment.Center, zIndex = z + 2, color = Tokens.color.goldDeep }
 			)
 			sub.AnchorPoint = Vector2.new(0.5, 1)
 			sub.Position = UDim2.new(0.5, 0, 1, -2)
@@ -168,7 +167,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	membersLayout.Padding = UDim.new(0, Tokens.spacing.xs)
 	membersLayout.Parent = members
 	members.Parent = container
-	local status = FrameKit.text(container, "Status", "", "body", { zIndex = z, color = Tokens.color.goldLight })
+	local status = FrameKit.text(container, "Status", "", "body", { zIndex = z, color = Tokens.color.goldDeep })
 	status.LayoutOrder = 5
 
 	local actions = Instance.new("Frame")
@@ -287,7 +286,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		"EmptyList",
 		"No open parties right now. Open one and friends can join from here.",
 		"caption",
-		{ zIndex = z, color = Tokens.color.creamDeep }
+		{ zIndex = z, color = Tokens.color.inkMuted }
 	)
 	emptyList.LayoutOrder = 9
 
@@ -362,8 +361,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				then "Opens in a later update"
 				elseif not unlocked then "Locked - win Sunlit Henhouse"
 				else (if active then "Chosen" else "")
-			card.handle.button.BackgroundColor3 = if isSelected then Tokens.color.gold else Tokens.color.tealLight
-			card.handle.button.TextColor3 = if isSelected then Tokens.color.inkStrong else Tokens.color.cream
+			card.handle.setSelected(isSelected)
 		end
 		for _, child in ipairs(members:GetChildren()) do
 			if child:IsA("Frame") then
@@ -380,7 +378,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 					.. (if locked then "  -  needs the unlock" else "")
 				local label = FrameKit.text(row, "Name", name .. suffix, "body", {
 					zIndex = z + 1,
-					color = if memberId == Players.LocalPlayer.UserId then Tokens.color.goldLight else Tokens.color.cream,
+					color = if memberId == Players.LocalPlayer.UserId then Tokens.color.goldDeep else Tokens.color.inkStrong,
 				})
 				label.Size = UDim2.fromScale(1, 1)
 			end
@@ -388,7 +386,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				local row = FrameKit.row(members, "Empty" .. index, tap, z)
 				row.LayoutOrder = index
 				row.BackgroundTransparency = 0.7
-				FrameKit.text(row, "Name", "Open seat", "caption", { zIndex = z + 1, color = Tokens.color.creamDeep }).Size =
+				FrameKit.text(row, "Name", "Open seat", "caption", { zIndex = z + 1, color = Tokens.color.inkMuted }).Size =
 					UDim2.fromScale(1, 1)
 			end
 			local phase = party.phase

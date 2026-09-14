@@ -8,36 +8,48 @@
 local Tokens = {}
 
 Tokens.color = table.freeze({
-	inkStrong = Color3.fromRGB(46, 36, 28),
-	ink = Color3.fromRGB(78, 62, 48),
-	inkMuted = Color3.fromRGB(139, 121, 103),
-	outline = Color3.fromRGB(38, 26, 16), -- chunky cartoon outline
+	-- Ink (soft browns) for all text on cream.
+	inkStrong = Color3.fromRGB(64, 44, 30),
+	ink = Color3.fromRGB(92, 68, 48),
+	inkMuted = Color3.fromRGB(150, 128, 106),
+	outline = Color3.fromRGB(88, 58, 34), -- soft cocoa outline (chunky, never black)
+	cocoa = Color3.fromRGB(122, 84, 52),
+	-- Cream and feather-white surfaces.
 	cream = Color3.fromRGB(252, 246, 234),
 	creamDeep = Color3.fromRGB(241, 229, 206),
-	creamPill = Color3.fromRGB(255, 241, 200), -- pill label fill
-	straw = Color3.fromRGB(226, 191, 108),
-	strawDeep = Color3.fromRGB(190, 145, 62),
-	goldLight = Color3.fromRGB(255, 220, 92), -- bevel highlight
-	gold = Color3.fromRGB(246, 182, 40), -- frame base
-	goldDeep = Color3.fromRGB(184, 118, 22), -- bevel shadow
-	tealPanel = Color3.fromRGB(20, 78, 92), -- deep teal panel
-	tealDeep = Color3.fromRGB(11, 50, 62),
-	tealLight = Color3.fromRGB(38, 118, 134),
+	creamPill = Color3.fromRGB(255, 243, 208),
+	featherWhite = Color3.fromRGB(255, 253, 248),
+	panel = Color3.fromRGB(253, 248, 238), -- modal / card panel fill
+	panelDeep = Color3.fromRGB(245, 235, 216), -- panel gradient foot
+	surface = Color3.fromRGB(255, 252, 245),
+	surfaceAlt = Color3.fromRGB(247, 238, 222),
+	-- Golden yellow (frames, primary actions, highlights).
+	straw = Color3.fromRGB(230, 196, 112),
+	strawDeep = Color3.fromRGB(194, 150, 66),
+	honey = Color3.fromRGB(255, 205, 66),
+	goldLight = Color3.fromRGB(255, 226, 110),
+	gold = Color3.fromRGB(246, 184, 44),
+	goldDeep = Color3.fromRGB(196, 130, 26),
+	-- Teal: small accents only (tabs, selected rings, badges).
+	tealPanel = Color3.fromRGB(38, 118, 134),
+	tealDeep = Color3.fromRGB(22, 84, 98),
+	tealLight = Color3.fromRGB(78, 170, 184),
+	tealAccent = Color3.fromRGB(46, 140, 156),
+	tealTint = Color3.fromRGB(224, 242, 244),
 	sky = Color3.fromRGB(129, 190, 220),
 	skyDeep = Color3.fromRGB(70, 136, 176),
 	leaf = Color3.fromRGB(116, 170, 92),
-	leafBright = Color3.fromRGB(128, 200, 70), -- leaf accents
+	leafBright = Color3.fromRGB(128, 200, 70),
 	leafDeep = Color3.fromRGB(74, 128, 60),
-	ember = Color3.fromRGB(228, 117, 70),
-	emberDeep = Color3.fromRGB(184, 78, 42),
+	ember = Color3.fromRGB(232, 122, 74),
+	emberDeep = Color3.fromRGB(190, 82, 44),
 	gem = Color3.fromRGB(122, 96, 220),
 	gemDeep = Color3.fromRGB(86, 62, 176),
-	surface = Color3.fromRGB(255, 252, 245),
-	surfaceAlt = Color3.fromRGB(247, 238, 222),
-	overlay = Color3.fromRGB(20, 14, 10),
-	success = Color3.fromRGB(88, 160, 84),
-	warning = Color3.fromRGB(214, 150, 40),
-	danger = Color3.fromRGB(196, 74, 62),
+	overlay = Color3.fromRGB(46, 32, 20),
+	shadow = Color3.fromRGB(70, 48, 28),
+	success = Color3.fromRGB(96, 168, 90),
+	warning = Color3.fromRGB(222, 158, 44),
+	danger = Color3.fromRGB(204, 82, 66),
 })
 
 -- Class card accent colours keyed by rarity band (weight thresholds resolved by the classes modal).
@@ -62,13 +74,13 @@ Tokens.typography = table.freeze({
 
 Tokens.spacing = table.freeze({ xs = 4, sm = 8, md = 12, lg = 16, xl = 24, xxl = 32 })
 
-Tokens.radius = table.freeze({ sm = 6, md = 10, lg = 16, xl = 22, pill = 999 })
+Tokens.radius = table.freeze({ sm = 8, md = 12, lg = 18, xl = 26, pill = 999 })
 
 Tokens.stroke = table.freeze({ hairline = 1, standard = 2, bold = 3, frame = 4 })
 
 Tokens.shadow = table.freeze({
-	soft = table.freeze({ transparency = 0.82, offset = 3 }),
-	lifted = table.freeze({ transparency = 0.7, offset = 6 }),
+	soft = table.freeze({ transparency = 0.86, offset = 3 }),
+	lifted = table.freeze({ transparency = 0.78, offset = 6 }),
 })
 
 -- Motion durations are capped by polishBudgets.maximumUiTweenSeconds at runtime (Motion module).
@@ -105,6 +117,12 @@ Tokens.recipes = table.freeze({
 	rotationSettle = table.freeze({ seconds = 0.45, style = "Elastic", direction = "Out" }),
 	ripple = table.freeze({ seconds = 0.4, style = "Quad", direction = "Out", scale = 2.4 }),
 	countUp = table.freeze({ seconds = 0.45, style = "Quad", direction = "Out" }),
+	-- Rebuilt UI recipes: attention pulse (only when useful), toast slide, error shake, sheen sweep.
+	pulse = table.freeze({ seconds = 0.45, style = "Sine", direction = "InOut", scale = 1.05 }),
+	toastSlide = table.freeze({ seconds = 0.34, style = "Back", direction = "Out" }),
+	shake = table.freeze({ seconds = 0.36, style = "Elastic", direction = "Out", degrees = 3 }),
+	sheen = table.freeze({ seconds = 0.45, style = "Sine", direction = "InOut" }),
+	lift = table.freeze({ seconds = 0.22, style = "Quad", direction = "Out" }),
 })
 
 -- Semantic sound roles. Actual asset ids resolve through AudioDirector's manifest so UI code never
@@ -117,6 +135,12 @@ Tokens.sound = table.freeze({
 	uiClose = "ui.close",
 	uiToast = "ui.toast",
 	uiError = "ui.error",
+	uiHover = "ui.hover",
+	uiTab = "ui.tab",
+	uiSwitch = "ui.switch",
+	uiSelect = "ui.select",
+	uiConfetti = "ui.confetti",
+	uiPop = "ui.pop",
 	rewardTick = "reward.tick",
 	rewardLand = "reward.land",
 	rollSpin = "class.spin",
@@ -159,6 +183,9 @@ Tokens.layout = table.freeze({
 	cardMaxHeightFraction = 0.9, -- of the viewport; content scrolls inside
 })
 
-Tokens.zIndex = table.freeze({ world = 1, hud = 10, toast = 20, modal = 30, blocking = 40, prompt = 50 })
+Tokens.zIndex = table.freeze({ world = 1, hud = 10, toast = 20, modal = 30, blocking = 40, prompt = 50, veil = 60 })
+
+-- Icon glyph sizes (vector icons drawn from frames; see UI/Components/Icons).
+Tokens.icon = table.freeze({ sm = 16, md = 22, lg = 32 })
 
 return Tokens

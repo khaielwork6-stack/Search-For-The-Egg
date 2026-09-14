@@ -39,7 +39,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local z = container.ZIndex + 1
 	local receivedAt = os.clock()
 
-	local status = FrameKit.text(container, "Status", "", "heading", { zIndex = z, color = Tokens.color.goldLight })
+	local status = FrameKit.text(container, "Status", "", "heading", { zIndex = z, color = Tokens.color.goldDeep })
 	status.LayoutOrder = 1
 	local grid = Instance.new("Frame")
 	grid.Name = "Calendar"
@@ -79,7 +79,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			"Gems",
 			string.format("%d Gems", entry.gems),
 			"heading",
-			{ align = Enum.TextXAlignment.Center, zIndex = z + 2, color = Tokens.color.goldLight }
+			{ align = Enum.TextXAlignment.Center, zIndex = z + 2, color = Tokens.color.goldDeep }
 		)
 		gems.AnchorPoint = Vector2.new(0, 1)
 		gems.Position = UDim2.new(0, 0, 1, -Tokens.spacing.xs)
@@ -87,7 +87,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		table.insert(cells, { frame = frame, day = day, gems = gems, stroke = stroke, scale = scale })
 	end
 
-	local grace = FrameKit.text(container, "Grace", "", "caption", { zIndex = z, color = Tokens.color.creamDeep })
+	local grace = FrameKit.text(container, "Grace", "", "caption", { zIndex = z, color = Tokens.color.inkMuted })
 	grace.LayoutOrder = 3
 	grace.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size * 2 + 6)
 

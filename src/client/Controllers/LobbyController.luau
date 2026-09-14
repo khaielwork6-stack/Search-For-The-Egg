@@ -61,7 +61,7 @@ function LobbyController.new(deps: any): LobbyController
 	gui.DisplayOrder = Tokens.zIndex.hud + 1
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-	local _, scaleCleanup = SafeArea.applyScale(gui, deps.config)
+	local _, scaleCleanup, stage = SafeArea.applyScale(gui, deps.config)
 
 	local self = setmetatable({
 		_deps = deps,
@@ -95,7 +95,7 @@ function LobbyController.new(deps: any): LobbyController
 	railLayout.Padding = UDim.new(0, Tokens.spacing.sm)
 	railLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 	railLayout.Parent = rail
-	rail.Parent = gui
+	rail.Parent = stage
 	self.rail = rail
 
 	local minimumTap = SafeArea.minimumTapTarget(gui, deps.config)

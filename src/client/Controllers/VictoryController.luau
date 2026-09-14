@@ -131,7 +131,7 @@ function VictoryController.onVictory(self: VictoryController, payload: { [string
 	label.Text = text
 	label.TextTransparency = 1
 	label.ZIndex = Tokens.zIndex.toast
-	label.Parent = deps.hud.gui
+	label.Parent = deps.hud.stage
 	local scale = Instance.new("UIScale")
 	scale.Scale = 0.8
 	scale.Parent = label

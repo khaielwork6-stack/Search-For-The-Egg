@@ -1,11 +1,14 @@
 --!strict
 -- Small tween helpers that turn the shared motion recipes into TweenService calls. Every UI motion
--- goes through here so the tween cap and reduced-motion scale apply uniformly.
+-- goes through here so the tween cap and reduced-motion scale apply uniformly. Also hosts the
+-- rebuilt-UI motions: count-up, pulse loops (attention only when useful), shakes, sheen sweeps,
+-- floating deltas, and slide-ins.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Motion = require(Shared.Design.Motion)
+local Tokens = require(Shared.Design.Tokens)
 
 local Tween = {}
 
@@ -44,6 +47,13 @@ function Tween.rotationPunch(object: GuiObject, settings: Motion.MotionSettings,
 	end)
 end
 
+-- Error shake: a short side-to-side rotation that settles (never loops).
+function Tween.shake(object: GuiObject, settings: Motion.MotionSettings)
+	local recipe = Motion.recipe("shake", settings)
+	object.Rotation = recipe.degrees or 3
+	TweenService:Create(object, Motion.tweenInfo(recipe), { Rotation = 0 }):Play()
+end
+
 -- Click ripple: a pill that grows from the click point and fades. Self-cleaning.
 function Tween.ripple(parent: GuiObject, settings: Motion.MotionSettings, color: Color3, atScale: Vector2?)
 	local ripple = Instance.new("Frame")
@@ -73,62 +83,124 @@ function Tween.ripple(parent: GuiObject, settings: Motion.MotionSettings, color:
 	end)
 end
 
--- Notification envelope: grow in (Back), pop (Elastic), and later shrink out (Quad in). Returns a
--- function that plays the shrink and destroys the object.
-function Tween.notify(object: GuiObject, uiScale: UIScale, settings: Motion.MotionSettings): () -> ()
+-- Notification entrance: grow (Back-out) then pop (Elastic). Returns a shrink function for exit.
+function Tween.notify(card: GuiObject, scale: UIScale, settings: Motion.MotionSettings): () -> ()
 	local grow = Motion.recipe("notifyGrow", settings)
-	uiScale.Scale = grow.fromScale or 0.6
-	object.Visible = true
-	local growTween = TweenService:Create(uiScale, Motion.tweenInfo(grow), { Scale = 1 })
+	scale.Scale = grow.fromScale or 0.6
+	card.Visible = true
+	local growTween = TweenService:Create(scale, Motion.tweenInfo(grow), { Scale = 1 })
 	growTween:Play()
 	growTween.Completed:Once(function()
 		local pop = Motion.recipe("notifyPop", settings)
-		uiScale.Scale = pop.scale or 1.06
-		TweenService:Create(uiScale, Motion.tweenInfo(pop), { Scale = 1 }):Play()
+		scale.Scale = pop.scale or 1.06
+		TweenService:Create(scale, Motion.tweenInfo(pop), { Scale = 1 }):Play()
 	end)
 	return function()
 		local shrink = Motion.recipe("notifyShrink", settings)
-		local out = TweenService:Create(uiScale, Motion.tweenInfo(shrink), { Scale = shrink.toScale or 0.7 })
-		out:Play()
-		out.Completed:Once(function()
-			object:Destroy()
+		local shrinkTween = TweenService:Create(scale, Motion.tweenInfo(shrink), { Scale = shrink.toScale or 0.7 })
+		shrinkTween:Play()
+		shrinkTween.Completed:Once(function()
+			card:Destroy()
 		end)
 	end
 end
 
--- Count-up for numeric labels; `format(value)` renders each frame. Returns a cancel function.
-function Tween.countUp(
-	from: number,
-	to: number,
-	settings: Motion.MotionSettings,
-	format: (value: number) -> (),
-	onTick: (() -> ())?
-): () -> ()
-	local resolved = Motion.recipe("countUp", settings)
-	local duration = math.max(0.01, resolved.duration)
+-- Count-up: calls `apply` with an eased integer from `from` to `to` over the countUp recipe.
+function Tween.countUp(from: number, to: number, settings: Motion.MotionSettings, apply: (value: number) -> ()): thread
+	local recipe = Motion.recipe("countUp", settings)
+	local duration = math.max(0.01, recipe.duration)
 	local started = os.clock()
-	local thread = task.spawn(function()
-		local ticks = 0
+	return task.spawn(function()
 		while true do
 			local t = math.clamp((os.clock() - started) / duration, 0, 1)
 			local eased = 1 - (1 - t) * (1 - t)
-			format(math.floor(from + (to - from) * eased + 0.5))
-			if onTick and ticks % 3 == 0 and ticks < 12 then
-				onTick()
-			end
-			ticks += 1
+			apply(math.floor(from + (to - from) * eased + 0.5))
 			if t >= 1 then
 				break
 			end
 			task.wait()
 		end
 	end)
-	return function()
-		if coroutine.status(thread) ~= "dead" then
-			task.cancel(thread)
-		end
-		format(to)
+end
+
+-- Attention pulse loop on a UIScale (gentle breathe). Returns a stop function that settles to 1.
+-- Use only while something needs the player (a claimable reward, a full bag), never constantly.
+function Tween.pulseLoop(scale: UIScale, settings: Motion.MotionSettings, amount: number?): () -> ()
+	local recipe = Motion.recipe("pulse", settings)
+	local amplitude = Motion.amplitude(amount or ((recipe.scale or 1.05) - 1), settings)
+	local info = TweenInfo.new(recipe.duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+	local tween = TweenService:Create(scale, info, { Scale = 1 + amplitude })
+	if amplitude > 0 then
+		tween:Play()
 	end
+	return function()
+		tween:Cancel()
+		TweenService:Create(scale, TweenInfo.new(Motion.duration("quick", settings), Tokens.motion.easeOut), { Scale = 1 }):Play()
+	end
+end
+
+-- Sheen: sweeps a UIGradient's offset across a surface once (ambient sparkle on gold frames).
+function Tween.sheen(gradient: UIGradient, settings: Motion.MotionSettings, onDone: (() -> ())?)
+	local recipe = Motion.recipe("sheen", settings)
+	gradient.Offset = Vector2.new(-1, 0)
+	local tween = TweenService:Create(gradient, Motion.tweenInfo(recipe), { Offset = Vector2.new(1, 0) })
+	tween:Play()
+	if onDone then
+		tween.Completed:Once(onDone)
+	end
+end
+
+-- Floating delta label ("+$1.20", "+3"): rises and fades from `anchor`, then destroys itself.
+function Tween.floatText(parent: GuiObject, text: string, color: Color3, settings: Motion.MotionSettings, zIndex: number?)
+	local label = Instance.new("TextLabel")
+	label.Name = "Float"
+	label.AnchorPoint = Vector2.new(0.5, 1)
+	label.Position = UDim2.fromScale(0.5, 0)
+	label.Size = UDim2.new(1, 0, 0, Tokens.typography.numeral.size + Tokens.spacing.xs)
+	label.BackgroundTransparency = 1
+	label.Font = Tokens.typography.label.font
+	label.TextSize = Tokens.typography.numeral.size
+	label.TextColor3 = color
+	label.TextStrokeColor3 = Tokens.color.outline
+	label.TextStrokeTransparency = 0.4
+	label.Text = text
+	label.ZIndex = (zIndex or parent.ZIndex) + 3
+	label.Parent = parent
+	local duration = Motion.clampSeconds(0.9, settings)
+	local rise = Motion.amplitude(28, settings)
+	local tween = TweenService:Create(
+		label,
+		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Position = UDim2.new(0.5, 0, 0, -rise), TextTransparency = 1, TextStrokeTransparency = 1 }
+	)
+	tween:Play()
+	tween.Completed:Once(function()
+		label:Destroy()
+	end)
+end
+
+-- Slide-in from an offset (toast / banner entrances), Back-out.
+function Tween.slideIn(object: GuiObject, settings: Motion.MotionSettings, fromOffset: Vector2, restPosition: UDim2)
+	local recipe = Motion.recipe("toastSlide", settings)
+	local dx = Motion.amplitude(fromOffset.X, settings)
+	local dy = Motion.amplitude(fromOffset.Y, settings)
+	object.Position = restPosition + UDim2.fromOffset(dx, dy)
+	TweenService:Create(object, Motion.tweenInfo(recipe), { Position = restPosition }):Play()
+end
+
+-- Fade helper for any GuiObject: background + text + stroke transparencies together.
+function Tween.fade(object: GuiObject, settings: Motion.MotionSettings, toTransparency: number, token: string?): Tween
+	local info = TweenInfo.new(Motion.duration(token or "quick", settings), Tokens.motion.easeOut)
+	local goal: { [string]: any } = { BackgroundTransparency = toTransparency }
+	if object:IsA("TextLabel") or object:IsA("TextButton") then
+		goal.TextTransparency = toTransparency
+	end
+	if object:IsA("ImageLabel") or object:IsA("ImageButton") then
+		goal.ImageTransparency = toTransparency
+	end
+	local tween = TweenService:Create(object, info, goal)
+	tween:Play()
+	return tween
 end
 
 return Tween

@@ -46,6 +46,7 @@ export type ModalController = typeof(setmetatable(
 		_debug: { [string]: { [string]: (...any) -> any } },
 		_blur: BlurEffect,
 		gui: ScreenGui,
+		stage: Frame,
 		changed: any,
 		opened: any,
 		closed: any,
@@ -62,7 +63,7 @@ function ModalController.new(input: any, accessibility: any, config: { [string]:
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.DisplayOrder = Tokens.zIndex.modal
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-	SafeArea.applyScale(gui, config)
+	local _, _, stage = SafeArea.applyScale(gui, config)
 
 	local blur = Lighting:FindFirstChild("SFE_ModalBlur") :: BlurEffect?
 	if not blur then
@@ -83,6 +84,7 @@ function ModalController.new(input: any, accessibility: any, config: { [string]:
 		_debug = {},
 		_blur = blur :: BlurEffect,
 		gui = gui,
+		stage = stage,
 		changed = Signal.new(),
 		opened = Signal.new(),
 		closed = Signal.new(),
@@ -174,7 +176,7 @@ function ModalController.open(
 	blocking: boolean,
 	build: (container: ScrollingFrame, api: Api) -> (() -> ())?,
 	title: string?,
-	options: { wide: boolean? }?
+	options: { wide: boolean?, compact: boolean? }?
 ): (boolean, string?)
 	local next, err = ModalReducer.open(self._state, { id = id, priority = priority, blocking = blocking })
 	if not next then
@@ -183,13 +185,14 @@ function ModalController.open(
 	self._focusMemory[id] = GuiService.SelectedObject
 	self._state = ModalReducer.normalize(next)
 	local minimumTap = SafeArea.minimumTapTarget(self.gui, self._config)
-	local shell = ModalShell.create(self.gui, {
+	local shell = ModalShell.create(self.stage, {
 		title = title or id,
 		id = id,
 		blocking = blocking,
 		motion = self._accessibility:motionSettings(),
 		minimumTapTarget = minimumTap,
 		wide = options and options.wide or false,
+		compact = options and options.compact or false,
 	})
 	local initialFocus: GuiObject? = nil
 	local api: Api = {

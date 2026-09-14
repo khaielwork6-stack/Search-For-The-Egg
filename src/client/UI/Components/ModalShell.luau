@@ -1,8 +1,9 @@
 --!strict
--- Modal shell in the owner's language: dim overlay, gold-bevelled card with a deep teal panel, cream
--- pill title, close button, a scrolling content frame sized for phone and desktop, and an optional
--- footer row. Open/close use the supplied panel recipes (Back-out open + Quad fade, Quad-in close)
--- and the shell is a controller selection group so focus never escapes an open modal.
+-- Modal shell for the rebuilt UI: a dim overlay, a gold-bevelled cream card with a soft shadow, a
+-- nameplate title pill that overlaps the top edge, feather accents, a round close button, a
+-- scrolling content frame sized for phone and desktop, and an optional footer row. Open lifts and
+-- scales in (Back-out) while the overlay fades; close eases out. The card is a controller selection
+-- group so focus never escapes an open modal; a slow gold sheen sweeps the frame as ambient motion.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -10,6 +11,8 @@ local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
 local FrameKit = require(script.Parent.Frame)
+local Icons = require(script.Parent.Icons)
+local Tween = require(script.Parent.Tween)
 
 local ModalShell = {}
 
@@ -27,7 +30,7 @@ export type Shell = {
 }
 
 function ModalShell.create(
-	gui: ScreenGui,
+	gui: Instance,
 	options: {
 		title: string,
 		id: string?,
@@ -35,6 +38,8 @@ function ModalShell.create(
 		motion: Motion.MotionSettings,
 		minimumTapTarget: number?,
 		wide: boolean?,
+		compact: boolean?,
+		ambient: boolean?,
 	}
 ): Shell
 	local tap = options.minimumTapTarget or Tokens.layout.minimumTapTargetPx
@@ -49,25 +54,32 @@ function ModalShell.create(
 	local card, panel =
 		FrameKit.goldPanel(root, "Card", { radius = Tokens.radius.xl, padding = Tokens.spacing.md, zIndex = root.ZIndex + 1 })
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
-	card.Position = UDim2.fromScale(0.5, 0.5)
-	card.Size = UDim2.fromScale(if options.wide then 0.96 else 0.92, Tokens.layout.cardMaxHeightFraction)
+	card.Position = UDim2.fromScale(0.5, 0.52)
+	if options.compact then
+		card.Size = UDim2.fromScale(0.8, 0)
+		card.AutomaticSize = Enum.AutomaticSize.Y
+	else
+		card.Size = UDim2.fromScale(if options.wide then 0.96 else 0.92, Tokens.layout.cardMaxHeightFraction)
+	end
 	card.SelectionGroup = true
 	card.SelectionBehaviorUp = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorDown = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorLeft = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorRight = Enum.SelectionBehavior.Stop
 	local maxSize = Instance.new("UISizeConstraint")
-	maxSize.MaxSize = Vector2.new(if options.wide then 820 else Tokens.layout.cardMaxWidthPx, 900)
+	maxSize.MaxSize = Vector2.new(if options.compact then 420 elseif options.wide then 860 else Tokens.layout.cardMaxWidthPx, 900)
 	maxSize.Parent = card
 	local cardScale = Instance.new("UIScale")
 	cardScale.Parent = card
 	FrameKit.leaves(card, card.ZIndex)
+	FrameKit.feathers(card, card.ZIndex)
 
 	local layout = Instance.new("UIListLayout")
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Padding = UDim.new(0, Tokens.spacing.md)
 	layout.Parent = panel
 
+	-- Header: nameplate pill overlapping the card's top edge, close button top-right.
 	local header = Instance.new("Frame")
 	header.Name = "Header"
 	header.BackgroundTransparency = 1
@@ -76,39 +88,62 @@ function ModalShell.create(
 	header.ZIndex = panel.ZIndex
 	header.Parent = panel
 
-	local title =
-		FrameKit.pill(header, "Title", options.title, { size = UDim2.new(1, -(tap + Tokens.spacing.sm), 1, 0), zIndex = panel.ZIndex + 1 })
-	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.TextSize = Tokens.typography.title.size
+	local title = FrameKit.pill(header, "Title", options.title, {
+		size = UDim2.fromOffset(0, tap),
+		zIndex = panel.ZIndex + 3,
+		textSize = Tokens.typography.title.size,
+	})
+	title.AutomaticSize = Enum.AutomaticSize.X
+	title.AnchorPoint = Vector2.new(0.5, 0.5)
+	title.Position = UDim2.new(0.5, 0, 0, -(Tokens.spacing.md + Tokens.spacing.sm))
+	title.TextXAlignment = Enum.TextXAlignment.Center
+	local titleMax = Instance.new("UISizeConstraint")
+	titleMax.MaxSize = Vector2.new(9999, tap)
+	titleMax.Parent = title
+	FrameKit.shadow(title, { radius = Tokens.radius.pill })
 
 	local closeButton = Instance.new("TextButton")
 	closeButton.Name = "Close"
 	closeButton.AnchorPoint = Vector2.new(1, 0)
 	closeButton.Position = UDim2.fromScale(1, 0)
 	closeButton.Size = UDim2.fromOffset(tap, tap)
-	closeButton.BackgroundColor3 = Tokens.color.ember
-	closeButton.Text = "X"
-	closeButton.Font = Tokens.typography.label.font
-	closeButton.TextSize = Tokens.typography.heading.size
-	closeButton.TextColor3 = Tokens.color.cream
-	closeButton.TextStrokeColor3 = Tokens.color.outline
-	closeButton.TextStrokeTransparency = 0.3
+	closeButton.BackgroundColor3 = Tokens.color.featherWhite
+	closeButton.Text = ""
 	closeButton.AutoButtonColor = false
-	closeButton.ZIndex = panel.ZIndex + 1
+	closeButton.ZIndex = panel.ZIndex + 2
 	local closeCorner = Instance.new("UICorner")
-	closeCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
+	closeCorner.CornerRadius = UDim.new(1, 0)
 	closeCorner.Parent = closeButton
 	local closeStroke = Instance.new("UIStroke")
 	closeStroke.Thickness = Tokens.stroke.bold
 	closeStroke.Color = Tokens.color.outline
 	closeStroke.Parent = closeButton
+	local closeGradient = Instance.new("UIGradient")
+	closeGradient.Rotation = 90
+	closeGradient.Color =
+		ColorSequence.new({ ColorSequenceKeypoint.new(0, Tokens.color.featherWhite), ColorSequenceKeypoint.new(1, Tokens.color.creamDeep) })
+	closeGradient.Parent = closeButton
+	local closeScale = Instance.new("UIScale")
+	closeScale.Parent = closeButton
+	FrameKit.shadow(closeButton, { radius = Tokens.radius.pill })
+	local closeIcon = Icons.close(closeButton, Tokens.icon.md, { zIndex = closeButton.ZIndex + 1, color = Tokens.color.ember })
+	closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+	closeIcon.Position = UDim2.fromScale(0.5, 0.5)
+	closeButton.MouseEnter:Connect(function()
+		Tween.scale(closeScale, "hover", options.motion)
+	end)
+	closeButton.MouseLeave:Connect(function()
+		Tween.scale(closeScale, "release", options.motion, 1)
+	end)
 	closeButton.SelectionGained:Connect(function()
 		closeStroke.Color = Tokens.color.goldLight
 		closeStroke.Thickness = Tokens.stroke.frame
+		Tween.scale(closeScale, "hover", options.motion)
 	end)
 	closeButton.SelectionLost:Connect(function()
 		closeStroke.Color = Tokens.color.outline
 		closeStroke.Thickness = Tokens.stroke.bold
+		Tween.scale(closeScale, "release", options.motion, 1)
 	end)
 	closeButton.Parent = header
 
@@ -127,7 +162,6 @@ function ModalShell.create(
 	footerLayout.Padding = UDim.new(0, Tokens.spacing.sm)
 	footerLayout.Parent = footer
 	footer.Parent = panel
-	footer:GetPropertyChangedSignal("Visible"):Connect(function() end)
 
 	-- Content scrolls inside the card so tall lists never push the footer off a phone screen.
 	local content = Instance.new("ScrollingFrame")
@@ -144,17 +178,26 @@ function ModalShell.create(
 	content.ScrollingDirection = Enum.ScrollingDirection.Y
 	content.ElasticBehavior = Enum.ElasticBehavior.Never
 	content.SelectionGroup = false
+	if options.compact then
+		content.AutomaticSize = Enum.AutomaticSize.Y
+		content.Size = UDim2.fromScale(1, 0)
+		content.ScrollingEnabled = false
+	end
 	local contentLayout = Instance.new("UIListLayout")
 	contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	contentLayout.Padding = UDim.new(0, Tokens.spacing.sm)
 	contentLayout.Parent = content
 	local contentPadding = Instance.new("UIPadding")
 	contentPadding.PaddingRight = UDim.new(0, Tokens.spacing.sm)
+	contentPadding.PaddingTop = UDim.new(0, Tokens.spacing.xs)
+	contentPadding.PaddingBottom = UDim.new(0, Tokens.spacing.xs)
 	contentPadding.Parent = content
 	content.Parent = panel
 
-	-- Footer visibility shrinks the content area.
 	local function relayout()
+		if options.compact then
+			return
+		end
 		local footerHeight = if footer.Visible then footer.AbsoluteSize.Y + Tokens.spacing.md else 0
 		content.Size = UDim2.new(1, 0, 1, -(tap + Tokens.spacing.md + footerHeight))
 	end
@@ -164,6 +207,46 @@ function ModalShell.create(
 	root.Parent = gui
 
 	local motion = options.motion
+	local alive = true
+	-- Ambient sheen: a slow highlight sweep across the gold bevel every few seconds.
+	if options.ambient ~= false and not motion.reducedMotion then
+		local bevel = card:FindFirstChild("Bevel") :: UIGradient?
+		task.spawn(function()
+			while alive and bevel do
+				task.wait(5 + math.random() * 3)
+				if alive then
+					local sweep = Instance.new("UIGradient")
+					sweep.Name = "Sheen"
+					sweep.Rotation = 20
+					sweep.Transparency = NumberSequence.new({
+						NumberSequenceKeypoint.new(0, 1),
+						NumberSequenceKeypoint.new(0.45, 1),
+						NumberSequenceKeypoint.new(0.5, 0.55),
+						NumberSequenceKeypoint.new(0.55, 1),
+						NumberSequenceKeypoint.new(1, 1),
+					})
+					sweep.Parent = nil
+					local shine = Instance.new("Frame")
+					shine.Name = "Shine"
+					shine.Size = UDim2.new(1, Tokens.spacing.sm * 2, 1, Tokens.spacing.sm * 2)
+					shine.Position = UDim2.fromOffset(-Tokens.spacing.sm, -Tokens.spacing.sm)
+					shine.BackgroundColor3 = Tokens.color.featherWhite
+					shine.BackgroundTransparency = 0.7
+					shine.BorderSizePixel = 0
+					shine.ZIndex = card.ZIndex
+					local shineCorner = Instance.new("UICorner")
+					shineCorner.CornerRadius = UDim.new(0, Tokens.radius.xl)
+					shineCorner.Parent = shine
+					sweep.Parent = shine
+					shine.Parent = card
+					Tween.sheen(sweep, motion, function()
+						shine:Destroy()
+					end)
+				end
+			end
+		end)
+	end
+
 	local shell: Shell = {
 		root = root,
 		card = card,
@@ -176,17 +259,22 @@ function ModalShell.create(
 			local openRecipe = Motion.recipe("panelOpen", motion)
 			local fadeRecipe = Motion.recipe("panelFadeIn", motion)
 			cardScale.Scale = openRecipe.fromScale or 0.82
-			TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = if options.blocking then 0.45 else 0.7 })
+			card.Position = UDim2.new(0.5, 0, 0.52, Motion.amplitude(18, motion))
+			TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = if options.blocking then 0.5 else 0.72 })
 				:Play()
 			TweenService:Create(cardScale, Motion.tweenInfo(openRecipe), { Scale = 1 }):Play()
+			TweenService:Create(card, Motion.tweenInfo(openRecipe), { Position = UDim2.fromScale(0.5, 0.52) }):Play()
 			relayout()
 		end,
 		close = function(onClosed)
+			alive = false
 			local closeRecipe = Motion.recipe("panelClose", motion)
 			local fadeRecipe = Motion.recipe("panelFadeOut", motion)
 			local fade = TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = 1 })
 			fade:Play()
 			TweenService:Create(cardScale, Motion.tweenInfo(closeRecipe), { Scale = closeRecipe.toScale or 0.86 }):Play()
+			TweenService:Create(card, Motion.tweenInfo(closeRecipe), { Position = UDim2.new(0.5, 0, 0.52, Motion.amplitude(12, motion)) })
+				:Play()
 			fade.Completed:Once(function()
 				root:Destroy()
 				if onClosed then

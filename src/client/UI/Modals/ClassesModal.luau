@@ -45,7 +45,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	end
 
 	-- Header: balance, odds note, slot chips.
-	local header = FrameKit.text(container, "Balance", "", "heading", { zIndex = z, color = Tokens.color.goldLight })
+	local header = FrameKit.text(container, "Balance", "", "heading", { zIndex = z, color = Tokens.color.goldDeep })
 	header.LayoutOrder = 1
 	local slots = Instance.new("Frame")
 	slots.Name = "Slots"
@@ -145,9 +145,9 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			zIndex = z + 2,
 		})
 		name.Position = UDim2.fromOffset(0, 0)
-		local odds = FrameKit.text(frame, "Odds", "", "caption", { zIndex = z + 2, color = Tokens.color.cream })
+		local odds = FrameKit.text(frame, "Odds", "", "caption", { zIndex = z + 2, color = Tokens.color.featherWhite })
 		odds.Position = UDim2.fromOffset(0, Tokens.typography.label.size + Tokens.spacing.md)
-		local effect = FrameKit.text(frame, "Effect", "", "caption", { zIndex = z + 2, color = Tokens.color.cream })
+		local effect = FrameKit.text(frame, "Effect", "", "caption", { zIndex = z + 2, color = Tokens.color.featherWhite })
 		effect.Position = UDim2.fromOffset(0, Tokens.typography.label.size + Tokens.spacing.md + Tokens.typography.caption.size + 2)
 		effect.Size = UDim2.new(1, -(tap + Tokens.spacing.sm), 0, Tokens.typography.caption.size * 2 + 4)
 		local equip = Button.build(frame, {
@@ -443,7 +443,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		"Terms",
 		"Odds are shown on every card. A roll always unlocks or re-equips the class it lands on; duplicates are not refunded.",
 		"caption",
-		{ zIndex = z, color = Tokens.color.creamDeep }
+		{ zIndex = z, color = Tokens.color.inkMuted }
 	)
 	terms.LayoutOrder = 6
 	terms.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size * 2 + 6)

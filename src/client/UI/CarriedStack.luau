@@ -103,7 +103,7 @@ local function restPose(index: number, count: number): CFrame
 end
 
 function CarriedStack.new(
-	gui: ScreenGui,
+	gui: Instance,
 	config: { [string]: any },
 	motion: () -> Motion.MotionSettings,
 	bottomOffset: () -> number
@@ -158,7 +158,7 @@ function CarriedStack.new(
 	self:_layout()
 	table.insert(
 		self._connections,
-		gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		(gui :: GuiBase2d):GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
 			self:_layout()
 		end)
 	)
@@ -168,13 +168,12 @@ end
 
 function CarriedStack._layout(self: CarriedStack)
 	local carried = self._config.hud.carriedStack
-	local gui = self.frame.Parent :: ScreenGui
+	local gui = self.frame.Parent :: GuiBase2d
 	local class = SafeArea.layoutClass(gui.AbsoluteSize.X, gui.AbsoluteSize.Y)
 	local mobile = class ~= "desktop"
 	-- Size follows the viewport (a fraction of its width, clamped) so the whole bundle stays inside
 	-- the bottom-right safe area on every screen; the frame never extends past the gui bounds.
-	local scale = gui:FindFirstChildOfClass("UIScale")
-	local factor = if scale then scale.Scale else 1
+	local factor = SafeArea.scaleOf(self.frame)
 	local width = math.clamp(gui.AbsoluteSize.X * carried.widthFraction / factor, carried.minWidthPx, carried.maxWidthPx)
 	local bottom = if mobile then carried.bottomOffsetPxMobile else carried.bottomOffsetPxDesktop
 	-- The gui already excludes the core UI safe insets; never let the frame outgrow what is left of

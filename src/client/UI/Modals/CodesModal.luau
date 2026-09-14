@@ -70,7 +70,7 @@ function CodesModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		end)
 	)
 
-	local feedback = FrameKit.text(container, "Feedback", "", "body", { zIndex = z, color = Tokens.color.goldLight })
+	local feedback = FrameKit.text(container, "Feedback", "", "body", { zIndex = z, color = Tokens.color.goldDeep })
 	feedback.LayoutOrder = 3
 
 	local function redeem()

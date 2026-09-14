@@ -42,7 +42,7 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 			"Header_" .. category,
 			cfg.tools[category].displayName,
 			"heading",
-			{ zIndex = z, color = Tokens.color.goldLight }
+			{ zIndex = z, color = Tokens.color.goldDeep }
 		)
 		header.LayoutOrder = order
 		for _, skin in ipairs(catalog) do
@@ -101,8 +101,8 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 			row.label.Text = if owned
 				then row.skin.displayName .. (if equipped then "  -  on the rack" else "")
 				else row.skin.displayName .. "  -  from the Moonlit Chest"
-			row.label.TextColor3 = if owned then Tokens.color.cream else Tokens.color.creamDeep
-			row.frame.BackgroundTransparency = if owned then 0.35 else 0.7
+			row.label.TextColor3 = if owned then Tokens.color.inkStrong else Tokens.color.inkMuted
+			row.frame.BackgroundTransparency = if owned then 0 else 0.5
 		end
 	end
 

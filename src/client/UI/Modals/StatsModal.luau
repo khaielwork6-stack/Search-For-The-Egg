@@ -46,7 +46,7 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local tap = deps.minimumTapTarget
 	local z = container.ZIndex + 1
 
-	FrameKit.text(container, "PersonalHeader", "Your ledger", "heading", { zIndex = z, color = Tokens.color.goldLight }).LayoutOrder = 1
+	FrameKit.text(container, "PersonalHeader", "Your ledger", "heading", { zIndex = z, color = Tokens.color.goldDeep }).LayoutOrder = 1
 	local personal = Instance.new("Frame")
 	personal.Name = "Personal"
 	personal.BackgroundTransparency = 1
@@ -69,7 +69,7 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		statLabels[key] = label
 	end
 
-	FrameKit.text(container, "BoardHeader", "Leaderboards", "heading", { zIndex = z, color = Tokens.color.goldLight }).LayoutOrder = 3
+	FrameKit.text(container, "BoardHeader", "Leaderboards", "heading", { zIndex = z, color = Tokens.color.goldDeep }).LayoutOrder = 3
 	local tabs = Instance.new("Frame")
 	tabs.Name = "Tabs"
 	tabs.BackgroundTransparency = 1
@@ -84,7 +84,7 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	tabsLayout.Wraps = true
 	tabsLayout.Parent = tabs
 	tabs.Parent = container
-	local age = FrameKit.text(container, "Age", "", "caption", { zIndex = z, color = Tokens.color.creamDeep })
+	local age = FrameKit.text(container, "Age", "", "caption", { zIndex = z, color = Tokens.color.inkMuted })
 	age.LayoutOrder = 5
 	local rowsFrame = Instance.new("Frame")
 	rowsFrame.Name = "Rows"
@@ -131,7 +131,7 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 					"Text",
 					"No entries yet - be the first forager on this board",
 					"caption",
-					{ zIndex = z + 1, color = Tokens.color.creamDeep }
+					{ zIndex = z + 1, color = Tokens.color.inkMuted }
 				).Size =
 					UDim2.fromScale(1, 1)
 			end
@@ -145,7 +145,7 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 					"Text",
 					string.format("%d.  %s", index, row.name),
 					"body",
-					{ zIndex = z + 1, color = if mine then Tokens.color.goldLight else Tokens.color.cream }
+					{ zIndex = z + 1, color = if mine then Tokens.color.goldDeep else Tokens.color.inkStrong }
 				)
 				label.Size = UDim2.fromScale(0.7, 1)
 				local valueLabel = FrameKit.text(
@@ -153,7 +153,7 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 					"Value",
 					value,
 					"numeral",
-					{ align = Enum.TextXAlignment.Right, zIndex = z + 1, color = Tokens.color.goldLight }
+					{ align = Enum.TextXAlignment.Right, zIndex = z + 1, color = Tokens.color.goldDeep }
 				)
 				valueLabel.AnchorPoint = Vector2.new(1, 0)
 				valueLabel.Position = UDim2.fromScale(1, 0)

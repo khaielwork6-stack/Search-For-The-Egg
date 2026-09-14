@@ -27,6 +27,7 @@ HUDController.__index = HUDController
 export type HUDController = typeof(setmetatable(
 	{} :: {
 		gui: ScreenGui,
+		stage: Frame,
 		toasts: any,
 		round: any,
 		hotbar: any,
@@ -83,10 +84,11 @@ function HUDController.new(deps: any): HUDController
 	gui.DisplayOrder = Tokens.zIndex.hud
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-	local _, scaleCleanup = SafeArea.applyScale(gui, deps.config)
+	local _, scaleCleanup, stage = SafeArea.applyScale(gui, deps.config)
 
 	local self = setmetatable({
 		gui = gui,
+		stage = stage,
 		toasts = nil,
 		round = nil,
 		hotbar = nil,
@@ -113,12 +115,12 @@ function HUDController.new(deps: any): HUDController
 	rowLayout.Padding = UDim.new(0, Tokens.spacing.sm)
 	rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	rowLayout.Parent = row
-	row.Parent = gui
+	row.Parent = stage
 	self._labels.gems = chip(row, "Gems", 1)
 	self._labels.tokens = chip(row, "Tokens", 2)
 
 	-- Top-center objective banner: title + detail on two lines, never covering the reticle.
-	local banner = chip(gui, "Banner", 1)
+	local banner = chip(stage, "Banner", 1)
 	banner.AnchorPoint = Vector2.new(0.5, 0)
 	banner.Position = UDim2.new(0.5, 0, 0, Tokens.layout.safeAreaPaddingPx)
 	banner.Size = UDim2.fromOffset(0, Tokens.layout.minimumTapTargetPx + Tokens.typography.caption.size + Tokens.spacing.sm)
@@ -144,7 +146,7 @@ function HUDController.new(deps: any): HUDController
 	self._labels.detail = detail
 
 	-- Bottom-right input prompt chip (swaps per input mode) and settings button.
-	local prompt = chip(gui, "Prompt", 1)
+	local prompt = chip(stage, "Prompt", 1)
 	prompt.AnchorPoint = Vector2.new(1, 1)
 	prompt.Position = UDim2.new(1, -Tokens.layout.safeAreaPaddingPx, 1, -Tokens.layout.safeAreaPaddingPx)
 	prompt.Font = Tokens.typography.caption.font
@@ -152,7 +154,7 @@ function HUDController.new(deps: any): HUDController
 	self._labels.prompt = prompt
 
 	local minimumTap = SafeArea.minimumTapTarget(gui, deps.config)
-	local settingsButton, settingsCleanup = Button.create(gui, {
+	local settingsButton, settingsCleanup = Button.create(stage, {
 		text = "Settings",
 		variant = "secondary",
 		minimumTapTarget = minimumTap,
@@ -177,7 +179,7 @@ function HUDController.new(deps: any): HUDController
 	local reticleCorner = Instance.new("UICorner")
 	reticleCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
 	reticleCorner.Parent = reticle
-	reticle.Parent = gui
+	reticle.Parent = stage
 	self._labels.reticle = reticle
 	-- The reticle sits on the true viewport centre (where the locked first-person mouse is and where
 	-- the pick ray goes), not the centre of the inset-adjusted gui: this gui excludes the core UI
@@ -187,33 +189,39 @@ function HUDController.new(deps: any): HUDController
 		if not camera then
 			return
 		end
+		if SafeArea.viewportOverride() then
+			reticle.Position = UDim2.fromScale(0.5, 0.5)
+			return
+		end
 		local inset = GuiService:GetGuiInset()
-		local uiScale = gui:FindFirstChildOfClass("UIScale")
-		local factor = if uiScale then uiScale.Scale else 1
+		local factor = SafeArea.scaleOf(stage)
 		local viewport = camera.ViewportSize
 		reticle.Position = UDim2.fromOffset((viewport.X * 0.5 - inset.X) / factor, (viewport.Y * 0.5 - inset.Y) / factor)
 	end
 	placeReticle()
-	self._trove:add(gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeReticle))
+	self._trove:add(stage:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeReticle))
+	self._trove:add(SafeArea.overrideChanged:Connect(placeReticle))
 	self._trove:add(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(placeReticle))
 	if workspace.CurrentCamera then
 		self._trove:add(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(placeReticle))
 	end
 
-	self.toasts = Toast.new(gui, function()
+	self.toasts = Toast.new(stage, function()
 		return deps.accessibility:motionSettings()
+	end, function(tone)
+		deps.audio:play(if tone == "danger" or tone == "warning" then Tokens.sound.uiError else Tokens.sound.uiToast)
 	end)
 	self._trove:add(self.toasts)
-	self.round = RoundHud.new(gui, function()
+	self.round = RoundHud.new(stage, function()
 		return deps.accessibility:motionSettings()
 	end)
 	self._trove:add(self.round)
-	self.hotbar = ToolHotbar.new(gui, deps.config, function()
+	self.hotbar = ToolHotbar.new(stage, deps.config, function()
 		return deps.accessibility:motionSettings()
 	end, minimumTap, deps.input:mode())
 	self._trove:add(self.hotbar)
 	-- Carried feather stack: below the reticle, above the hotbar, hidden whenever a modal blocks.
-	self.carriedStack = CarriedStack.new(gui, deps.config, function()
+	self.carriedStack = CarriedStack.new(stage, deps.config, function()
 		return deps.accessibility:motionSettings()
 	end, function()
 		return Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx + Tokens.spacing.md + Tokens.spacing.md
@@ -399,7 +407,7 @@ function HUDController.openSettings(self: HUDController)
 		local minimumTap = api.minimumTapTarget or SafeArea.minimumTapTarget(deps.modals.gui, deps.config)
 		local intro = FrameKit.text(container, "Intro", "Comfort settings save to your profile right away.", "caption", {
 			zIndex = container.ZIndex + 1,
-			color = Tokens.color.creamDeep,
+			color = Tokens.color.inkMuted,
 		})
 		intro.LayoutOrder = 0
 		local function toggle(order: number, key: string, labelText: string)

@@ -23,6 +23,7 @@ export type AudioDirector = typeof(setmetatable(
 		_music: { [string]: Sound },
 		_state: MusicState,
 		_oneShots: { Sound },
+		_lastPlayed: { [string]: number },
 		_pool: { Sound },
 		_manifest: { [string]: string },
 		_volumes: { music: number, sfx: number },
@@ -31,40 +32,93 @@ export type AudioDirector = typeof(setmetatable(
 	AudioDirector
 ))
 
--- Semantic role -> asset id. Empty string = silent stub. PLACEHOLDER (Phase 6).
+-- Semantic role -> asset id. UI roles use Roblox's bundled sounds (always available, no upload)
+-- layered through pitch variance and per-role throttles; world/music roles stay silent stubs until
+-- the Phase 6 audio pass. Empty string = silent stub.
+local BUILTIN = {
+	click = "rbxasset://sounds/clickfast.wav",
+	button = "rbxasset://sounds/button.wav",
+	ping = "rbxasset://sounds/electronicpingshort.wav",
+	swoosh = "rbxasset://sounds/swoosh.wav",
+	snap = "rbxasset://sounds/snap.mp3",
+	flash = "rbxasset://sounds/flashbulb.wav",
+	band = "rbxasset://sounds/Rubber band snap.wav",
+	bass = "rbxasset://sounds/bass.wav",
+	splat = "rbxasset://sounds/splat.wav",
+	uuhhh = "rbxasset://sounds/uuhhh.mp3",
+}
 local MANIFEST: { [string]: string } = {
-	[Tokens.sound.uiTap] = "",
-	[Tokens.sound.uiConfirm] = "",
-	[Tokens.sound.uiCancel] = "",
-	[Tokens.sound.uiOpen] = "",
-	[Tokens.sound.uiClose] = "",
-	[Tokens.sound.uiToast] = "",
-	[Tokens.sound.uiError] = "",
-	[Tokens.sound.rewardTick] = "",
+	[Tokens.sound.uiTap] = BUILTIN.click,
+	[Tokens.sound.uiHover] = BUILTIN.click,
+	[Tokens.sound.uiTab] = BUILTIN.button,
+	[Tokens.sound.uiSwitch] = BUILTIN.snap,
+	[Tokens.sound.uiSelect] = BUILTIN.button,
+	[Tokens.sound.uiConfirm] = BUILTIN.ping,
+	[Tokens.sound.uiCancel] = BUILTIN.button,
+	[Tokens.sound.uiOpen] = BUILTIN.swoosh,
+	[Tokens.sound.uiClose] = BUILTIN.swoosh,
+	[Tokens.sound.uiToast] = BUILTIN.snap,
+	[Tokens.sound.uiError] = BUILTIN.band,
+	[Tokens.sound.uiPop] = BUILTIN.snap,
+	[Tokens.sound.uiConfetti] = BUILTIN.flash,
+	[Tokens.sound.rewardTick] = BUILTIN.click,
 	[Tokens.sound.collectTug] = "",
 	[Tokens.sound.collectRelease] = "",
-	[Tokens.sound.bagFull] = "",
-	[Tokens.sound.sellArc] = "",
-	[Tokens.sound.sellTick] = "",
-	[Tokens.sound.sellBurst] = "",
-	[Tokens.sound.upgradeChord] = "",
-	[Tokens.sound.eggChime] = "",
+	[Tokens.sound.bagFull] = BUILTIN.band,
+	[Tokens.sound.sellArc] = BUILTIN.swoosh,
+	[Tokens.sound.sellTick] = BUILTIN.click,
+	[Tokens.sound.sellBurst] = BUILTIN.flash,
+	[Tokens.sound.upgradeChord] = BUILTIN.ping,
+	[Tokens.sound.eggChime] = BUILTIN.ping,
 	[Tokens.sound.eggClaimHold] = "",
-	[Tokens.sound.victoryStem] = "",
-	[Tokens.sound.countdownTick] = "",
-	[Tokens.sound.countdownGo] = "",
-	[Tokens.sound.rewardLand] = "",
-	[Tokens.sound.rollSpin] = "",
-	[Tokens.sound.rollLand] = "",
+	[Tokens.sound.victoryStem] = BUILTIN.flash,
+	[Tokens.sound.countdownTick] = BUILTIN.click,
+	[Tokens.sound.countdownGo] = BUILTIN.ping,
+	[Tokens.sound.rewardLand] = BUILTIN.ping,
+	[Tokens.sound.rollSpin] = BUILTIN.click,
+	[Tokens.sound.rollLand] = BUILTIN.snap,
 	[Tokens.sound.stationHum] = "",
-	[Tokens.sound.stationChime] = "",
-	[Tokens.sound.partyReady] = "",
+	[Tokens.sound.stationChime] = BUILTIN.button,
+	[Tokens.sound.partyReady] = BUILTIN.ping,
 	["music.lobby"] = "",
 	["music.search"] = "",
 	["music.discovery"] = "",
 	["music.victory"] = "",
 	["music.results"] = "",
 	["ambience.henhouse"] = "",
+}
+
+-- Per-role tuning: base pitch, pitch variance, volume, and the minimum gap between repeats so a
+-- burst of identical events (hover sweeps, count-up ticks) never machine-guns.
+local ROLE_TUNING: { [string]: { pitch: number?, variance: number?, volume: number?, minGap: number? } } = {
+	[Tokens.sound.uiTap] = { pitch = 1.15, variance = 0.06, volume = 0.55, minGap = 0.05 },
+	[Tokens.sound.uiHover] = { pitch = 1.6, variance = 0.05, volume = 0.16, minGap = 0.09 },
+	[Tokens.sound.uiTab] = { pitch = 1.3, variance = 0.04, volume = 0.45, minGap = 0.08 },
+	[Tokens.sound.uiSwitch] = { pitch = 1.2, variance = 0.05, volume = 0.5, minGap = 0.08 },
+	[Tokens.sound.uiSelect] = { pitch = 1.1, variance = 0.04, volume = 0.4, minGap = 0.08 },
+	[Tokens.sound.uiConfirm] = { pitch = 1.25, variance = 0.03, volume = 0.5, minGap = 0.12 },
+	[Tokens.sound.uiCancel] = { pitch = 0.85, variance = 0.03, volume = 0.45, minGap = 0.12 },
+	[Tokens.sound.uiOpen] = { pitch = 1.15, variance = 0.05, volume = 0.5, minGap = 0.2 },
+	[Tokens.sound.uiClose] = { pitch = 0.85, variance = 0.05, volume = 0.45, minGap = 0.2 },
+	[Tokens.sound.uiToast] = { pitch = 1.3, variance = 0.06, volume = 0.4, minGap = 0.15 },
+	[Tokens.sound.uiError] = { pitch = 0.7, variance = 0.03, volume = 0.5, minGap = 0.25 },
+	[Tokens.sound.uiPop] = { pitch = 1.5, variance = 0.08, volume = 0.45, minGap = 0.06 },
+	[Tokens.sound.uiConfetti] = { pitch = 1.4, variance = 0.05, volume = 0.35, minGap = 0.4 },
+	[Tokens.sound.rewardTick] = { pitch = 1.7, variance = 0.12, volume = 0.3, minGap = 0.04 },
+	[Tokens.sound.rewardLand] = { pitch = 1.0, variance = 0.02, volume = 0.6, minGap = 0.3 },
+	[Tokens.sound.sellTick] = { pitch = 1.5, variance = 0.12, volume = 0.3, minGap = 0.04 },
+	[Tokens.sound.sellArc] = { pitch = 1.0, variance = 0.05, volume = 0.5, minGap = 0.3 },
+	[Tokens.sound.sellBurst] = { pitch = 1.2, variance = 0.05, volume = 0.5, minGap = 0.5 },
+	[Tokens.sound.rollSpin] = { pitch = 1.3, variance = 0.15, volume = 0.3, minGap = 0.04 },
+	[Tokens.sound.rollLand] = { pitch = 0.9, variance = 0.03, volume = 0.6, minGap = 0.3 },
+	[Tokens.sound.upgradeChord] = { pitch = 1.1, variance = 0.02, volume = 0.55, minGap = 0.3 },
+	[Tokens.sound.eggChime] = { pitch = 1.4, variance = 0.02, volume = 0.6, minGap = 0.5 },
+	[Tokens.sound.victoryStem] = { pitch = 0.9, variance = 0.02, volume = 0.6, minGap = 1 },
+	[Tokens.sound.countdownTick] = { pitch = 1.0, variance = 0.02, volume = 0.5, minGap = 0.3 },
+	[Tokens.sound.countdownGo] = { pitch = 1.3, variance = 0.02, volume = 0.6, minGap = 0.5 },
+	[Tokens.sound.bagFull] = { pitch = 0.75, variance = 0.03, volume = 0.5, minGap = 0.6 },
+	[Tokens.sound.partyReady] = { pitch = 1.2, variance = 0.02, volume = 0.55, minGap = 0.4 },
+	[Tokens.sound.stationChime] = { pitch = 1.1, variance = 0.05, volume = 0.35, minGap = 0.5 },
 }
 
 local MUSIC_STATES: { [string]: string } =
@@ -85,6 +139,7 @@ function AudioDirector.new(profile: any, config: { [string]: any }): AudioDirect
 		_music = {},
 		_state = "Silent" :: MusicState,
 		_oneShots = {},
+		_lastPlayed = {},
 		_pool = {},
 		_manifest = MANIFEST,
 		_volumes = { music = 0.7, sfx = 0.85 },
@@ -171,6 +226,15 @@ function AudioDirector.play(self: AudioDirector, role: string, options: { at: Ba
 		warn("[SFE][Audio] unknown sound role " .. tostring(role))
 		return nil
 	end
+	local tuning = ROLE_TUNING[role]
+	local now = os.clock()
+	if tuning and tuning.minGap then
+		local last = self._lastPlayed[role]
+		if last and now - last < tuning.minGap then
+			return nil
+		end
+	end
+	self._lastPlayed[role] = now
 	local limit = self._config.polishBudgets.maximumConcurrentOneShotSounds
 	while #self._oneShots >= limit do
 		local oldest = table.remove(self._oneShots, 1) :: Sound
@@ -179,8 +243,9 @@ function AudioDirector.play(self: AudioDirector, role: string, options: { at: Ba
 	end
 	local sound = acquire(self)
 	sound.SoundId = assetId
-	sound.Volume = 1
-	sound.PlaybackSpeed = 1 + (opts.pitchVariance or 0) * (math.random() * 2 - 1)
+	sound.Volume = if tuning and tuning.volume then tuning.volume else 1
+	local variance = opts.pitchVariance or (tuning and tuning.variance) or 0
+	sound.PlaybackSpeed = ((tuning and tuning.pitch) or 1) + variance * (math.random() * 2 - 1)
 	local busName = opts.bus or (if string.sub(role, 1, 3) == "ui." then "UI" else "SFX")
 	sound.SoundGroup = self._buses[busName]
 	sound.Parent = opts.at or self._buses[busName]

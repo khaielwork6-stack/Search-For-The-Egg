@@ -32,7 +32,7 @@ function EventModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local z = container.ZIndex + 1
 	local chest = cfg.monetization.eventChest
 
-	local balance = FrameKit.text(container, "Balance", "", "heading", { zIndex = z, color = Tokens.color.goldLight })
+	local balance = FrameKit.text(container, "Balance", "", "heading", { zIndex = z, color = Tokens.color.goldDeep })
 	balance.LayoutOrder = 1
 	local intro = FrameKit.text(
 		container,
@@ -55,7 +55,7 @@ function EventModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			"Odds",
 			string.format("%.1f%%", reward.weight),
 			"numeral",
-			{ align = Enum.TextXAlignment.Right, zIndex = z + 1, color = Tokens.color.goldLight }
+			{ align = Enum.TextXAlignment.Right, zIndex = z + 1, color = Tokens.color.goldDeep }
 		)
 		odds.AnchorPoint = Vector2.new(1, 0)
 		odds.Position = UDim2.fromScale(1, 0)
@@ -67,7 +67,7 @@ function EventModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		"Note",
 		"Duplicate skins turn into Event Tokens. The chest unseals when the Moonlit event begins.",
 		"caption",
-		{ zIndex = z, color = Tokens.color.creamDeep }
+		{ zIndex = z, color = Tokens.color.inkMuted }
 	)
 	note.LayoutOrder = 30
 	note.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size * 2 + 6)

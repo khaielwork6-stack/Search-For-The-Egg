@@ -38,14 +38,14 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	local tap = deps.minimumTapTarget
 	local z = container.ZIndex + 1
 
-	local balance = FrameKit.text(container, "Balance", "", "heading", { zIndex = z, color = Tokens.color.goldLight })
+	local balance = FrameKit.text(container, "Balance", "", "heading", { zIndex = z, color = Tokens.color.goldDeep })
 	balance.LayoutOrder = 1
 	local note = FrameKit.text(
 		container,
 		"Note",
 		"Permanent perks stay with you across every search. Each level adds a steady bonus; costs rise per level.",
 		"caption",
-		{ zIndex = z, color = Tokens.color.creamDeep }
+		{ zIndex = z, color = Tokens.color.inkMuted }
 	)
 	note.LayoutOrder = 2
 	note.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size * 2 + 6)
@@ -55,7 +55,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	for index, perkId in ipairs(Perks.IDS) do
 		local frame = FrameKit.row(container, "Perk_" .. perkId, tap * 2 + Tokens.spacing.md, z)
 		frame.LayoutOrder = 10 + index
-		local title = FrameKit.text(frame, "Title", COPY[perkId].title, "heading", { zIndex = z + 1, color = Tokens.color.goldLight })
+		local title = FrameKit.text(frame, "Title", COPY[perkId].title, "heading", { zIndex = z + 1, color = Tokens.color.goldDeep })
 		title.Position = UDim2.fromOffset(0, Tokens.spacing.xs)
 		title.Size = UDim2.new(1, -(tap * 3), 0, Tokens.typography.heading.size + 2)
 		local detail = FrameKit.text(frame, "Detail", "", "caption", { zIndex = z + 1 })
@@ -130,7 +130,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 					currentPct,
 					COPY[row.perkId].what
 				)
-				row.detail.TextColor3 = Tokens.color.goldLight
+				row.detail.TextColor3 = Tokens.color.goldDeep
 				row.buy.button.Visible = false
 				row.meterFill.BackgroundColor3 = Tokens.color.leafBright
 			else
@@ -143,7 +143,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 					nextPct,
 					COPY[row.perkId].what
 				)
-				row.detail.TextColor3 = Tokens.color.cream
+				row.detail.TextColor3 = Tokens.color.ink
 				row.buy.button.Visible = true
 				row.buy.setText(string.format("%d Gems", preview.costGems or 0))
 				row.buy.setEnabled(projection.currencies.gems >= (preview.costGems or 0))
