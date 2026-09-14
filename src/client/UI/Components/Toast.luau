@@ -89,55 +89,51 @@ function Toast._drain(self: Toast)
 		local card = Instance.new("Frame")
 		card.Name = "Toast"
 		card.Size = UDim2.new(1, 0, 0, Tokens.layout.minimumTapTargetPx + Tokens.spacing.xs)
-		card.AutomaticSize = Enum.AutomaticSize.Y
-		card.BackgroundColor3 = Tokens.color.featherWhite
+		card.BackgroundColor3 = Tokens.color.goldDeep
 		card.ZIndex = Tokens.zIndex.toast
 		card.Visible = false
 		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, Tokens.radius.lg)
+		corner.CornerRadius = UDim.new(0, Tokens.radius.pill)
 		corner.Parent = card
 		local stroke = Instance.new("UIStroke")
 		stroke.Thickness = Tokens.stroke.bold
 		stroke.Color = Tokens.color.outline
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 		stroke.Parent = card
+		local scale = Instance.new("UIScale")
+		scale.Parent = card
+		local face = Instance.new("Frame")
+		face.Name = "Face"
+		face.Size = UDim2.new(1, 0, 1, -4)
+		face.BackgroundColor3 = Tokens.color.featherWhite
+		face.BorderSizePixel = 0
+		face.ZIndex = card.ZIndex + 1
+		local faceCorner = Instance.new("UICorner")
+		faceCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
+		faceCorner.Parent = face
 		local gradient = Instance.new("UIGradient")
 		gradient.Rotation = 90
 		gradient.Color =
 			ColorSequence.new({ ColorSequenceKeypoint.new(0, Tokens.color.featherWhite), ColorSequenceKeypoint.new(1, Tokens.color.cream) })
-		gradient.Parent = card
-		FrameKit.shadow(card, { radius = Tokens.radius.lg })
-		local padding = Instance.new("UIPadding")
-		padding.PaddingLeft = UDim.new(0, Tokens.spacing.md + Tokens.icon.lg + Tokens.spacing.sm)
-		padding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
-		padding.PaddingTop = UDim.new(0, Tokens.spacing.sm)
-		padding.PaddingBottom = UDim.new(0, Tokens.spacing.sm)
-		padding.Parent = card
-		local scale = Instance.new("UIScale")
-		scale.Parent = card
-		-- Tone strip and glyph.
-		local strip = Instance.new("Frame")
-		strip.Name = "Strip"
-		strip.Position = UDim2.fromOffset(-(Tokens.spacing.md + Tokens.icon.lg + Tokens.spacing.sm), -Tokens.spacing.sm)
-		strip.Size = UDim2.new(0, 8, 1, Tokens.spacing.sm * 2)
-		strip.BackgroundColor3 = tone.color
-		strip.BorderSizePixel = 0
-		strip.ZIndex = card.ZIndex + 1
-		strip.Parent = card
+		gradient.Parent = face
+		face.Parent = card
+		-- Tone glyph in a coloured disc on the left.
 		local glyphBadge = Instance.new("Frame")
 		glyphBadge.Name = "Glyph"
 		glyphBadge.AnchorPoint = Vector2.new(0, 0.5)
-		glyphBadge.Position = UDim2.new(0, -(Tokens.icon.lg + Tokens.spacing.sm), 0.5, 0)
-		glyphBadge.Size = UDim2.fromOffset(Tokens.icon.lg, Tokens.icon.lg)
+		glyphBadge.Position = UDim2.new(0, Tokens.spacing.xs + 2, 0.5, 0)
+		glyphBadge.Size = UDim2.fromOffset(Tokens.icon.lg + 2, Tokens.icon.lg + 2)
 		glyphBadge.BackgroundColor3 = tone.color
-		glyphBadge.ZIndex = card.ZIndex + 1
+		glyphBadge.ZIndex = card.ZIndex + 2
 		local glyphCorner = Instance.new("UICorner")
 		glyphCorner.CornerRadius = UDim.new(1, 0)
 		glyphCorner.Parent = glyphBadge
 		local glyphStroke = Instance.new("UIStroke")
 		glyphStroke.Thickness = Tokens.stroke.standard
 		glyphStroke.Color = Tokens.color.outline
+		glyphStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 		glyphStroke.Parent = glyphBadge
-		local art = Skin.icon(glyphBadge, "toast.icon." .. item.tone, Tokens.icon.lg, card.ZIndex + 2)
+		local art = Skin.icon(glyphBadge, "toast.icon." .. item.tone, Tokens.icon.lg + 2, card.ZIndex + 3)
 		if art then
 			glyphBadge.BackgroundTransparency = 1
 			glyphStroke.Enabled = false
@@ -148,35 +144,39 @@ function Toast._drain(self: Toast)
 				tone.icon,
 				glyphBadge,
 				Tokens.icon.md,
-				{ zIndex = card.ZIndex + 2, color = Tokens.color.featherWhite, outline = false }
+				{ zIndex = card.ZIndex + 3, color = Tokens.color.featherWhite, outline = false }
 			)
 			glyph.AnchorPoint = Vector2.new(0.5, 0.5)
 			glyph.Position = UDim2.fromScale(0.5, 0.5)
 		end
-		glyphBadge.Parent = card
+		glyphBadge.Parent = face
+		local textLeft = Tokens.spacing.xs + 2 + Tokens.icon.lg + 2 + Tokens.spacing.md
 		local label = FrameKit.text(
-			card,
+			face,
 			"Text",
 			item.text,
 			"body",
-			{ align = Enum.TextXAlignment.Left, zIndex = card.ZIndex + 1, color = Tokens.color.inkStrong }
+			{ align = Enum.TextXAlignment.Left, zIndex = card.ZIndex + 2, color = Tokens.color.inkStrong }
 		)
-		label.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size + Tokens.spacing.xs)
-		label.AutomaticSize = Enum.AutomaticSize.Y
+		label.Font = Tokens.typography.heading.font
+		label.Position = UDim2.fromOffset(textLeft, 0)
+		label.Size = UDim2.new(1, -(textLeft + Tokens.spacing.lg), 1, 0)
+		label.TextYAlignment = Enum.TextYAlignment.Center
 		if item.amount then
 			local amountLabel = FrameKit.text(
-				card,
+				face,
 				"Amount",
 				"+0",
 				"numeral",
-				{ align = Enum.TextXAlignment.Left, color = Tokens.color.goldDeep, zIndex = card.ZIndex + 1 }
+				{ align = Enum.TextXAlignment.Right, color = Tokens.color.goldDeep, zIndex = card.ZIndex + 2 }
 			)
 			amountLabel.Font = Tokens.typography.label.font
-			amountLabel.Position = UDim2.fromOffset(0, Tokens.typography.body.size + Tokens.spacing.sm)
-			amountLabel.Size = UDim2.new(1, 0, 0, Tokens.typography.numeral.size + Tokens.spacing.xs)
-			label.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size + Tokens.typography.numeral.size + Tokens.spacing.md)
-			label.AutomaticSize = Enum.AutomaticSize.None
-			label.TextYAlignment = Enum.TextYAlignment.Top
+			amountLabel.AnchorPoint = Vector2.new(1, 0.5)
+			amountLabel.Position = UDim2.new(1, -Tokens.spacing.lg, 0.5, 0)
+			amountLabel.Size = UDim2.fromOffset(120, Tokens.typography.numeral.size + Tokens.spacing.xs)
+			amountLabel.TextYAlignment = Enum.TextYAlignment.Center
+			FrameKit.outline(amountLabel, 1.2)
+			label.Size = UDim2.new(1, -(textLeft + 120 + Tokens.spacing.lg), 1, 0)
 			Tween.countUp(0, item.amount :: number, self._motion(), function(value)
 				amountLabel.Text = string.format("+%d Gems", value)
 			end)

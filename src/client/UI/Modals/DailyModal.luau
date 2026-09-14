@@ -81,14 +81,13 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		corner.Parent = frame
 		local stroke = Instance.new("UIStroke")
 		stroke.Thickness = Tokens.stroke.standard
-		stroke.Color = Tokens.color.strawDeep
+		stroke.Color = Tokens.color.outline
+		stroke.Transparency = 0.5
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 		stroke.Parent = frame
 		local scale = Instance.new("UIScale")
 		scale.Parent = frame
-		local art = Skin.label(frame, "daily.cell.future", { zIndex = z + 1, inset = 1, name = "ArtFrame" })
-		if art then
-			stroke.Enabled = false
-		end
+		local art: ImageLabel? = nil
 		local day = FrameKit.text(
 			frame,
 			"Day",

@@ -1,21 +1,20 @@
 --!strict
--- Token-driven button for the rebuilt UI. Variants: primary (gold bevel), secondary (feather-white),
--- ghost (outline only), teal (accent), pill (cream nameplate), danger; "gold" stays an alias of
--- primary for existing callers. Every interaction answers: hover lift + soft tick, press squash,
--- elastic release, click ripple, selected ring, disabled dim, pending spinner, and a controller
--- focus ring. Enforces the minimum tap target and supports an image face (station buttons) and an
--- optional leading vector icon. Returns the button plus cleanup.
+-- Hand-drawn button: a coloured face on a darker lip (the face drops onto the lip when pressed),
+-- cocoa outline, outlined lettering on strong variants, hover wash and lift, elastic release,
+-- selected ring, disabled dim, pending spinner, controller focus ring, and layered sounds.
+-- Variants: primary (gold), secondary (cream), ghost (outline only), teal (accent), pill (cream
+-- nameplate), danger (ember). "gold" stays an alias of primary. Image faces serve station buttons.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
 local Tween = require(script.Parent.Tween)
 local Icons = require(script.Parent.Icons)
 local FrameKit = require(script.Parent.Frame)
-local Skin = require(script.Parent.Skin)
 
 local Button = {}
 
@@ -28,16 +27,16 @@ export type Options = {
 	motion: Motion.MotionSettings,
 	onActivated: (() -> ())?,
 	size: UDim2?,
-	image: string?, -- asset id for an image face (station buttons)
-	pressedImage: string?, -- swapped in while the face is held
+	image: string?,
+	pressedImage: string?,
 	caption: string?,
-	icon: string?, -- vector icon role from Icons (leading)
+	icon: string?,
 	zIndex: number?,
-	sound: (() -> ())?, -- tap sound
-	hoverSound: (() -> ())?, -- soft hover tick (mouse only, throttled by the audio layer)
+	sound: (() -> ())?,
+	hoverSound: (() -> ())?,
 	textSize: number?,
-	art: boolean?, -- false keeps the token drawing even when state art exists
-	round: boolean?, -- circular (icon) button
+	art: boolean?,
+	round: boolean?,
 }
 
 export type Handle = {
@@ -53,94 +52,76 @@ export type Handle = {
 }
 
 type Style = {
-	background: Color3,
+	face: Color3,
+	faceLight: Color3,
+	lip: Color3,
 	text: Color3,
-	stroke: Color3,
-	gradientTop: Color3?,
-	gradientBottom: Color3?,
-	textStroke: number,
 	font: Enum.Font,
 	radius: number,
-	strokeWidth: number,
-	shadow: boolean,
+	outlined: boolean,
+	ghost: boolean?,
 }
 
 local STYLES: { [string]: Style } = {
 	primary = {
-		background = Tokens.color.gold,
-		text = Tokens.color.inkStrong,
-		stroke = Tokens.color.outline,
-		gradientTop = Tokens.color.goldLight,
-		gradientBottom = Tokens.color.goldDeep,
-		textStroke = 1,
+		face = Tokens.color.gold,
+		faceLight = Tokens.color.goldLight,
+		lip = Tokens.color.goldDeep,
+		text = Tokens.color.featherWhite,
 		font = Tokens.typography.label.font,
 		radius = Tokens.radius.md,
-		strokeWidth = Tokens.stroke.bold,
-		shadow = true,
+		outlined = true,
 	},
 	secondary = {
-		background = Tokens.color.featherWhite,
+		face = Tokens.color.creamPill,
+		faceLight = Tokens.color.featherWhite,
+		lip = Tokens.color.strawDeep,
 		text = Tokens.color.inkStrong,
-		stroke = Tokens.color.outline,
-		gradientTop = Tokens.color.featherWhite,
-		gradientBottom = Tokens.color.creamDeep,
-		textStroke = 1,
-		font = Tokens.typography.heading.font,
+		font = Tokens.typography.label.font,
 		radius = Tokens.radius.md,
-		strokeWidth = Tokens.stroke.standard,
-		shadow = true,
+		outlined = false,
 	},
 	ghost = {
-		background = Tokens.color.featherWhite,
+		face = Tokens.color.featherWhite,
+		faceLight = Tokens.color.featherWhite,
+		lip = Tokens.color.strawDeep,
 		text = Tokens.color.ink,
-		stroke = Tokens.color.strawDeep,
-		textStroke = 1,
 		font = Tokens.typography.heading.font,
 		radius = Tokens.radius.md,
-		strokeWidth = Tokens.stroke.standard,
-		shadow = false,
+		outlined = false,
+		ghost = true,
 	},
 	teal = {
-		background = Tokens.color.tealAccent,
+		face = Tokens.color.tealAccent,
+		faceLight = Tokens.color.tealLight,
+		lip = Tokens.color.tealDeep,
 		text = Tokens.color.featherWhite,
-		stroke = Tokens.color.tealDeep,
-		gradientTop = Tokens.color.tealLight,
-		gradientBottom = Tokens.color.tealAccent,
-		textStroke = 1,
-		font = Tokens.typography.heading.font,
+		font = Tokens.typography.label.font,
 		radius = Tokens.radius.md,
-		strokeWidth = Tokens.stroke.standard,
-		shadow = true,
+		outlined = true,
 	},
 	pill = {
-		background = Tokens.color.creamPill,
-		text = Tokens.color.gold,
-		stroke = Tokens.color.outline,
-		gradientTop = Tokens.color.featherWhite,
-		gradientBottom = Tokens.color.creamPill,
-		textStroke = 0.2,
+		face = Tokens.color.creamPill,
+		faceLight = Tokens.color.featherWhite,
+		lip = Tokens.color.strawDeep,
+		text = Tokens.color.goldDeep,
 		font = Tokens.typography.label.font,
 		radius = Tokens.radius.pill,
-		strokeWidth = Tokens.stroke.bold,
-		shadow = true,
+		outlined = false,
 	},
 	danger = {
-		background = Tokens.color.danger,
+		face = Tokens.color.ember,
+		faceLight = Color3.fromRGB(246, 150, 104),
+		lip = Tokens.color.emberDeep,
 		text = Tokens.color.featherWhite,
-		stroke = Tokens.color.outline,
-		gradientTop = Tokens.color.ember,
-		gradientBottom = Tokens.color.danger,
-		textStroke = 1,
-		font = Tokens.typography.heading.font,
+		font = Tokens.typography.label.font,
 		radius = Tokens.radius.md,
-		strokeWidth = Tokens.stroke.standard,
-		shadow = true,
+		outlined = true,
 	},
 }
 STYLES.gold = STYLES.primary
 
--- Ghost buttons are outline-only: the fill is transparent.
-local GHOST_FILL_TRANSPARENCY = 0.55
+local LIP = 4
 
 function Button.create(parent: Instance, options: Options): (TextButton, () -> ())
 	local handle = Button.build(parent, options)
@@ -153,62 +134,31 @@ function Button.build(parent: Instance, options: Options): Handle
 	local z = options.zIndex or 1
 	local motion = options.motion
 
+	-- The button itself is the lip; the face sits on top and drops when pressed.
 	local button = Instance.new("TextButton")
 	button.Name = "Button_" .. options.text
 	button.AutoButtonColor = false
-	button.BackgroundColor3 = style.background
-	button.BackgroundTransparency = if variantName == "ghost" then GHOST_FILL_TRANSPARENCY else 0
-	button.TextColor3 = style.text
-	button.Font = style.font
-	button.TextSize = options.textSize or (if variantName == "pill" then Tokens.typography.label.size else Tokens.typography.heading.size)
-	button.Text = if options.image then "" else options.text
-	button.TextStrokeColor3 = Tokens.color.outline
-	button.TextStrokeTransparency = style.textStroke
-	button.TextTruncate = Enum.TextTruncate.AtEnd
+	button.Text = ""
+	button.BackgroundColor3 = style.lip
+	button.BackgroundTransparency = if style.ghost then 1 else 0
 	button.Size = options.size or UDim2.fromOffset(160, options.minimumTapTarget)
 	button.Selectable = true
 	button.ZIndex = z
-	button.ClipsDescendants = false
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, style.radius)
+	corner.CornerRadius = UDim.new(0, if options.round then 999 else style.radius)
 	corner.Parent = button
-	local stroke = Instance.new("UIStroke")
-	stroke.Name = "Outline"
-	stroke.Thickness = style.strokeWidth
-	stroke.Color = style.stroke
-	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	stroke.Parent = button
-	local gradient = Instance.new("UIGradient")
-	gradient.Name = "Fill"
-	gradient.Rotation = 90
-	gradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, style.gradientTop or style.background),
-		ColorSequenceKeypoint.new(1, style.gradientBottom or style.background),
-	})
-	gradient.Parent = button
-	local padding = Instance.new("UIPadding")
-	padding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
-	padding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
-	padding.Parent = button
+	local outline = Instance.new("UIStroke")
+	outline.Name = "Outline"
+	outline.Thickness = Tokens.stroke.bold
+	outline.Color = Tokens.color.outline
+	outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	outline.Transparency = if style.ghost then 0.35 else 0
+	outline.Parent = button
 	local constraint = Instance.new("UISizeConstraint")
 	constraint.MinSize = Vector2.new(options.minimumTapTarget, options.minimumTapTarget)
 	constraint.Parent = button
 	local scale = Instance.new("UIScale")
 	scale.Parent = button
-	-- Hover highlight: a white wash that fades in over the face.
-	local wash = Instance.new("Frame")
-	wash.Name = "Wash"
-	wash.Position = UDim2.fromOffset(-Tokens.spacing.lg, 0)
-	wash.Size = UDim2.new(1, Tokens.spacing.lg * 2, 1, 0)
-	wash.BackgroundColor3 = Color3.new(1, 1, 1)
-	wash.BackgroundTransparency = 1
-	wash.BorderSizePixel = 0
-	wash.ZIndex = z + 1
-	local washCorner = Instance.new("UICorner")
-	washCorner.CornerRadius = UDim.new(0, style.radius)
-	washCorner.Parent = wash
-	wash.Parent = button
-	-- Focus ring for controllers: a second stroke outside the outline, hidden until selected.
 	local ring = Instance.new("UIStroke")
 	ring.Name = "FocusRing"
 	ring.Thickness = 0
@@ -217,68 +167,72 @@ function Button.build(parent: Instance, options: Options): Handle
 	ring.Enabled = false
 	ring.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	ring.Parent = button
-	local shadow: Frame? = nil
-	if style.shadow and not options.image then
-		shadow = FrameKit.shadow(button, { radius = style.radius })
-	end
-	-- Art skin: a nine-sliced frame per state behind the live text; the token drawing becomes the
-	-- centre fill so the face still reads when a state image is missing.
-	local skinRole = "button." .. (if variantName == "gold" then "primary" else variantName)
-	local skin: ImageLabel? = nil
-	local skinInset = 0
-	if options.round then
-		corner.CornerRadius = UDim.new(1, 0)
-		washCorner.CornerRadius = UDim.new(1, 0)
-		padding.PaddingLeft = UDim.new(0, 0)
-		padding.PaddingRight = UDim.new(0, 0)
-	end
-	if options.art ~= false and not options.round and not options.image and Skin.has(skinRole .. ".normal") then
-		skinInset = 2
-		skin = Skin.label(button, skinRole .. ".normal", { zIndex = z + 1, inset = skinInset, name = "ArtFrame" })
-		stroke.Enabled = false
-		wash.ZIndex = z + 2
-		-- The art supplies the frame and its own gradient: the face underneath is a flat centre.
-		gradient.Enabled = false
-		button.BackgroundColor3 = if variantName == "primary" or variantName == "gold"
-			then Tokens.color.creamPill
-			elseif variantName == "danger" then Tokens.color.cream
-			elseif variantName == "pill" then Tokens.color.creamPill
-			else Tokens.color.featherWhite
-		button.TextColor3 = if variantName == "danger"
-			then Tokens.color.danger
-			elseif variantName == "pill" then Tokens.color.goldDeep
-			else Tokens.color.inkStrong
-		button.TextStrokeTransparency = 1
-		if shadow then
-			shadow.Visible = false
-			shadow = nil
-		end
-	end
-	local function skinState(state: string)
-		if not skin then
-			return
-		end
-		local role = skinRole .. "." .. state
-		if not Skin.has(role) then
-			role = skinRole .. ".normal"
-		end
-		Skin.apply(skin :: ImageLabel, role)
-	end
+
+	local face = Instance.new("Frame")
+	face.Name = "Face"
+	face.Size = UDim2.new(1, 0, 1, if style.ghost then 0 else -LIP)
+	face.BackgroundColor3 = style.face
+	face.BackgroundTransparency = if style.ghost then 0.35 else 0
+	face.BorderSizePixel = 0
+	face.ZIndex = z + 1
+	local faceCorner = Instance.new("UICorner")
+	faceCorner.CornerRadius = UDim.new(0, if options.round then 999 else style.radius)
+	faceCorner.Parent = face
+	local gradient = Instance.new("UIGradient")
+	gradient.Name = "Fill"
+	gradient.Rotation = 90
+	gradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, style.faceLight),
+		ColorSequenceKeypoint.new(0.6, style.face),
+		ColorSequenceKeypoint.new(1, style.face),
+	})
+	gradient.Parent = face
+	face.Parent = button
+	local wash = Instance.new("Frame")
+	wash.Name = "Wash"
+	wash.Size = UDim2.fromScale(1, 1)
+	wash.BackgroundColor3 = Color3.new(1, 1, 1)
+	wash.BackgroundTransparency = 1
+	wash.BorderSizePixel = 0
+	wash.ZIndex = z + 2
+	local washCorner = Instance.new("UICorner")
+	washCorner.CornerRadius = UDim.new(0, if options.round then 999 else style.radius)
+	washCorner.Parent = wash
+	wash.Parent = face
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = style.font
+	label.TextSize = options.textSize
+		or (if variantName == "pill" then Tokens.typography.label.size else Tokens.typography.heading.size + 1)
+	label.TextColor3 = style.text
+	label.Text = if options.image then "" else options.text
+	label.TextTruncate = Enum.TextTruncate.AtEnd
+	label.ZIndex = z + 3
+	label.Parent = face
+	local labelPadding = Instance.new("UIPadding")
+	labelPadding.PaddingLeft = UDim.new(0, if options.round then 0 else Tokens.spacing.lg)
+	labelPadding.PaddingRight = UDim.new(0, if options.round then 0 else Tokens.spacing.lg)
+	labelPadding.Parent = label
+	local textOutline = if style.outlined then FrameKit.outline(label, 1.8) else nil
 
 	-- Optional image face (station buttons) or leading vector icon.
 	local imageLabel: ImageLabel? = nil
 	if options.image then
-		padding.PaddingLeft = UDim.new(0, 0)
-		padding.PaddingRight = UDim.new(0, 0)
 		local image = Instance.new("ImageLabel")
 		image.Name = "Face"
 		image.BackgroundTransparency = 1
 		image.Size = UDim2.fromScale(1, 1)
 		image.Image = options.image :: string
 		image.ScaleType = Enum.ScaleType.Fit
-		image.ZIndex = z + 1
+		image.ZIndex = z + 4
 		image.Parent = button
 		imageLabel = image
+		button.BackgroundTransparency = 1
+		outline.Enabled = false
+		face.Visible = false
 		if options.pressedImage then
 			local pressedImage = options.pressedImage :: string
 			local normalImage = options.image :: string
@@ -289,74 +243,73 @@ function Button.build(parent: Instance, options: Options): Handle
 				image.Image = normalImage
 			end)
 		end
-		button.BackgroundTransparency = 1
-		stroke.Enabled = false
-		wash.Visible = false
 	elseif options.caption then
-		button.Text = options.caption
+		label.Text = options.caption
 	end
 	if options.icon and not options.image then
-		local iconPx = Tokens.icon.md
 		local icon = Icons.build(
 			options.icon,
-			button,
-			iconPx,
-			{ zIndex = z + 2, color = if variantName == "teal" or variantName == "danger" then Tokens.color.featherWhite else nil }
+			face,
+			Tokens.icon.md,
+			{ zIndex = z + 4, color = if style.outlined then Tokens.color.featherWhite else nil }
 		)
 		icon.AnchorPoint = Vector2.new(0, 0.5)
-		icon.Position = UDim2.fromScale(0, 0.5)
-		button.TextXAlignment = Enum.TextXAlignment.Left
-		padding.PaddingLeft = UDim.new(0, Tokens.spacing.md)
-		-- Shift the text right of the icon.
-		button.Text = "      " .. button.Text
+		icon.Position = UDim2.new(0, Tokens.spacing.md, 0.5, 0)
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		labelPadding.PaddingLeft = UDim.new(0, Tokens.spacing.md + Tokens.icon.md + Tokens.spacing.sm)
 	end
 
 	local enabled = true
 	local pending = false
 	local selected = false
 	local hovered = false
-	local baseText = button.Text
+	local pressedDown = false
+	local baseText = label.Text
 	local spinner: Frame? = nil
 	local spinnerConnection: RBXScriptConnection? = nil
 	local stopPulse: (() -> ())? = nil
 
+	local function setFaceDown(down: boolean)
+		if style.ghost or imageLabel then
+			return
+		end
+		local target = if down then UDim2.fromOffset(0, LIP) else UDim2.fromOffset(0, 0)
+		TweenService:Create(
+			face,
+			TweenInfo.new(Motion.duration("instant", motion), Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Position = target }
+		):Play()
+	end
+
 	local function applyState()
 		local dim = not enabled
-		if skin then
-			skinState(if dim then "disabled" elseif selected then "selected" elseif hovered then "hover" else "normal")
-			-- With art, the button's own fill is the centre colour behind the frame.
-			button.BackgroundTransparency = if variantName == "ghost" then 1 else (if dim then 0.5 else 0.08)
-		end
 		button.Active = enabled
 		button.Selectable = enabled
 		if imageLabel then
 			imageLabel.ImageTransparency = if dim then 0.45 else 0
-			button.BackgroundTransparency = 1
 		else
-			button.BackgroundTransparency = if variantName == "ghost"
-				then GHOST_FILL_TRANSPARENCY + (if dim then 0.25 else 0)
-				else (if dim then 0.35 else 0)
+			face.BackgroundTransparency = if style.ghost then (if dim then 0.7 else 0.35) else (if dim then 0.4 else 0)
+			button.BackgroundTransparency = if style.ghost then 1 else (if dim then 0.5 else 0)
 		end
-		button.TextTransparency = if dim and selected then 0.15 elseif dim then 0.45 elseif pending then 0.3 else 0
-		stroke.Transparency = if dim then 0.5 else 0
+		label.TextTransparency = if dim and selected then 0.15 elseif dim then 0.45 elseif pending then 0.3 else 0
+		if textOutline then
+			textOutline.Transparency = if dim then 0.5 else 0
+		end
+		outline.Transparency = if style.ghost then (if dim then 0.7 else 0.35) else (if dim then 0.4 else 0)
 		if selected then
-			stroke.Color = Tokens.color.tealAccent
-			stroke.Thickness = Tokens.stroke.bold
-			stroke.Enabled = true
+			outline.Color = Tokens.color.tealAccent
+			outline.Thickness = Tokens.stroke.frame
+			outline.Transparency = 0
 		else
-			stroke.Color = style.stroke
-			stroke.Thickness = style.strokeWidth
-			stroke.Enabled = skin == nil and imageLabel == nil
+			outline.Color = Tokens.color.outline
+			outline.Thickness = Tokens.stroke.bold
 		end
-		if shadow then
-			shadow.Visible = not dim
-		end
+		outline.Enabled = imageLabel == nil or selected
 	end
 
 	local function tweenScale(recipe: string, override: number?)
 		Tween.scale(scale, recipe, motion, override)
 	end
-
 	local function setWash(target: number)
 		Tween.fade(wash, motion, target)
 	end
@@ -366,8 +319,7 @@ function Button.build(parent: Instance, options: Options): Handle
 			hovered = true
 			if enabled then
 				tweenScale("hover")
-				setWash(0.82)
-				skinState(if selected then "selected" else "hover")
+				setWash(0.84)
 				if options.hoverSound and UserInputService.MouseEnabled then
 					options.hoverSound()
 				end
@@ -375,32 +327,35 @@ function Button.build(parent: Instance, options: Options): Handle
 		end),
 		button.MouseLeave:Connect(function()
 			hovered = false
+			pressedDown = false
 			tweenScale("release", 1)
 			setWash(1)
-			skinState(if not enabled then "disabled" elseif selected then "selected" else "normal")
+			setFaceDown(false)
 		end),
 		button.MouseButton1Down:Connect(function()
 			if enabled then
+				pressedDown = true
 				tweenScale("press")
-				skinState("pressed")
+				setFaceDown(true)
 			end
 		end),
 		button.MouseButton1Up:Connect(function()
+			pressedDown = false
 			tweenScale("release", if hovered and enabled then Motion.recipe("hover", motion).scale else 1)
-			skinState(if not enabled then "disabled" elseif selected then "selected" elseif hovered then "hover" else "normal")
+			setFaceDown(false)
 		end),
 		button.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.Touch and enabled then
 				tweenScale("press")
-				setWash(0.85)
-				skinState("pressed")
+				setWash(0.86)
+				setFaceDown(true)
 			end
 		end),
 		button.InputEnded:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.Touch then
 				tweenScale("release", 1)
 				setWash(1)
-				skinState(if not enabled then "disabled" elseif selected then "selected" else "normal")
+				setFaceDown(false)
 			end
 		end),
 		button.SelectionGained:Connect(function()
@@ -432,11 +387,13 @@ function Button.build(parent: Instance, options: Options): Handle
 					at = Vector2.new(math.clamp((pos.X - abs.X) / size.X, 0, 1), math.clamp((pos.Y - abs.Y) / size.Y, 0, 1))
 				end
 			end
-			Tween.ripple(button, motion, if imageLabel then Tokens.color.goldLight else Tokens.color.featherWhite, at)
-			tweenScale("press")
-			task.delay(Motion.recipe("press", motion).duration, function()
-				tweenScale("release", 1)
-			end)
+			Tween.ripple(if imageLabel then button else face, motion, Tokens.color.featherWhite, at)
+			if not pressedDown then
+				tweenScale("press")
+				task.delay(Motion.recipe("press", motion).duration, function()
+					tweenScale("release", 1)
+				end)
+			end
 			if options.sound then
 				options.sound()
 			end
@@ -448,20 +405,20 @@ function Button.build(parent: Instance, options: Options): Handle
 	button.Parent = parent
 	applyState()
 
-	local function setPending(value: boolean, label: string?)
+	local function setPending(value: boolean, labelText: string?)
 		pending = value
 		if value then
 			if not imageLabel then
-				button.Text = label or "..."
+				label.Text = labelText or "..."
 			end
 			if not spinner then
 				local ringFrame = Instance.new("Frame")
 				ringFrame.Name = "Spinner"
 				ringFrame.AnchorPoint = Vector2.new(1, 0.5)
-				ringFrame.Position = UDim2.fromScale(1, 0.5)
+				ringFrame.Position = UDim2.new(1, -Tokens.spacing.sm, 0.5, 0)
 				ringFrame.Size = UDim2.fromOffset(Tokens.icon.sm, Tokens.icon.sm)
 				ringFrame.BackgroundTransparency = 1
-				ringFrame.ZIndex = z + 3
+				ringFrame.ZIndex = z + 5
 				local arc = Instance.new("UIStroke")
 				arc.Thickness = 2.5
 				arc.Color = style.text
@@ -473,11 +430,11 @@ function Button.build(parent: Instance, options: Options): Handle
 				notch.AnchorPoint = Vector2.new(0.5, 0)
 				notch.Position = UDim2.fromScale(0.5, -0.1)
 				notch.Size = UDim2.fromScale(0.4, 0.4)
-				notch.BackgroundColor3 = style.background
+				notch.BackgroundColor3 = style.face
 				notch.BorderSizePixel = 0
-				notch.ZIndex = z + 4
+				notch.ZIndex = z + 6
 				notch.Parent = ringFrame
-				ringFrame.Parent = button
+				ringFrame.Parent = face
 				spinner = ringFrame
 				spinnerConnection = RunService.RenderStepped:Connect(function(dt)
 					ringFrame.Rotation = (ringFrame.Rotation + dt * 360) % 360
@@ -485,7 +442,7 @@ function Button.build(parent: Instance, options: Options): Handle
 			end
 		else
 			if not imageLabel then
-				button.Text = baseText
+				label.Text = baseText
 			end
 			if spinnerConnection then
 				spinnerConnection:Disconnect()
@@ -511,21 +468,29 @@ function Button.build(parent: Instance, options: Options): Handle
 			applyState()
 		end,
 		setText = function(text: string)
-			baseText = if options.icon and not options.image then "      " .. text else text
+			baseText = text
 			if not pending and not imageLabel then
-				button.Text = baseText
+				label.Text = text
 			end
 		end,
 		setVariant = function(variant: Variant)
 			variantName = variant
 			style = STYLES[variant] or STYLES.primary
-			button.BackgroundColor3 = style.background
-			button.TextColor3 = style.text
+			button.BackgroundColor3 = style.lip
+			face.BackgroundColor3 = style.face
+			label.TextColor3 = style.text
+			label.Font = style.font
 			gradient.Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0, style.gradientTop or style.background),
-				ColorSequenceKeypoint.new(1, style.gradientBottom or style.background),
+				ColorSequenceKeypoint.new(0, style.faceLight),
+				ColorSequenceKeypoint.new(0.6, style.face),
+				ColorSequenceKeypoint.new(1, style.face),
 			})
-			corner.CornerRadius = UDim.new(0, style.radius)
+			face.Size = UDim2.new(1, 0, 1, if style.ghost then 0 else -LIP)
+			if textOutline then
+				textOutline.Enabled = style.outlined
+			elseif style.outlined then
+				textOutline = FrameKit.outline(label, 1.8)
+			end
 			applyState()
 		end,
 		punch = function()
@@ -550,6 +515,19 @@ function Button.build(parent: Instance, options: Options): Handle
 			button:Destroy()
 		end,
 	}
+	-- Callers that poke button.Text / TextSize keep working through the label.
+	local proxyConnections = {
+		button:GetPropertyChangedSignal("Text"):Connect(function()
+			if button.Text ~= "" then
+				label.Text = button.Text
+				baseText = button.Text
+				button.Text = ""
+			end
+		end),
+	}
+	for _, c in ipairs(proxyConnections) do
+		table.insert(connections, c)
+	end
 	return handle
 end
 

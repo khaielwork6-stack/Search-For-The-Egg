@@ -13,7 +13,6 @@ local Motion = require(Shared.Design.Motion)
 local Trove = require(Shared.Util.Trove)
 local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
 local Icons = require(script.Parent.Parent.UI.Components.Icons)
-local Skin = require(script.Parent.Parent.UI.Components.Skin)
 
 local PromptController = {}
 PromptController.__index = PromptController
@@ -120,11 +119,19 @@ function PromptController._show(self: PromptController, prompt: ProximityPrompt)
 	local scale = Instance.new("UIScale")
 	scale.Scale = 0.85
 	scale.Parent = card
-	local art = Skin.label(card, "prompt.action", { zIndex = 3, inset = 2, name = "ArtFrame" })
-	if art then
-		art.ImageTransparency = 1
-		stroke.Enabled = false
-	end
+	local art: ImageLabel? = nil
+	card.BackgroundColor3 = Tokens.color.goldDeep
+	local promptFace = Instance.new("Frame")
+	promptFace.Name = "Face"
+	promptFace.Size = UDim2.new(1, 0, 1, -4)
+	promptFace.BackgroundColor3 = Tokens.color.creamPill
+	promptFace.BackgroundTransparency = 1
+	promptFace.BorderSizePixel = 0
+	promptFace.ZIndex = 3
+	local promptFaceCorner = Instance.new("UICorner")
+	promptFaceCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
+	promptFaceCorner.Parent = promptFace
+	promptFace.Parent = card
 	local fill = Instance.new("Frame")
 	fill.Name = "HoldFill"
 	fill.Size = UDim2.fromScale(0, 1)
@@ -157,6 +164,7 @@ function PromptController._show(self: PromptController, prompt: ProximityPrompt)
 	object.TextTruncate = Enum.TextTruncate.AtEnd
 	local action = FrameKit.text(content, "Action", prompt.ActionText, "heading", { zIndex = 6, color = Tokens.color.inkStrong })
 	action.Font = Tokens.typography.label.font
+	FrameKit.outline(action, 1.2, Tokens.color.featherWhite)
 	action.Position = UDim2.fromOffset(textLeft, Tokens.spacing.sm + Tokens.typography.caption.size + 4)
 	action.Size = UDim2.new(1, -textLeft, 0, Tokens.typography.heading.size + 4)
 	action.TextTruncate = Enum.TextTruncate.AtEnd
@@ -168,12 +176,10 @@ function PromptController._show(self: PromptController, prompt: ProximityPrompt)
 	self._live[prompt] = { gui = gui, fill = fill, scale = scale, holdTween = nil }
 	self.stats.shown += 1
 	local info = TweenInfo.new(Motion.duration("quick", motion), Tokens.motion.easeOut)
-	TweenService:Create(card, info, { BackgroundTransparency = if art then 1 else 0.05 }):Play()
-	if art then
-		TweenService:Create(art, info, { ImageTransparency = 0 }):Play()
-	else
-		TweenService:Create(stroke, info, { Transparency = 0 }):Play()
-	end
+	TweenService:Create(card, info, { BackgroundTransparency = 0 }):Play()
+	TweenService:Create(promptFace, info, { BackgroundTransparency = 0 }):Play()
+	TweenService:Create(stroke, info, { Transparency = 0 }):Play()
+	local _ = art
 	TweenService:Create(scale, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeBack), { Scale = 1 }):Play()
 	for _, label in ipairs({ object, action, cap:FindFirstChild("Glyph") }) do
 		if label and label:IsA("TextLabel") then

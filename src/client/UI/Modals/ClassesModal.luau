@@ -135,35 +135,52 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		local frame = Instance.new("Frame")
 		frame.Name = "Card_" .. entry.id
 		frame.LayoutOrder = index
-		frame.BackgroundColor3 = Tokens.color.featherWhite
+		frame.BackgroundColor3 = rarity.deep
 		frame.ZIndex = z + 1
 		local corner = Instance.new("UICorner")
 		corner.CornerRadius = UDim.new(0, Tokens.radius.lg)
 		corner.Parent = frame
 		local stroke = Instance.new("UIStroke")
 		stroke.Thickness = Tokens.stroke.bold
-		stroke.Color = rarity.deep
+		stroke.Color = Tokens.color.outline
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 		stroke.Parent = frame
+		local body = Instance.new("Frame")
+		body.Name = "Body"
+		body.Size = UDim2.new(1, 0, 1, -5)
+		body.BackgroundColor3 = Tokens.color.featherWhite
+		body.BorderSizePixel = 0
+		body.ZIndex = z + 2
+		local bodyCorner = Instance.new("UICorner")
+		bodyCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
+		bodyCorner.Parent = body
 		local gradient = Instance.new("UIGradient")
 		gradient.Rotation = 90
 		gradient.Color =
 			ColorSequence.new({ ColorSequenceKeypoint.new(0, Tokens.color.featherWhite), ColorSequenceKeypoint.new(1, Tokens.color.cream) })
-		gradient.Parent = frame
-		local art = Skin.label(frame, "class." .. rarityName .. ".locked", { zIndex = z + 1, inset = 2, name = "ArtFrame" })
-		if art then
-			stroke.Enabled = false
-		end
+		gradient.Parent = body
+		body.Parent = frame
+		local art: ImageLabel? = nil
+		local band, bandTitle = FrameKit.headerBand(body, "Band", entry.displayName, {
+			height = Tokens.layout.minimumTapTargetPx - 4,
+			zIndex = z + 3,
+			radius = Tokens.radius.lg,
+			color = rarity.fill,
+			deep = rarity.deep,
+		})
+		bandTitle.TextSize = Tokens.typography.label.size
+		local _ = band
 		-- Content sits in a padded child so the art frame keeps the card's full size.
 		local content = Instance.new("Frame")
 		content.Name = "Content"
 		content.Size = UDim2.fromScale(1, 1)
 		content.BackgroundTransparency = 1
-		content.ZIndex = z + 3
-		content.Parent = frame
+		content.ZIndex = z + 4
+		content.Parent = body
 		local padding = Instance.new("UIPadding")
-		padding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
-		padding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
-		padding.PaddingTop = UDim.new(0, Tokens.spacing.md + Tokens.spacing.xs)
+		padding.PaddingLeft = UDim.new(0, Tokens.spacing.md)
+		padding.PaddingRight = UDim.new(0, Tokens.spacing.md)
+		padding.PaddingTop = UDim.new(0, Tokens.layout.minimumTapTargetPx + Tokens.spacing.xs)
 		padding.PaddingBottom = UDim.new(0, Tokens.spacing.md)
 		padding.Parent = content
 		local scale = Instance.new("UIScale")
@@ -175,7 +192,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		stateBadge.Position = UDim2.new(1, -Tokens.spacing.sm, 0, Tokens.spacing.sm)
 		stateBadge.Size = UDim2.fromOffset(Tokens.icon.md + 6, Tokens.icon.md + 6)
 		stateBadge.BackgroundColor3 = Tokens.color.creamPill
-		stateBadge.ZIndex = z + 4
+		stateBadge.ZIndex = z + 6
 		local stateCorner = Instance.new("UICorner")
 		stateCorner.CornerRadius = UDim.new(1, 0)
 		stateCorner.Parent = stateBadge
@@ -184,27 +201,18 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		stateStroke.Color = Tokens.color.outline
 		stateStroke.Parent = stateBadge
 		stateBadge.Parent = frame
-		local lockIcon = Icons.lock(stateBadge, Tokens.icon.md - 2, { zIndex = z + 5 })
+		local lockIcon = Icons.lock(stateBadge, Tokens.icon.md - 2, { zIndex = z + 7 })
 		lockIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 		lockIcon.Position = UDim2.fromScale(0.5, 0.5)
-		local checkIcon = Icons.check(stateBadge, Tokens.icon.md - 2, { zIndex = z + 5, color = Tokens.color.featherWhite })
+		local checkIcon = Icons.check(stateBadge, Tokens.icon.md - 2, { zIndex = z + 7, color = Tokens.color.featherWhite })
 		checkIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 		checkIcon.Position = UDim2.fromScale(0.5, 0.5)
 		checkIcon.Visible = false
-		local name = FrameKit.pill(content, "Name", entry.displayName, {
-			size = UDim2.new(1, -(Tokens.icon.md + Tokens.spacing.md), 0, Tokens.typography.label.size + Tokens.spacing.sm),
-			textSize = Tokens.typography.body.size,
-			zIndex = z + 4,
-			art = false,
-			fill = rarity.fill,
-			textColor = Tokens.color.featherWhite,
-		})
-		name.TextStrokeTransparency = 0.4
-		name.Position = UDim2.fromOffset(0, 0)
-		local odds = FrameKit.text(content, "Odds", "", "caption", { zIndex = z + 4, color = Tokens.color.inkMuted })
-		odds.Position = UDim2.fromOffset(0, Tokens.typography.label.size + Tokens.spacing.md)
-		local effect = FrameKit.text(content, "Effect", "", "caption", { zIndex = z + 4, color = Tokens.color.inkStrong })
-		effect.Position = UDim2.fromOffset(0, Tokens.typography.label.size + Tokens.spacing.md + Tokens.typography.caption.size + 2)
+		local name = bandTitle
+		local odds = FrameKit.text(content, "Odds", "", "caption", { zIndex = z + 5, color = Tokens.color.inkMuted })
+		odds.Position = UDim2.fromOffset(0, 0)
+		local effect = FrameKit.text(content, "Effect", "", "body", { zIndex = z + 5, color = Tokens.color.inkStrong })
+		effect.Position = UDim2.fromOffset(0, Tokens.typography.caption.size + Tokens.spacing.sm)
 		effect.Size = UDim2.new(1, -(tap + Tokens.spacing.sm), 0, Tokens.typography.caption.size * 2 + 4)
 		local equip = Button.build(content, {
 			text = "Equip",
@@ -212,8 +220,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			minimumTapTarget = tap,
 			motion = motion,
 			size = UDim2.fromOffset(tap * 2 + Tokens.spacing.sm, tap - Tokens.spacing.xs),
-			zIndex = z + 4,
-			textSize = Tokens.typography.caption.size,
+			zIndex = z + 5,
+			textSize = Tokens.typography.caption.size + 1,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTap)
 			end,
@@ -362,7 +370,11 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			card.checkIcon.Visible = equippedIndex ~= nil
 			card.stateBadge.Visible = not owned or equippedIndex ~= nil
 			card.stateBadge.BackgroundColor3 = if equippedIndex then Tokens.color.success else Tokens.color.creamPill
-			card.frame.BackgroundTransparency = if owned then 0 else 0.35
+			local body = card.frame:FindFirstChild("Body") :: Frame?
+			if body then
+				body.BackgroundTransparency = if owned then 0 else 0.25
+			end
+			card.name.TextTransparency = if owned then 0 else 0.25
 			card.effect.TextTransparency = if owned then 0 else 0.35
 		end
 		if rollHandle then

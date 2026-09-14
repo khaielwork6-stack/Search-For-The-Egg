@@ -1,7 +1,8 @@
 --!strict
--- Round HUD strip: timer chip, bag meter (art track + art fill that grows with the bag, squash on
--- award, a FULL - DEPOSIT state that pulses gently until the bag is emptied), and the cash chip
--- with an accelerating count-up and a floating "+$" delta. Hidden outside rounds.
+-- Round HUD strip: timer chip, bag meter (recessed cream track, clipped gold fill that grows with
+-- the bag, outlined count, squash on award, FULL - DEPOSIT state that pulses gently until the bag is
+-- emptied), and the cash chip with an accelerating count-up and a floating "+$" delta. Hidden
+-- outside rounds. All vector, in the cookie-chip language of the HUD.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -20,13 +21,12 @@ RoundHud.__index = RoundHud
 export type RoundHud = typeof(setmetatable(
 	{} :: {
 		root: Frame,
-		bagFill: GuiObject,
+		bagFill: Frame,
 		bagText: TextLabel,
 		cashText: TextLabel,
 		timerText: TextLabel,
 		_bagFrame: Frame,
 		_bagScale: UIScale,
-		_bagArt: boolean,
 		_motion: () -> Motion.MotionSettings,
 		_displayedCents: number,
 		_targetCents: number,
@@ -39,25 +39,35 @@ export type RoundHud = typeof(setmetatable(
 	RoundHud
 ))
 
-local TIMER_WIDTH = 132
-local BAG_WIDTH = 196
-local CASH_WIDTH = 136
+local TIMER_WIDTH = 138
+local BAG_WIDTH = 210
+local CASH_WIDTH = 142
 
-local function chip(parent: Instance, name: string, order: number, width: number, art: string, icon: string?): (Frame, TextLabel)
-	local frame, text, iconSlot = FrameKit.chip(parent, name, { width = width, art = art, zIndex = Tokens.zIndex.hud })
+local function chip(
+	parent: Instance,
+	name: string,
+	order: number,
+	width: number,
+	iconRole: string?,
+	iconFallback: string?
+): (Frame, TextLabel)
+	local frame, text, iconSlot = FrameKit.chip(parent, name, { width = width, zIndex = Tokens.zIndex.hud })
 	frame.LayoutOrder = order
-	text.Font = Tokens.typography.numeral.font
-	text.TextSize = Tokens.typography.numeral.size - 1
-	text.Size = UDim2.fromOffset(
-		width - Tokens.spacing.md - Tokens.spacing.lg - (if icon then Tokens.icon.md + Tokens.spacing.sm else 0),
-		Tokens.layout.minimumTapTargetPx
-	)
+	text.Font = Tokens.typography.label.font
+	text.TextSize = Tokens.typography.label.size + 1
 	text.TextXAlignment = Enum.TextXAlignment.Center
-	if icon then
+	FrameKit.outline(text, 1.4, Tokens.color.featherWhite)
+	if iconRole or iconFallback then
 		iconSlot.Visible = true
-		local built = Icons.build(icon, iconSlot, Tokens.icon.md, { zIndex = iconSlot.ZIndex + 1 })
-		built.Position = UDim2.fromScale(0, 0)
+		local art = if iconRole then Skin.icon(iconSlot, iconRole, Tokens.icon.md + 2, iconSlot.ZIndex + 1) else nil
+		if not art and iconFallback then
+			Icons.build(iconFallback, iconSlot, Tokens.icon.md + 2, { zIndex = iconSlot.ZIndex + 1 })
+		end
 	end
+	text.Size = UDim2.fromOffset(
+		width - Tokens.spacing.md - Tokens.spacing.lg - (if iconRole or iconFallback then Tokens.icon.md + 2 + Tokens.spacing.sm else 0),
+		Tokens.layout.minimumTapTargetPx - 4
+	)
 	return frame, text
 end
 
@@ -78,44 +88,38 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 	layout.Parent = root
 	root.Parent = gui
 
-	local _timerFrame, timerText = chip(root, "Timer", 1, TIMER_WIDTH, "hud.timer", "clock")
+	local _timerFrame, timerText = chip(root, "Timer", 1, TIMER_WIDTH, nil, "clock")
 	timerText.Text = "00:00.00"
 
-	-- Bag: art track (or cream track) with an art fill that grows from the left.
-	local bagFrame, bagText = chip(root, "Bag", 2, BAG_WIDTH, "hud.bag.track", nil)
-	bagText.ZIndex = bagFrame.ZIndex + 5
-	local bagFill: GuiObject
-	local bagArt = Skin.has("hud.bag.fill.normal")
-	if bagArt then
-		local fill = Instance.new("ImageLabel")
-		fill.Name = "Fill"
-		fill.BackgroundTransparency = 1
-		fill.AnchorPoint = Vector2.new(0, 0.5)
-		fill.Position = UDim2.new(0, 5, 0.5, 0)
-		fill.Size = UDim2.new(0, 0, 1, -10)
-		fill.ZIndex = bagFrame.ZIndex + 2
-		Skin.apply(fill, "hud.bag.fill.normal")
-		fill.Parent = bagFrame
-		bagFill = fill
-	else
-		local fill = Instance.new("Frame")
-		fill.Name = "Fill"
-		fill.AnchorPoint = Vector2.new(0, 0.5)
-		fill.Position = UDim2.new(0, 5, 0.5, 0)
-		fill.Size = UDim2.new(0, 0, 1, -10)
-		fill.BackgroundColor3 = Tokens.color.straw
-		fill.BorderSizePixel = 0
-		fill.ZIndex = bagFrame.ZIndex + 2
-		local fillCorner = Instance.new("UICorner")
-		fillCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
-		fillCorner.Parent = fill
-		fill.Parent = bagFrame
-		bagFill = fill
+	-- Bag: the chip face is the recessed track; the fill grows inside it, under the count.
+	local bagFrame, bagText = chip(root, "Bag", 2, BAG_WIDTH, nil, nil)
+	local face = bagFrame:FindFirstChild("Face") :: Frame
+	face.BackgroundColor3 = Tokens.color.creamDeep
+	local faceGradient = face:FindFirstChildOfClass("UIGradient")
+	if faceGradient then
+		faceGradient.Enabled = false
 	end
+	face.ClipsDescendants = true
+	local bagFill = Instance.new("Frame")
+	bagFill.Name = "Fill"
+	bagFill.Size = UDim2.fromScale(0, 1)
+	bagFill.BackgroundColor3 = Tokens.color.gold
+	bagFill.BorderSizePixel = 0
+	bagFill.ZIndex = face.ZIndex + 1
+	local fillCorner = Instance.new("UICorner")
+	fillCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
+	fillCorner.Parent = bagFill
+	local fillGradient = Instance.new("UIGradient")
+	fillGradient.Rotation = 90
+	fillGradient.Color =
+		ColorSequence.new({ ColorSequenceKeypoint.new(0, Tokens.color.goldLight), ColorSequenceKeypoint.new(1, Tokens.color.gold) })
+	fillGradient.Parent = bagFill
+	bagFill.Parent = face
 	bagText.Text = "Bag 0 / 25"
+	bagText.TextColor3 = Tokens.color.inkStrong
 	local bagScale = bagFrame:FindFirstChildOfClass("UIScale") :: UIScale
 
-	local _cashFrame, cashText = chip(root, "Cash", 3, CASH_WIDTH, "hud.cash", "coin")
+	local _cashFrame, cashText = chip(root, "Cash", 3, CASH_WIDTH, "hud.token", "coin")
 	cashText.Text = "$0.00"
 	cashText.TextColor3 = Tokens.color.leafDeep
 
@@ -127,7 +131,6 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 		timerText = timerText,
 		_bagFrame = bagFrame,
 		_bagScale = bagScale,
-		_bagArt = bagArt,
 		_motion = motion,
 		_displayedCents = 0,
 		_targetCents = 0,
@@ -157,7 +160,13 @@ function RoundHud._setFull(self: RoundHud, full: boolean)
 	self._full = full
 	if full then
 		self._stopPulse = Tween.pulseLoop(self._bagScale, self._motion(), 0.04)
-		self.bagText.TextColor3 = Tokens.color.emberDeep
+		self.bagText.TextColor3 = Tokens.color.featherWhite
+		local outline = self.bagText:FindFirstChild("TextOutline") :: UIStroke?
+		if outline then
+			outline.Color = Tokens.color.emberDeep
+			outline.Thickness = 2
+		end
+		self.bagFill.BackgroundColor3 = Tokens.color.ember
 		self._fullThread = task.spawn(function()
 			local showPrompt = true
 			while self._full do
@@ -176,11 +185,16 @@ function RoundHud._setFull(self: RoundHud, full: boolean)
 			self._fullThread = nil
 		end
 		self.bagText.TextColor3 = Tokens.color.inkStrong
+		local outline = self.bagText:FindFirstChild("TextOutline") :: UIStroke?
+		if outline then
+			outline.Color = Tokens.color.featherWhite
+			outline.Thickness = 1.4
+		end
+		self.bagFill.BackgroundColor3 = Tokens.color.gold
 		self.bagText.Text = self._lastBagText
 	end
 end
 
--- Bag meter with restrained squash; a stronger pulse when full.
 function RoundHud.setBag(self: RoundHud, carried: number, capacity: number, infinite: boolean, animate: boolean?)
 	local fraction: number
 	if infinite then
@@ -191,23 +205,17 @@ function RoundHud.setBag(self: RoundHud, carried: number, capacity: number, infi
 		fraction = if capacity > 0 then math.clamp(carried / capacity, 0, 1) else 0
 	end
 	local full = not infinite and carried >= capacity and capacity > 0
-	local width = self._bagFrame.AbsoluteSize.X / math.max(0.01, self._bagScale.Scale)
-	local _ = width
-	local fillWidth = math.floor((BAG_WIDTH - 10) * fraction)
-	local target = UDim2.new(0, fillWidth, 1, -10)
+	local target = UDim2.fromScale(fraction, 1)
 	if animate then
 		TweenService:Create(self.bagFill, TweenInfo.new(Motion.duration("quick", self._motion()), Tokens.motion.easeOut), { Size = target })
 			:Play()
 	else
 		self.bagFill.Size = target
 	end
-	if self._bagArt then
-		Skin.apply(
-			self.bagFill :: ImageLabel,
-			if infinite then "hud.bag.fill.infinite" elseif full then "hud.bag.fill.full" else "hud.bag.fill.normal"
-		)
-	else
-		(self.bagFill :: Frame).BackgroundColor3 = if full then Tokens.color.ember else Tokens.color.straw
+	if infinite then
+		self.bagFill.BackgroundColor3 = Tokens.color.tealLight
+	elseif not full then
+		self.bagFill.BackgroundColor3 = Tokens.color.gold
 	end
 	if not self._full or not full then
 		self.bagText.Text = self._lastBagText
@@ -224,7 +232,6 @@ function RoundHud.setBag(self: RoundHud, carried: number, capacity: number, infi
 	end
 end
 
--- Cash count-up with a short accelerating tick; `onTick` lets the caller play a capped tick sound.
 function RoundHud.setCash(self: RoundHud, cents: number, animate: boolean?, onTick: (() -> ())?)
 	local previous = self._targetCents
 	self._targetCents = cents
@@ -235,7 +242,7 @@ function RoundHud.setCash(self: RoundHud, cents: number, animate: boolean?, onTi
 	end
 	if cents > previous then
 		Tween.floatText(
-			self.cashText.Parent :: GuiObject,
+			self.cashText.Parent.Parent :: GuiObject,
 			"+" .. EconomyMath.formatCents(cents - previous),
 			Tokens.color.leafDeep,
 			self._motion()

@@ -1,8 +1,8 @@
 --!strict
--- Tool hotbar: one slot per owned tool (Hand first) with the tool's art, name, a keycap hint by
--- input mode, and a per-slot status bar (Vac heat, Charge cooldown, Chick trip state). Slots use
--- the idle / equipped / disabled art frames, lift on hover, pop when equipped, and stay clear of
--- the reticle. Sits above the round strip inside the safe area; hidden outside rounds.
+-- Tool hotbar: one lipped square slot per owned tool (Hand first) with the tool art centred, the
+-- name on a small pill beneath, a keycap hint in the corner by input mode, and a status bar for
+-- cooldown / heat / trip state. The equipped slot glows gold and pops. Sits above the round strip
+-- inside the safe area; hidden outside rounds. Display names come from config.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -21,23 +21,22 @@ ToolHotbar.__index = ToolHotbar
 
 type Slot = {
 	frame: TextButton,
-	art: ImageLabel?,
-	icon: ImageLabel?,
+	face: Frame,
 	name: TextLabel,
-	hint: Frame?,
+	hint: Frame,
 	hintText: TextLabel?,
 	status: TextLabel,
 	bar: Frame,
-	fill: GuiObject,
-	fillArt: boolean,
+	fill: Frame,
 	scale: UIScale,
+	outline: UIStroke,
 	index: number,
 }
 
 export type ToolHotbar = typeof(setmetatable(
 	{} :: {
 		root: Frame,
-		activated: any, -- (toolId)
+		activated: any,
 		_slots: { [string]: Slot },
 		_order: { string },
 		_owned: { [string]: boolean },
@@ -50,7 +49,8 @@ export type ToolHotbar = typeof(setmetatable(
 	ToolHotbar
 ))
 
-local SLOT_WIDTH = 134
+local SLOT = 72
+local LIP = 5
 
 function ToolHotbar.new(
 	gui: Instance,
@@ -63,16 +63,15 @@ function ToolHotbar.new(
 	local root = Instance.new("Frame")
 	root.Name = "ToolHotbar"
 	root.AnchorPoint = Vector2.new(0.5, 1)
-	-- Above the round strip (safe padding + strip height + spacing).
 	root.Position = UDim2.new(0.5, 0, 1, -(Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx + Tokens.spacing.md))
-	root.Size = UDim2.fromOffset(0, minimumTapTarget + Tokens.spacing.lg)
+	root.Size = UDim2.fromOffset(0, SLOT + Tokens.spacing.lg)
 	root.AutomaticSize = Enum.AutomaticSize.X
 	root.BackgroundTransparency = 1
 	root.Visible = false
 	root.ZIndex = Tokens.zIndex.hud
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.Padding = UDim.new(0, Tokens.spacing.sm)
+	layout.Padding = UDim.new(0, Tokens.spacing.sm + 2)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 	layout.Parent = root
@@ -102,117 +101,130 @@ end
 
 function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, minimumTapTarget: number)
 	local z = Tokens.zIndex.hud
+	local size = math.max(SLOT, minimumTapTarget)
 	local frame = Instance.new("TextButton")
 	frame.Name = "Slot_" .. toolId
 	frame.LayoutOrder = index
 	frame.AutoButtonColor = false
 	frame.Text = ""
-	frame.Size = UDim2.fromOffset(SLOT_WIDTH, minimumTapTarget + Tokens.spacing.lg)
-	frame.BackgroundColor3 = Tokens.color.featherWhite
+	frame.Size = UDim2.fromOffset(size, size + Tokens.spacing.lg)
+	frame.BackgroundTransparency = 1
 	frame.ZIndex = z
 	frame.Selectable = true
 	frame.Visible = toolId == "hand"
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, Tokens.radius.md)
-	corner.Parent = frame
-	local stroke = Instance.new("UIStroke")
-	stroke.Name = "Outline"
-	stroke.Thickness = Tokens.stroke.bold
-	stroke.Color = Tokens.color.outline
-	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	stroke.Parent = frame
 	local scale = Instance.new("UIScale")
 	scale.Parent = frame
-	FrameKit.shadow(frame, { radius = Tokens.radius.md })
-	local art = Skin.label(frame, "hotbar.slot.idle", { zIndex = z + 1, inset = 2, name = "ArtFrame" })
-	if art then
-		stroke.Enabled = false
-		frame.BackgroundTransparency = 0.05
-	end
 
-	-- Tool art (left) with the name beside it.
-	local icon = Skin.icon(frame, "tool." .. toolId .. ".normal", Tokens.icon.lg, z + 2)
+	-- Lipped square tile.
+	local tile = Instance.new("Frame")
+	tile.Name = "Tile"
+	tile.Size = UDim2.fromOffset(size, size)
+	tile.BackgroundColor3 = Tokens.color.strawDeep
+	tile.BorderSizePixel = 0
+	tile.ZIndex = z
+	local tileCorner = Instance.new("UICorner")
+	tileCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
+	tileCorner.Parent = tile
+	local outline = Instance.new("UIStroke")
+	outline.Name = "Outline"
+	outline.Thickness = Tokens.stroke.bold
+	outline.Color = Tokens.color.outline
+	outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	outline.Parent = tile
+	tile.Parent = frame
+	local face = Instance.new("Frame")
+	face.Name = "Face"
+	face.Size = UDim2.new(1, 0, 1, -LIP)
+	face.BackgroundColor3 = Tokens.color.creamPill
+	face.BorderSizePixel = 0
+	face.ZIndex = z + 1
+	local faceCorner = Instance.new("UICorner")
+	faceCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
+	faceCorner.Parent = face
+	local faceGradient = Instance.new("UIGradient")
+	faceGradient.Rotation = 90
+	faceGradient.Color =
+		ColorSequence.new({ ColorSequenceKeypoint.new(0, Tokens.color.featherWhite), ColorSequenceKeypoint.new(1, Tokens.color.creamPill) })
+	faceGradient.Parent = face
+	face.Parent = tile
+
+	-- Tool art centred in the tile.
+	local icon = Skin.icon(face, "tool." .. toolId .. ".normal", size - Tokens.spacing.lg, z + 2)
 	if icon then
-		icon.Position = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
+		icon.AnchorPoint = Vector2.new(0.5, 0.5)
+		icon.Position = UDim2.fromScale(0.5, 0.5)
+	else
+		local glyph = Icons.feather(face, Tokens.icon.lg, { zIndex = z + 2 })
+		glyph.AnchorPoint = Vector2.new(0.5, 0.5)
+		glyph.Position = UDim2.fromScale(0.5, 0.5)
 	end
-	local name = Instance.new("TextLabel")
-	name.Name = "Name"
-	local nameLeft = if icon then Tokens.icon.lg + Tokens.spacing.md else Tokens.spacing.sm
-	name.Position = UDim2.fromOffset(nameLeft, Tokens.spacing.sm + 2)
-	name.Size = UDim2.new(1, -nameLeft - Tokens.icon.md - Tokens.spacing.sm, 0, Tokens.typography.caption.size + 2)
-	name.BackgroundTransparency = 1
-	name.Font = Tokens.typography.heading.font
-	name.TextSize = Tokens.typography.caption.size
-	name.TextColor3 = Tokens.color.inkStrong
-	name.TextXAlignment = Enum.TextXAlignment.Left
-	name.TextTruncate = Enum.TextTruncate.AtEnd
-	name.Text = if toolId == "hand" then "Hand" else self._config.tools[toolId].displayName
-	name.ZIndex = z + 2
-	name.Parent = frame
 
-	-- Keycap hint (number key / bumper) in the top-right corner.
-	local hint = Icons.keycap(frame, "1", Tokens.icon.md - 2, { zIndex = z + 3 })
+	-- Keycap hint in the top-left corner.
+	local hint = Icons.keycap(frame, "1", Tokens.icon.md, { zIndex = z + 4 })
 	hint.Name = "Hint"
-	hint.AnchorPoint = Vector2.new(1, 0)
-	hint.Position = UDim2.new(1, -Tokens.spacing.sm, 0, Tokens.spacing.sm)
-	local hintText = hint:FindFirstChild("Glyph") :: TextLabel
+	hint.AnchorPoint = Vector2.new(0, 0)
+	hint.Position = UDim2.fromOffset(-Tokens.spacing.xs, -Tokens.spacing.xs)
+	local hintText = hint:FindFirstChild("Glyph") :: TextLabel?
 
+	-- Name pill hanging under the tile.
+	local name = FrameKit.pill(frame, "Name", if toolId == "hand" then "Hand" else self._config.tools[toolId].displayName, {
+		size = UDim2.new(1, Tokens.spacing.sm, 0, Tokens.typography.caption.size + Tokens.spacing.md),
+		textSize = Tokens.typography.caption.size,
+		zIndex = z + 3,
+		outline = false,
+	})
+	name.AnchorPoint = Vector2.new(0.5, 1)
+	name.Position = UDim2.fromScale(0.5, 1)
+	name.TextColor3 = Tokens.color.inkStrong
+	local namePadding = name:FindFirstChildOfClass("UIPadding")
+	if namePadding then
+		namePadding.PaddingLeft = UDim.new(0, Tokens.spacing.sm)
+		namePadding.PaddingRight = UDim.new(0, Tokens.spacing.sm)
+	end
+
+	-- Status caption + bar inside the tile's lower edge.
 	local status = Instance.new("TextLabel")
 	status.Name = "Status"
-	status.AnchorPoint = Vector2.new(0, 1)
-	status.Position = UDim2.new(0, nameLeft, 1, -(Tokens.spacing.sm + 8))
-	status.Size = UDim2.new(1, -nameLeft - Tokens.spacing.sm, 0, Tokens.typography.caption.size + 2)
+	status.AnchorPoint = Vector2.new(0.5, 1)
+	status.Position = UDim2.new(0.5, 0, 1, -(LIP + Tokens.spacing.sm + 6))
+	status.Size = UDim2.new(1, -Tokens.spacing.sm, 0, Tokens.typography.caption.size)
 	status.BackgroundTransparency = 1
-	status.Font = Tokens.typography.caption.font
-	status.TextSize = Tokens.typography.caption.size - 1
-	status.TextColor3 = Tokens.color.inkMuted
-	status.TextXAlignment = Enum.TextXAlignment.Left
+	status.Font = Tokens.typography.heading.font
+	status.TextSize = Tokens.typography.caption.size - 2
+	status.TextColor3 = Tokens.color.inkStrong
 	status.Text = ""
-	status.ZIndex = z + 2
-	status.Parent = frame
-
+	status.ZIndex = z + 3
+	status.Parent = tile
+	FrameKit.outline(status, 1.2, Tokens.color.featherWhite)
 	local bar = Instance.new("Frame")
 	bar.Name = "Bar"
-	bar.AnchorPoint = Vector2.new(0, 1)
-	bar.Position = UDim2.new(0, Tokens.spacing.sm + 2, 1, -(Tokens.spacing.sm + 1))
-	bar.Size = UDim2.new(1, -(Tokens.spacing.sm + 2) * 2, 0, 5)
+	bar.AnchorPoint = Vector2.new(0.5, 1)
+	bar.Position = UDim2.new(0.5, 0, 1, -(LIP + Tokens.spacing.xs + 1))
+	bar.Size = UDim2.new(1, -Tokens.spacing.md, 0, 6)
 	bar.BackgroundColor3 = Tokens.color.creamDeep
 	bar.BorderSizePixel = 0
-	bar.ZIndex = z + 2
+	bar.ZIndex = z + 3
 	bar.Visible = false
+	bar.ClipsDescendants = true
 	local barCorner = Instance.new("UICorner")
-	barCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
+	barCorner.CornerRadius = UDim.new(1, 0)
 	barCorner.Parent = bar
-	bar.Parent = frame
-	local fill: GuiObject
-	local fillArt = false
-	if Skin.has("hotbar.status.info") then
-		local trackArt = Skin.label(bar, "hotbar.status.track", { zIndex = z + 2 })
-		if trackArt then
-			bar.BackgroundTransparency = 1
-		end
-		local image = Instance.new("ImageLabel")
-		image.Name = "Fill"
-		image.BackgroundTransparency = 1
-		image.Size = UDim2.fromScale(0, 1)
-		image.ZIndex = z + 3
-		Skin.apply(image, "hotbar.status.info")
-		image.Parent = bar
-		fill = image
-		fillArt = true
-	else
-		local plain = Instance.new("Frame")
-		plain.Name = "Fill"
-		plain.Size = UDim2.fromScale(0, 1)
-		plain.BackgroundColor3 = Tokens.color.straw
-		plain.BorderSizePixel = 0
-		plain.ZIndex = z + 3
-		local fillCorner = Instance.new("UICorner")
-		fillCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
-		fillCorner.Parent = plain
-		plain.Parent = bar
-		fill = plain
-	end
+	local barStroke = Instance.new("UIStroke")
+	barStroke.Thickness = 1.5
+	barStroke.Color = Tokens.color.outline
+	barStroke.Transparency = 0.4
+	barStroke.Parent = bar
+	bar.Parent = tile
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+	fill.Size = UDim2.fromScale(0, 1)
+	fill.BackgroundColor3 = Tokens.color.gold
+	fill.BorderSizePixel = 0
+	fill.ZIndex = z + 4
+	local fillCorner = Instance.new("UICorner")
+	fillCorner.CornerRadius = UDim.new(1, 0)
+	fillCorner.Parent = fill
+	fill.Parent = bar
 
 	frame.MouseEnter:Connect(function()
 		Tween.scale(scale, "hover", self._motion())
@@ -222,16 +234,21 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	end)
 	frame.MouseLeave:Connect(function()
 		Tween.scale(scale, "release", self._motion(), 1)
+		face.Position = UDim2.fromOffset(0, 0)
+	end)
+	frame.MouseButton1Down:Connect(function()
+		face.Position = UDim2.fromOffset(0, LIP)
+	end)
+	frame.MouseButton1Up:Connect(function()
+		face.Position = UDim2.fromOffset(0, 0)
 	end)
 	frame.SelectionGained:Connect(function()
-		stroke.Enabled = true
-		stroke.Color = Tokens.color.goldLight
-		stroke.Thickness = Tokens.stroke.frame
+		outline.Color = Tokens.color.goldLight
+		outline.Thickness = Tokens.stroke.frame
 	end)
 	frame.SelectionLost:Connect(function()
-		stroke.Color = Tokens.color.outline
-		stroke.Thickness = Tokens.stroke.bold
-		stroke.Enabled = art == nil
+		outline.Color = Tokens.color.outline
+		outline.Thickness = Tokens.stroke.bold
 	end)
 	frame.Activated:Connect(function()
 		if self._sound then
@@ -242,16 +259,15 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	frame.Parent = self.root
 	self._slots[toolId] = {
 		frame = frame,
-		art = art,
-		icon = icon,
+		face = face,
 		name = name,
 		hint = hint,
 		hintText = hintText,
 		status = status,
 		bar = bar,
 		fill = fill,
-		fillArt = fillArt,
 		scale = scale,
+		outline = outline,
 		index = index,
 	}
 end
@@ -270,24 +286,38 @@ function ToolHotbar._refresh(self: ToolHotbar)
 			elseif self._mode == "mouse" then
 				hintText = tostring(visibleIndex)
 			end
-			if slot.hint and slot.hintText then
+			if slot.hintText then
 				slot.hintText.Text = hintText
-				slot.hint.Visible = hintText ~= ""
 			end
+			slot.hint.Visible = hintText ~= ""
 		end
 		local equipped = toolId == self._equipped
-		if slot.art then
-			Skin.apply(slot.art, if equipped then "hotbar.slot.equipped" else "hotbar.slot.idle")
-		else
-			local stroke = slot.frame:FindFirstChild("Outline") :: UIStroke
-			stroke.Color = if equipped then Tokens.color.gold else Tokens.color.outline
+		local tile = slot.face.Parent :: Frame
+		tile.BackgroundColor3 = if equipped then Tokens.color.goldDeep else Tokens.color.strawDeep
+		slot.face.BackgroundColor3 = if equipped then Tokens.color.gold else Tokens.color.creamPill
+		local gradient = slot.face:FindFirstChildOfClass("UIGradient")
+		if gradient then
+			gradient.Color = if equipped
+				then ColorSequence.new({
+					ColorSequenceKeypoint.new(0, Tokens.color.goldLight),
+					ColorSequenceKeypoint.new(1, Tokens.color.gold),
+				})
+				else ColorSequence.new({
+					ColorSequenceKeypoint.new(0, Tokens.color.featherWhite),
+					ColorSequenceKeypoint.new(1, Tokens.color.creamPill),
+				})
 		end
-		slot.frame.BackgroundColor3 = if equipped then Tokens.color.creamPill else Tokens.color.featherWhite
-		slot.name.TextColor3 = if equipped then Tokens.color.goldDeep else Tokens.color.inkStrong
+		slot.name.BackgroundColor3 = if equipped then Tokens.color.gold else Tokens.color.creamPill
+		slot.name.TextColor3 = if equipped then Tokens.color.featherWhite else Tokens.color.inkStrong
+		local nameOutline = slot.name:FindFirstChild("TextOutline")
+		if equipped and not nameOutline then
+			FrameKit.outline(slot.name, 1.2)
+		elseif nameOutline then
+			(nameOutline :: UIStroke).Enabled = equipped
+		end
 	end
 end
 
--- Owned tools from the authoritative player projection (`roundTools`).
 function ToolHotbar.setOwned(self: ToolHotbar, roundTools: { [string]: boolean })
 	self._owned = { hand = true }
 	for toolId, owned in pairs(roundTools) do
@@ -306,7 +336,7 @@ function ToolHotbar.setEquipped(self: ToolHotbar, toolId: string)
 	self:_refresh()
 	local slot = self._slots[toolId]
 	if slot then
-		slot.scale.Scale = 1 + Motion.amplitude(0.08, self._motion())
+		slot.scale.Scale = 1 + Motion.amplitude(0.1, self._motion())
 		TweenService:Create(slot.scale, TweenInfo.new(Motion.duration("quick", self._motion()), Tokens.motion.easeBack), { Scale = 1 })
 			:Play()
 	end
@@ -317,33 +347,20 @@ function ToolHotbar.setMode(self: ToolHotbar, mode: string)
 	self:_refresh()
 end
 
--- Status for one slot: bar fraction [0,1], caption, tone ("info" | "warning" | "danger" | "success").
 function ToolHotbar.setStatus(self: ToolHotbar, toolId: string, fraction: number?, text: string?, tone: string?)
 	local slot = self._slots[toolId]
 	if not slot then
 		return
 	end
 	slot.status.Text = text or ""
-	local toneName = tone or "info"
-	if slot.fillArt then
-		local role = ({
-			info = "hotbar.status.info",
-			warning = "hotbar.status.warning",
-			danger = "hotbar.status.danger",
-			success = "hotbar.status.green",
-		})[toneName] or "hotbar.status.info"
-		Skin.apply(slot.fill :: ImageLabel, role)
-	else
-		local colors =
-			{ info = Tokens.color.straw, warning = Tokens.color.warning, danger = Tokens.color.danger, success = Tokens.color.success }
-		(slot.fill :: Frame).BackgroundColor3 = colors[toneName] or Tokens.color.straw
-	end
+	local colors =
+		{ info = Tokens.color.gold, warning = Tokens.color.warning, danger = Tokens.color.danger, success = Tokens.color.success }
+	slot.fill.BackgroundColor3 = colors[tone or "info"] or Tokens.color.gold
 	local target = UDim2.fromScale(math.clamp(fraction or 0, 0, 1), 1)
 	TweenService:Create(slot.fill, TweenInfo.new(Motion.duration("instant", self._motion())), { Size = target }):Play()
 	slot.bar.Visible = fraction ~= nil
 end
 
--- Tool id at a visible slot position (1-based, owned tools only) for number keys.
 function ToolHotbar.toolAtIndex(self: ToolHotbar, index: number): string?
 	local visibleIndex = 0
 	for _, toolId in ipairs(self._order) do
@@ -357,7 +374,6 @@ function ToolHotbar.toolAtIndex(self: ToolHotbar, index: number): string?
 	return nil
 end
 
--- Next/previous owned tool relative to the equipped one (gamepad bumpers).
 function ToolHotbar.cycle(self: ToolHotbar, direction: number): string
 	local owned = {}
 	for _, toolId in ipairs(self._order) do

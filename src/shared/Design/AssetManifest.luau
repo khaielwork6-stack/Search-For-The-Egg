@@ -9,6 +9,10 @@ local AssetManifest = {}
 -- UI art (owner-supplied PNGs in /ui, uploaded as image assets). Roles without art render the
 -- token-drawn fallback, so every screen works before an image loads or when one is missing.
 AssetManifest.images = table.freeze({
+	-- Textures from the owner's UI pack (StarterGui.ScreenGui), reused as subtle surface detail.
+	["texture.rays"] = "rbxassetid://92627249277540",
+	["texture.studs"] = "rbxassetid://76728843491214",
+	["texture.sunburst"] = "rbxassetid://77613333876426",
 	["button.close.normal"] = "rbxassetid://132197731374053",
 	["button.close.pressed"] = "rbxassetid://70489286740208",
 	["button.danger.disabled"] = "rbxassetid://139510908172586",

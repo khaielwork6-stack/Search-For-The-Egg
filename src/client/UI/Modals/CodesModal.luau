@@ -60,16 +60,13 @@ function CodesModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	stroke.Color = Tokens.color.outline
 	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = box
+	box.BackgroundColor3 = Tokens.color.featherWhite
+	box.TextXAlignment = Enum.TextXAlignment.Center
 	local padding = Instance.new("UIPadding")
 	padding.PaddingLeft = UDim.new(0, Tokens.spacing.xl)
 	padding.PaddingRight = UDim.new(0, Tokens.spacing.xl)
 	padding.Parent = box
-	local boxArt = Skin.label(box, "textbox.idle", { zIndex = z + 2, inset = 2, name = "ArtFrame" })
-	if boxArt then
-		stroke.Enabled = false
-		box.BackgroundColor3 = Tokens.color.featherWhite
-		box.ZIndex = z + 1
-	end
+	local boxArt: ImageLabel? = nil
 	local function boxState(state: string)
 		if boxArt then
 			Skin.apply(boxArt, "textbox." .. state)

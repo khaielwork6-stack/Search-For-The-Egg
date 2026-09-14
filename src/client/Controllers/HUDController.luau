@@ -110,21 +110,22 @@ function HUDController.new(deps: any): HUDController
 			Icons.build(fallback, iconSlot, Tokens.icon.md, { zIndex = frame.ZIndex + 2 })
 		end
 		label.Text = "0"
-		label.Font = Tokens.typography.numeral.font
-		label.TextSize = Tokens.typography.numeral.size - 2
+		label.Font = Tokens.typography.label.font
+		label.TextSize = Tokens.typography.label.size + 1
+		FrameKit.outline(label, 1.4, Tokens.color.featherWhite)
 		return label
 	end
 	self._labels.gems = currencyChip("Gems", 1, "hud.gem", "gem")
 	self._labels.tokens = currencyChip("Tokens", 2, "hud.token", "coin")
 
-	-- Top-center objective banner: art frame, title + detail on two lines, never over the reticle.
+	-- Top-center objective ribbon: gold band with the outlined objective, cream tail with the detail.
+	local bannerHeight = Tokens.layout.minimumTapTargetPx + Tokens.typography.caption.size + Tokens.spacing.lg
 	local banner = Instance.new("Frame")
 	banner.Name = "Banner"
 	banner.AnchorPoint = Vector2.new(0.5, 0)
 	banner.Position = UDim2.new(0.5, 0, 0, Tokens.layout.safeAreaPaddingPx)
-	local bannerHeight = Tokens.layout.minimumTapTargetPx + Tokens.typography.caption.size + Tokens.spacing.xl
-	banner.Size = UDim2.fromOffset(240, bannerHeight)
-	banner.BackgroundColor3 = Tokens.color.featherWhite
+	banner.Size = UDim2.fromOffset(280, bannerHeight)
+	banner.BackgroundColor3 = Tokens.color.goldDeep
 	banner.ZIndex = Tokens.zIndex.hud
 	local bannerCorner = Instance.new("UICorner")
 	bannerCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
@@ -132,52 +133,46 @@ function HUDController.new(deps: any): HUDController
 	local bannerStroke = Instance.new("UIStroke")
 	bannerStroke.Thickness = Tokens.stroke.bold
 	bannerStroke.Color = Tokens.color.outline
+	bannerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	bannerStroke.Parent = banner
 	local bannerScale = Instance.new("UIScale")
 	bannerScale.Parent = banner
-	FrameKit.shadow(banner, { radius = Tokens.radius.lg })
 	banner.Parent = stage
-	if Skin.label(banner, "hud.banner", { zIndex = banner.ZIndex + 1, inset = 3, name = "ArtFrame" }) then
-		bannerStroke.Enabled = false
-		banner.BackgroundTransparency = 1
-		local shadowFrame = banner:FindFirstChild("Shadow")
-		local halo = banner:FindFirstChild("Halo")
-		if shadowFrame then
-			shadowFrame.Visible = false
-		end
-		if halo then
-			halo.Visible = false
-		end
-	end
-	-- Text lives in a padded content child so the art frame keeps the banner's full size.
+	local bannerFace = Instance.new("Frame")
+	bannerFace.Name = "Face"
+	bannerFace.Size = UDim2.new(1, 0, 1, -4)
+	bannerFace.BackgroundColor3 = Tokens.color.panel
+	bannerFace.BorderSizePixel = 0
+	bannerFace.ZIndex = banner.ZIndex + 1
+	local bannerFaceCorner = Instance.new("UICorner")
+	bannerFaceCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
+	bannerFaceCorner.Parent = bannerFace
+	bannerFace.Parent = banner
+	local bannerBand, bannerTitle = FrameKit.headerBand(
+		bannerFace,
+		"Band",
+		"Loading your nest...",
+		{ height = Tokens.layout.minimumTapTargetPx, zIndex = banner.ZIndex + 2, radius = Tokens.radius.lg }
+	)
+	bannerTitle.TextSize = Tokens.typography.label.size + 2
+	local _ = bannerBand
 	local bannerContent = Instance.new("Frame")
 	bannerContent.Name = "Content"
 	bannerContent.Size = UDim2.fromScale(1, 1)
 	bannerContent.BackgroundTransparency = 1
 	bannerContent.ZIndex = banner.ZIndex + 2
-	bannerContent.Parent = banner
+	bannerContent.Parent = bannerFace
 	local bannerPadding = Instance.new("UIPadding")
-	bannerPadding.PaddingLeft = UDim.new(0, Tokens.spacing.xxl)
-	bannerPadding.PaddingRight = UDim.new(0, Tokens.spacing.xxl)
-	bannerPadding.PaddingTop = UDim.new(0, Tokens.spacing.md)
-	bannerPadding.PaddingBottom = UDim.new(0, Tokens.spacing.md)
+	bannerPadding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
+	bannerPadding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
+	bannerPadding.PaddingBottom = UDim.new(0, Tokens.spacing.xs + 1)
 	bannerPadding.Parent = bannerContent
-	local bannerTitle = Instance.new("TextLabel")
-	bannerTitle.Name = "Text"
-	bannerTitle.Size = UDim2.new(1, 0, 0, Tokens.typography.heading.size + Tokens.spacing.xs)
-	bannerTitle.BackgroundTransparency = 1
-	bannerTitle.Font = Tokens.typography.label.font
-	bannerTitle.TextSize = Tokens.typography.label.size + 1
-	bannerTitle.TextColor3 = Tokens.color.inkStrong
-	bannerTitle.Text = "Loading your nest..."
-	bannerTitle.ZIndex = banner.ZIndex + 3
-	bannerTitle.Parent = bannerContent
 	self._labels.banner = bannerTitle
 	local detail = Instance.new("TextLabel")
 	detail.Name = "Detail"
 	detail.AnchorPoint = Vector2.new(0.5, 1)
 	detail.Position = UDim2.fromScale(0.5, 1)
-	detail.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 2)
+	detail.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 4)
 	detail.BackgroundTransparency = 1
 	detail.Font = Tokens.typography.body.font
 	detail.TextSize = Tokens.typography.caption.size
@@ -187,12 +182,9 @@ function HUDController.new(deps: any): HUDController
 	detail.Parent = bannerContent
 	self._labels.detail = detail
 	self._bannerScale = bannerScale
-	-- Banner width follows the longer of its two lines (never AutomaticSize: the art and shadow
-	-- children are scale-sized and would feed back into it).
 	local function fitBanner()
-		local widest = math.max(bannerTitle.TextBounds.X, detail.TextBounds.X)
-		local pad = bannerPadding.PaddingLeft.Offset + bannerPadding.PaddingRight.Offset
-		banner.Size = UDim2.fromOffset(math.max(240, math.ceil(widest) + pad), bannerHeight)
+		local widest = math.max(bannerTitle.TextBounds.X + Tokens.spacing.xxl * 2, detail.TextBounds.X + Tokens.spacing.lg * 2)
+		banner.Size = UDim2.fromOffset(math.max(280, math.ceil(widest)), bannerHeight)
 	end
 	bannerTitle:GetPropertyChangedSignal("TextBounds"):Connect(fitBanner)
 	detail:GetPropertyChangedSignal("TextBounds"):Connect(fitBanner)
@@ -205,16 +197,16 @@ function HUDController.new(deps: any): HUDController
 	prompt.Position = UDim2.new(1, -Tokens.layout.safeAreaPaddingPx, 1, -Tokens.layout.safeAreaPaddingPx)
 	prompt.Size = UDim2.fromOffset(0, Tokens.layout.minimumTapTargetPx - Tokens.spacing.sm)
 	prompt.AutomaticSize = Enum.AutomaticSize.X
-	prompt.BackgroundColor3 = Tokens.color.featherWhite
-	prompt.BackgroundTransparency = 0.15
+	prompt.BackgroundColor3 = Tokens.color.creamPill
+	prompt.BackgroundTransparency = 0.05
 	prompt.ZIndex = Tokens.zIndex.hud
 	local promptCorner = Instance.new("UICorner")
 	promptCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
 	promptCorner.Parent = prompt
 	local promptStroke = Instance.new("UIStroke")
-	promptStroke.Thickness = Tokens.stroke.standard
+	promptStroke.Thickness = Tokens.stroke.bold
 	promptStroke.Color = Tokens.color.outline
-	promptStroke.Transparency = 0.2
+	promptStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	promptStroke.Parent = prompt
 	local promptLayout = Instance.new("UIListLayout")
 	promptLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -373,10 +365,12 @@ function HUDController.new(deps: any): HUDController
 		ColorSequence.new({ ColorSequenceKeypoint.new(0, Tokens.color.featherWhite), ColorSequenceKeypoint.new(1, Tokens.color.creamDeep) })
 	veilGradient.Parent = veil
 	local veilTitle = FrameKit.pill(veil, "Title", "Search for the Egg", {
-		size = UDim2.fromOffset(0, Tokens.layout.minimumTapTargetPx + Tokens.spacing.md),
+		size = UDim2.fromOffset(0, Tokens.layout.minimumTapTargetPx + Tokens.spacing.lg),
 		textSize = Tokens.typography.display.size,
 		zIndex = veil.ZIndex + 1,
 		fitText = true,
+		fill = Tokens.color.gold,
+		textColor = Tokens.color.featherWhite,
 	})
 	veilTitle.AnchorPoint = Vector2.new(0.5, 0.5)
 	veilTitle.Position = UDim2.fromScale(0.5, 0.44)
