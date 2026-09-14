@@ -1,9 +1,11 @@
 --!strict
--- Shop modal (Perk Bench): the four permanent perks as cards with level meters, old -> new previews,
--- the server cost in Gems, atomic purchases with a pending state, and a celebratory maxed state.
--- Cards react to affordability (lit gold Buy / dimmed with a lock), pop and confetti on purchase.
+-- Perk Shop (the Perk Seller's stall): permanent account perks as big illustrated tiles in a 2 x 2
+-- grid - tinted face, art, level pips and a gem price button - beside a column of gem bundles and
+-- permanent passes bought with Robux. Perk purchases are atomic server requests; Robux items open
+-- the native prompt through the server. Tiles pop and shower confetti when a purchase lands.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Perks = require(Shared.Domain.Perks)
@@ -13,6 +15,7 @@ local Button = require(script.Parent.Parent.Components.Button)
 local Icons = require(script.Parent.Parent.Components.Icons)
 local Skin = require(script.Parent.Parent.Components.Skin)
 local Confetti = require(script.Parent.Parent.Components.Confetti)
+local UpgradeActions = require(script.Parent.Parent.UpgradeActions)
 
 local ShopModal = {}
 
@@ -26,14 +29,93 @@ export type Deps = {
 	minimumTapTarget: number,
 	toasts: any,
 	quality: any?,
+	entitlements: (() -> { [string]: boolean })?,
 }
 
-local COPY: { [string]: { title: string, what: string, icon: string, art: string } } = {
-	bagSize = { title = "Bigger Bag", what = "bag capacity", icon = "feather", art = "icon.feather" },
-	handGrab = { title = "Steady Hands", what = "Hand grasp", icon = "star", art = "tool.hand.normal" },
-	gemValue = { title = "Gem Polish", what = "Gem rewards", icon = "gem", art = "hud.gem" },
-	featherValue = { title = "Feather Appraisal", what = "sale value", icon = "coin", art = "hud.token" },
+local COPY: { [string]: { title: string, what: string, icon: string, art: string, fill: Color3, deep: Color3 } } = {
+	bagSize = {
+		title = "Bag Size",
+		what = "bag capacity",
+		icon = "feather",
+		art = "icon.feather",
+		fill = Tokens.color.leaf,
+		deep = Tokens.color.leafDeep,
+	},
+	handGrab = {
+		title = "Hand Grab",
+		what = "Hand grasp",
+		icon = "star",
+		art = "tool.hand.normal",
+		fill = Tokens.color.gold,
+		deep = Tokens.color.goldDeep,
+	},
+	gemValue = {
+		title = "Gem Value",
+		what = "Gem rewards",
+		icon = "gem",
+		art = "hud.gem",
+		fill = Tokens.color.gem,
+		deep = Tokens.color.gemDeep,
+	},
+	featherValue = {
+		title = "Feather Value",
+		what = "sale value",
+		icon = "coin",
+		art = "hud.token",
+		fill = Tokens.color.sky,
+		deep = Tokens.color.skyDeep,
+	},
 }
+
+-- Robux column: gem bundles first, then the two permanent passes sold here.
+type Offer = { key: string, name: string, caption: string, art: string, icon: string, robux: number?, pass: string?, popular: boolean? }
+
+local function offers(cfg: { [string]: any }): { Offer }
+	local list: { Offer } = {}
+	local bundles = cfg.monetization and cfg.monetization.gemBundles or {}
+	for index, bundle in ipairs(bundles) do
+		table.insert(list, {
+			key = "gemBundle" .. tostring(bundle.gems),
+			name = string.format("%d Gems", bundle.gems),
+			caption = "Added at once",
+			art = "hud.gem",
+			icon = "gem",
+			robux = bundle.robux,
+			popular = index == #bundles,
+		})
+	end
+	local passes = cfg.monetization and cfg.monetization.passes or {}
+	if passes.doubleGems then
+		table.insert(list, {
+			key = "doubleGems",
+			name = "2x Gems",
+			caption = "Permanent",
+			art = "hud.gem",
+			icon = "gem",
+			robux = passes.doubleGems.robux,
+			pass = "doubleGems",
+		})
+	end
+	if passes.infiniteBag then
+		table.insert(list, {
+			key = "infiniteBag",
+			name = "Infinite Bag",
+			caption = "Permanent",
+			art = "icon.feather",
+			icon = "feather",
+			robux = passes.infiniteBag.robux,
+			pass = "infiniteBag",
+		})
+	end
+	return list
+end
+
+local function centredArt(parent: GuiObject, art: string, icon: string, px: number, z: number): GuiObject
+	local glyph = Skin.icon(parent, art, px, z) or Icons.build(icon, parent, px, { zIndex = z })
+	glyph.AnchorPoint = Vector2.new(0.5, 0.5)
+	glyph.Position = UDim2.fromScale(0.5, 0.5)
+	return glyph
+end
 
 function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () -> ()
 	local cleanups: { any } = {}
@@ -41,100 +123,192 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	local motion = deps.accessibility:motionSettings()
 	local tap = deps.minimumTapTarget
 	local z = container.ZIndex + 1
+	local tier = deps.quality and deps.quality:tier() or nil
+	local function entitlements(): { [string]: boolean }
+		return deps.entitlements and deps.entitlements() or {}
+	end
 
-	-- Balance chip + note.
-	local balanceRow = Instance.new("Frame")
-	balanceRow.Name = "BalanceRow"
-	balanceRow.BackgroundTransparency = 1
-	balanceRow.Size = UDim2.new(1, 0, 0, tap)
-	balanceRow.LayoutOrder = 1
-	balanceRow.ZIndex = z
-	balanceRow.Parent = container
-	local balanceChip, balanceLabel, balanceIcon = FrameKit.chip(balanceRow, "Balance", { zIndex = z + 1 })
+	-- Top row: subtitle on the left, gem balance chip with a "+" on the right.
+	local top = Instance.new("Frame")
+	top.Name = "Top"
+	top.BackgroundTransparency = 1
+	top.Size = UDim2.new(1, 0, 0, tap)
+	top.LayoutOrder = 1
+	top.ZIndex = z
+	top.Parent = container
+	local subtitle = FrameKit.text(top, "Subtitle", "Permanent Player Perks", "label", { zIndex = z, color = Tokens.color.goldDeep })
+	subtitle.Size = UDim2.new(1, -(tap * 4), 0, Tokens.typography.label.size + 4)
+	local note = FrameKit.text(top, "Note", "Bought once, kept on every search.", "caption", { zIndex = z, color = Tokens.color.inkMuted })
+	note.Position = UDim2.fromOffset(0, Tokens.typography.label.size + 4)
+	note.Size = UDim2.new(1, -(tap * 4), 0, Tokens.typography.caption.size + 4)
+	local balanceChip, balanceLabel, balanceIcon = FrameKit.chip(top, "Balance", { zIndex = z + 1, height = tap - Tokens.spacing.xs })
 	balanceIcon.Visible = true
 	if not Skin.icon(balanceIcon, "hud.gem", Tokens.icon.md, balanceIcon.ZIndex + 1) then
 		Icons.gem(balanceIcon, Tokens.icon.md, { zIndex = balanceIcon.ZIndex + 1 })
 	end
 	balanceLabel.Text = "0"
 	balanceChip.AnchorPoint = Vector2.new(1, 0.5)
-	balanceChip.Position = UDim2.fromScale(1, 0.5)
-	local note = FrameKit.text(
-		balanceRow,
-		"Note",
-		"Permanent perks stay with you across every search. Each level adds a steady bonus.",
-		"caption",
-		{ zIndex = z, color = Tokens.color.inkMuted }
-	)
-	note.Size = UDim2.new(1, -(tap * 3), 1, 0)
+	balanceChip.Position = UDim2.new(1, -(tap - Tokens.spacing.xs + Tokens.spacing.xs), 0.5, 0)
+	local plus = Button.build(top, {
+		text = "+",
+		variant = "success",
+		round = true,
+		minimumTapTarget = tap,
+		motion = motion,
+		size = UDim2.fromOffset(tap - Tokens.spacing.xs, tap - Tokens.spacing.xs),
+		zIndex = z + 1,
+		textSize = Tokens.typography.title.size,
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTap)
+		end,
+		hoverSound = function()
+			deps.audio:play(Tokens.sound.uiHover)
+		end,
+	})
+	plus.button.AnchorPoint = Vector2.new(1, 0.5)
+	plus.button.Position = UDim2.fromScale(1, 0.5)
+	table.insert(cleanups, plus.destroy)
 
-	type Row = {
-		frame: Frame,
-		title: TextLabel,
-		detail: TextLabel,
-		meter: FrameKit.MeterHandle,
-		buy: any,
-		badge: TextLabel,
+	-- Body: perk grid (left) and the Robux column (right), sized by scale so phones fit.
+	local body = Instance.new("Frame")
+	body.Name = "Body"
+	body.BackgroundTransparency = 1
+	body.Size = UDim2.fromScale(1, 0)
+	body.AutomaticSize = Enum.AutomaticSize.Y
+	body.LayoutOrder = 2
+	body.ZIndex = z
+	body.Parent = container
+
+	local tileHeight = tap * 4 + Tokens.spacing.md
+	local grid = Instance.new("Frame")
+	grid.Name = "Perks"
+	grid.BackgroundColor3 = Tokens.color.creamDeep
+	grid.Size = UDim2.new(0.66, -Tokens.spacing.sm, 0, tileHeight * 2 + Tokens.spacing.sm * 3)
+	grid.ZIndex = z
+	local gridCorner = Instance.new("UICorner")
+	gridCorner.CornerRadius = UDim.new(0, Tokens.radius.xl)
+	gridCorner.Parent = grid
+	local gridStroke = Instance.new("UIStroke")
+	gridStroke.Thickness = Tokens.stroke.standard
+	gridStroke.Color = Tokens.color.strawDeep
+	gridStroke.Transparency = 0.4
+	gridStroke.Parent = grid
+	local gridPadding = Instance.new("UIPadding")
+	gridPadding.PaddingLeft = UDim.new(0, Tokens.spacing.sm)
+	gridPadding.PaddingRight = UDim.new(0, Tokens.spacing.sm)
+	gridPadding.PaddingTop = UDim.new(0, Tokens.spacing.sm)
+	gridPadding.PaddingBottom = UDim.new(0, Tokens.spacing.sm)
+	gridPadding.Parent = grid
+	local gridLayout = Instance.new("UIGridLayout")
+	gridLayout.CellSize = UDim2.new(0.5, -Tokens.spacing.xs, 0, tileHeight)
+	gridLayout.CellPadding = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
+	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	gridLayout.Parent = grid
+	grid.Parent = body
+
+	local column = Instance.new("Frame")
+	column.Name = "Offers"
+	column.BackgroundTransparency = 1
+	column.AnchorPoint = Vector2.new(1, 0)
+	column.Position = UDim2.fromScale(1, 0)
+	column.Size = UDim2.new(0.34, -Tokens.spacing.sm, 0, 0)
+	column.AutomaticSize = Enum.AutomaticSize.Y
+	column.ZIndex = z
+	local columnLayout = Instance.new("UIListLayout")
+	columnLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	columnLayout.Padding = UDim.new(0, Tokens.spacing.sm)
+	columnLayout.Parent = column
+	column.Parent = body
+
+	-- Perk tiles ----------------------------------------------------------------------------------
+	type Tile = {
 		perkId: string,
+		tile: Frame,
 		scale: UIScale,
+		pips: { Frame },
+		buy: any,
+		levelLabel: TextLabel,
+		maxBadge: TextLabel,
 		displayedLevel: number?,
 	}
-	local rows: { Row } = {}
+	local tiles: { Tile } = {}
 	for index, perkId in ipairs(Perks.IDS) do
 		local copy = COPY[perkId]
-		local frame = FrameKit.row(container, "Perk_" .. perkId, tap * 2 + Tokens.spacing.lg, z, { padding = Tokens.spacing.md })
-		frame.LayoutOrder = 10 + index
+		local tile, face =
+			FrameKit.tile(grid, "Perk_" .. perkId, { fill = copy.fill, deep = copy.deep, zIndex = z + 1, radius = Tokens.radius.lg })
+		tile.LayoutOrder = index
 		local scale = Instance.new("UIScale")
-		scale.Parent = frame
-		FrameKit.shadow(frame, { radius = Tokens.radius.md })
-		-- Icon badge.
-		local badgeFrame = Instance.new("Frame")
-		badgeFrame.Name = "IconBadge"
-		badgeFrame.AnchorPoint = Vector2.new(0, 0.5)
-		badgeFrame.Position = UDim2.fromScale(0, 0.5)
-		badgeFrame.Size = UDim2.fromOffset(tap, tap)
-		badgeFrame.BackgroundColor3 = Tokens.color.creamPill
-		badgeFrame.ZIndex = z + 1
-		local badgeCorner = Instance.new("UICorner")
-		badgeCorner.CornerRadius = UDim.new(1, 0)
-		badgeCorner.Parent = badgeFrame
-		local badgeStroke = Instance.new("UIStroke")
-		badgeStroke.Thickness = Tokens.stroke.standard
-		badgeStroke.Color = Tokens.color.outline
-		badgeStroke.Parent = badgeFrame
-		local glyph = Skin.icon(badgeFrame, copy.art, Tokens.icon.lg, z + 2)
-			or Icons.build(copy.icon, badgeFrame, Tokens.icon.lg, { zIndex = z + 2 })
-		glyph.AnchorPoint = Vector2.new(0.5, 0.5)
-		glyph.Position = UDim2.fromScale(0.5, 0.5)
-		badgeFrame.Parent = frame
-		local left = tap + Tokens.spacing.md
-		local title = FrameKit.text(frame, "Title", copy.title, "heading", { zIndex = z + 1, color = Tokens.color.inkStrong })
-		title.Position = UDim2.fromOffset(left, Tokens.spacing.sm)
-		title.Size = UDim2.new(1, -(left + tap * 3), 0, Tokens.typography.heading.size + 2)
-		local badge = FrameKit.badge(frame, "Badge", "MAX", Tokens.color.success, z + 2)
-		badge.AnchorPoint = Vector2.new(0, 0)
-		badge.Position = UDim2.fromOffset(left, Tokens.spacing.sm + 1)
-		badge.Visible = false
-		local detail = FrameKit.text(frame, "Detail", "", "caption", { zIndex = z + 1, color = Tokens.color.inkMuted })
-		detail.Position = UDim2.fromOffset(left, Tokens.typography.heading.size + Tokens.spacing.md)
-		detail.Size = UDim2.new(1, -(left + tap * 3), 0, Tokens.typography.caption.size * 2 + 4)
-		local meterTrack, _, meter = FrameKit.meter(frame, "Meter", 0, {
-			height = 10,
-			zIndex = z + 1,
-			motion = function()
-				return deps.accessibility:motionSettings()
-			end,
+		scale.Parent = tile
+		-- Title strip along the top of the face.
+		local title = FrameKit.text(face, "Title", string.upper(copy.title), "label", {
+			zIndex = z + 3,
+			color = Tokens.color.featherWhite,
+			align = Enum.TextXAlignment.Center,
 		})
-		meterTrack.AnchorPoint = Vector2.new(0, 1)
-		meterTrack.Position = UDim2.new(0, left, 1, -Tokens.spacing.md)
-		meterTrack.Size = UDim2.new(1, -(left + tap * 3), 0, 10)
-		local buy = Button.build(frame, {
-			text = "Buy",
-			variant = "primary",
+		title.Position = UDim2.fromOffset(0, Tokens.spacing.sm)
+		title.Size = UDim2.new(1, 0, 0, Tokens.typography.label.size + 6)
+		FrameKit.outline(title, 2.2)
+		-- Illustration on a soft sunburst.
+		local artHolder = Instance.new("Frame")
+		artHolder.Name = "Art"
+		artHolder.AnchorPoint = Vector2.new(0.5, 0)
+		artHolder.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.md + 4)
+		artHolder.Size = UDim2.fromOffset(tap * 2 - Tokens.spacing.xs, tap * 2 - Tokens.spacing.xs)
+		artHolder.BackgroundTransparency = 1
+		artHolder.ZIndex = z + 2
+		artHolder.Parent = face
+		Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 2, transparency = 0.72, color = Tokens.color.featherWhite })
+		centredArt(artHolder, copy.art, copy.icon, tap * 2 - Tokens.spacing.lg, z + 4)
+		-- Level pips: one per level, lit up to the current one.
+		local pips = Instance.new("Frame")
+		pips.Name = "Pips"
+		pips.AnchorPoint = Vector2.new(0.5, 1)
+		pips.Position = UDim2.new(0.5, 0, 1, -(tap + Tokens.spacing.sm))
+		pips.Size = UDim2.new(1, -Tokens.spacing.md * 2, 0, 10)
+		pips.BackgroundTransparency = 1
+		pips.ZIndex = z + 3
+		local pipLayout = Instance.new("UIListLayout")
+		pipLayout.FillDirection = Enum.FillDirection.Horizontal
+		pipLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		pipLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+		pipLayout.Padding = UDim.new(0, 3)
+		pipLayout.Parent = pips
+		pips.Parent = face
+		local pipDots: { Frame } = {}
+		local maxLevel = cfg.permanentPerks[perkId].maxLevel
+		for level = 1, maxLevel do
+			local dot = Instance.new("Frame")
+			dot.Name = "Pip" .. level
+			dot.Size = UDim2.fromOffset(if maxLevel > 6 then 9 else 12, if maxLevel > 6 then 9 else 12)
+			dot.BackgroundColor3 = Tokens.color.overlay
+			dot.BackgroundTransparency = 0.55
+			dot.BorderSizePixel = 0
+			dot.ZIndex = z + 3
+			dot.LayoutOrder = level
+			local dotCorner = Instance.new("UICorner")
+			dotCorner.CornerRadius = UDim.new(1, 0)
+			dotCorner.Parent = dot
+			dot.Parent = pips
+			table.insert(pipDots, dot)
+		end
+		local levelLabel = FrameKit.text(face, "Level", "", "caption", {
+			zIndex = z + 3,
+			color = Tokens.color.featherWhite,
+			align = Enum.TextXAlignment.Center,
+		})
+		levelLabel.AnchorPoint = Vector2.new(0.5, 1)
+		levelLabel.Position = UDim2.new(0.5, 0, 1, -(tap + Tokens.spacing.sm + 12))
+		levelLabel.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 2)
+		FrameKit.outline(levelLabel, 1.6)
+		-- Price button across the bottom.
+		local buy = Button.build(face, {
+			text = "",
+			variant = "gem",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromOffset(tap * 3 - Tokens.spacing.lg, tap),
-			zIndex = z + 2,
-			textSize = Tokens.typography.body.size,
+			size = UDim2.new(1, -Tokens.spacing.md, 0, tap - Tokens.spacing.xs),
+			zIndex = z + 3,
+			textSize = Tokens.typography.label.size,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTap)
 			end,
@@ -142,21 +316,24 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 				deps.audio:play(Tokens.sound.uiHover)
 			end,
 		})
-		buy.button.AnchorPoint = Vector2.new(1, 0.5)
-		buy.button.Position = UDim2.fromScale(1, 0.5)
+		buy.button.AnchorPoint = Vector2.new(0.5, 1)
+		buy.button.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.sm)
 		table.insert(cleanups, buy.destroy)
-		local row: Row = {
-			frame = frame,
-			title = title,
-			detail = detail,
-			meter = meter,
-			buy = buy,
-			badge = badge,
+		local maxBadge = FrameKit.badge(face, "Max", "MAXED", Tokens.color.success, z + 4)
+		maxBadge.AnchorPoint = Vector2.new(0.5, 1)
+		maxBadge.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.md)
+		maxBadge.Visible = false
+		local record: Tile = {
 			perkId = perkId,
+			tile = tile,
 			scale = scale,
+			pips = pipDots,
+			buy = buy,
+			levelLabel = levelLabel,
+			maxBadge = maxBadge,
 			displayedLevel = nil,
 		}
-		table.insert(rows, row)
+		table.insert(tiles, record)
 		table.insert(
 			cleanups,
 			buy.button.Activated:Connect(function()
@@ -171,21 +348,21 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 				if result.ok then
 					deps.audio:play(Tokens.sound.purchase)
 					deps.haptics:pulse(0.5, 0.1)
-					scale.Scale = 1.04
+					scale.Scale = 1.06
 					Tween.scale(scale, "release", motion, 1)
-					Confetti.burst(frame, {
-						origin = UDim2.fromScale(0.5, 0.5),
-						count = 18,
-						spread = 120,
+					Confetti.burst(tile, {
+						origin = UDim2.fromScale(0.5, 0.45),
+						count = 22,
+						spread = 140,
 						motion = motion,
-						tier = deps.quality and deps.quality:tier() or nil,
-						zIndex = z + 6,
+						tier = tier,
+						zIndex = z + 8,
 					})
 					deps.audio:play(Tokens.sound.uiConfetti)
 					deps.toasts:push(string.format("%s reached level %d", copy.title, result.data.level), "success")
 				else
 					deps.audio:play(Tokens.sound.uiError)
-					Tween.shake(frame, motion)
+					Tween.shake(tile, motion)
 					local message = if result.code == "insufficient_funds"
 						then "Not enough Gems"
 						elseif result.code == "stale_token" then "Levels changed - try again"
@@ -197,9 +374,118 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 			end)
 		)
 	end
-	if rows[1] then
-		api.setInitialFocus(rows[1].buy.button)
+	if tiles[1] then
+		api.setInitialFocus(tiles[1].buy.button)
 	end
+
+	-- Robux offers ---------------------------------------------------------------------------------
+	type OfferCard = { offer: Offer, tile: Frame, buy: any, owned: TextLabel, scale: UIScale }
+	local offerCards: { OfferCard } = {}
+	local offerHeight = tap * 2 + Tokens.spacing.xl
+	for index, offer in ipairs(offers(cfg)) do
+		local fill = if offer.pass then Tokens.color.gem else Tokens.color.sky
+		local deep = if offer.pass then Tokens.color.gemDeep else Tokens.color.skyDeep
+		local tile, face = FrameKit.tile(column, "Offer_" .. offer.key, {
+			fill = fill,
+			deep = deep,
+			zIndex = z + 1,
+			radius = Tokens.radius.lg,
+			size = UDim2.new(1, 0, 0, offerHeight),
+		})
+		tile.LayoutOrder = index
+		local scale = Instance.new("UIScale")
+		scale.Parent = tile
+		local artHolder = Instance.new("Frame")
+		artHolder.Name = "Art"
+		artHolder.AnchorPoint = Vector2.new(0, 0.5)
+		artHolder.Position = UDim2.new(0, Tokens.spacing.sm, 0.5, -2)
+		artHolder.Size = UDim2.fromOffset(tap + Tokens.spacing.md, tap + Tokens.spacing.md)
+		artHolder.BackgroundTransparency = 1
+		artHolder.ZIndex = z + 2
+		artHolder.Parent = face
+		Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 2, transparency = 0.7, color = Tokens.color.featherWhite })
+		centredArt(artHolder, offer.art, offer.icon, tap, z + 4)
+		local left = tap + Tokens.spacing.md + Tokens.spacing.md
+		local name = FrameKit.text(face, "Name", offer.name, "label", { zIndex = z + 3, color = Tokens.color.featherWhite })
+		name.Position = UDim2.fromOffset(left, Tokens.spacing.sm)
+		name.Size = UDim2.new(1, -left, 0, Tokens.typography.label.size + 4)
+		FrameKit.outline(name, 2)
+		local caption = FrameKit.text(face, "Caption", offer.caption, "caption", { zIndex = z + 3, color = Tokens.color.featherWhite })
+		caption.Position = UDim2.fromOffset(left, Tokens.typography.label.size + Tokens.spacing.sm + 2)
+		caption.Size = UDim2.new(1, -left, 0, Tokens.typography.caption.size + 2)
+		FrameKit.outline(caption, 1.4)
+		local buy = Button.build(face, {
+			text = if offer.robux then string.format("R$ %d", offer.robux) else "R$",
+			variant = "primary",
+			minimumTapTarget = tap,
+			motion = motion,
+			size = UDim2.new(1, -(left + Tokens.spacing.sm), 0, tap - Tokens.spacing.sm),
+			zIndex = z + 3,
+			textSize = Tokens.typography.body.size + 1,
+			sound = function()
+				deps.audio:play(Tokens.sound.uiTap)
+			end,
+			hoverSound = function()
+				deps.audio:play(Tokens.sound.uiHover)
+			end,
+			onActivated = function()
+				local result =
+					UpgradeActions.promptPurchase({ net = deps.net, audio = deps.audio, toasts = deps.toasts }, offer.key, offer.name)
+				if result.ok then
+					scale.Scale = 1.05
+					Tween.scale(scale, "release", motion, 1)
+				end
+			end,
+		})
+		buy.button.AnchorPoint = Vector2.new(1, 1)
+		buy.button.Position = UDim2.new(1, -Tokens.spacing.sm, 1, -Tokens.spacing.sm)
+		table.insert(cleanups, buy.destroy)
+		local owned = FrameKit.badge(face, "Owned", "OWNED", Tokens.color.success, z + 4)
+		owned.AnchorPoint = Vector2.new(1, 1)
+		owned.Position = UDim2.new(1, -Tokens.spacing.md, 1, -Tokens.spacing.md)
+		owned.Visible = false
+		if offer.popular then
+			local ribbon = FrameKit.badge(tile, "Popular", "POPULAR", Tokens.color.ember, z + 5)
+			ribbon.AnchorPoint = Vector2.new(1, 0)
+			ribbon.Position = UDim2.new(1, Tokens.spacing.xs, 0, -Tokens.spacing.xs)
+			ribbon.Rotation = 6
+		end
+		table.insert(offerCards, { offer = offer, tile = tile, buy = buy, owned = owned, scale = scale })
+	end
+	local firstBundle = offerCards[1]
+	table.insert(
+		cleanups,
+		plus.button.Activated:Connect(function()
+			if firstBundle then
+				firstBundle.scale.Scale = 1.08
+				Tween.scale(firstBundle.scale, "release", motion, 1)
+				local stroke = firstBundle.tile:FindFirstChild("Outline") :: UIStroke?
+				if stroke then
+					stroke.Color = Tokens.color.goldLight
+					TweenService:Create(stroke, TweenInfo.new(0.8), { Color = Tokens.color.outline }):Play()
+				end
+			end
+		end)
+	)
+
+	-- Close ----------------------------------------------------------------------------------------
+	local close = Button.build(container, {
+		text = "Close",
+		variant = "danger",
+		minimumTapTarget = tap,
+		motion = motion,
+		size = UDim2.new(1, 0, 0, tap),
+		zIndex = z + 1,
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTap)
+		end,
+		hoverSound = function()
+			deps.audio:play(Tokens.sound.uiHover)
+		end,
+		onActivated = api.close,
+	})
+	close.button.LayoutOrder = 3
+	table.insert(cleanups, close.destroy)
 
 	local function render()
 		local projection = deps.profile.projection
@@ -207,40 +493,43 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 			return
 		end
 		balanceLabel.Text = tostring(projection.currencies.gems)
-		for _, row in ipairs(rows) do
-			local preview = Perks.preview(cfg, row.perkId, projection.permanentPerks[row.perkId] or 0)
+		for _, record in ipairs(tiles) do
+			local preview = Perks.preview(cfg, record.perkId, projection.permanentPerks[record.perkId] or 0)
 			local currentPct = math.floor((preview.currentMultiplier - 1) * 100 + 0.5)
-			row.meter.set(preview.level / preview.maxLevel, row.displayedLevel ~= nil and row.displayedLevel ~= preview.level)
-			row.displayedLevel = preview.level
+			local grew = record.displayedLevel ~= nil and record.displayedLevel ~= preview.level
+			record.displayedLevel = preview.level
+			for level, dot in ipairs(record.pips) do
+				local lit = level <= preview.level
+				dot.BackgroundColor3 = if lit then Tokens.color.goldLight else Tokens.color.overlay
+				dot.BackgroundTransparency = if lit then 0 else 0.55
+				if lit and grew and level == preview.level then
+					local dotScale = dot:FindFirstChildOfClass("UIScale") or Instance.new("UIScale")
+					dotScale.Parent = dot
+					dotScale.Scale = 1.8
+					TweenService:Create(dotScale, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+				end
+			end
 			if preview.maxed then
-				row.detail.Text =
-					string.format("Level %d / %d  -  +%d%% %s", preview.level, preview.maxLevel, currentPct, COPY[row.perkId].what)
-				row.detail.TextColor3 = Tokens.color.leafDeep
-				row.buy.button.Visible = false
-				row.badge.Visible = true
-				row.badge.Position = UDim2.fromOffset(
-					row.title.Position.X.Offset + math.ceil(row.title.TextBounds.X) + Tokens.spacing.sm,
-					Tokens.spacing.sm + 1
-				)
-				row.meter.setColor(Tokens.color.leafBright)
+				record.levelLabel.Text =
+					string.format("Level %d / %d  -  +%d%% %s", preview.level, preview.maxLevel, currentPct, COPY[record.perkId].what)
+				record.buy.button.Visible = false
+				record.maxBadge.Visible = true
 			else
 				local nextPct = math.floor(((preview.nextMultiplier or 1) - 1) * 100 + 0.5)
-				row.detail.Text = string.format(
-					"Level %d / %d  -  +%d%% -> +%d%% %s",
-					preview.level,
-					preview.maxLevel,
-					currentPct,
-					nextPct,
-					COPY[row.perkId].what
-				)
-				row.detail.TextColor3 = Tokens.color.inkMuted
-				row.buy.button.Visible = true
-				row.badge.Visible = false
+				record.levelLabel.Text =
+					string.format("Lv %d  -  +%d%% -> +%d%% %s", preview.level, currentPct, nextPct, COPY[record.perkId].what)
+				record.buy.button.Visible = true
+				record.maxBadge.Visible = false
 				local affordable = projection.currencies.gems >= (preview.costGems or 0)
-				row.buy.setText(string.format("%d Gems", preview.costGems or 0))
-				row.buy.setEnabled(affordable)
-				row.meter.setColor(Tokens.color.gold)
+				record.buy.setText(string.format("%d Gems", preview.costGems or 0))
+				record.buy.setEnabled(affordable)
 			end
+		end
+		local ent = entitlements()
+		for _, card in ipairs(offerCards) do
+			local ownedPass = card.offer.pass ~= nil and ent[card.offer.pass :: string] == true
+			card.buy.button.Visible = not ownedPass
+			card.owned.Visible = ownedPass
 		end
 	end
 

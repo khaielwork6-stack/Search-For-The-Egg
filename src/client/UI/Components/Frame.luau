@@ -493,6 +493,50 @@ end
 
 -- HUD chip: cream pill on a cocoa lip, optional leading icon slot, outlined numerals.
 -- Returns (chip, textLabel, iconSlot). Width follows the text unless `width` is given.
+-- Tinted tile: a coloured lip with a lighter gradient face on top (shop cards, class rows). The
+-- face keeps the tile's full size minus the lip so children position against it directly.
+function Frame.tile(
+	parent: Instance,
+	name: string,
+	options: { fill: Color3, deep: Color3, zIndex: number?, radius: number?, lip: number?, size: UDim2? }
+): (Frame, Frame)
+	local z = options.zIndex or 1
+	local radius = options.radius or Tokens.radius.lg
+	local lip = options.lip or 5
+	local tile = Instance.new("Frame")
+	tile.Name = name
+	tile.Size = options.size or UDim2.fromScale(1, 1)
+	tile.BackgroundColor3 = options.deep
+	tile.BorderSizePixel = 0
+	tile.ZIndex = z
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, radius)
+	corner.Parent = tile
+	local stroke = Instance.new("UIStroke")
+	stroke.Name = "Outline"
+	stroke.Thickness = Tokens.stroke.bold
+	stroke.Color = Tokens.color.outline
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = tile
+	local face = Instance.new("Frame")
+	face.Name = "Face"
+	face.Size = UDim2.new(1, 0, 1, -lip)
+	face.BackgroundColor3 = options.fill
+	face.BorderSizePixel = 0
+	face.ZIndex = z + 1
+	local faceCorner = Instance.new("UICorner")
+	faceCorner.CornerRadius = UDim.new(0, radius)
+	faceCorner.Parent = face
+	local gradient = Instance.new("UIGradient")
+	gradient.Rotation = 90
+	local light = options.fill:Lerp(Color3.new(1, 1, 1), 0.28)
+	gradient.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, light), ColorSequenceKeypoint.new(1, options.fill) })
+	gradient.Parent = face
+	face.Parent = tile
+	tile.Parent = parent
+	return tile, face
+end
+
 function Frame.chip(
 	parent: Instance,
 	name: string,

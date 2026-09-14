@@ -18,7 +18,7 @@ local FrameKit = require(script.Parent.Frame)
 
 local Button = {}
 
-export type Variant = "primary" | "secondary" | "ghost" | "gold" | "pill" | "danger" | "teal"
+export type Variant = "primary" | "secondary" | "ghost" | "gold" | "pill" | "danger" | "teal" | "gem" | "success"
 
 export type Options = {
 	text: string,
@@ -113,6 +113,26 @@ local STYLES: { [string]: Style } = {
 		face = Tokens.color.ember,
 		faceLight = Color3.fromRGB(246, 150, 104),
 		lip = Tokens.color.emberDeep,
+		text = Tokens.color.featherWhite,
+		font = Tokens.typography.label.font,
+		radius = Tokens.radius.md,
+		outlined = true,
+	},
+	-- Gem purchases and Robux products: the gem purple of the currency itself.
+	gem = {
+		face = Tokens.color.gem,
+		faceLight = Color3.fromRGB(160, 136, 240),
+		lip = Tokens.color.gemDeep,
+		text = Tokens.color.featherWhite,
+		font = Tokens.typography.label.font,
+		radius = Tokens.radius.md,
+		outlined = true,
+	},
+	-- The big "go" action (spin a class, set off): leaf green.
+	success = {
+		face = Tokens.color.leafBright,
+		faceLight = Color3.fromRGB(170, 224, 120),
+		lip = Tokens.color.leafDeep,
 		text = Tokens.color.featherWhite,
 		font = Tokens.typography.label.font,
 		radius = Tokens.radius.md,
