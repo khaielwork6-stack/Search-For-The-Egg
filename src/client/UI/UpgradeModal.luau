@@ -124,6 +124,14 @@ local LABELS: { [string]: { title: string, describe: (any) -> string } } = {
 	},
 }
 
+-- One line per tool for the acquisition row; the paths describe themselves once the tool is owned.
+local TOOL_TAGLINES: { [string]: string } = {
+	nestRake = "Sweeps several feathers in one pull",
+	confettiCharge = "Blasts a patch of the nest loose",
+	featherVac = "Hoovers feathers while it runs",
+	scoutChick = "A chick that pecks feathers for you",
+}
+
 export type Deps = {
 	net: any,
 	round: any,
@@ -160,16 +168,16 @@ end
 -- Builds the modal body inside `container`; returns a cleanup function.
 function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: Deps): () -> ()
 	local cleanups: { any } = {}
-	local rows: { [string]: { frame: Frame, label: TextLabel, button: TextButton?, cost: TextLabel } } = {}
+	local rows: { [string]: any } = {}
 	local headers: { [string]: TextLabel } = {}
 
 	local cashLabel = Instance.new("TextLabel")
 	cashLabel.Name = "Cash"
 	cashLabel.Size = UDim2.new(1, 0, 0, Tokens.typography.heading.size + Tokens.spacing.sm)
 	cashLabel.BackgroundTransparency = 1
-	cashLabel.Font = Tokens.typography.heading.font
-	cashLabel.TextSize = Tokens.typography.heading.size
-	cashLabel.TextColor3 = Tokens.color.leafDeep
+	cashLabel.Font = Tokens.typography.label.font
+	cashLabel.TextSize = Tokens.typography.label.size
+	cashLabel.TextColor3 = Tokens.color.goldDeep
 	cashLabel.TextXAlignment = Enum.TextXAlignment.Left
 	cashLabel.LayoutOrder = 0
 	cashLabel.ZIndex = container.ZIndex + 1
@@ -258,85 +266,120 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 			end
 			local row = rows[preview.upgradeId]
 			if not row then
-				local frame =
-					FrameKit.row(container, "Row_" .. preview.upgradeId, deps.minimumTapTarget + Tokens.spacing.lg, container.ZIndex + 1)
-				local label = Instance.new("TextLabel")
-				label.Name = "Label"
-				label.Position = UDim2.fromOffset(0, 0)
-				label.Size = UDim2.new(0.62, -Tokens.spacing.md, 1, 0)
-				label.ZIndex = frame.ZIndex + 1
-				label.BackgroundTransparency = 1
-				label.Font = Tokens.typography.body.font
-				label.TextSize = Tokens.typography.body.size
-				label.TextColor3 = Tokens.color.inkStrong
-				label.TextXAlignment = Enum.TextXAlignment.Left
-				label.TextWrapped = true
-				label.Parent = frame
-				local cost = Instance.new("TextLabel")
-				cost.Name = "Cost"
-				cost.AnchorPoint = Vector2.new(1, 0.5)
-				cost.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, 0)
-				cost.Size = UDim2.new(0.38, -Tokens.spacing.md, 1, 0)
-				cost.BackgroundTransparency = 1
-				cost.Font = Tokens.typography.caption.font
-				cost.TextSize = Tokens.typography.caption.size
-				cost.TextColor3 = Tokens.color.inkMuted
-				cost.TextXAlignment = Enum.TextXAlignment.Right
-				cost.Visible = false
-				cost.ZIndex = frame.ZIndex + 1
-				cost.Parent = frame
-				row = { frame = frame, label = label, button = nil, cost = cost }
-				rows[preview.upgradeId] = row
-				local button, buttonCleanup = Button.create(frame, {
+				local z = container.ZIndex + 1
+				local frame = FrameKit.row(container, "Row_" .. preview.upgradeId, deps.minimumTapTarget + Tokens.spacing.lg, z)
+				local buttonWidth = math.max(deps.minimumTapTarget * 2, 128)
+				local textWidth = -(buttonWidth + Tokens.spacing.md)
+				local title = FrameKit.text(frame, "Title", "", "label", { zIndex = z + 1, color = Tokens.color.inkStrong })
+				title.Position = UDim2.new(0, 0, 0.5, -(Tokens.typography.label.size + Tokens.spacing.xs) + 2)
+				title.Size = UDim2.new(1, textWidth, 0, Tokens.typography.label.size + Tokens.spacing.xs)
+				local detail = FrameKit.text(frame, "Detail", "", "caption", { zIndex = z + 1, color = Tokens.color.inkMuted })
+				detail.Position = UDim2.new(0, 0, 0.5, 2)
+				detail.Size = UDim2.new(1, textWidth, 0, Tokens.typography.caption.size + Tokens.spacing.xs)
+				detail.RichText = true
+				-- Level pips sit after the title: one dot per level, filled up to the current one.
+				local pips = Instance.new("Frame")
+				pips.Name = "Pips"
+				pips.BackgroundTransparency = 1
+				pips.AnchorPoint = Vector2.new(0, 0.5)
+				pips.Size = UDim2.fromOffset(0, 10)
+				pips.AutomaticSize = Enum.AutomaticSize.X
+				pips.ZIndex = z + 1
+				local pipLayout = Instance.new("UIListLayout")
+				pipLayout.FillDirection = Enum.FillDirection.Horizontal
+				pipLayout.Padding = UDim.new(0, 3)
+				pipLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+				pipLayout.Parent = pips
+				local pipDots: { Frame } = {}
+				for index = 1, math.clamp(preview.maxLevel or 0, 0, 8) do
+					local dot = Instance.new("Frame")
+					dot.Name = "Pip" .. index
+					dot.Size = UDim2.fromOffset(9, 9)
+					dot.BackgroundColor3 = Tokens.color.creamDeep
+					dot.BorderSizePixel = 0
+					dot.ZIndex = z + 1
+					dot.LayoutOrder = index
+					local dotCorner = Instance.new("UICorner")
+					dotCorner.CornerRadius = UDim.new(1, 0)
+					dotCorner.Parent = dot
+					local dotStroke = Instance.new("UIStroke")
+					dotStroke.Thickness = 1.5
+					dotStroke.Color = Tokens.color.strawDeep
+					dotStroke.Parent = dot
+					dot.Parent = pips
+					table.insert(pipDots, dot)
+				end
+				pips.Parent = frame
+				local maxBadge = FrameKit.badge(frame, "MaxBadge", "MAX", Tokens.color.gold, z + 1)
+				maxBadge.AnchorPoint = Vector2.new(1, 0.5)
+				maxBadge.Position = UDim2.fromScale(1, 0.5)
+				maxBadge.Visible = false
+				local handle = Button.build(frame, {
 					text = "Buy",
 					variant = "primary",
 					minimumTapTarget = deps.minimumTapTarget,
 					motion = deps.accessibility:motionSettings(),
-					size = UDim2.fromOffset(math.max(deps.minimumTapTarget, 132), deps.minimumTapTarget),
-					zIndex = frame.ZIndex + 2,
-					textSize = Tokens.typography.body.size,
+					size = UDim2.fromOffset(buttonWidth, deps.minimumTapTarget - Tokens.spacing.xs),
+					zIndex = z + 2,
+					textSize = Tokens.typography.body.size + 1,
 					sound = function()
 						deps.audio:play(Tokens.sound.uiTap)
 					end,
 					hoverSound = function()
 						deps.audio:play(Tokens.sound.uiHover)
 					end,
-				})
-				button.AnchorPoint = Vector2.new(1, 0.5)
-				button.Position = UDim2.fromScale(1, 0.5)
-				table.insert(cleanups, buttonCleanup)
-				row.button = button
-				table.insert(
-					cleanups,
-					button.Activated:Connect(function()
+					onActivated = function()
 						purchase(preview.upgradeId)
-					end)
-				)
+					end,
+				})
+				handle.button.AnchorPoint = Vector2.new(1, 0.5)
+				handle.button.Position = UDim2.fromScale(1, 0.5)
+				table.insert(cleanups, handle.destroy)
+				row = {
+					frame = frame,
+					title = title,
+					detail = detail,
+					pips = pips,
+					pipDots = pipDots,
+					maxBadge = maxBadge,
+					handle = handle,
+				}
+				rows[preview.upgradeId] = row
 			end
 			row.frame.LayoutOrder = order
-			local title = titleFor(preview)
+			row.title.Text = titleFor(preview)
+			-- Pips follow the title text so they never collide with it.
+			row.pips.Position = UDim2.new(0, math.ceil(row.title.TextBounds.X) + Tokens.spacing.sm, 0.5, -(Tokens.spacing.xs + 4))
+			row.pips.Visible = #row.pipDots > 1
+			for index, dot in ipairs(row.pipDots) do
+				local lit = index <= (preview.level or 0)
+				dot.BackgroundColor3 = if lit then Tokens.color.gold else Tokens.color.creamDeep
+				local dotStroke = dot:FindFirstChildOfClass("UIStroke")
+				if dotStroke then
+					dotStroke.Color = if lit then Tokens.color.goldDeep else Tokens.color.strawDeep
+				end
+			end
 			local current = describe(preview, preview.current)
 			if preview.maxed then
 				local suffix = if preview.kind == "acquire"
-					then (if preview.permanent then "PERMANENT" else "OWNED")
-					elseif preview.permanent then "MAX (permanent)"
-					else "MAXED"
-				row.label.Text = string.format("%s\n%s  -  %s", title, current, suffix)
-				row.label.TextColor3 = Tokens.color.leafDeep
-				if row.button then
-					row.button.Visible = false
-				end
-				row.cost.Visible = true
-				row.cost.Text = if preview.kind == "acquire" then "Ready in your hotbar" else "Fully upgraded"
-				row.cost.TextColor3 = Tokens.color.leafDeep
+					then (if preview.permanent then "Yours for keeps" else "Ready in your hotbar")
+					elseif preview.permanent then "Fully upgraded, for keeps"
+					else "Fully upgraded"
+				row.detail.Text = string.format('%s  <font color="#%s">%s</font>', current, Tokens.color.leafDeep:ToHex(), suffix)
+				row.handle.button.Visible = false
+				row.maxBadge.Visible = true
+				row.maxBadge.Text = if preview.kind == "acquire" then "OWNED" else "MAX"
 			else
-				row.label.Text = string.format("%s\n%s  ->  %s", title, current, describe(preview, preview.next))
-				row.label.TextColor3 = Tokens.color.inkStrong
-				if row.button then
-					row.button.Visible = true
-					row.button.Text = costText(preview)
-				end
-				row.cost.Visible = false
+				local nextText = describe(preview, preview.next)
+				row.detail.Text = if preview.kind == "acquire"
+					then (TOOL_TAGLINES[preview.toolId or ""] or nextText)
+					else string.format('%s  <font color="#%s">→  %s</font>', current, Tokens.color.goldDeep:ToHex(), nextText)
+				local cash = player and player.cashCents or 0
+				local affordable = if preview.costGems then (gems or 0) >= preview.costGems else cash >= (preview.costCents or 0)
+				row.handle.button.Visible = true
+				row.handle.setText(costText(preview))
+				row.handle.setVariant(if affordable then "primary" else "secondary")
+				row.maxBadge.Visible = false
 			end
 		end
 	end
