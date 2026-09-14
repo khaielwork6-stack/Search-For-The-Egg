@@ -833,13 +833,13 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	end
 
 	rollHandle = Button.build(controls, {
-		text = string.format("Spin Class   %d Gems", cfg.classes.rollGemCost),
+		text = string.format("Spin  -  %d Gems", cfg.classes.rollGemCost),
 		variant = "success",
 		minimumTapTarget = tap,
 		motion = motion,
 		size = UDim2.new(0.66, -Tokens.spacing.xs, 0, tap + Tokens.spacing.xs),
 		zIndex = z + 1,
-		textSize = Tokens.typography.title.size - 2,
+		textSize = Tokens.typography.label.size + 2,
 		sound = function()
 			deps.audio:play(Tokens.sound.uiTap)
 		end,
