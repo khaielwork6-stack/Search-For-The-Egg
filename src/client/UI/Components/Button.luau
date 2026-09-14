@@ -15,6 +15,7 @@ local Motion = require(Shared.Design.Motion)
 local Tween = require(script.Parent.Tween)
 local Icons = require(script.Parent.Icons)
 local FrameKit = require(script.Parent.Frame)
+local Skin = require(script.Parent.Skin)
 
 local Button = {}
 
@@ -28,6 +29,7 @@ export type Options = {
 	onActivated: (() -> ())?,
 	size: UDim2?,
 	image: string?, -- asset id for an image face (station buttons)
+	pressedImage: string?, -- swapped in while the face is held
 	caption: string?,
 	icon: string?, -- vector icon role from Icons (leading)
 	zIndex: number?,
@@ -215,6 +217,27 @@ function Button.build(parent: Instance, options: Options): Handle
 	if style.shadow and not options.image then
 		shadow = FrameKit.shadow(button, { radius = style.radius })
 	end
+	-- Art skin: a nine-sliced frame per state behind the live text; the token drawing becomes the
+	-- centre fill so the face still reads when a state image is missing.
+	local skinRole = "button." .. (if variantName == "gold" then "primary" else variantName)
+	local skin: ImageLabel? = nil
+	local skinInset = 0
+	if not options.image and Skin.has(skinRole .. ".normal") then
+		skinInset = 2
+		skin = Skin.label(button, skinRole .. ".normal", { zIndex = z + 1, inset = skinInset, name = "ArtFrame" })
+		stroke.Enabled = false
+		wash.ZIndex = z + 2
+	end
+	local function skinState(state: string)
+		if not skin then
+			return
+		end
+		local role = skinRole .. "." .. state
+		if not Skin.has(role) then
+			role = skinRole .. ".normal"
+		end
+		Skin.apply(skin :: ImageLabel, role)
+	end
 
 	-- Optional image face (station buttons) or leading vector icon.
 	local imageLabel: ImageLabel? = nil
@@ -230,6 +253,16 @@ function Button.build(parent: Instance, options: Options): Handle
 		image.ZIndex = z + 1
 		image.Parent = button
 		imageLabel = image
+		if options.pressedImage then
+			local pressedImage = options.pressedImage :: string
+			local normalImage = options.image :: string
+			image.InputBegan:Connect(function()
+				image.Image = pressedImage
+			end)
+			image.InputEnded:Connect(function()
+				image.Image = normalImage
+			end)
+		end
 		button.BackgroundTransparency = 1
 		stroke.Enabled = false
 		wash.Visible = false
@@ -263,6 +296,11 @@ function Button.build(parent: Instance, options: Options): Handle
 
 	local function applyState()
 		local dim = not enabled
+		if skin then
+			skinState(if dim then "disabled" elseif selected then "selected" elseif hovered then "hover" else "normal")
+			-- With art, the button's own fill is the centre colour behind the frame.
+			button.BackgroundTransparency = if variantName == "ghost" then 1 else (if dim then 0.5 else 0.08)
+		end
 		button.Active = enabled
 		button.Selectable = enabled
 		if imageLabel then
@@ -278,9 +316,11 @@ function Button.build(parent: Instance, options: Options): Handle
 		if selected then
 			stroke.Color = Tokens.color.tealAccent
 			stroke.Thickness = Tokens.stroke.bold
+			stroke.Enabled = true
 		else
 			stroke.Color = style.stroke
 			stroke.Thickness = style.strokeWidth
+			stroke.Enabled = skin == nil and imageLabel == nil
 		end
 		if shadow then
 			shadow.Visible = not dim
@@ -301,6 +341,7 @@ function Button.build(parent: Instance, options: Options): Handle
 			if enabled then
 				tweenScale("hover")
 				setWash(0.82)
+				skinState(if selected then "selected" else "hover")
 				if options.hoverSound and UserInputService.MouseEnabled then
 					options.hoverSound()
 				end
@@ -310,25 +351,30 @@ function Button.build(parent: Instance, options: Options): Handle
 			hovered = false
 			tweenScale("release", 1)
 			setWash(1)
+			skinState(if not enabled then "disabled" elseif selected then "selected" else "normal")
 		end),
 		button.MouseButton1Down:Connect(function()
 			if enabled then
 				tweenScale("press")
+				skinState("pressed")
 			end
 		end),
 		button.MouseButton1Up:Connect(function()
 			tweenScale("release", if hovered and enabled then Motion.recipe("hover", motion).scale else 1)
+			skinState(if not enabled then "disabled" elseif selected then "selected" elseif hovered then "hover" else "normal")
 		end),
 		button.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.Touch and enabled then
 				tweenScale("press")
 				setWash(0.85)
+				skinState("pressed")
 			end
 		end),
 		button.InputEnded:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.Touch then
 				tweenScale("release", 1)
 				setWash(1)
+				skinState(if not enabled then "disabled" elseif selected then "selected" else "normal")
 			end
 		end),
 		button.SelectionGained:Connect(function()

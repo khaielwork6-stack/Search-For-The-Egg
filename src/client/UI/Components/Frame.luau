@@ -9,8 +9,34 @@ local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
+local AssetManifest = require(Shared.Design.AssetManifest)
 
 local Frame = {}
+
+local function skinLabel(parent: GuiObject, role: string, zIndex: number, inset: number?): ImageLabel?
+	local id, rect, scale = AssetManifest.skin(role)
+	if not id then
+		return nil
+	end
+	local label = Instance.new("ImageLabel")
+	label.Name = "ArtFrame"
+	label.BackgroundTransparency = 1
+	local pad = inset or 0
+	label.Position = UDim2.fromOffset(-pad, -pad)
+	label.Size = UDim2.new(1, pad * 2, 1, pad * 2)
+	label.Image = id
+	if rect then
+		label.ScaleType = Enum.ScaleType.Slice
+		label.SliceCenter = rect
+		label.SliceScale = scale
+	else
+		label.ScaleType = Enum.ScaleType.Fit
+	end
+	label.ZIndex = zIndex
+	label.Parent = parent
+	return label
+end
+Frame.skinLabel = skinLabel
 
 -- Soft drop shadow behind any rounded frame: two offset rounded frames with low alpha. Returns the
 -- shadow frame (parented under `target`, drawn below it via ZIndex).
@@ -123,7 +149,7 @@ function Frame.pill(
 	parent: Instance,
 	name: string,
 	text: string,
-	options: { size: UDim2?, textSize: number?, zIndex: number?, fill: Color3?, textColor: Color3? }?
+	options: { size: UDim2?, textSize: number?, zIndex: number?, fill: Color3?, textColor: Color3?, art: boolean? }?
 ): TextLabel
 	local opts = (options or {}) :: any
 	local label = Instance.new("TextLabel")
@@ -158,6 +184,9 @@ function Frame.pill(
 	padding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
 	padding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
 	padding.Parent = label
+	if opts.art ~= false and skinLabel(label, "modal.title", label.ZIndex + 1, 2) then
+		stroke.Enabled = false
+	end
 	label.Parent = parent
 	return label
 end
@@ -316,6 +345,20 @@ function Frame.meter(
 	local sizeConstraint = Instance.new("UISizeConstraint")
 	sizeConstraint.MinSize = Vector2.new(0, height)
 	sizeConstraint.Parent = fill
+	if skinLabel(track, "meter.track", track.ZIndex, 0) then
+		trackStroke.Enabled = false
+		track.BackgroundTransparency = 1
+		local fillArt = skinLabel(
+			fill,
+			if opts.fill == Tokens.color.leafBright or opts.fill == Tokens.color.success then "meter.fill.green" else "meter.fill.gold",
+			fill.ZIndex,
+			0
+		)
+		if fillArt then
+			fill.BackgroundTransparency = 1
+			fillGradient.Enabled = false
+		end
+	end
 	fill.Parent = track
 	track.Parent = parent
 	local handle: MeterHandle = {
@@ -339,7 +382,13 @@ function Frame.meter(
 end
 
 -- Row / card container on a cream panel: feather-white with a soft edge and a hairline shadow.
-function Frame.row(parent: Instance, name: string, height: number, zIndex: number?, options: { tint: Color3?, padding: number? }?): Frame
+function Frame.row(
+	parent: Instance,
+	name: string,
+	height: number,
+	zIndex: number?,
+	options: { tint: Color3?, padding: number?, art: boolean?, muted: boolean? }?
+): Frame
 	local opts = (options or {}) :: any
 	local row = Instance.new("Frame")
 	row.Name = name
@@ -360,6 +409,10 @@ function Frame.row(parent: Instance, name: string, height: number, zIndex: numbe
 	padding.PaddingLeft = UDim.new(0, pad)
 	padding.PaddingRight = UDim.new(0, pad)
 	padding.Parent = row
+	if opts.art ~= false and skinLabel(row, if opts.muted then "modal.row.muted" else "modal.row.normal", row.ZIndex, 1) then
+		stroke.Enabled = false
+		row.BackgroundTransparency = 0.15
+	end
 	row.Parent = parent
 	return row
 end
@@ -442,6 +495,10 @@ function Frame.chip(
 	local scale = Instance.new("UIScale")
 	scale.Parent = frame
 	Frame.shadow(frame, { radius = Tokens.radius.pill })
+	if skinLabel(frame, opts.art or "hud.chip", z + 1, 2) then
+		stroke.Enabled = false
+		frame.BackgroundTransparency = 0.1
+	end
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
 	layout.VerticalAlignment = Enum.VerticalAlignment.Center

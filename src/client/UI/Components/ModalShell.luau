@@ -13,6 +13,7 @@ local Motion = require(Shared.Design.Motion)
 local FrameKit = require(script.Parent.Frame)
 local Icons = require(script.Parent.Icons)
 local Tween = require(script.Parent.Tween)
+local Skin = require(script.Parent.Skin)
 
 local ModalShell = {}
 
@@ -40,6 +41,7 @@ function ModalShell.create(
 		wide: boolean?,
 		compact: boolean?,
 		ambient: boolean?,
+		icon: string?,
 	}
 ): Shell
 	local tap = options.minimumTapTarget or Tokens.layout.minimumTapTargetPx
@@ -71,7 +73,18 @@ function ModalShell.create(
 	maxSize.Parent = card
 	local cardScale = Instance.new("UIScale")
 	cardScale.Parent = card
-	FrameKit.leaves(card, card.ZIndex)
+	if Skin.has("modal.leaf.left") then
+		for index, role in ipairs({ "modal.leaf.left", "modal.leaf.right" }) do
+			local leaf = Skin.icon(card, role, 26, card.ZIndex + 2)
+			if leaf then
+				leaf.Size = UDim2.fromOffset(52, 28)
+				leaf.AnchorPoint = Vector2.new(if index == 1 then 0 else 1, 1)
+				leaf.Position = UDim2.new(if index == 1 then 0 else 1, if index == 1 then -6 else 6, 1, 6)
+			end
+		end
+	else
+		FrameKit.leaves(card, card.ZIndex)
+	end
 	FrameKit.feathers(card, card.ZIndex)
 
 	local layout = Instance.new("UIListLayout")
@@ -126,9 +139,29 @@ function ModalShell.create(
 	local closeScale = Instance.new("UIScale")
 	closeScale.Parent = closeButton
 	FrameKit.shadow(closeButton, { radius = Tokens.radius.pill })
-	local closeIcon = Icons.close(closeButton, Tokens.icon.md, { zIndex = closeButton.ZIndex + 1, color = Tokens.color.ember })
-	closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-	closeIcon.Position = UDim2.fromScale(0.5, 0.5)
+	local closeArt = Skin.label(closeButton, "button.close.normal", { zIndex = closeButton.ZIndex + 1, inset = 3, name = "ArtFace" })
+	if closeArt then
+		closeStroke.Enabled = false
+		closeButton.BackgroundTransparency = 1
+		closeButton.MouseButton1Down:Connect(function()
+			Skin.apply(closeArt, "button.close.pressed")
+		end)
+		closeButton.MouseButton1Up:Connect(function()
+			Skin.apply(closeArt, "button.close.normal")
+		end)
+	else
+		local closeIcon = Icons.close(closeButton, Tokens.icon.md, { zIndex = closeButton.ZIndex + 1, color = Tokens.color.ember })
+		closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+		closeIcon.Position = UDim2.fromScale(0.5, 0.5)
+	end
+	-- Optional header glyph (station art) to the left of the nameplate.
+	if options.icon then
+		local glyph = Skin.icon(header, options.icon, tap, panel.ZIndex + 3)
+		if glyph then
+			glyph.AnchorPoint = Vector2.new(0, 0)
+			glyph.Position = UDim2.fromScale(0, 0)
+		end
+	end
 	closeButton.MouseEnter:Connect(function()
 		Tween.scale(closeScale, "hover", options.motion)
 	end)

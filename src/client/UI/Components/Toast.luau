@@ -11,6 +11,7 @@ local Motion = require(Shared.Design.Motion)
 local Tween = require(script.Parent.Tween)
 local FrameKit = require(script.Parent.Frame)
 local Icons = require(script.Parent.Icons)
+local Skin = require(script.Parent.Skin)
 
 local Toast = {}
 Toast.__index = Toast
@@ -136,14 +137,22 @@ function Toast._drain(self: Toast)
 		glyphStroke.Thickness = Tokens.stroke.standard
 		glyphStroke.Color = Tokens.color.outline
 		glyphStroke.Parent = glyphBadge
-		local glyph = Icons.build(
-			tone.icon,
-			glyphBadge,
-			Tokens.icon.md,
-			{ zIndex = card.ZIndex + 2, color = Tokens.color.featherWhite, outline = false }
-		)
-		glyph.AnchorPoint = Vector2.new(0.5, 0.5)
-		glyph.Position = UDim2.fromScale(0.5, 0.5)
+		local art = Skin.icon(glyphBadge, "toast.icon." .. item.tone, Tokens.icon.lg, card.ZIndex + 2)
+		if art then
+			glyphBadge.BackgroundTransparency = 1
+			glyphStroke.Enabled = false
+			art.AnchorPoint = Vector2.new(0.5, 0.5)
+			art.Position = UDim2.fromScale(0.5, 0.5)
+		else
+			local glyph = Icons.build(
+				tone.icon,
+				glyphBadge,
+				Tokens.icon.md,
+				{ zIndex = card.ZIndex + 2, color = Tokens.color.featherWhite, outline = false }
+			)
+			glyph.AnchorPoint = Vector2.new(0.5, 0.5)
+			glyph.Position = UDim2.fromScale(0.5, 0.5)
+		end
 		glyphBadge.Parent = card
 		local label = FrameKit.text(
 			card,

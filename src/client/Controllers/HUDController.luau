@@ -83,7 +83,7 @@ function HUDController.new(deps: any): HUDController
 	gui.ResetOnSpawn = false
 	gui.DisplayOrder = Tokens.zIndex.hud
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	gui.Parent = deps.parent or Players.LocalPlayer:WaitForChild("PlayerGui")
 	local _, scaleCleanup, stage = SafeArea.applyScale(gui, deps.config)
 
 	local self = setmetatable({

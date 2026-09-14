@@ -55,14 +55,14 @@ export type ModalController = typeof(setmetatable(
 	ModalController
 ))
 
-function ModalController.new(input: any, accessibility: any, config: { [string]: any }): ModalController
+function ModalController.new(input: any, accessibility: any, config: { [string]: any }, parent: Instance?): ModalController
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "SFE_Modals"
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = false
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.DisplayOrder = Tokens.zIndex.modal
-	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	gui.Parent = parent or Players.LocalPlayer:WaitForChild("PlayerGui")
 	local _, _, stage = SafeArea.applyScale(gui, config)
 
 	local blur = Lighting:FindFirstChild("SFE_ModalBlur") :: BlurEffect?
@@ -176,7 +176,7 @@ function ModalController.open(
 	blocking: boolean,
 	build: (container: ScrollingFrame, api: Api) -> (() -> ())?,
 	title: string?,
-	options: { wide: boolean?, compact: boolean? }?
+	options: { wide: boolean?, compact: boolean?, icon: string? }?
 ): (boolean, string?)
 	local next, err = ModalReducer.open(self._state, { id = id, priority = priority, blocking = blocking })
 	if not next then
@@ -193,6 +193,7 @@ function ModalController.open(
 		minimumTapTarget = minimumTap,
 		wide = options and options.wide or false,
 		compact = options and options.compact or false,
+		icon = options and options.icon or nil,
 	})
 	local initialFocus: GuiObject? = nil
 	local api: Api = {

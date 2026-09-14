@@ -60,7 +60,7 @@ function LobbyController.new(deps: any): LobbyController
 	gui.ResetOnSpawn = false
 	gui.DisplayOrder = Tokens.zIndex.hud + 1
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	gui.Parent = deps.parent or Players.LocalPlayer:WaitForChild("PlayerGui")
 	local _, scaleCleanup, stage = SafeArea.applyScale(gui, deps.config)
 
 	local self = setmetatable({
@@ -102,11 +102,15 @@ function LobbyController.new(deps: any): LobbyController
 	local size = math.max(minimumTap, Tokens.layout.stationButtonPx)
 	for index, entry in ipairs(RAIL) do
 		self._titles[entry.id] = entry.title
-		local image = AssetManifest.image(entry.image)
+		local image = AssetManifest.image(entry.image .. ".normal") or AssetManifest.image(entry.image)
 		local handle = Button.build(rail, {
 			text = entry.short,
 			variant = if image then "gold" else "pill",
 			image = image,
+			pressedImage = AssetManifest.image(entry.image .. ".pressed"),
+			hoverSound = function()
+				deps.audio:play(Tokens.sound.uiHover)
+			end,
 			minimumTapTarget = minimumTap,
 			motion = deps.accessibility:motionSettings(),
 			size = UDim2.fromOffset(size, size),
@@ -220,7 +224,7 @@ function LobbyController.open(self: LobbyController, id: string): boolean
 	local priority = if id == "party" then deps.modals.Priority.Party else deps.modals.Priority.Shop
 	local opened = deps.modals:open(id, priority, true, function(container, api)
 		return builder(container, api, common)
-	end, self._titles[id] or id, { wide = id == "classes" or id == "stats" or id == "party" })
+	end, self._titles[id] or id, { wide = id == "classes" or id == "stats" or id == "party", icon = "header." .. id })
 	if opened then
 		self.stats.opened += 1
 		local handle = self._buttons[id]
