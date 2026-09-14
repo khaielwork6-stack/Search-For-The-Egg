@@ -200,6 +200,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	actionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	actionsLayout.Padding = UDim.new(0, Tokens.spacing.sm)
 	actionsLayout.Wraps = true
+	actionsLayout.HorizontalFlex = Enum.UIFlexAlignment.Fill
 	actionsLayout.Parent = actions
 	actions.Parent = container
 
@@ -383,6 +384,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			table.insert(rowHandles, joinHandle)
 		end
 		emptyList.Visible = shown == 0
+		listFrame.Visible = shown > 0
 	end
 
 	local function render()
@@ -421,6 +423,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			end
 		end
 		if party then
+			members.Visible = true
 			for index, memberId in ipairs(party.members) do
 				local row = FrameKit.row(members, "Member" .. index, tap, z)
 				row.LayoutOrder = index
@@ -462,6 +465,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			cancelHandle.button.Visible = isLeader and phase == "Countdown"
 			leaveHandle.button.Visible = phase ~= "Reserving" and phase ~= "Teleporting"
 		else
+			members.Visible = false
 			status.Text = "Set off alone, open a party for friends, or join one below"
 			soloHandle.button.Visible = true
 			createHandle.button.Visible = true

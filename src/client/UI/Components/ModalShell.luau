@@ -58,14 +58,14 @@ function ModalShell.create(
 		FrameKit.goldPanel(root, "Card", { radius = Tokens.radius.xl, padding = Tokens.spacing.lg, zIndex = root.ZIndex + 1 })
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
 	card.Position = UDim2.fromScale(0.5, 0.5)
-	card.Size = UDim2.fromScale(if options.compact then 0.8 elseif options.wide then 0.96 else 0.92, Tokens.layout.cardMaxHeightFraction)
+	card.Size = UDim2.fromScale(if options.compact then 0.8 elseif options.wide then 0.9 else 0.88, Tokens.layout.cardMaxHeightFraction)
 	card.SelectionGroup = true
 	card.SelectionBehaviorUp = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorDown = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorLeft = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorRight = Enum.SelectionBehavior.Stop
 	local maxSize = Instance.new("UISizeConstraint")
-	maxSize.MaxSize = Vector2.new(if options.compact then 440 elseif options.wide then 900 else Tokens.layout.cardMaxWidthPx + 40, 900)
+	maxSize.MaxSize = Vector2.new(if options.compact then 440 elseif options.wide then 860 else Tokens.layout.cardMaxWidthPx + 40, 900)
 	maxSize.Parent = card
 	local cardScale = Instance.new("UIScale")
 	cardScale.Parent = card

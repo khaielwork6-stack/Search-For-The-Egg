@@ -63,6 +63,8 @@ function Tabs.build(parent: Instance, options: Options): Handle
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Padding = UDim.new(0, Tokens.spacing.xs)
 	layout.Wraps = true
+	-- Tabs share the track evenly so the strip never leaves dead space on the right.
+	layout.HorizontalFlex = Enum.UIFlexAlignment.Fill
 	layout.Parent = frame
 	frame.Parent = parent
 
