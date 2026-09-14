@@ -96,7 +96,9 @@ function InputController.new(): InputController
 end
 
 function InputController._handle(self: InputController, action: Action, state: Enum.UserInputState): Enum.ContextActionResult
-	if self._suspended and action ~= "Cancel" and action ~= "Back" then
+	-- Cancel/Back always reach the menus; Menu and Cursor still fire so Tab/backtick close the book
+	-- and Alt frees the cursor while a screen is up.
+	if self._suspended and action ~= "Cancel" and action ~= "Back" and action ~= "Menu" and action ~= "Cursor" then
 		return Enum.ContextActionResult.Pass
 	end
 	if state == Enum.UserInputState.Begin then
