@@ -329,6 +329,14 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	end
 	stepper("Fewer", "-", -1)
 	stepper("More", "+", 1)
+	local hint = FrameKit.text(createPanel, "Hint", "Friends can join at the pad while the party forms", "caption", {
+		zIndex = z + 3,
+		color = Tokens.color.inkMuted,
+		align = Enum.TextXAlignment.Center,
+		wrap = true,
+	})
+	hint.Position = UDim2.fromOffset(0, tap * 2 + Tokens.typography.title.size + Tokens.spacing.lg + Tokens.spacing.sm)
+	hint.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size * 2 + 4)
 
 	local createHandle = Button.build(createPanel, {
 		text = "CREATE",
@@ -470,7 +478,16 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	end
 
 	-- Destination cards (right column) ------------------------------------------------------------
-	type Card = { tile: Frame, face: Frame, hit: TextButton, lockBadge: Frame, lockText: TextLabel, name: TextLabel, art: ImageLabel? }
+	type Card = {
+		tile: Frame,
+		face: Frame,
+		hit: TextButton,
+		lockBadge: Frame,
+		lockText: TextLabel,
+		lockNote: TextLabel,
+		name: TextLabel,
+		art: ImageLabel?,
+	}
 	local cards: { [string]: Card } = {}
 	local cardHeight = math.floor((layoutHeight - Tokens.spacing.sm) / 2)
 	for index, chapterKey in ipairs(CHAPTERS) do
@@ -527,6 +544,15 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		lockText.Size = UDim2.new(1, 0, 0, Tokens.typography.display.size + 4)
 		lockText.TextSize = Tokens.typography.display.size - 4
 		FrameKit.outline(lockText, 3)
+		local lockNote = FrameKit.text(face, "LockNote", "Coming soon", "caption", {
+			zIndex = z + 6,
+			color = Tokens.color.featherWhite,
+			align = Enum.TextXAlignment.Center,
+		})
+		lockNote.AnchorPoint = Vector2.new(0.5, 0)
+		lockNote.Position = UDim2.new(0.5, 0, 0.4, tap / 2 + Tokens.spacing.sm + Tokens.typography.display.size + 2)
+		lockNote.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 4)
+		FrameKit.outline(lockNote, 2)
 		local hit = Instance.new("TextButton")
 		hit.Name = "Hit"
 		hit.Text = ""
@@ -561,7 +587,16 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				render()
 			end)
 		)
-		cards[chapterKey] = { tile = tile, face = face, hit = hit, lockBadge = lockBadge, lockText = lockText, name = name, art = art }
+		cards[chapterKey] = {
+			tile = tile,
+			face = face,
+			hit = hit,
+			lockBadge = lockBadge,
+			lockText = lockText,
+			lockNote = lockNote,
+			name = name,
+			art = art,
+		}
 	end
 
 	-- Open parties list --------------------------------------------------------------------------
@@ -680,7 +715,8 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			end
 			card.lockBadge.Visible = not open
 			card.lockText.Visible = not open
-			card.lockText.Text = if not available then "Coming soon" else requirementText(cfg, key, "normal")
+			card.lockText.Text = requirementText(cfg, key, "normal")
+			card.lockNote.Visible = not available
 			card.face.BackgroundTransparency = if open then 0 else 0.15
 			if card.art then
 				card.art.ImageTransparency = if open then 0 else 0.5

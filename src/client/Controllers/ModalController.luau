@@ -131,7 +131,9 @@ function ModalController._applyMouseLock(self: ModalController)
 			player.CameraMaxZoomDistance = 0.5
 		end
 		player.CameraMode = Enum.CameraMode.Classic
-		player.DevEnableMouseLock = false -- shift lock lets go while a screen is open
+		pcall(function()
+			player.DevEnableMouseLock = false -- shift lock lets go while a screen is open
+		end)
 		UserInputService.MouseIconEnabled = true
 		if not self._unlockBound then
 			-- The camera module re-locks the mouse every frame at first-person zoom; free it after it.
@@ -146,7 +148,9 @@ function ModalController._applyMouseLock(self: ModalController)
 			self._unlockBound = false
 			RunService:UnbindFromRenderStep("SFE_MenuMouseUnlock")
 		end
-		player.DevEnableMouseLock = true
+		pcall(function()
+			player.DevEnableMouseLock = true
+		end)
 		player.CameraMinZoomDistance = 0.5
 		player.CameraMaxZoomDistance = 0.5
 		player.CameraMode = Enum.CameraMode.LockFirstPerson
@@ -159,7 +163,9 @@ function ModalController._applyMouseLock(self: ModalController)
 			RunService:UnbindFromRenderStep("SFE_MenuMouseUnlock")
 		end
 		player.CameraMode = Enum.CameraMode.Classic
-		player.DevEnableMouseLock = true
+		pcall(function()
+			player.DevEnableMouseLock = true
+		end)
 		player.CameraMinZoomDistance = 0.5
 		player.CameraMaxZoomDistance = 28
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
