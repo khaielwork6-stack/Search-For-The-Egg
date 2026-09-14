@@ -136,11 +136,10 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	top.LayoutOrder = 1
 	top.ZIndex = z
 	top.Parent = container
-	local subtitle = FrameKit.text(top, "Subtitle", "Permanent Player Perks", "label", { zIndex = z, color = Tokens.color.goldDeep })
-	subtitle.Size = UDim2.new(1, -(tap * 4), 0, Tokens.typography.label.size + 4)
-	local note = FrameKit.text(top, "Note", "Bought once, kept on every search.", "caption", { zIndex = z, color = Tokens.color.inkMuted })
-	note.Position = UDim2.fromOffset(0, Tokens.typography.label.size + 4)
-	note.Size = UDim2.new(1, -(tap * 4), 0, Tokens.typography.caption.size + 4)
+	local subtitle = FrameKit.text(top, "Subtitle", "PERMANENT PERKS", "title", { zIndex = z, color = Tokens.color.goldDeep })
+	subtitle.Size = UDim2.new(1, -(tap * 4), 1, 0)
+	subtitle.TextYAlignment = Enum.TextYAlignment.Center
+	FrameKit.outline(subtitle, 2, Tokens.color.featherWhite)
 	local balanceChip, balanceLabel, balanceIcon = FrameKit.chip(top, "Balance", { zIndex = z + 1, height = tap - Tokens.spacing.xs })
 	balanceIcon.Visible = true
 	if not Skin.icon(balanceIcon, "hud.gem", Tokens.icon.md, balanceIcon.ZIndex + 1) then
@@ -179,7 +178,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	body.ZIndex = z
 	body.Parent = container
 
-	local tileHeight = tap * 4 + Tokens.spacing.xxl + Tokens.spacing.sm
+	local tileHeight = tap * 5 + Tokens.spacing.sm
 	local grid = Instance.new("Frame")
 	grid.Name = "Perks"
 	grid.BackgroundColor3 = Tokens.color.creamDeep
@@ -252,18 +251,18 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		local artHolder = Instance.new("Frame")
 		artHolder.Name = "Art"
 		artHolder.AnchorPoint = Vector2.new(0.5, 0)
-		artHolder.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.md + 2)
-		artHolder.Size = UDim2.fromOffset(tap * 2 - Tokens.spacing.sm, tap * 2 - Tokens.spacing.sm)
+		artHolder.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.md)
+		artHolder.Size = UDim2.fromOffset(tap * 2 + Tokens.spacing.lg, tap * 2 + Tokens.spacing.lg)
 		artHolder.BackgroundTransparency = 1
 		artHolder.ZIndex = z + 2
 		artHolder.Parent = face
-		Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 2, transparency = 0.72, color = Tokens.color.featherWhite })
-		centredArt(artHolder, copy.art, copy.icon, tap * 2 - Tokens.spacing.lg, z + 4)
+		Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 2, transparency = 0.66, color = Tokens.color.featherWhite })
+		centredArt(artHolder, copy.art, copy.icon, tap * 2 + Tokens.spacing.xs, z + 4)
 		-- Level pips: one per level, lit up to the current one.
 		local pips = Instance.new("Frame")
 		pips.Name = "Pips"
 		pips.AnchorPoint = Vector2.new(0.5, 1)
-		pips.Position = UDim2.new(0.5, 0, 1, -(tap + Tokens.spacing.sm + 2))
+		pips.Position = UDim2.new(0.5, 0, 1, -(tap + Tokens.spacing.md + 4))
 		pips.Size = UDim2.new(1, -Tokens.spacing.md * 2, 0, 10)
 		pips.BackgroundTransparency = 1
 		pips.ZIndex = z + 3
@@ -279,7 +278,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		for level = 1, maxLevel do
 			local dot = Instance.new("Frame")
 			dot.Name = "Pip" .. level
-			dot.Size = UDim2.fromOffset(if maxLevel > 6 then 9 else 12, if maxLevel > 6 then 9 else 12)
+			dot.Size = UDim2.fromOffset(if maxLevel > 6 then 11 else 14, if maxLevel > 6 then 11 else 14)
 			dot.BackgroundColor3 = Tokens.color.overlay
 			dot.BackgroundTransparency = 0.55
 			dot.BorderSizePixel = 0
@@ -291,24 +290,20 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 			dot.Parent = pips
 			table.insert(pipDots, dot)
 		end
-		local levelLabel = FrameKit.text(face, "Level", "", "caption", {
-			zIndex = z + 3,
-			color = Tokens.color.featherWhite,
-			align = Enum.TextXAlignment.Center,
-		})
-		levelLabel.AnchorPoint = Vector2.new(0.5, 1)
-		levelLabel.Position = UDim2.new(0.5, 0, 1, -(tap + Tokens.spacing.sm + 16))
-		levelLabel.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 2)
-		FrameKit.outline(levelLabel, 1.6)
+		-- Level badge in the top-left corner; the bonus reads from the pips.
+		local levelLabel = FrameKit.badge(face, "Level", "LV 0", Tokens.color.overlay, z + 4)
+		levelLabel.AnchorPoint = Vector2.new(0, 0)
+		levelLabel.Position = UDim2.fromOffset(Tokens.spacing.xs, Tokens.spacing.xs)
+		levelLabel.BackgroundTransparency = 0.35
 		-- Price button across the bottom.
 		local buy = Button.build(face, {
 			text = "",
 			variant = "gem",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.new(1, -Tokens.spacing.md, 0, tap - Tokens.spacing.xs),
+			size = UDim2.new(1, -Tokens.spacing.md, 0, tap + Tokens.spacing.xs),
 			zIndex = z + 3,
-			textSize = Tokens.typography.label.size,
+			textSize = Tokens.typography.title.size - 2,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTap)
 			end,
@@ -381,7 +376,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	-- Robux offers ---------------------------------------------------------------------------------
 	type OfferCard = { offer: Offer, tile: Frame, buy: any, owned: TextLabel, scale: UIScale }
 	local offerCards: { OfferCard } = {}
-	local offerHeight = tap * 3 + Tokens.spacing.xs
+	local offerHeight = tap * 3 + Tokens.spacing.lg
 	for index, offer in ipairs(offers(cfg)) do
 		local fill = if offer.pass then Tokens.color.gem else Tokens.color.sky
 		local deep = if offer.pass then Tokens.color.gemDeep else Tokens.color.skyDeep
@@ -429,9 +424,9 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 			variant = "primary",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.new(1, -Tokens.spacing.md, 0, tap - Tokens.spacing.sm),
+			size = UDim2.new(1, -Tokens.spacing.md, 0, tap - Tokens.spacing.xs),
 			zIndex = z + 3,
-			textSize = Tokens.typography.body.size + 1,
+			textSize = Tokens.typography.label.size + 1,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTap)
 			end,
@@ -520,12 +515,13 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 				end
 			end
 			if preview.maxed then
-				record.levelLabel.Text = string.format("Lv %d  ·  +%d%%", preview.level, currentPct)
+				record.levelLabel.Text = string.format("LV %d  ·  +%d%%", preview.level, currentPct)
 				record.buy.button.Visible = false
 				record.maxBadge.Visible = true
 			else
 				local nextPct = math.floor(((preview.nextMultiplier or 1) - 1) * 100 + 0.5)
-				record.levelLabel.Text = string.format("Lv %d  ·  +%d%% → +%d%%", preview.level, currentPct, nextPct)
+				record.levelLabel.Text = string.format("LV %d  ·  +%d%%", preview.level, currentPct)
+				local _ = nextPct
 				record.buy.button.Visible = true
 				record.maxBadge.Visible = false
 				local affordable = projection.currencies.gems >= (preview.costGems or 0)

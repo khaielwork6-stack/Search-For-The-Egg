@@ -118,8 +118,8 @@ function DisplayController._buildCard(self: DisplayController, key: string, mode
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "PriceCard"
 	gui.Adornee = adornee
-	gui.Size = UDim2.fromOffset(190, 70)
-	gui.StudsOffsetWorldSpace = Vector3.new(0, size.Y + 1.1, 0)
+	gui.Size = UDim2.fromOffset(200, 64)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, size.Y * 0.5 + 1.4, 0)
 	gui.MaxDistance = 60
 	gui.LightInfluence = 0
 	gui.ResetOnSpawn = false
@@ -131,10 +131,11 @@ function DisplayController._buildCard(self: DisplayController, key: string, mode
 		align = Enum.TextXAlignment.Center,
 	})
 	name.Size = UDim2.new(1, 0, 0, Tokens.typography.label.size + 6)
-	FrameKit.outline(name, 2.2)
+	name.TextSize = Tokens.typography.label.size + 2
+	FrameKit.outline(name, 2.4)
 	local price = FrameKit.pill(gui, "Price", "-", {
-		size = UDim2.fromOffset(0, Tokens.typography.label.size + Tokens.spacing.sm),
-		textSize = Tokens.typography.label.size,
+		size = UDim2.fromOffset(0, Tokens.typography.label.size + Tokens.spacing.md),
+		textSize = Tokens.typography.label.size + 2,
 		zIndex = 2,
 		fill = Tokens.color.gold,
 		textColor = Tokens.color.inkStrong,
@@ -203,7 +204,9 @@ function DisplayController.refresh(self: DisplayController)
 		card.price.Text = text
 		card.price.BackgroundColor3 = fill
 		card.price.TextColor3 = textColor
-		card.caption.Text = caption
+		-- Only a state reads under the price; plain descriptions stay off the world.
+		local isState = text == "OWNED" or text == "MAX" or text == "-"
+		card.caption.Text = if isState then caption else ""
 	end
 end
 

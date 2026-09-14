@@ -1,7 +1,7 @@
 --!strict
--- Forager Ledger modal: personal stats (playtime, equipped class, best times, wins, feathers, Eggs)
--- from the profile projection and the leaderboards (bounded refresh) from LeaderboardProjection,
--- one board at a time behind pill tabs.
+-- Stats: a player header (avatar, name, total playtime) over big picture stat cards, then the
+-- leaderboards behind a tab strip. Numbers come from the profile projection and the bounded
+-- LeaderboardProjection; nothing here is computed locally beyond formatting.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
@@ -9,11 +9,12 @@ local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Tabs = require(script.Parent.Parent.Components.Tabs)
+local Skin = require(script.Parent.Parent.Components.Skin)
+local Icons = require(script.Parent.Parent.Components.Icons)
 
--- Short tab names for the boards; anything unknown is humanised from its id.
 local TAB_LABELS: { [string]: string } = {
 	totalWins = "Eggs won",
-	bestTimeChapter1Normal = "Fastest nest",
+	bestTimeChapter1Normal = "Fastest",
 	feathersCollected = "Feathers",
 	eggsFound = "Eggs found",
 }
@@ -44,13 +45,52 @@ local function playtime(seconds: number): string
 	return string.format("%dm %02ds", minutes, math.floor(seconds % 60))
 end
 
-local function formatTime(ms: number?): string
+local function formatTime(ms: number?): string?
 	if not ms then
-		return "--:--"
+		return nil
 	end
 	local totalSeconds = math.floor(ms / 1000)
 	return string.format("%02d:%02d.%02d", math.floor(totalSeconds / 60), totalSeconds % 60, math.floor((ms % 1000) / 10))
 end
+
+-- The picture cards: caption, art, tint, and how to read the value from the projection.
+type CardSpec = { key: string, caption: string, art: string, icon: string, fill: Color3, deep: Color3 }
+local CARDS: { CardSpec } = {
+	{
+		key = "class",
+		caption = "CLASS",
+		art = "station.classes.normal",
+		icon = "star",
+		fill = Tokens.color.gold,
+		deep = Tokens.color.goldDeep,
+	},
+	{
+		key = "record",
+		caption = "TIME RECORD",
+		art = "hud.timer",
+		icon = "clock",
+		fill = Tokens.color.ember,
+		deep = Tokens.color.emberDeep,
+	},
+	{ key = "wins", caption = "EGGS WON", art = "icon.egg", icon = "egg", fill = Tokens.color.leaf, deep = Tokens.color.leafDeep },
+	{
+		key = "feathers",
+		caption = "FEATHERS",
+		art = "icon.feather",
+		icon = "feather",
+		fill = Tokens.color.sky,
+		deep = Tokens.color.skyDeep,
+	},
+	{ key = "eggs", caption = "EGGS FOUND", art = "hud.token", icon = "egg", fill = Tokens.color.gem, deep = Tokens.color.gemDeep },
+	{
+		key = "searches",
+		caption = "SEARCHES",
+		art = "station.party.normal",
+		icon = "star",
+		fill = Tokens.color.tealAccent,
+		deep = Tokens.color.tealDeep,
+	},
+}
 
 function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -> ()
 	local cleanups: { any } = {}
@@ -58,49 +98,147 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local motion = deps.accessibility:motionSettings()
 	local tap = deps.minimumTapTarget
 	local z = container.ZIndex + 1
+	local player = Players.LocalPlayer
 
-	FrameKit.heading(container, "PersonalHeader", "Your ledger", z).LayoutOrder = 1
-	local personal = Instance.new("Frame")
-	personal.Name = "Personal"
-	personal.BackgroundTransparency = 1
-	personal.Size = UDim2.fromScale(1, 0)
-	personal.AutomaticSize = Enum.AutomaticSize.Y
-	personal.LayoutOrder = 2
-	personal.ZIndex = z
-	local personalLayout = Instance.new("UIGridLayout")
-	personalLayout.CellSize = UDim2.new(0.5, -Tokens.spacing.xs, 0, Tokens.typography.body.size * 2 + Tokens.spacing.sm)
-	personalLayout.CellPadding = UDim2.fromOffset(Tokens.spacing.xs, Tokens.spacing.xs)
-	personalLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	personalLayout.Parent = personal
-	personal.Parent = container
-	local statLabels: { [string]: TextLabel } = {}
-	for index, key in ipairs({ "playtime", "class", "wins", "eggs", "feathers", "best1n", "best1h", "rounds" }) do
-		local cell = FrameKit.row(personal, "Stat_" .. key, Tokens.typography.body.size * 2 + Tokens.spacing.sm, z)
-		cell.LayoutOrder = index
-		local label = FrameKit.text(cell, "Value", "", "body", { zIndex = z + 1, color = Tokens.color.inkStrong })
-		label.Size = UDim2.fromScale(1, 1)
-		label.RichText = true
-		statLabels[key] = label
+	-- Header: avatar disc, name, total playtime.
+	local headerHeight = tap * 2 + Tokens.spacing.md
+	local header, headerFace = FrameKit.tile(container, "Header", {
+		fill = Tokens.color.tealPanel,
+		deep = Tokens.color.tealDeep,
+		zIndex = z,
+		radius = Tokens.radius.xl,
+		size = UDim2.new(1, 0, 0, headerHeight),
+	})
+	header.LayoutOrder = 1
+	local avatar = Instance.new("ImageLabel")
+	avatar.Name = "Avatar"
+	avatar.AnchorPoint = Vector2.new(0, 0.5)
+	avatar.Position = UDim2.new(0, Tokens.spacing.md, 0.5, -2)
+	avatar.Size = UDim2.fromOffset(headerHeight - Tokens.spacing.lg, headerHeight - Tokens.spacing.lg)
+	avatar.BackgroundColor3 = Tokens.color.creamPill
+	avatar.ZIndex = z + 2
+	local avatarCorner = Instance.new("UICorner")
+	avatarCorner.CornerRadius = UDim.new(1, 0)
+	avatarCorner.Parent = avatar
+	local avatarStroke = Instance.new("UIStroke")
+	avatarStroke.Thickness = Tokens.stroke.frame
+	avatarStroke.Color = Tokens.color.outline
+	avatarStroke.Parent = avatar
+	avatar.Parent = headerFace
+	if player then
+		task.spawn(function()
+			local ok, content = pcall(function()
+				return Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+			end)
+			if ok and avatar.Parent then
+				avatar.Image = content
+			end
+		end)
+	end
+	local nameLeft = headerHeight - Tokens.spacing.lg + Tokens.spacing.md * 2
+	local nameLabel = FrameKit.text(headerFace, "Name", if player then player.DisplayName else "Forager", "display", {
+		zIndex = z + 2,
+		color = Tokens.color.featherWhite,
+	})
+	nameLabel.Position = UDim2.new(0, nameLeft, 0.5, -Tokens.typography.display.size / 2 - 2)
+	nameLabel.Size = UDim2.new(0.55, -nameLeft, 0, Tokens.typography.display.size + 4)
+	nameLabel.TextSize = Tokens.typography.display.size - 4
+	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	FrameKit.outline(nameLabel, 2.6)
+	local playCaption = FrameKit.text(headerFace, "PlayCaption", "TOTAL PLAYTIME", "label", {
+		zIndex = z + 2,
+		color = Tokens.color.featherWhite,
+		align = Enum.TextXAlignment.Right,
+	})
+	playCaption.AnchorPoint = Vector2.new(1, 0)
+	playCaption.Position = UDim2.new(1, -Tokens.spacing.md, 0, Tokens.spacing.md)
+	playCaption.Size = UDim2.new(0.45, 0, 0, Tokens.typography.label.size + 4)
+	playCaption.TextSize = Tokens.typography.label.size - 2
+	FrameKit.outline(playCaption, 2)
+	local playValue = FrameKit.text(headerFace, "PlayValue", "0m 00s", "display", {
+		zIndex = z + 2,
+		color = Tokens.color.goldLight,
+		align = Enum.TextXAlignment.Right,
+	})
+	playValue.AnchorPoint = Vector2.new(1, 1)
+	playValue.Position = UDim2.new(1, -Tokens.spacing.md, 1, -Tokens.spacing.sm)
+	playValue.Size = UDim2.new(0.45, 0, 0, Tokens.typography.display.size + 4)
+	playValue.TextSize = Tokens.typography.display.size - 4
+	FrameKit.outline(playValue, 2.6)
+
+	-- Picture cards, two per row.
+	local cardHeight = tap * 2 + Tokens.spacing.xs
+	local grid = Instance.new("Frame")
+	grid.Name = "Cards"
+	grid.BackgroundTransparency = 1
+	grid.Size = UDim2.new(1, 0, 0, (cardHeight + Tokens.spacing.sm) * math.ceil(#CARDS / 2))
+	grid.LayoutOrder = 2
+	grid.ZIndex = z
+	local gridLayout = Instance.new("UIGridLayout")
+	gridLayout.CellSize = UDim2.new(0.5, -Tokens.spacing.xs, 0, cardHeight)
+	gridLayout.CellPadding = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
+	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	gridLayout.Parent = grid
+	grid.Parent = container
+	local values: { [string]: TextLabel } = {}
+	for index, spec in ipairs(CARDS) do
+		local tile, face =
+			FrameKit.tile(grid, "Card_" .. spec.key, { fill = spec.fill, deep = spec.deep, zIndex = z + 1, radius = Tokens.radius.lg })
+		tile.LayoutOrder = index
+		local artSize = cardHeight - Tokens.spacing.lg
+		local artHolder = Instance.new("Frame")
+		artHolder.Name = "Art"
+		artHolder.AnchorPoint = Vector2.new(0, 0.5)
+		artHolder.Position = UDim2.new(0, Tokens.spacing.sm, 0.5, -2)
+		artHolder.Size = UDim2.fromOffset(artSize, artSize)
+		artHolder.BackgroundTransparency = 1
+		artHolder.ZIndex = z + 2
+		artHolder.Parent = face
+		Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 2, transparency = 0.7, color = Tokens.color.featherWhite })
+		local glyph = Skin.icon(artHolder, spec.art, artSize - Tokens.spacing.sm, z + 4)
+			or Icons.build(spec.icon, artHolder, artSize - Tokens.spacing.md, { zIndex = z + 4, color = Tokens.color.featherWhite })
+		glyph.AnchorPoint = Vector2.new(0.5, 0.5)
+		glyph.Position = UDim2.fromScale(0.5, 0.5)
+		local left = artSize + Tokens.spacing.md
+		local caption = FrameKit.text(face, "Caption", spec.caption, "label", {
+			zIndex = z + 3,
+			color = Tokens.color.featherWhite,
+			align = Enum.TextXAlignment.Center,
+		})
+		caption.Position = UDim2.new(0, left, 0.5, -(Tokens.typography.label.size + Tokens.spacing.xs) - 2)
+		caption.Size = UDim2.new(1, -(left + Tokens.spacing.sm), 0, Tokens.typography.label.size + 4)
+		caption.TextSize = Tokens.typography.label.size - 2
+		FrameKit.outline(caption, 2)
+		local value = FrameKit.text(face, "Value", "-", "display", {
+			zIndex = z + 3,
+			color = Tokens.color.goldLight,
+			align = Enum.TextXAlignment.Center,
+		})
+		value.Position = UDim2.new(0, left, 0.5, -2)
+		value.Size = UDim2.new(1, -(left + Tokens.spacing.sm), 0, Tokens.typography.display.size + 2)
+		value.TextSize = Tokens.typography.display.size - 6
+		value.TextScaled = false
+		value.TextTruncate = Enum.TextTruncate.AtEnd
+		FrameKit.outline(value, 2.6)
+		values[spec.key] = value
 	end
 
-	FrameKit.heading(container, "BoardHeader", "Leaderboards", z).LayoutOrder = 3
-	local age = FrameKit.text(container, "Age", "", "caption", { zIndex = z, color = Tokens.color.inkMuted })
-	age.LayoutOrder = 5
+	-- Leaderboards: tab strip then the rows.
 	local rowsFrame = Instance.new("Frame")
-	rowsFrame.Name = "Rows"
+	rowsFrame.Name = "Board"
 	rowsFrame.BackgroundTransparency = 1
 	rowsFrame.Size = UDim2.fromScale(1, 0)
 	rowsFrame.AutomaticSize = Enum.AutomaticSize.Y
-	rowsFrame.LayoutOrder = 6
+	rowsFrame.LayoutOrder = 4
 	rowsFrame.ZIndex = z
 	local rowsLayout = Instance.new("UIListLayout")
 	rowsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	rowsLayout.Padding = UDim.new(0, Tokens.spacing.xs)
 	rowsLayout.Parent = rowsFrame
-	rowsFrame.Parent = container
 
 	local selectedBoard = cfg.leaderboards.boards[1]
 	local tabsHandle
+	local medalColors = { Tokens.color.gold, Color3.fromRGB(196, 200, 210), Color3.fromRGB(205, 137, 84) }
 
 	local function renderBoard()
 		for _, child in ipairs(rowsFrame:GetChildren()) do
@@ -110,12 +248,17 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		end
 		local snapshot = deps.leaderboards.snapshot
 		if not snapshot then
-			age.Text = "Fetching the ledger..."
+			local empty = FrameKit.row(rowsFrame, "Empty", tap, z)
+			FrameKit.text(
+				empty,
+				"Text",
+				"Loading...",
+				"body",
+				{ zIndex = z + 1, color = Tokens.color.inkMuted, align = Enum.TextXAlignment.Center }
+			).Size =
+				UDim2.fromScale(1, 1)
 			return
 		end
-		age.Text = if snapshot.ageSeconds
-			then string.format("Refreshed %ds ago  -  updates every %ds", snapshot.ageSeconds, snapshot.refreshSeconds)
-			else "Waiting for the first refresh"
 		for _, board in ipairs(snapshot.boards) do
 			if board.id ~= selectedBoard then
 				continue
@@ -125,54 +268,42 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				FrameKit.text(
 					empty,
 					"Text",
-					"No entries yet - be the first forager on this board",
-					"caption",
-					{ zIndex = z + 1, color = Tokens.color.inkMuted }
+					"No entries yet",
+					"body",
+					{ zIndex = z + 1, color = Tokens.color.inkMuted, align = Enum.TextXAlignment.Center }
 				).Size =
 					UDim2.fromScale(1, 1)
 			end
 			for index, row in ipairs(board.rows) do
 				local frame = FrameKit.row(rowsFrame, "Row" .. index, tap, z)
 				frame.LayoutOrder = index
-				local mine = row.userId == Players.LocalPlayer.UserId
-				local value = if board.unit == "ms" then formatTime(row.value) else tostring(row.value)
-				local label = FrameKit.text(
-					frame,
-					"Text",
-					string.format("%d.  %s", index, row.name),
-					"body",
-					{ zIndex = z + 1, color = if mine then Tokens.color.goldDeep else Tokens.color.inkStrong }
-				)
-				label.Size = UDim2.fromScale(0.7, 1)
-				local valueLabel = FrameKit.text(
-					frame,
-					"Value",
-					value,
-					"numeral",
-					{ align = Enum.TextXAlignment.Right, zIndex = z + 1, color = Tokens.color.goldDeep }
-				)
+				local mine = row.userId == player.UserId
+				local value = if board.unit == "ms" then (formatTime(row.value) or "--:--") else tostring(row.value)
+				local rank = FrameKit.badge(frame, "Rank", "#" .. index, medalColors[index] or Tokens.color.strawDeep, z + 2)
+				rank.AnchorPoint = Vector2.new(0, 0.5)
+				rank.Position = UDim2.fromScale(0, 0.5)
+				rank.TextColor3 = Tokens.color.inkStrong
+				local label = FrameKit.text(frame, "Text", row.name, "label", {
+					zIndex = z + 1,
+					color = if mine then Tokens.color.goldDeep else Tokens.color.inkStrong,
+				})
+				label.Position = UDim2.fromOffset(tap, 0)
+				label.Size = UDim2.new(0.6, -tap, 1, 0)
+				local valueLabel = FrameKit.text(frame, "Value", value, "label", {
+					align = Enum.TextXAlignment.Right,
+					zIndex = z + 1,
+					color = Tokens.color.goldDeep,
+				})
 				valueLabel.AnchorPoint = Vector2.new(1, 0)
 				valueLabel.Position = UDim2.fromScale(1, 0)
-				valueLabel.Size = UDim2.fromScale(0.3, 1)
-				valueLabel.TextSize = Tokens.typography.body.size
+				valueLabel.Size = UDim2.fromScale(0.4, 1)
 			end
 		end
 	end
 
 	local items = {}
 	for _, boardId in ipairs(cfg.leaderboards.boards) do
-		local labelText = TAB_LABELS[boardId]
-		if not labelText then
-			local snapshot = deps.leaderboards.snapshot
-			if snapshot then
-				for _, board in ipairs(snapshot.boards) do
-					if board.id == boardId then
-						labelText = board.label
-					end
-				end
-			end
-		end
-		table.insert(items, { id = boardId, label = labelText or humanise(boardId) })
+		table.insert(items, { id = boardId, label = TAB_LABELS[boardId] or humanise(boardId) })
 	end
 	tabsHandle = Tabs.build(container, {
 		items = items,
@@ -191,7 +322,8 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			renderBoard()
 		end,
 	})
-	tabsHandle.frame.LayoutOrder = 4
+	tabsHandle.frame.LayoutOrder = 3
+	rowsFrame.Parent = container
 	table.insert(cleanups, tabsHandle.destroy)
 	local firstTab = tabsHandle.buttons[selectedBoard]
 	if firstTab then
@@ -209,50 +341,23 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				className = entry.displayName
 			end
 		end
-		local extra = ""
-		if #projection.classes.equipped > 1 then
-			for _, entry in ipairs(cfg.classes.weights) do
-				if entry.id == projection.classes.equipped[2] then
-					extra = " + " .. entry.displayName
-				end
-			end
-		end
-		local muted = string.format(
-			"rgb(%d,%d,%d)",
-			math.floor(Tokens.color.inkMuted.R * 255),
-			math.floor(Tokens.color.inkMuted.G * 255),
-			math.floor(Tokens.color.inkMuted.B * 255)
-		)
-		local function tile(caption: string, value: string): string
-			return string.format('<font color="%s" size="%d">%s</font>\n<b>%s</b>', muted, Tokens.typography.caption.size, caption, value)
-		end
-		statLabels.playtime.Text = tile("Time in the nest", playtime(projection.stats.playtimeSeconds))
-		statLabels.class.Text = tile("Class", className .. extra)
-		statLabels.wins.Text = tile("Eggs won", tostring(projection.progression.totalWins))
-		statLabels.eggs.Text = tile("Eggs found first", tostring(projection.stats.eggsFound))
-		statLabels.feathers.Text = tile("Feathers gathered", tostring(projection.stats.feathersCollected))
+		playValue.Text = playtime(projection.stats.playtimeSeconds)
+		values.class.Text = className
 		local best = projection.progression.bestTimeMs.chapter1 or {}
-		statLabels.best1n.Text = tile("Best Henhouse (Normal)", formatTime(best.normal))
-		statLabels.best1h.Text = tile("Best Henhouse (Hard)", formatTime(best.hard))
-		statLabels.rounds.Text = tile("Searches finished", tostring(projection.stats.roundsCompleted))
+		local record = formatTime(best.normal)
+		values.record.Text = record or "NO RECORD"
+		values.record.TextSize = if record then Tokens.typography.display.size - 6 else Tokens.typography.title.size - 2
+		values.wins.Text = tostring(projection.progression.totalWins)
+		values.feathers.Text = tostring(projection.stats.feathersCollected)
+		values.eggs.Text = tostring(projection.stats.eggsFound)
+		values.searches.Text = tostring(projection.stats.roundsCompleted)
 	end
 
 	renderPersonal()
 	renderBoard()
 	deps.leaderboards.request()
 	table.insert(cleanups, deps.profile.changed:Connect(renderPersonal))
-	table.insert(
-		cleanups,
-		deps.leaderboards.changed:Connect(function()
-			local snapshot = deps.leaderboards.snapshot
-			if snapshot then
-				for _, board in ipairs(snapshot.boards) do
-					tabsHandle.setLabel(board.id, board.label)
-				end
-			end
-			renderBoard()
-		end)
-	)
+	table.insert(cleanups, deps.leaderboards.changed:Connect(renderBoard))
 	deps.audio:play(Tokens.sound.uiOpen)
 
 	return function()

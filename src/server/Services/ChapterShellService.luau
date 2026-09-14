@@ -353,39 +353,55 @@ end
 -- The owner's item models become shop displays inside the supplies barn: two bags on the counter,
 -- the pitchfork and the dynamite on the rear wall boards. Each carries a Buy prompt; the client
 -- draws the price card from the round previews. Missing models are skipped, never rebuilt.
-local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string } } = {
+local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, scale: number? } } = {
 	{
 		key = "bag",
 		model = "FeatherBag",
-		cframe = CFrame.new(-50.5, 58.75, 299) * CFrame.Angles(0, math.rad(180), 0),
+		cframe = CFrame.new(-47, 58.75, 299) * CFrame.Angles(0, math.rad(180), 0),
 		name = "Upgrade Bag",
+		scale = 0.8,
 	},
 	{
 		key = "infiniteBag",
 		model = "InfiniteBag",
-		cframe = CFrame.new(-41.5, 58.75, 299) * CFrame.Angles(0, math.rad(180), 0),
+		cframe = CFrame.new(-36.5, 58.75, 299) * CFrame.Angles(0, math.rad(180), 0),
 		name = "Infinite Bag",
+		scale = 0.8,
 	},
 	{
 		key = "nestRake",
 		model = "Pitchfork",
-		cframe = CFrame.new(-40, 62.9, 291.65) * CFrame.Angles(0, 0, math.rad(-62)) * CFrame.new(0, -4.2, 0),
+		cframe = CFrame.new(-54, 60.2, 291.65) * CFrame.Angles(0, 0, math.rad(-62)) * CFrame.new(0, -4.2, 0),
 		name = "Nest Rake",
 	},
 	{
 		key = "confettiCharge",
 		model = "Dynamite",
-		cframe = CFrame.new(-54, 61.1, 292.1) * CFrame.Angles(0, 0, math.rad(-8)),
+		cframe = CFrame.new(-40, 58.4, 292.1) * CFrame.Angles(0, 0, math.rad(-8)),
 		name = "Confetti Charge",
 	},
 }
+-- The rear-wall display boards the owner built sit high; they come down to eye level with the items.
+local BOARD_Y = 60.2
 
 function ChapterShellService.placeDisplays(workspaceService: Workspace, config: { [string]: any }): number
 	local placed = 0
+	local map = workspaceService:FindFirstChild(ChapterLayout.CHAPTER1_MAP_NAME)
+	local shop = map and map:FindFirstChild("SupplyShop")
+	if shop then
+		for _, part in ipairs(shop:GetChildren()) do
+			if part:IsA("BasePart") and (part.Name == "EmptyDisplayBoard" or part.Name == "EmptyDisplayFrame") then
+				part.Position = Vector3.new(part.Position.X, BOARD_Y, part.Position.Z)
+			end
+		end
+	end
 	for _, spec in ipairs(DISPLAYS) do
 		local model = workspaceService:FindFirstChild(spec.model)
 		if not (model and model:IsA("Model")) then
 			continue
+		end
+		if spec.scale and math.abs(model:GetScale() - spec.scale) > 0.01 then
+			model:ScaleTo(spec.scale)
 		end
 		model:PivotTo(spec.cframe)
 		model:SetAttribute("SFE_Display", spec.key)

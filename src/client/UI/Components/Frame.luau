@@ -514,7 +514,7 @@ function Frame.tile(
 	corner.Parent = tile
 	local stroke = Instance.new("UIStroke")
 	stroke.Name = "Outline"
-	stroke.Thickness = Tokens.stroke.bold
+	stroke.Thickness = Tokens.stroke.frame
 	stroke.Color = Tokens.color.outline
 	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = tile

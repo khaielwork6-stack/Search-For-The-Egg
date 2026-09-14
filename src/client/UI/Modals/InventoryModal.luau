@@ -1,15 +1,19 @@
 --!strict
--- Tool Rack modal: tool-skin categories with owned-only equips. Owned skins show Equip / Equipped;
--- unowned event skins show where they come from. Equips are validated server-side and the modal
--- re-renders from the profile projection.
+-- Tool Rack: one tab per tool, then big square skin cards - art, a short name strip, a check when
+-- equipped, LOCKED when unowned. Tapping an owned card equips it; the server validates and the
+-- modal re-renders from the profile projection.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local SkinCatalog = require(Shared.Domain.SkinCatalog)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
+local Tabs = require(script.Parent.Parent.Components.Tabs)
 local Skin = require(script.Parent.Parent.Components.Skin)
+local Icons = require(script.Parent.Parent.Components.Icons)
+local Tween = require(script.Parent.Parent.Components.Tween)
 
 local InventoryModal = {}
 
@@ -24,6 +28,22 @@ export type Deps = {
 	toasts: any,
 }
 
+local SHORT_NAMES: { [string]: string } = {
+	nestRake = "Rake",
+	confettiCharge = "Charge",
+	featherVac = "Vac",
+	scoutChick = "Chick",
+}
+
+-- Card name: "Classic Nest Rake" -> "CLASSIC", "alienRakeSkin" -> "ALIEN".
+local function shortName(skin: SkinCatalog.Skin): string
+	if skin.source == "default" then
+		return "CLASSIC"
+	end
+	local first = string.match(skin.displayName, "^(%a+)") or skin.displayName
+	return string.upper(first)
+end
+
 function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): () -> ()
 	local cleanups: { any } = {}
 	local cfg = deps.config
@@ -31,122 +51,248 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 	local tap = deps.minimumTapTarget
 	local z = container.ZIndex + 1
 	local catalog = SkinCatalog.all(cfg)
+	local selectedCategory = SkinCatalog.CATEGORIES[1]
 
-	type Row = {
-		frame: Frame,
-		label: TextLabel,
-		caption: TextLabel,
-		lockBadge: TextLabel,
-		icon: ImageLabel?,
-		equip: any,
-		skin: SkinCatalog.Skin,
-	}
-	local rows: { Row } = {}
-	local order = 0
-	local firstButton: TextButton? = nil
+	-- Tabs: one per tool.
+	local items = {}
 	for _, category in ipairs(SkinCatalog.CATEGORIES) do
-		order += 1
-		local header = FrameKit.heading(container, "Header_" .. category, cfg.tools[category].displayName, z)
-		header.LayoutOrder = order
-		for _, skin in ipairs(catalog) do
-			if skin.category ~= category then
+		table.insert(items, { id = category, label = SHORT_NAMES[category] or cfg.tools[category].displayName })
+	end
+	local render
+	local tabs = Tabs.build(container, {
+		items = items,
+		selected = selectedCategory,
+		minimumTapTarget = tap,
+		motion = motion,
+		zIndex = z + 1,
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTab)
+		end,
+		hoverSound = function()
+			deps.audio:play(Tokens.sound.uiHover)
+		end,
+		onSelect = function(id)
+			selectedCategory = id
+			render()
+		end,
+	})
+	tabs.frame.LayoutOrder = 1
+	table.insert(cleanups, tabs.destroy)
+
+	-- Card grid: three per row, square-ish.
+	local cardSize = tap * 3
+	local grid = Instance.new("Frame")
+	grid.Name = "Cards"
+	grid.BackgroundTransparency = 1
+	grid.Size = UDim2.fromScale(1, 0)
+	grid.AutomaticSize = Enum.AutomaticSize.Y
+	grid.LayoutOrder = 2
+	grid.ZIndex = z
+	local gridLayout = Instance.new("UIGridLayout")
+	gridLayout.CellSize = UDim2.fromOffset(cardSize, cardSize + Tokens.spacing.md)
+	gridLayout.CellPadding = UDim2.fromOffset(Tokens.spacing.md, Tokens.spacing.md)
+	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	gridLayout.Parent = grid
+	grid.Parent = container
+
+	type Card = {
+		skin: SkinCatalog.Skin,
+		tile: Frame,
+		face: Frame,
+		scale: UIScale,
+		art: ImageLabel?,
+		name: TextLabel,
+		lockLabel: TextLabel,
+		check: Frame,
+		hit: TextButton,
+	}
+	local cards: { Card } = {}
+	for index, skin in ipairs(catalog) do
+		local tile, face = FrameKit.tile(grid, "Skin_" .. skin.id, {
+			fill = Tokens.color.creamPill,
+			deep = Tokens.color.strawDeep,
+			zIndex = z + 1,
+			radius = Tokens.radius.lg,
+		})
+		tile.LayoutOrder = index
+		local scale = Instance.new("UIScale")
+		scale.Parent = tile
+		local artSize = cardSize - Tokens.spacing.xl - Tokens.spacing.md
+		local art = Skin.icon(face, "tool." .. skin.category .. ".normal", artSize, z + 3)
+		if art then
+			art.AnchorPoint = Vector2.new(0.5, 0)
+			art.Position = UDim2.new(0.5, 0, 0, Tokens.spacing.sm)
+			if skin.source ~= "default" then
+				-- Event skins: the same tool, tinted so the card reads as a different finish.
+				art.ImageColor3 = Color3.fromRGB(150, 230, 130)
+			end
+		end
+		local strip = Instance.new("Frame")
+		strip.Name = "Strip"
+		strip.AnchorPoint = Vector2.new(0.5, 1)
+		strip.Position = UDim2.fromScale(0.5, 1)
+		strip.Size = UDim2.new(1, 0, 0, Tokens.typography.label.size + Tokens.spacing.md)
+		strip.BackgroundColor3 = Tokens.color.strawDeep
+		strip.BorderSizePixel = 0
+		strip.ZIndex = z + 2
+		local stripCorner = Instance.new("UICorner")
+		stripCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
+		stripCorner.Parent = strip
+		strip.Parent = face
+		local name = FrameKit.text(strip, "Name", shortName(skin), "label", {
+			zIndex = z + 3,
+			color = Tokens.color.featherWhite,
+			align = Enum.TextXAlignment.Center,
+		})
+		name.Size = UDim2.fromScale(1, 1)
+		FrameKit.outline(name, 2)
+		local lockLabel = FrameKit.text(face, "Locked", "LOCKED", "title", {
+			zIndex = z + 4,
+			color = Tokens.color.featherWhite,
+			align = Enum.TextXAlignment.Center,
+		})
+		lockLabel.Position = UDim2.new(0, 0, 0.5, -Tokens.typography.title.size)
+		lockLabel.Size = UDim2.new(1, 0, 0, Tokens.typography.title.size + 4)
+		FrameKit.outline(lockLabel, 2.6)
+		lockLabel.Visible = false
+		local check = Instance.new("Frame")
+		check.Name = "Check"
+		check.AnchorPoint = Vector2.new(1, 0)
+		check.Position = UDim2.new(1, Tokens.spacing.xs, 0, -Tokens.spacing.xs)
+		check.Size = UDim2.fromOffset(Tokens.icon.lg + 4, Tokens.icon.lg + 4)
+		check.BackgroundColor3 = Tokens.color.success
+		check.ZIndex = z + 5
+		local checkCorner = Instance.new("UICorner")
+		checkCorner.CornerRadius = UDim.new(1, 0)
+		checkCorner.Parent = check
+		local checkStroke = Instance.new("UIStroke")
+		checkStroke.Thickness = Tokens.stroke.bold
+		checkStroke.Color = Tokens.color.outline
+		checkStroke.Parent = check
+		local checkGlyph = Icons.check(check, Tokens.icon.md, { zIndex = z + 6, color = Tokens.color.featherWhite })
+		checkGlyph.AnchorPoint = Vector2.new(0.5, 0.5)
+		checkGlyph.Position = UDim2.fromScale(0.5, 0.5)
+		check.Visible = false
+		check.Parent = tile
+		local hit = Instance.new("TextButton")
+		hit.Name = "Hit"
+		hit.Text = ""
+		hit.BackgroundTransparency = 1
+		hit.Size = UDim2.fromScale(1, 1)
+		hit.ZIndex = z + 6
+		hit.Parent = tile
+		local card: Card = {
+			skin = skin,
+			tile = tile,
+			face = face,
+			scale = scale,
+			art = art,
+			name = name,
+			lockLabel = lockLabel,
+			check = check,
+			hit = hit,
+		}
+		table.insert(cards, card)
+		table.insert(
+			cleanups,
+			hit.MouseEnter:Connect(function()
+				deps.audio:play(Tokens.sound.uiHover)
+				TweenService:Create(scale, TweenInfo.new(0.12), { Scale = 1.04 }):Play()
+			end)
+		)
+		table.insert(
+			cleanups,
+			hit.MouseLeave:Connect(function()
+				TweenService:Create(scale, TweenInfo.new(0.16), { Scale = 1 }):Play()
+			end)
+		)
+		table.insert(
+			cleanups,
+			hit.Activated:Connect(function()
+				local projection = deps.profile.projection
+				local owned = projection and projection.inventory.toolSkins[skin.id] == true
+				if not owned then
+					deps.audio:play(Tokens.sound.uiError)
+					Tween.shake(tile, motion)
+					deps.toasts:push("Drops from the Moonlit Chest", "info")
+					return
+				end
+				deps.audio:play(Tokens.sound.uiTap)
+				local result = deps.net:request("InventoryEquip", { category = skin.category, itemId = skin.id })
+				if result.ok then
+					deps.audio:play(Tokens.sound.uiConfirm)
+					deps.haptics:pulse(0.3, 0.06)
+					scale.Scale = 1.1
+					Tween.scale(scale, "release", motion, 1)
+				else
+					deps.audio:play(Tokens.sound.uiError)
+					deps.toasts:push("Could not equip", "warning")
+				end
+			end)
+		)
+	end
+
+	local close = Button.build(container, {
+		text = "Close",
+		variant = "danger",
+		minimumTapTarget = tap,
+		motion = motion,
+		size = UDim2.new(1, 0, 0, tap),
+		zIndex = z + 1,
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTap)
+		end,
+		hoverSound = function()
+			deps.audio:play(Tokens.sound.uiHover)
+		end,
+		onActivated = api.close,
+	})
+	close.button.LayoutOrder = 3
+	table.insert(cleanups, close.destroy)
+
+	render = function()
+		local projection = deps.profile.projection
+		local first: TextButton? = nil
+		for _, card in ipairs(cards) do
+			local show = card.skin.category == selectedCategory
+			card.tile.Visible = show
+			if not show then
 				continue
 			end
-			order += 1
-			local frame = FrameKit.row(container, "Skin_" .. skin.id, tap + Tokens.spacing.md, z)
-			frame.LayoutOrder = order
-			local toolIcon = Skin.icon(frame, "tool." .. skin.category .. ".normal", Tokens.icon.lg, z + 1)
-			if toolIcon then
-				toolIcon.AnchorPoint = Vector2.new(0, 0.5)
-				toolIcon.Position = UDim2.fromScale(0, 0.5)
+			first = first or card.hit
+			local owned = projection ~= nil and projection.inventory.toolSkins[card.skin.id] == true
+			local equipped = projection ~= nil and projection.inventory.equippedSkins[card.skin.category] == card.skin.id
+			card.face.BackgroundColor3 = if equipped
+				then Tokens.color.leafBright
+				elseif owned then Tokens.color.creamPill
+				else Tokens.color.cocoa
+			card.tile.BackgroundColor3 = if equipped
+				then Tokens.color.leafDeep
+				elseif owned then Tokens.color.strawDeep
+				else Tokens.color.outline
+			local gradient = card.face:FindFirstChildOfClass("UIGradient")
+			if gradient then
+				local fill = card.face.BackgroundColor3
+				gradient.Color = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, fill:Lerp(Color3.new(1, 1, 1), 0.28)),
+					ColorSequenceKeypoint.new(1, fill),
+				})
 			end
-			local textLeft = if toolIcon then Tokens.icon.lg + Tokens.spacing.md else 0
-			local textWidth = -(tap * 3) - textLeft
-			local label = FrameKit.text(frame, "Label", skin.displayName, "label", { zIndex = z + 1, color = Tokens.color.inkStrong })
-			label.Position = UDim2.new(0, textLeft, 0.5, -(Tokens.typography.label.size + Tokens.spacing.xs) + 2)
-			label.Size = UDim2.new(1, textWidth, 0, Tokens.typography.label.size + Tokens.spacing.xs)
-			local caption = FrameKit.text(frame, "Caption", "", "caption", { zIndex = z + 1, color = Tokens.color.inkMuted })
-			caption.Position = UDim2.new(0, textLeft, 0.5, 2)
-			caption.Size = UDim2.new(1, textWidth, 0, Tokens.typography.caption.size + Tokens.spacing.xs)
-			local lockBadge = FrameKit.badge(frame, "LockBadge", "Moonlit Chest", Tokens.color.strawDeep, z + 1)
-			lockBadge.AnchorPoint = Vector2.new(1, 0.5)
-			lockBadge.Position = UDim2.fromScale(1, 0.5)
-			lockBadge.Visible = false
-			local equip = Button.build(frame, {
-				text = "Equip",
-				variant = "teal",
-				minimumTapTarget = tap,
-				motion = motion,
-				size = UDim2.fromOffset(tap * 3 - Tokens.spacing.md, tap - Tokens.spacing.xs),
-				zIndex = z + 1,
-				textSize = Tokens.typography.body.size,
-				sound = function()
-					deps.audio:play(Tokens.sound.uiTap)
-				end,
-				hoverSound = function()
-					deps.audio:play(Tokens.sound.uiHover)
-				end,
-				onActivated = function()
-					local result = deps.net:request("InventoryEquip", { category = skin.category, itemId = skin.id })
-					if result.ok then
-						deps.audio:play(Tokens.sound.uiConfirm)
-						deps.haptics:pulse(0.3, 0.06)
-					else
-						deps.audio:play(Tokens.sound.uiError)
-						deps.toasts:push(
-							if result.code == "not_authorized" then "You do not own that skin yet" else "Could not equip",
-							"warning"
-						)
-					end
-				end,
-			})
-			equip.button.AnchorPoint = Vector2.new(1, 0.5)
-			equip.button.Position = UDim2.fromScale(1, 0.5)
-			firstButton = firstButton or equip.button
-			table.insert(cleanups, equip.destroy)
-			table.insert(rows, {
-				frame = frame,
-				label = label,
-				caption = caption,
-				lockBadge = lockBadge,
-				icon = toolIcon,
-				equip = equip,
-				skin = skin,
-			})
+			local strip = card.face:FindFirstChild("Strip") :: Frame?
+			if strip then
+				strip.BackgroundColor3 = if equipped
+					then Tokens.color.leafDeep
+					elseif owned then Tokens.color.strawDeep
+					else Tokens.color.outline
+			end
+			if card.art then
+				card.art.ImageTransparency = if owned then 0 else 0.55
+			end
+			card.lockLabel.Visible = not owned
+			card.check.Visible = equipped
 		end
-	end
-	if firstButton then
-		api.setInitialFocus(firstButton)
-	end
-
-	local function render()
-		local projection = deps.profile.projection
-		if not projection then
-			return
-		end
-		for _, row in ipairs(rows) do
-			local owned = projection.inventory.toolSkins[row.skin.id] == true
-			local equipped = projection.inventory.equippedSkins[row.skin.category] == row.skin.id
-			row.equip.button.Visible = owned
-			row.equip.setText(if equipped then "Equipped" else "Equip")
-			row.equip.setEnabled(not equipped)
-			row.equip.setSelected(equipped)
-			row.label.Text = row.skin.displayName
-			row.caption.Text = if equipped
-				then "On the rack"
-				elseif owned then "Owned  -  tap Equip to use it"
-				else "Drops from the Moonlit Chest"
-			row.label.TextColor3 = if owned then Tokens.color.inkStrong else Tokens.color.inkMuted
-			row.lockBadge.Visible = not owned
-			row.frame.BackgroundTransparency = if owned then 0 else 0.45
-			if row.icon then
-				row.icon.ImageTransparency = if owned then 0 else 0.45
-			end
-			local stroke = row.frame:FindFirstChildOfClass("UIStroke")
-			if stroke then
-				stroke.Color = if equipped then Tokens.color.gold else Tokens.color.strawDeep
-				stroke.Thickness = if equipped then Tokens.stroke.standard + 1 else Tokens.stroke.standard
-			end
+		if first then
+			api.setInitialFocus(first)
 		end
 	end
 
