@@ -82,7 +82,7 @@ local function colorsFor(tier: string): { fill: Color3, deep: Color3 }
 end
 
 local function percent(value: number): string
-	local pct = value * 100
+	local pct = math.floor(value * 100 * 100 + 0.5) / 100
 	if pct == math.floor(pct) then
 		return string.format("%d%%", pct)
 	end
@@ -176,7 +176,7 @@ end
 local function describeEffect(entry: any, weights: { any }?): string
 	local lines = effectLines(entry, weights or {})
 	if #lines == 0 then
-		return "No bonuses. Steady and dependable."
+		return ""
 	end
 	local out = {}
 	for _, line in ipairs(lines) do

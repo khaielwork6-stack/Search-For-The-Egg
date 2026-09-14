@@ -341,9 +341,19 @@ function LobbyController.open(self: LobbyController, id: string): boolean
 		return false
 	end
 	local priority = if id == "party" then deps.modals.Priority.Party else deps.modals.Priority.Shop
-	local opened = deps.modals:open(id, priority, true, function(container, api)
-		return builder(container, api, common)
-	end, self._titles[id] or id, { wide = id == "classes" or id == "stats" or id == "party", icon = "header." .. id })
+	local opened = deps.modals:open(
+		id,
+		priority,
+		true,
+		function(container, api)
+			return builder(container, api, common)
+		end,
+		self._titles[id] or id,
+		{
+			wide = id == "classes" or id == "stats" or id == "party" or id == "gems",
+			icon = "header." .. (if id == "gems" then "shop" else id),
+		}
+	)
 	if opened then
 		self.stats.opened += 1
 		local handle = self._buttons[id]

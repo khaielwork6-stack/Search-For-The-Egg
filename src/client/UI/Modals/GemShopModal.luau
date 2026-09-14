@@ -152,6 +152,7 @@ function GemShopModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	-- Cards row.
 	local bundles = cfg.monetization and cfg.monetization.gemBundles or {}
 	local passes = cfg.monetization and cfg.monetization.passes or {}
+	local cardCount = math.max(1, #bundles + (if passes.doubleGems then 1 else 0))
 	local cardHeight = if compact then tap * 4 else tap * 5 + Tokens.spacing.lg
 	local row = Instance.new("Frame")
 	row.Name = "Cards"
@@ -191,13 +192,13 @@ function GemShopModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		local popular = options.popular == true
 		local fill = if options.pass then Tokens.color.tealAccent elseif popular then Tokens.color.skyDeep else Tokens.color.sky
 		local deep = if options.pass then Tokens.color.tealDeep elseif popular then Color3.fromRGB(44, 96, 150) else Tokens.color.skyDeep
-		local width = if compact then tap * 3 + Tokens.spacing.sm else tap * 3 + Tokens.spacing.xl
+		-- Cards share the row width so every bundle fits on one line at any size.
 		local tile, face = FrameKit.tile(row, "Card_" .. key, {
 			fill = fill,
 			deep = deep,
 			zIndex = z + 1,
 			radius = Tokens.radius.lg,
-			size = UDim2.fromOffset(width, if popular then cardHeight + Tokens.spacing.lg else cardHeight),
+			size = UDim2.new(1 / cardCount, -Tokens.spacing.sm, 0, if popular then cardHeight + Tokens.spacing.lg else cardHeight),
 		})
 		tile.LayoutOrder = order
 		local scale = Instance.new("UIScale")
@@ -242,7 +243,7 @@ function GemShopModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			color = Tokens.color.featherWhite,
 			align = Enum.TextXAlignment.Center,
 		})
-		title.Position = UDim2.fromOffset(0, Tokens.spacing.sm)
+		title.Position = UDim2.fromOffset(0, if popular then Tokens.spacing.lg + 2 else Tokens.spacing.sm)
 		title.Size = UDim2.new(1, 0, 0, Tokens.typography.title.size + 4)
 		title.TextSize = if popular then Tokens.typography.title.size + 2 else Tokens.typography.title.size - 2
 		FrameKit.outline(title, 2.4)
