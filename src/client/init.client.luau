@@ -33,6 +33,7 @@ local ToolVisualController = require(Controllers.ToolVisualController)
 local InteractionController = require(Controllers.InteractionController)
 local DisplayController = require(Controllers.DisplayController)
 local NameplateController = require(Controllers.NameplateController)
+local InspectController = require(Controllers.InspectController)
 local PromptController = require(Controllers.PromptController)
 local ObjectiveController = require(Controllers.ObjectiveController)
 local VictoryController = require(Controllers.VictoryController)
@@ -132,8 +133,23 @@ local victory = trove:add(VictoryController.new({
 hud:bindRound(round, interaction)
 -- Player nameplates: display name and record time over every character.
 local nameplates = trove:add(NameplateController.new())
--- Barn shop displays: price cards on the owner's item models and their Buy prompts.
+-- Barn item inspection: camera focus, cinematic bars, options and skins for a display.
+local inspect = trove:add(InspectController.new({
+	net = net,
+	round = round,
+	profile = profile,
+	modals = modals,
+	input = input,
+	audio = audio,
+	haptics = haptics,
+	hud = hud,
+	vfx = vfx,
+	config = config,
+	accessibility = accessibility,
+}))
+-- Barn shop displays: price cards on the owner's item models and their inspect prompts.
 local displays = trove:add(DisplayController.new({
+	inspect = inspect,
 	net = net,
 	round = round,
 	profile = profile,
@@ -267,6 +283,7 @@ if RunService:IsStudio() then
 			snap.strands = lobby:strandCount() + arena:strandCount()
 			snap.displays = displays:cardCount()
 			snap.nameplates = nameplates:count()
+			snap.inspecting = inspect:isOpen()
 			snap.audioState = audio:state()
 			snap.vfxInstances = vfx:instanceCount()
 			snap.vfxStats = vfx.stats

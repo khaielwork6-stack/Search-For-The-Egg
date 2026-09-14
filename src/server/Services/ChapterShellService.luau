@@ -502,7 +502,7 @@ function ChapterShellService.placeDisplays(workspaceService: Workspace, config: 
 			if old then
 				old:Destroy()
 			end
-			prompt(host, "SFE_Display_" .. spec.key, "Buy", spec.name, 0, math.min(config.interaction.upgradeRangeStuds, 8))
+			prompt(host, "SFE_Display_" .. spec.key, "Inspect", spec.name, 0, math.min(config.interaction.upgradeRangeStuds, 8))
 		end
 		placed += 1
 	end

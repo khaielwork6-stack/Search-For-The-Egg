@@ -103,7 +103,13 @@ function DisplayController.new(deps: any): DisplayController
 		self:refresh()
 	end))
 	self._trove:add(deps.interaction.displayRequested:Connect(function(key: string)
-		self:buy(key)
+		local card = self._cards[key]
+		if deps.inspect and card then
+			-- The prompt opens the inspection; buying happens from its option row.
+			deps.inspect:open(key, card.model)
+		else
+			self:buy(key)
+		end
 	end))
 	return self
 end
