@@ -93,7 +93,10 @@ function LobbyShellController.start(self: LobbyShellController)
 	self._trove:add(container)
 
 	local tier = deps.quality:tier()
-	local strandsPerAnchor = STRANDS_PER_ANCHOR_BY_TIER[tier] or 12
+	-- A scene can opt out of drifting strands (the lobby does: the owner wants its air clear).
+	local strandsPerAnchor = if deps.strandsPerAnchor ~= nil
+		then deps.strandsPerAnchor :: number
+		else STRANDS_PER_ANCHOR_BY_TIER[tier] or 12
 	local loopBudget = deps.quality:budgets().loopingAmbient
 
 	local function register(actor)

@@ -6,10 +6,8 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
-local Motion = require(Shared.Design.Motion)
 local AssetManifest = require(Shared.Design.AssetManifest)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local Signal = require(Shared.Util.Signal)
@@ -46,15 +44,20 @@ export type LobbyController = typeof(setmetatable(
 
 -- Rail order and copy (original). Image roles resolve through the asset manifest; roles without art
 -- render the gold pill with the short label.
-local RAIL: { { id: string, title: string, short: string, image: string } } = {
-	{ id = "party", title = "Sunlit Henhouse", short = "Play", image = "station.party" },
-	{ id = "daily", title = "Daily Nest", short = "Daily", image = "station.daily" },
-	{ id = "classes", title = "Class Cards", short = "Classes", image = "station.classes" },
-	{ id = "shop", title = "Perk Bench", short = "Shop", image = "station.shop" },
-	{ id = "inventory", title = "Tool Rack", short = "Rack", image = "station.inventory" },
+-- Permanent side menu: only the three account screens. Everything else opens from the world
+-- (NPCs, the portal, the nest, the chest) so the lobby stays the way to find things.
+local SIDE_MENU: { { id: string, title: string, short: string, image: string } } = {
 	{ id = "stats", title = "Forager Ledger", short = "Stats", image = "station.stats" },
+	{ id = "inventory", title = "Tool Rack", short = "Inventory", image = "station.inventory" },
 	{ id = "codes", title = "Nest Mailbox", short = "Codes", image = "station.codes" },
-	{ id = "event", title = "Moonlit Chest", short = "Chest", image = "station.event" },
+}
+-- Titles for the modals that open from the world rather than the side menu.
+local WORLD_TITLES: { [string]: string } = {
+	party = "Sunlit Henhouse",
+	daily = "Daily Nest",
+	classes = "Class Cards",
+	shop = "Perk Shop",
+	event = "Moonlit Chest",
 }
 
 function LobbyController.new(deps: any): LobbyController
@@ -83,30 +86,42 @@ function LobbyController.new(deps: any): LobbyController
 		deps.net:request("LeaderboardRequest", nil)
 	end
 
-	-- Station rail: bottom-center row, one square button per station, inside the safe area.
+	-- Side menu: a vertical stack on the right edge, one square tile with its name beneath.
 	local rail = Instance.new("Frame")
-	rail.Name = "StationRail"
-	rail.AnchorPoint = Vector2.new(0.5, 1)
-	rail.Position = UDim2.new(0.5, 0, 1, -Tokens.layout.safeAreaPaddingPx)
-	rail.Size = UDim2.fromOffset(0, Tokens.layout.stationButtonPx + Tokens.spacing.sm)
-	rail.AutomaticSize = Enum.AutomaticSize.X
+	rail.Name = "SideMenu"
+	rail.AnchorPoint = Vector2.new(1, 0.5)
+	rail.Position = UDim2.new(1, -Tokens.layout.safeAreaPaddingPx, 0.5, 0)
+	rail.Size = UDim2.fromOffset(Tokens.layout.stationButtonPx + Tokens.spacing.md, 0)
+	rail.AutomaticSize = Enum.AutomaticSize.Y
 	rail.BackgroundTransparency = 1
 	rail.ZIndex = Tokens.zIndex.hud + 1
 	local railLayout = Instance.new("UIListLayout")
-	railLayout.FillDirection = Enum.FillDirection.Horizontal
+	railLayout.FillDirection = Enum.FillDirection.Vertical
 	railLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	railLayout.Padding = UDim.new(0, Tokens.spacing.sm)
-	railLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	railLayout.Padding = UDim.new(0, Tokens.spacing.md)
+	railLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	railLayout.Parent = rail
 	rail.Parent = stage
 	self.rail = rail
 
 	local minimumTap = SafeArea.minimumTapTarget(gui, deps.config)
 	local size = math.max(minimumTap, Tokens.layout.stationButtonPx)
-	for index, entry in ipairs(RAIL) do
+	for id, title in pairs(WORLD_TITLES) do
+		self._titles[id] = title
+	end
+	local labelHeight = Tokens.typography.caption.size + Tokens.spacing.sm
+	for index, entry in ipairs(SIDE_MENU) do
 		self._titles[entry.id] = entry.title
 		local image = AssetManifest.image(entry.image .. ".normal") or AssetManifest.image(entry.image)
-		local handle = Button.build(rail, {
+		-- Each item is a slot holding the tile and the name label so the list spacing stays even.
+		local slot = Instance.new("Frame")
+		slot.Name = "Slot_" .. entry.id
+		slot.BackgroundTransparency = 1
+		slot.Size = UDim2.fromOffset(size + Tokens.spacing.md, size + labelHeight)
+		slot.LayoutOrder = index
+		slot.ZIndex = rail.ZIndex
+		slot.Parent = rail
+		local handle = Button.build(slot, {
 			text = entry.short,
 			variant = if image then "gold" else "pill",
 			image = image,
@@ -125,38 +140,23 @@ function LobbyController.new(deps: any): LobbyController
 				self:open(entry.id)
 			end,
 		})
-		handle.button.LayoutOrder = index
+		handle.button.AnchorPoint = Vector2.new(0.5, 0)
+		handle.button.Position = UDim2.fromScale(0.5, 0)
 		handle.button.Name = "Station_" .. entry.id
-		-- Hover nameplate: the station's title rises above its tile so the icons explain themselves.
-		local plate = FrameKit.pill(handle.button, "Nameplate", entry.title, {
-			size = UDim2.fromOffset(0, Tokens.typography.caption.size + Tokens.spacing.md),
-			textSize = Tokens.typography.caption.size + 1,
-			zIndex = rail.ZIndex + 3,
-			fitText = true,
-			outline = true,
-		})
-		plate.AnchorPoint = Vector2.new(0.5, 1)
-		plate.Position = UDim2.new(0.5, 0, 0, -Tokens.spacing.xs)
-		plate.Visible = false
-		local plateMotion = deps.accessibility:motionSettings()
-		handle.button.MouseEnter:Connect(function()
-			plate.Visible = true
-			plate.Position = UDim2.new(0.5, 0, 0, Tokens.spacing.xs)
-			plate.TextTransparency = 1
-			plate.BackgroundTransparency = 1
-			local info = TweenInfo.new(Motion.duration("quick", plateMotion), Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-			TweenService:Create(plate, info, {
-				Position = UDim2.new(0.5, 0, 0, -Tokens.spacing.xs),
-				TextTransparency = 0,
-				BackgroundTransparency = 0,
-			}):Play()
-		end)
-		handle.button.MouseLeave:Connect(function()
-			plate.Visible = false
-		end)
 		if not image then
 			handle.button.TextSize = Tokens.typography.caption.size + 1
 		end
+		local label = FrameKit.text(slot, "Name", entry.short, "caption", {
+			zIndex = rail.ZIndex + 2,
+			color = Tokens.color.featherWhite,
+			align = Enum.TextXAlignment.Center,
+		})
+		label.Font = Tokens.typography.label.font
+		label.TextSize = Tokens.typography.caption.size + 1
+		label.AnchorPoint = Vector2.new(0.5, 1)
+		label.Position = UDim2.fromScale(0.5, 1)
+		label.Size = UDim2.new(1, 0, 0, labelHeight)
+		FrameKit.outline(label, 1.6)
 		self._buttons[entry.id] = handle
 		self._trove:add(handle.destroy)
 	end
@@ -194,16 +194,8 @@ function LobbyController.new(deps: any): LobbyController
 		for id, handle in pairs(self._buttons) do
 			handle.setSelected(open == id)
 		end
-		local projection = deps.profile.projection
-		local daily = projection and projection.rewards and projection.rewards.daily
-		local ready = daily ~= nil and (daily.status == "ready" or daily.status == "reset")
-		local dailyHandle = self._buttons.daily
-		if dailyHandle then
-			dailyHandle.pulse(ready and open ~= "daily")
-		end
 	end
 	self._trove:add(deps.modals.changed:Connect(refreshRail))
-	self._trove:add(deps.profile.changed:Connect(refreshRail))
 	refreshRail()
 	self._trove:add(deps.party.changed:Connect(function(party)
 		if deps.lobbyShell and deps.lobbyShell.setPartySilhouettes then

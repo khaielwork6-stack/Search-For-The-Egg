@@ -148,12 +148,16 @@ trove:add(hand.collected:Connect(function(data)
 	hud:onCollected(data)
 end))
 
-local lobby = trove:add(
-	LobbyShellController.new(
-		{ ambient = ambient, vfx = vfx, quality = quality, camera = camera, haptics = haptics, audio = audio, config = config },
-		"SFE_LobbyShell"
-	)
-)
+local lobby = trove:add(LobbyShellController.new({
+	ambient = ambient,
+	vfx = vfx,
+	quality = quality,
+	camera = camera,
+	haptics = haptics,
+	audio = audio,
+	config = config,
+	strandsPerAnchor = 0,
+}, "SFE_LobbyShell"))
 local arena = trove:add(
 	LobbyShellController.new(
 		{ ambient = ambient, vfx = vfx, quality = quality, camera = camera, haptics = haptics, audio = audio, config = config },
