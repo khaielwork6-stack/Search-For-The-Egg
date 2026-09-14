@@ -41,6 +41,7 @@ export type ModalController = typeof(setmetatable(
 		_views: { [string]: any },
 		_focusMemory: { [string]: GuiObject? },
 		_externalUnlock: boolean?,
+		_firstPerson: boolean?,
 		_unlockBound: boolean?,
 		mouseUnlocked: boolean?,
 		_debug: { [string]: { [string]: (...any) -> any } },
@@ -111,10 +112,12 @@ local function firstSelectable(root: Instance): GuiObject?
 	return nil
 end
 
--- First-person mouse lock (owner requirement): the player stays in first person at all times; a
--- blocking menu unlocks the mouse and shows the cursor, closing it hides the cursor and re-centres.
--- Passive HUD never touches this. Classic camera at zoom 0.5 keeps the first-person view while the
--- cursor is free (LockFirstPerson would re-lock the mouse every frame).
+-- Camera and mouse policy (owner requirement, revised 13 Sep 2026): first person only while a
+-- round is running (RoundController calls setFirstPerson); the lobby is a free third-person camera
+-- with a visible cursor. A blocking menu always unlocks the mouse and shows the cursor; closing it
+-- restores whichever mode is active. Passive HUD never touches this. During a round with a menu
+-- open, the Classic camera at zoom 0.5 keeps the first-person view while the cursor is free
+-- (LockFirstPerson would re-lock the mouse every frame).
 function ModalController._applyMouseLock(self: ModalController)
 	local player = Players.LocalPlayer
 	local blocking = ModalReducer.isBlocking(self._state) or self._externalUnlock == true
@@ -123,8 +126,10 @@ function ModalController._applyMouseLock(self: ModalController)
 		return -- edit-mode probes and very early boot: no character camera to lock
 	end
 	if blocking then
-		player.CameraMinZoomDistance = 0.5
-		player.CameraMaxZoomDistance = 0.5
+		if self._firstPerson then
+			player.CameraMinZoomDistance = 0.5
+			player.CameraMaxZoomDistance = 0.5
+		end
 		player.CameraMode = Enum.CameraMode.Classic
 		UserInputService.MouseIconEnabled = true
 		if not self._unlockBound then
@@ -135,16 +140,42 @@ function ModalController._applyMouseLock(self: ModalController)
 			end)
 		end
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-	else
+	elseif self._firstPerson then
 		if self._unlockBound then
 			self._unlockBound = false
 			RunService:UnbindFromRenderStep("SFE_MenuMouseUnlock")
 		end
+		player.CameraMinZoomDistance = 0.5
+		player.CameraMaxZoomDistance = 0.5
 		player.CameraMode = Enum.CameraMode.LockFirstPerson
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 		UserInputService.MouseIconEnabled = false
+	else
+		-- Lobby: free third-person camera, cursor visible, scroll to zoom.
+		if self._unlockBound then
+			self._unlockBound = false
+			RunService:UnbindFromRenderStep("SFE_MenuMouseUnlock")
+		end
+		player.CameraMode = Enum.CameraMode.Classic
+		player.CameraMinZoomDistance = 0.5
+		player.CameraMaxZoomDistance = 28
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		UserInputService.MouseIconEnabled = true
 	end
 	self.mouseUnlocked = blocking
+end
+
+-- First person is wanted only while a round runs (RoundController drives this by phase).
+function ModalController.setFirstPerson(self: ModalController, wanted: boolean)
+	if self._firstPerson == wanted then
+		return
+	end
+	self._firstPerson = wanted
+	self:_applyMouseLock()
+end
+
+function ModalController.isFirstPerson(self: ModalController): boolean
+	return self._firstPerson == true
 end
 
 -- Non-modal blocking surfaces (the cutscene overlay with its Skip button) borrow the same unlock.

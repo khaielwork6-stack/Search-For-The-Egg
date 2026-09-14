@@ -143,6 +143,9 @@ function RoundController._onSnapshot(self: RoundController, payload: { [string]:
 end
 
 function RoundController._applyPhase(self: RoundController, phase: string, previous: string?)
+	-- First person only while the search itself runs; the lobby, cutscene and post-round screens
+	-- keep a free camera and cursor (owner requirement, 13 Sep 2026).
+	self._modals:setFirstPerson(phase == "Countdown" or phase == "Searching" or phase == "EggRevealed")
 	if phase == "Cutscene" then
 		self.eggPosition = nil
 		self._audio:setState("Search")
