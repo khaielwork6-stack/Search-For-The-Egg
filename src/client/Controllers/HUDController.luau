@@ -518,7 +518,9 @@ function HUDController.new(deps: any): HUDController
 	-- Currency chips count up only from acknowledged projections (never from client prediction).
 	local chipLabels = { gems = self._labels.gems, eventTokens = self._labels.tokens }
 	for key, label in pairs(chipLabels) do
-		self._chipScales[key] = label:FindFirstChildOfClass("UIScale") :: UIScale
+		-- The chip's UIScale sits on the chip frame (label -> Content -> chip).
+		local chipFrame = label.Parent and label.Parent.Parent
+		self._chipScales[key] = (chipFrame and chipFrame:FindFirstChildOfClass("UIScale")) :: UIScale
 	end
 	local function refreshProfile(projection)
 		if not projection then
@@ -536,8 +538,8 @@ function HUDController.new(deps: any): HUDController
 					label.Text = tostring(value)
 				end)
 				self._displayed[key] = target
-				if target > previous then
-					local scale = self._chipScales[key]
+				local scale = self._chipScales[key]
+				if target > previous and scale then
 					scale.Scale = 1.12
 					Tween.scale(scale, "release", motion, 1)
 				end
@@ -632,7 +634,12 @@ function HUDController.celebrateCurrency(self: HUDController, key: string, amoun
 	if not label or amount <= 0 then
 		return
 	end
-	Tween.rotationPunch(label, self._deps.accessibility:motionSettings(), 0)
+	local chipFrame = label.Parent and label.Parent.Parent
+	Tween.rotationPunch(
+		(if chipFrame and chipFrame:IsA("GuiObject") then chipFrame else label) :: GuiObject,
+		self._deps.accessibility:motionSettings(),
+		0
+	)
 end
 
 -- Called by ToolController on each accepted award for the bag squash.
