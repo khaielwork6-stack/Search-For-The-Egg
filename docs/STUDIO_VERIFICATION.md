@@ -1121,3 +1121,21 @@ level. Verified in the edit-mode probe (Studio viewport) and Play Solo.
   items span 55.9-64.5 and the cards read name + price only (`Nest Rake | $8.00`, `Infinite Bag |
   R$ 99`); states (OWNED / MAX) keep a one-line caption.
 - Tiles carry a 4 px cocoa outline everywhere (`FrameKit.tile`). 295 tests, selene / stylua clean.
+
+## Egg depth, live product ids, music loop (14 Sep 2026)
+
+- **Egg spawn.** `minimumRemovalFraction` 0.2 -> 0.45 (max stays 0.65); new `luckyRoundChance`
+  0.09 with `luckyMinimumRemovalFraction` 0.1; spawn nodes weighted by distance to the mound's
+  core (`coreNodeWeight` 3, `edgeNodeWeight` 1). Simulated 200k rounds: mean depth fraction 0.534,
+  9.0 % lucky, 3.3 % found under 30 % dug. A Play Solo round drew `eggDepthFraction 0.643` on
+  `chapter1:node_12` (core). Hard keeps its own 0.45-0.8 window.
+- **Product ids.** All 9 passes and 10 developer products filled in `ProductIds.luau`; only the
+  three place ids are missing, so Studio still runs the mock Marketplace. Test updated to assert
+  every pass and product resolves.
+- **Music.** Loop `130291967851605` (122 s) loads and plays: `Music_Lobby playing=true vol=0.45`,
+  and after setting off `Music_Search playing=true` picked up at the same position (18.9 s ->
+  26.8 s eight seconds later), so the loop runs continuously across lobby, search, discovery,
+  victory and results. Fixed on the way: `setState` only started a stem when its target volume
+  was exactly 1, so no stem had ever started.
+- Rojo plugin was disconnected during this pass; the six changed sources were patched into Studio
+  directly and match the repository.
