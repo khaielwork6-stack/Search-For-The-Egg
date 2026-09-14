@@ -200,6 +200,8 @@ function Frame.pill(
 	end
 	if opts.fitText then
 		-- Width follows the text plus padding (AutomaticSize would feed back on the art child).
+		-- Truncation would report the clipped bounds, so a fitted pill never truncates.
+		label.TextTruncate = Enum.TextTruncate.None
 		local height = label.Size.Y.Offset
 		local function fit()
 			label.Size =

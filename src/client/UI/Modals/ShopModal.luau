@@ -28,11 +28,11 @@ export type Deps = {
 	quality: any?,
 }
 
-local COPY: { [string]: { title: string, what: string, icon: string } } = {
-	bagSize = { title = "Bigger Bag", what = "bag capacity", icon = "feather" },
-	handGrab = { title = "Steady Hands", what = "Hand grasp", icon = "star" },
-	gemValue = { title = "Gem Polish", what = "Gem rewards", icon = "gem" },
-	featherValue = { title = "Feather Appraisal", what = "sale value", icon = "coin" },
+local COPY: { [string]: { title: string, what: string, icon: string, art: string } } = {
+	bagSize = { title = "Bigger Bag", what = "bag capacity", icon = "feather", art = "icon.feather" },
+	handGrab = { title = "Steady Hands", what = "Hand grasp", icon = "star", art = "tool.hand.normal" },
+	gemValue = { title = "Gem Polish", what = "Gem rewards", icon = "gem", art = "hud.gem" },
+	featherValue = { title = "Feather Appraisal", what = "sale value", icon = "coin", art = "hud.token" },
 }
 
 function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () -> ()
@@ -101,7 +101,8 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		badgeStroke.Thickness = Tokens.stroke.standard
 		badgeStroke.Color = Tokens.color.outline
 		badgeStroke.Parent = badgeFrame
-		local glyph = Icons.build(copy.icon, badgeFrame, Tokens.icon.lg, { zIndex = z + 2 })
+		local glyph = Skin.icon(badgeFrame, copy.art, Tokens.icon.lg, z + 2)
+			or Icons.build(copy.icon, badgeFrame, Tokens.icon.lg, { zIndex = z + 2 })
 		glyph.AnchorPoint = Vector2.new(0.5, 0.5)
 		glyph.Position = UDim2.fromScale(0.5, 0.5)
 		badgeFrame.Parent = frame
