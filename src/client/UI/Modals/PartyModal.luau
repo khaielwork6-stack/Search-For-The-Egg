@@ -118,7 +118,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	end
 
 	-- Layout: left card + right column ------------------------------------------------------------
-	local layoutHeight = if compact then tap * 6 + Tokens.spacing.md else tap * 9 + Tokens.spacing.lg
+	local layoutHeight = if compact then tap * 4 + Tokens.spacing.lg * 3 else tap * 9 + Tokens.spacing.lg
 	local layout = Instance.new("Frame")
 	layout.Name = "Layout"
 	layout.BackgroundTransparency = 1
@@ -148,7 +148,9 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	rightLayout.Parent = right
 
 	-- Preview band on the left card.
-	local previewHeight = if compact then tap * 2 else tap * 3 + Tokens.spacing.md
+	local previewHeight = if compact
+		then Tokens.typography.title.size + Tokens.typography.label.size + Tokens.spacing.lg + Tokens.spacing.sm
+		else tap * 3 + Tokens.spacing.md
 	local preview = Instance.new("Frame")
 	preview.Name = "Preview"
 	preview.Size = UDim2.new(1, 0, 0, previewHeight)
@@ -169,10 +171,10 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	previewGradient.Parent = preview
 	preview.Parent = leftFace
 	Skin.texture(preview, "texture.rays", { zIndex = z + 2, transparency = 0.8, color = Tokens.color.featherWhite })
-	local previewArt = Skin.icon(preview, CHAPTER_LOOK.chapter1.art, if compact then tap else tap * 2 + Tokens.spacing.lg, z + 3)
+	local previewArt = if compact then nil else Skin.icon(preview, CHAPTER_LOOK.chapter1.art, tap * 2 + Tokens.spacing.lg, z + 3)
 	if previewArt then
 		previewArt.AnchorPoint = Vector2.new(0.5, 0.5)
-		previewArt.Position = UDim2.fromScale(0.5, if compact then 0.3 else 0.42)
+		previewArt.Position = UDim2.fromScale(0.5, 0.42)
 	end
 	local previewTitle = FrameKit.text(preview, "Title", "", "display", {
 		zIndex = z + 4,
@@ -204,17 +206,25 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local createPadding = Instance.new("UIPadding")
 	createPadding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
 	createPadding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
-	createPadding.PaddingTop = UDim.new(0, Tokens.spacing.sm)
-	createPadding.PaddingBottom = UDim.new(0, Tokens.spacing.md)
+	createPadding.PaddingTop = UDim.new(0, if compact then Tokens.spacing.xs else Tokens.spacing.sm)
+	createPadding.PaddingBottom = UDim.new(0, if compact then Tokens.spacing.sm else Tokens.spacing.md)
 	createPadding.Parent = createPanel
+	-- Rows spread top to bottom: chips, size, hint, CREATE pinned at the foot.
+	local createLayout = Instance.new("UIListLayout")
+	createLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	createLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	createLayout.VerticalFlex = Enum.UIFlexAlignment.SpaceBetween
+	createLayout.Padding = UDim.new(0, Tokens.spacing.xs)
+	createLayout.Parent = createPanel
 	createPanel.Parent = leftFace
 
 	-- Difficulty chips.
 	local chipsRow = Instance.new("Frame")
 	chipsRow.Name = "Difficulty"
 	chipsRow.BackgroundTransparency = 1
-	chipsRow.Size = UDim2.new(1, 0, 0, tap)
+	chipsRow.Size = UDim2.new(1, 0, 0, if compact then tap - Tokens.spacing.xs else tap)
 	chipsRow.ZIndex = z + 3
+	chipsRow.LayoutOrder = 1
 	local chipsLayout = Instance.new("UIListLayout")
 	chipsLayout.FillDirection = Enum.FillDirection.Horizontal
 	chipsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -273,30 +283,41 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	end
 
 	-- Party size.
-	local sizeCaption = FrameKit.text(createPanel, "SizeCaption", "PARTY SIZE:", "title", {
-		zIndex = z + 3,
-		color = Tokens.color.inkStrong,
-		align = Enum.TextXAlignment.Center,
-	})
-	sizeCaption.Position = UDim2.fromOffset(0, tap + Tokens.spacing.xs)
-	sizeCaption.Size = UDim2.new(1, 0, 0, Tokens.typography.title.size + 4)
 	local sizeRow = Instance.new("Frame")
 	sizeRow.Name = "SizeRow"
 	sizeRow.BackgroundTransparency = 1
-	sizeRow.Position = UDim2.fromOffset(0, tap + Tokens.typography.title.size + Tokens.spacing.md)
-	sizeRow.Size = UDim2.new(1, 0, 0, tap + Tokens.spacing.xs)
+	sizeRow.Size = UDim2.new(1, 0, 0, if compact then tap else tap + Tokens.spacing.xs)
 	sizeRow.ZIndex = z + 3
+	sizeRow.LayoutOrder = 2
+	local sizeLayout = Instance.new("UIListLayout")
+	sizeLayout.FillDirection = Enum.FillDirection.Horizontal
+	sizeLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	sizeLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	sizeLayout.Padding = UDim.new(0, Tokens.spacing.sm)
+	sizeLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	sizeLayout.Parent = sizeRow
 	sizeRow.Parent = createPanel
+	local sizeCaption = FrameKit.text(sizeRow, "SizeCaption", "PARTY SIZE:", "title", {
+		zIndex = z + 3,
+		color = Tokens.color.inkStrong,
+		align = Enum.TextXAlignment.Right,
+	})
+	sizeCaption.Size = UDim2.new(0, 0, 1, 0)
+	sizeCaption.AutomaticSize = Enum.AutomaticSize.X
+	sizeCaption.TextYAlignment = Enum.TextYAlignment.Center
+	sizeCaption.LayoutOrder = 1
+	local sizeCaptionPad = Instance.new("UIPadding")
+	sizeCaptionPad.PaddingRight = UDim.new(0, Tokens.spacing.sm)
+	sizeCaptionPad.Parent = sizeCaption
 	local sizeValue, sizeValueFace = FrameKit.tile(sizeRow, "Value", {
 		fill = Tokens.color.creamPill,
 		deep = Tokens.color.strawDeep,
 		zIndex = z + 3,
 		radius = Tokens.radius.md,
 		lip = 4,
-		size = UDim2.fromOffset(tap + Tokens.spacing.lg, tap + Tokens.spacing.xs),
+		size = UDim2.fromOffset(tap + Tokens.spacing.lg, if compact then tap else tap + Tokens.spacing.xs),
 	})
-	sizeValue.AnchorPoint = Vector2.new(0.5, 0.5)
-	sizeValue.Position = UDim2.fromScale(0.5, 0.5)
+	sizeValue.LayoutOrder = 3
 	local sizeText = FrameKit.text(sizeValueFace, "Text", "1", "display", {
 		zIndex = z + 4,
 		color = Tokens.color.inkStrong,
@@ -310,7 +331,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			variant = "secondary",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromOffset(tap + Tokens.spacing.xs, tap + Tokens.spacing.xs),
+			size = UDim2.fromOffset(tap, if compact then tap else tap + Tokens.spacing.xs),
 			zIndex = z + 3,
 			textSize = Tokens.typography.display.size,
 			sound = function()
@@ -325,8 +346,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			end,
 		})
 		handle.button.Name = name
-		handle.button.AnchorPoint = Vector2.new(0.5, 0.5)
-		handle.button.Position = UDim2.new(0.5, direction * (tap + Tokens.spacing.lg + Tokens.spacing.md), 0.5, 0)
+		handle.button.LayoutOrder = if direction < 0 then 2 else 4
 		table.insert(cleanups, handle.destroy)
 		return handle
 	end
@@ -338,8 +358,8 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		align = Enum.TextXAlignment.Center,
 		wrap = true,
 	})
-	hint.Position = UDim2.fromOffset(0, tap * 2 + Tokens.typography.title.size + Tokens.spacing.lg + Tokens.spacing.sm)
 	hint.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size * 2 + 4)
+	hint.LayoutOrder = 3
 	hint.Visible = not compact
 
 	local createHandle = Button.build(createPanel, {
@@ -367,8 +387,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		end,
 	})
 	createHandle.button.Name = "SoloButton"
-	createHandle.button.AnchorPoint = Vector2.new(0.5, 1)
-	createHandle.button.Position = UDim2.fromScale(0.5, 1)
+	createHandle.button.LayoutOrder = 4
 	table.insert(cleanups, createHandle.destroy)
 	api.setInitialFocus(createHandle.button)
 
