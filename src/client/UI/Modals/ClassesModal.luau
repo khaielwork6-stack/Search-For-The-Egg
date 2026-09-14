@@ -450,7 +450,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	local slotsRow = Instance.new("Frame")
 	slotsRow.Name = "Slots"
 	slotsRow.BackgroundTransparency = 1
-	slotsRow.Size = UDim2.new(1, 0, 0, tap)
+	local slotRowHeight = tap - Tokens.spacing.sm
+	slotsRow.Size = UDim2.new(1, 0, 0, (slotRowHeight + Tokens.spacing.xs) * cfg.classes.maximumSlots)
 	slotsRow.ZIndex = z
 	slotsRow.Parent = side
 	local slotHandles: { any } = {}
@@ -461,8 +462,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			variant = "secondary",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.new(1 / cfg.classes.maximumSlots, -Tokens.spacing.xs, 0, tap - Tokens.spacing.xs),
-			textSize = Tokens.typography.caption.size + 1,
+			size = UDim2.new(1, 0, 0, slotRowHeight),
+			textSize = Tokens.typography.caption.size + 2,
 			zIndex = z + 1,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTab)
@@ -486,8 +487,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			end,
 		})
 		handle.button.Name = "Slot" .. index
-		handle.button.AnchorPoint = Vector2.new(if index == 1 then 0 else 1, 0.5)
-		handle.button.Position = UDim2.fromScale(if index == 1 then 0 else 1, 0.5)
+		handle.button.Position = UDim2.fromOffset(0, (index - 1) * (slotRowHeight + Tokens.spacing.xs))
 		table.insert(slotHandles, handle)
 		table.insert(cleanups, handle.destroy)
 	end
@@ -495,8 +495,9 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	local story = Instance.new("Frame")
 	story.Name = "Story"
 	story.BackgroundColor3 = Tokens.color.featherWhite
-	story.Position = UDim2.fromOffset(0, tap + Tokens.spacing.sm)
-	story.Size = UDim2.new(1, 0, 1, -(tap + Tokens.spacing.sm))
+	local storyTop = (slotRowHeight + Tokens.spacing.xs) * cfg.classes.maximumSlots + Tokens.spacing.xs
+	story.Position = UDim2.fromOffset(0, storyTop)
+	story.Size = UDim2.new(1, 0, 1, -storyTop)
 	story.ZIndex = z
 	local storyCorner = Instance.new("UICorner")
 	storyCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
@@ -521,8 +522,17 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	storyText.Position = UDim2.fromOffset(0, Tokens.typography.title.size + Tokens.spacing.lg)
 	storyText.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size * 4)
 	storyText.TextYAlignment = Enum.TextYAlignment.Top
+	local storyEffect = FrameKit.text(story, "Effect", "", "caption", { zIndex = z + 1, color = Tokens.color.goldDeep, wrap = true })
+	storyEffect.Font = Tokens.typography.label.font
+	storyEffect.TextSize = Tokens.typography.caption.size + 1
+	storyEffect.Position = UDim2.fromOffset(0, Tokens.typography.title.size + Tokens.spacing.lg + Tokens.typography.body.size * 4 + 2)
+	storyEffect.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size * 2 + 6)
+	storyEffect.TextYAlignment = Enum.TextYAlignment.Top
 	local storyOdds = FrameKit.text(story, "Odds", "", "caption", { zIndex = z + 1, color = Tokens.color.inkMuted })
-	storyOdds.Position = UDim2.fromOffset(0, Tokens.typography.title.size + Tokens.spacing.lg + Tokens.typography.body.size * 4 + 2)
+	storyOdds.Position = UDim2.fromOffset(
+		0,
+		Tokens.typography.title.size + Tokens.spacing.lg + Tokens.typography.body.size * 4 + Tokens.typography.caption.size * 2 + 12
+	)
 	storyOdds.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 4)
 	local equipHandle = Button.build(story, {
 		text = "Equip",
@@ -604,6 +614,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		local copy = CLASS_COPY[entry.id]
 		storyName.Text = entry.displayName
 		storyText.Text = if copy and copy.story ~= "" then copy.story else describeEffect(entry)
+		storyEffect.Text = "Bonus: " .. describeEffect(entry)
 		for _, other in ipairs(rows) do
 			local outline = other.tile:FindFirstChild("Outline") :: UIStroke?
 			if outline then
@@ -627,7 +638,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			if unlocked then
 				local equipped = projection.classes.equipped[index]
 				local entry = entryFor(equipped)
-				handle.setText(string.format("Slot %d: %s", index, entry and entry.displayName or "empty"))
+				handle.setText(string.format("Slot %d  -  %s", index, entry and entry.displayName or "empty"))
 				handle.setVariant(if index == state.slot then "primary" else "secondary")
 				handle.setSelected(index == state.slot)
 			else
@@ -758,7 +769,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			state.auto = false
 			stats.autoStops += 1
 			if autoHandle then
-				autoHandle.setText("Auto  -  Off")
+				autoHandle.setText("Auto: Off")
 				autoHandle.setSelected(false)
 			end
 			if reason then
@@ -826,7 +837,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		variant = "success",
 		minimumTapTarget = tap,
 		motion = motion,
-		size = UDim2.new(0.68, -Tokens.spacing.xs, 0, tap + Tokens.spacing.xs),
+		size = UDim2.new(0.66, -Tokens.spacing.xs, 0, tap + Tokens.spacing.xs),
 		zIndex = z + 1,
 		textSize = Tokens.typography.title.size - 2,
 		sound = function()
@@ -843,11 +854,11 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	rollHandle.button.AnchorPoint = Vector2.new(0, 1)
 	rollHandle.button.Position = UDim2.fromScale(0, 1)
 	autoHandle = Button.build(controls, {
-		text = "Auto  -  Off",
+		text = "Auto: Off",
 		variant = "secondary",
 		minimumTapTarget = tap,
 		motion = motion,
-		size = UDim2.new(0.32, -Tokens.spacing.xs, 0, tap + Tokens.spacing.xs),
+		size = UDim2.new(0.34, -Tokens.spacing.xs, 0, tap + Tokens.spacing.xs),
 		zIndex = z + 1,
 		textSize = Tokens.typography.body.size,
 		onActivated = function()
@@ -855,7 +866,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 				stopAuto("Auto stopped")
 			else
 				state.auto = true
-				autoHandle.setText("Auto  -  On")
+				autoHandle.setText("Auto: On")
 				autoHandle.setSelected(true)
 				deps.audio:play(Tokens.sound.uiConfirm)
 				rollOnce(true)
@@ -901,7 +912,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 					stopAuto("Auto stopped")
 				else
 					state.auto = true
-					autoHandle.setText("Auto  -  On")
+					autoHandle.setText("Auto: On")
 					rollOnce(true)
 				end
 				return { auto = state.auto }

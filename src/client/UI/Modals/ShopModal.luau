@@ -179,7 +179,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	body.ZIndex = z
 	body.Parent = container
 
-	local tileHeight = tap * 4 + Tokens.spacing.md
+	local tileHeight = tap * 4 + Tokens.spacing.xxl + Tokens.spacing.sm
 	local grid = Instance.new("Frame")
 	grid.Name = "Perks"
 	grid.BackgroundColor3 = Tokens.color.creamDeep
@@ -252,8 +252,8 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		local artHolder = Instance.new("Frame")
 		artHolder.Name = "Art"
 		artHolder.AnchorPoint = Vector2.new(0.5, 0)
-		artHolder.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.md + 4)
-		artHolder.Size = UDim2.fromOffset(tap * 2 - Tokens.spacing.xs, tap * 2 - Tokens.spacing.xs)
+		artHolder.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.md + 2)
+		artHolder.Size = UDim2.fromOffset(tap * 2 - Tokens.spacing.sm, tap * 2 - Tokens.spacing.sm)
 		artHolder.BackgroundTransparency = 1
 		artHolder.ZIndex = z + 2
 		artHolder.Parent = face
@@ -263,7 +263,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		local pips = Instance.new("Frame")
 		pips.Name = "Pips"
 		pips.AnchorPoint = Vector2.new(0.5, 1)
-		pips.Position = UDim2.new(0.5, 0, 1, -(tap + Tokens.spacing.sm))
+		pips.Position = UDim2.new(0.5, 0, 1, -(tap + Tokens.spacing.sm + 2))
 		pips.Size = UDim2.new(1, -Tokens.spacing.md * 2, 0, 10)
 		pips.BackgroundTransparency = 1
 		pips.ZIndex = z + 3
@@ -297,7 +297,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 			align = Enum.TextXAlignment.Center,
 		})
 		levelLabel.AnchorPoint = Vector2.new(0.5, 1)
-		levelLabel.Position = UDim2.new(0.5, 0, 1, -(tap + Tokens.spacing.sm + 12))
+		levelLabel.Position = UDim2.new(0.5, 0, 1, -(tap + Tokens.spacing.sm + 16))
 		levelLabel.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 2)
 		FrameKit.outline(levelLabel, 1.6)
 		-- Price button across the bottom.
@@ -381,7 +381,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	-- Robux offers ---------------------------------------------------------------------------------
 	type OfferCard = { offer: Offer, tile: Frame, buy: any, owned: TextLabel, scale: UIScale }
 	local offerCards: { OfferCard } = {}
-	local offerHeight = tap * 2 + Tokens.spacing.xl
+	local offerHeight = tap * 2 + Tokens.spacing.xs
 	for index, offer in ipairs(offers(cfg)) do
 		local fill = if offer.pass then Tokens.color.gem else Tokens.color.sky
 		local deep = if offer.pass then Tokens.color.gemDeep else Tokens.color.skyDeep
@@ -407,11 +407,11 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		centredArt(artHolder, offer.art, offer.icon, tap, z + 4)
 		local left = tap + Tokens.spacing.md + Tokens.spacing.md
 		local name = FrameKit.text(face, "Name", offer.name, "label", { zIndex = z + 3, color = Tokens.color.featherWhite })
-		name.Position = UDim2.fromOffset(left, Tokens.spacing.sm)
+		name.Position = UDim2.fromOffset(left, Tokens.spacing.xs)
 		name.Size = UDim2.new(1, -left, 0, Tokens.typography.label.size + 4)
 		FrameKit.outline(name, 2)
 		local caption = FrameKit.text(face, "Caption", offer.caption, "caption", { zIndex = z + 3, color = Tokens.color.featherWhite })
-		caption.Position = UDim2.fromOffset(left, Tokens.typography.label.size + Tokens.spacing.sm + 2)
+		caption.Position = UDim2.fromOffset(left, Tokens.typography.label.size + Tokens.spacing.xs + 2)
 		caption.Size = UDim2.new(1, -left, 0, Tokens.typography.caption.size + 2)
 		FrameKit.outline(caption, 1.4)
 		local buy = Button.build(face, {
@@ -419,7 +419,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 			variant = "primary",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.new(1, -(left + Tokens.spacing.sm), 0, tap - Tokens.spacing.sm),
+			size = UDim2.new(1, -(left + Tokens.spacing.sm), 0, tap - Tokens.spacing.md),
 			zIndex = z + 3,
 			textSize = Tokens.typography.body.size + 1,
 			sound = function()
@@ -438,7 +438,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 			end,
 		})
 		buy.button.AnchorPoint = Vector2.new(1, 1)
-		buy.button.Position = UDim2.new(1, -Tokens.spacing.sm, 1, -Tokens.spacing.sm)
+		buy.button.Position = UDim2.new(1, -Tokens.spacing.sm, 1, -Tokens.spacing.xs - 2)
 		table.insert(cleanups, buy.destroy)
 		local owned = FrameKit.badge(face, "Owned", "OWNED", Tokens.color.success, z + 4)
 		owned.AnchorPoint = Vector2.new(1, 1)
@@ -446,9 +446,9 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		owned.Visible = false
 		if offer.popular then
 			local ribbon = FrameKit.badge(tile, "Popular", "POPULAR", Tokens.color.ember, z + 5)
-			ribbon.AnchorPoint = Vector2.new(1, 0)
-			ribbon.Position = UDim2.new(1, Tokens.spacing.xs, 0, -Tokens.spacing.xs)
-			ribbon.Rotation = 6
+			ribbon.AnchorPoint = Vector2.new(1, 1)
+			ribbon.Position = UDim2.new(1, Tokens.spacing.xs, 1, Tokens.spacing.xs)
+			ribbon.Rotation = -6
 		end
 		table.insert(offerCards, { offer = offer, tile = tile, buy = buy, owned = owned, scale = scale })
 	end
