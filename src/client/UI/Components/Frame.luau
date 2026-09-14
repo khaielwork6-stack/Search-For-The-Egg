@@ -149,7 +149,15 @@ function Frame.pill(
 	parent: Instance,
 	name: string,
 	text: string,
-	options: { size: UDim2?, textSize: number?, zIndex: number?, fill: Color3?, textColor: Color3?, art: boolean? }?
+	options: {
+		size: UDim2?,
+		textSize: number?,
+		zIndex: number?,
+		fill: Color3?,
+		textColor: Color3?,
+		art: boolean?,
+		fitText: boolean?,
+	}?
 ): TextLabel
 	local opts = (options or {}) :: any
 	local label = Instance.new("TextLabel")
@@ -189,6 +197,16 @@ function Frame.pill(
 		-- The art's rounded ends are wider than the drawn stroke: keep the text clear of them.
 		padding.PaddingLeft = UDim.new(0, Tokens.spacing.xl + Tokens.spacing.xs)
 		padding.PaddingRight = UDim.new(0, Tokens.spacing.xl + Tokens.spacing.xs)
+	end
+	if opts.fitText then
+		-- Width follows the text plus padding (AutomaticSize would feed back on the art child).
+		local height = label.Size.Y.Offset
+		local function fit()
+			label.Size =
+				UDim2.fromOffset(math.ceil(label.TextBounds.X) + padding.PaddingLeft.Offset + padding.PaddingRight.Offset + 2, height)
+		end
+		label:GetPropertyChangedSignal("TextBounds"):Connect(fit)
+		fit()
 	end
 	label.Parent = parent
 	return label
@@ -477,8 +495,7 @@ function Frame.chip(
 	local height = opts.height or Tokens.layout.minimumTapTargetPx
 	local frame = Instance.new("Frame")
 	frame.Name = name
-	frame.Size = if opts.width then UDim2.fromOffset(opts.width, height) else UDim2.fromOffset(0, height)
-	frame.AutomaticSize = if opts.width then Enum.AutomaticSize.None else Enum.AutomaticSize.X
+	frame.Size = UDim2.fromOffset(opts.width or height * 2, height)
 	frame.BackgroundColor3 = opts.fill or Tokens.color.creamPill
 	frame.BorderSizePixel = 0
 	frame.ZIndex = z
@@ -524,7 +541,6 @@ function Frame.chip(
 	local label = Instance.new("TextLabel")
 	label.Name = "Text"
 	label.LayoutOrder = 2
-	label.AutomaticSize = Enum.AutomaticSize.X
 	label.Size = UDim2.fromOffset(0, height)
 	label.BackgroundTransparency = 1
 	label.Font = Tokens.typography.label.font
@@ -534,6 +550,19 @@ function Frame.chip(
 	label.Text = ""
 	label.ZIndex = z + 1
 	label.Parent = frame
+	-- Width follows the text (never AutomaticSize: scale-sized shadow and art children would feed
+	-- back into it). Fixed-width chips keep their width and centre the text.
+	if not opts.width then
+		local function fit()
+			local iconWidth = if iconSlot.Visible then Tokens.icon.md + Tokens.spacing.sm else 0
+			local width = math.ceil(label.TextBounds.X) + iconWidth + Tokens.spacing.md + Tokens.spacing.lg
+			label.Size = UDim2.fromOffset(math.ceil(label.TextBounds.X) + 2, height)
+			frame.Size = UDim2.fromOffset(math.max(height, width), height)
+		end
+		label:GetPropertyChangedSignal("TextBounds"):Connect(fit)
+		iconSlot:GetPropertyChangedSignal("Visible"):Connect(fit)
+		fit()
+	end
 	frame.Parent = parent
 	return frame, label, iconSlot
 end

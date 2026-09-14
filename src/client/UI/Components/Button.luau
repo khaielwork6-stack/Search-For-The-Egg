@@ -36,6 +36,8 @@ export type Options = {
 	sound: (() -> ())?, -- tap sound
 	hoverSound: (() -> ())?, -- soft hover tick (mouse only, throttled by the audio layer)
 	textSize: number?,
+	art: boolean?, -- false keeps the token drawing even when state art exists
+	round: boolean?, -- circular (icon) button
 }
 
 export type Handle = {
@@ -222,7 +224,13 @@ function Button.build(parent: Instance, options: Options): Handle
 	local skinRole = "button." .. (if variantName == "gold" then "primary" else variantName)
 	local skin: ImageLabel? = nil
 	local skinInset = 0
-	if not options.image and Skin.has(skinRole .. ".normal") then
+	if options.round then
+		corner.CornerRadius = UDim.new(1, 0)
+		washCorner.CornerRadius = UDim.new(1, 0)
+		padding.PaddingLeft = UDim.new(0, 0)
+		padding.PaddingRight = UDim.new(0, 0)
+	end
+	if options.art ~= false and not options.round and not options.image and Skin.has(skinRole .. ".normal") then
 		skinInset = 2
 		skin = Skin.label(button, skinRole .. ".normal", { zIndex = z + 1, inset = skinInset, name = "ArtFrame" })
 		stroke.Enabled = false

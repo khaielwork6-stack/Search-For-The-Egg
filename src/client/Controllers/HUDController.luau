@@ -122,8 +122,8 @@ function HUDController.new(deps: any): HUDController
 	banner.Name = "Banner"
 	banner.AnchorPoint = Vector2.new(0.5, 0)
 	banner.Position = UDim2.new(0.5, 0, 0, Tokens.layout.safeAreaPaddingPx)
-	banner.Size = UDim2.fromOffset(0, Tokens.layout.minimumTapTargetPx + Tokens.typography.caption.size + Tokens.spacing.md)
-	banner.AutomaticSize = Enum.AutomaticSize.X
+	local bannerHeight = Tokens.layout.minimumTapTargetPx + Tokens.typography.caption.size + Tokens.spacing.md
+	banner.Size = UDim2.fromOffset(240, bannerHeight)
 	banner.BackgroundColor3 = Tokens.color.featherWhite
 	banner.ZIndex = Tokens.zIndex.hud
 	local bannerCorner = Instance.new("UICorner")
@@ -141,6 +141,7 @@ function HUDController.new(deps: any): HUDController
 	bannerPadding.PaddingRight = UDim.new(0, Tokens.spacing.xl)
 	bannerPadding.PaddingTop = UDim.new(0, Tokens.spacing.sm)
 	bannerPadding.Parent = banner
+	banner.Parent = stage
 	if Skin.label(banner, "hud.banner", { zIndex = banner.ZIndex + 1, inset = 3, name = "ArtFrame" }) then
 		bannerStroke.Enabled = false
 		banner.BackgroundTransparency = 0.08
@@ -149,8 +150,7 @@ function HUDController.new(deps: any): HUDController
 	end
 	local bannerTitle = Instance.new("TextLabel")
 	bannerTitle.Name = "Text"
-	bannerTitle.AutomaticSize = Enum.AutomaticSize.X
-	bannerTitle.Size = UDim2.fromOffset(0, Tokens.typography.heading.size + Tokens.spacing.xs)
+	bannerTitle.Size = UDim2.new(1, 0, 0, Tokens.typography.heading.size + Tokens.spacing.xs)
 	bannerTitle.BackgroundTransparency = 1
 	bannerTitle.Font = Tokens.typography.label.font
 	bannerTitle.TextSize = Tokens.typography.label.size + 1
@@ -158,9 +158,6 @@ function HUDController.new(deps: any): HUDController
 	bannerTitle.Text = "Loading your nest..."
 	bannerTitle.ZIndex = banner.ZIndex + 2
 	bannerTitle.Parent = banner
-	local minBanner = Instance.new("UISizeConstraint")
-	minBanner.MinSize = Vector2.new(240, 0)
-	minBanner.Parent = banner
 	self._labels.banner = bannerTitle
 	local detail = Instance.new("TextLabel")
 	detail.Name = "Detail"
@@ -176,6 +173,16 @@ function HUDController.new(deps: any): HUDController
 	detail.Parent = banner
 	self._labels.detail = detail
 	self._bannerScale = bannerScale
+	-- Banner width follows the longer of its two lines (never AutomaticSize: the art and shadow
+	-- children are scale-sized and would feed back into it).
+	local function fitBanner()
+		local widest = math.max(bannerTitle.TextBounds.X, detail.TextBounds.X)
+		local pad = bannerPadding.PaddingLeft.Offset + bannerPadding.PaddingRight.Offset
+		banner.Size = UDim2.fromOffset(math.max(240, math.ceil(widest) + pad), bannerHeight)
+	end
+	bannerTitle:GetPropertyChangedSignal("TextBounds"):Connect(fitBanner)
+	detail:GetPropertyChangedSignal("TextBounds"):Connect(fitBanner)
+	fitBanner()
 
 	-- Bottom-right input prompt: keycaps + verbs, swapped per input mode.
 	local prompt = Instance.new("Frame")
@@ -240,6 +247,8 @@ function HUDController.new(deps: any): HUDController
 	local settingsHandle = Button.build(stage, {
 		text = "Settings",
 		variant = "secondary",
+		art = false,
+		round = true,
 		minimumTapTarget = minimumTap,
 		motion = deps.accessibility:motionSettings(),
 		size = UDim2.fromOffset(minimumTap, minimumTap),
@@ -353,8 +362,8 @@ function HUDController.new(deps: any): HUDController
 		size = UDim2.fromOffset(0, Tokens.layout.minimumTapTargetPx + Tokens.spacing.md),
 		textSize = Tokens.typography.display.size,
 		zIndex = veil.ZIndex + 1,
+		fitText = true,
 	})
-	veilTitle.AutomaticSize = Enum.AutomaticSize.X
 	veilTitle.AnchorPoint = Vector2.new(0.5, 0.5)
 	veilTitle.Position = UDim2.fromScale(0.5, 0.44)
 	veilTitle.TextXAlignment = Enum.TextXAlignment.Center
@@ -524,6 +533,7 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 			or phase == "CommittingRewards"
 			or phase == "Results"
 		self.round:setVisible(inRound)
+		self.hotbar:setVisible(phase == "Cutscene" or phase == "Countdown" or phase == "Searching" or phase == "EggRevealed")
 		self._labels.reticle.Visible = phase == "Searching" or phase == "EggRevealed"
 		self.carriedStack:setVisible(phase == "Searching" or phase == "EggRevealed")
 		if inRound and not self._timerConnection then

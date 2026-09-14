@@ -104,8 +104,8 @@ function ModalShell.create(
 		size = UDim2.fromOffset(0, tap),
 		zIndex = panel.ZIndex + 3,
 		textSize = Tokens.typography.title.size,
+		fitText = true,
 	})
-	title.AutomaticSize = Enum.AutomaticSize.X
 	title.AnchorPoint = Vector2.new(0.5, 0.5)
 	title.Position = UDim2.new(0.5, 0, 0, -(Tokens.spacing.md + Tokens.spacing.sm))
 	title.TextXAlignment = Enum.TextXAlignment.Center
