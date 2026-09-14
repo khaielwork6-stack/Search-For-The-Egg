@@ -884,7 +884,8 @@ function PileVisualController.aimRay(_self: PileVisualController): (Vector3?, Ve
 		return nil, nil
 	end
 	local point = camera.ViewportSize * 0.5
-	local firstPerson = Players.LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson
+	local player = Players.LocalPlayer
+	local firstPerson = (player ~= nil and player.CameraMode == Enum.CameraMode.LockFirstPerson)
 		or UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
 	local lastInput = UserInputService:GetLastInputType()
 	local mouse = lastInput == Enum.UserInputType.MouseButton1
