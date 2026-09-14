@@ -406,20 +406,21 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 2, transparency = 0.7, color = Tokens.color.featherWhite })
 		centredArt(artHolder, offer.art, offer.icon, tap, z + 4)
 		local left = tap + Tokens.spacing.md + Tokens.spacing.md
+		local priceWidth = tap * 2 - Tokens.spacing.xs
 		local name = FrameKit.text(face, "Name", offer.name, "label", { zIndex = z + 3, color = Tokens.color.featherWhite })
-		name.Position = UDim2.fromOffset(left, Tokens.spacing.xs)
-		name.Size = UDim2.new(1, -left, 0, Tokens.typography.label.size + 4)
+		name.Position = UDim2.new(0, left, 0.5, -(Tokens.typography.label.size + 2))
+		name.Size = UDim2.new(1, -(left + priceWidth + Tokens.spacing.sm), 0, Tokens.typography.label.size + 4)
 		FrameKit.outline(name, 2)
 		local caption = FrameKit.text(face, "Caption", offer.caption, "caption", { zIndex = z + 3, color = Tokens.color.featherWhite })
-		caption.Position = UDim2.fromOffset(left, Tokens.typography.label.size + Tokens.spacing.xs + 2)
-		caption.Size = UDim2.new(1, -left, 0, Tokens.typography.caption.size + 2)
+		caption.Position = UDim2.new(0, left, 0.5, 2)
+		caption.Size = UDim2.new(1, -(left + priceWidth + Tokens.spacing.sm), 0, Tokens.typography.caption.size + 2)
 		FrameKit.outline(caption, 1.4)
 		local buy = Button.build(face, {
 			text = if offer.robux then string.format("R$ %d", offer.robux) else "R$",
 			variant = "primary",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.new(1, -(left + Tokens.spacing.sm), 0, tap - Tokens.spacing.md),
+			size = UDim2.fromOffset(priceWidth, tap - Tokens.spacing.sm),
 			zIndex = z + 3,
 			textSize = Tokens.typography.body.size + 1,
 			sound = function()
@@ -437,18 +438,18 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 				end
 			end,
 		})
-		buy.button.AnchorPoint = Vector2.new(1, 1)
-		buy.button.Position = UDim2.new(1, -Tokens.spacing.sm, 1, -Tokens.spacing.xs - 2)
+		buy.button.AnchorPoint = Vector2.new(1, 0.5)
+		buy.button.Position = UDim2.new(1, -Tokens.spacing.sm, 0.5, -2)
 		table.insert(cleanups, buy.destroy)
 		local owned = FrameKit.badge(face, "Owned", "OWNED", Tokens.color.success, z + 4)
-		owned.AnchorPoint = Vector2.new(1, 1)
-		owned.Position = UDim2.new(1, -Tokens.spacing.md, 1, -Tokens.spacing.md)
+		owned.AnchorPoint = Vector2.new(1, 0.5)
+		owned.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, -2)
 		owned.Visible = false
 		if offer.popular then
 			local ribbon = FrameKit.badge(tile, "Popular", "POPULAR", Tokens.color.ember, z + 5)
-			ribbon.AnchorPoint = Vector2.new(1, 1)
-			ribbon.Position = UDim2.new(1, Tokens.spacing.xs, 1, Tokens.spacing.xs)
-			ribbon.Rotation = -6
+			ribbon.AnchorPoint = Vector2.new(1, 0)
+			ribbon.Position = UDim2.new(1, Tokens.spacing.xs, 0, -Tokens.spacing.sm)
+			ribbon.Rotation = 8
 		end
 		table.insert(offerCards, { offer = offer, tile = tile, buy = buy, owned = owned, scale = scale })
 	end
@@ -510,14 +511,12 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 				end
 			end
 			if preview.maxed then
-				record.levelLabel.Text =
-					string.format("Level %d / %d  -  +%d%% %s", preview.level, preview.maxLevel, currentPct, COPY[record.perkId].what)
+				record.levelLabel.Text = string.format("Lv %d  ·  +%d%%", preview.level, currentPct)
 				record.buy.button.Visible = false
 				record.maxBadge.Visible = true
 			else
 				local nextPct = math.floor(((preview.nextMultiplier or 1) - 1) * 100 + 0.5)
-				record.levelLabel.Text =
-					string.format("Lv %d  -  +%d%% -> +%d%% %s", preview.level, currentPct, nextPct, COPY[record.perkId].what)
+				record.levelLabel.Text = string.format("Lv %d  ·  +%d%% → +%d%%", preview.level, currentPct, nextPct)
 				record.buy.button.Visible = true
 				record.maxBadge.Visible = false
 				local affordable = projection.currencies.gems >= (preview.costGems or 0)
