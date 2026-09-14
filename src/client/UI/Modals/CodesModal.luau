@@ -93,6 +93,11 @@ function CodesModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 
 	local feedback = FrameKit.text(container, "Feedback", "", "body", { zIndex = z, color = Tokens.color.goldDeep })
 	feedback.LayoutOrder = 3
+	-- The feedback line only takes space once it has something to say.
+	feedback.Visible = false
+	feedback:GetPropertyChangedSignal("Text"):Connect(function()
+		feedback.Visible = feedback.Text ~= ""
+	end)
 
 	local function fail(text: string)
 		feedback.Text = text

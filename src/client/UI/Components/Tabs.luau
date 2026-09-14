@@ -74,7 +74,17 @@ function Tabs.build(parent: Instance, options: Options): Handle
 		for id, handle in pairs(buttons) do
 			local on = id == current
 			handle.setVariant(if on then "teal" else "ghost")
-			handle.button.BackgroundTransparency = if on then 0 else 1
+			handle.button.BackgroundTransparency = 1
+			-- Segmented tabs are lipless: every face fills its slot so labels share one baseline.
+			local face = handle.button:FindFirstChild("Face") :: Frame?
+			if face then
+				face.Size = UDim2.fromScale(1, 1)
+			end
+			local outline = handle.button:FindFirstChild("Outline") :: UIStroke?
+			if outline then
+				outline.Transparency = if on then 0 else 1
+				outline.Color = if on then Tokens.color.tealDeep else Tokens.color.strawDeep
+			end
 			if on and animate then
 				local scale = handle.button:FindFirstChildOfClass("UIScale")
 				if scale then

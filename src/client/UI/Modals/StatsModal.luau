@@ -10,6 +10,19 @@ local Tokens = require(Shared.Design.Tokens)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Tabs = require(script.Parent.Parent.Components.Tabs)
 
+-- Short tab names for the boards; anything unknown is humanised from its id.
+local TAB_LABELS: { [string]: string } = {
+	totalWins = "Eggs won",
+	bestTimeChapter1Normal = "Fastest nest",
+	feathersCollected = "Feathers",
+	eggsFound = "Eggs found",
+}
+
+local function humanise(id: string): string
+	local spaced = id:gsub("(%l)(%u)", "%1 %2"):gsub("(%a)(%d)", "%1 %2")
+	return spaced:sub(1, 1):upper() .. spaced:sub(2):lower()
+end
+
 local StatsModal = {}
 
 export type Deps = {
@@ -148,16 +161,18 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 
 	local items = {}
 	for _, boardId in ipairs(cfg.leaderboards.boards) do
-		local labelText = boardId
-		local snapshot = deps.leaderboards.snapshot
-		if snapshot then
-			for _, board in ipairs(snapshot.boards) do
-				if board.id == boardId then
-					labelText = board.label
+		local labelText = TAB_LABELS[boardId]
+		if not labelText then
+			local snapshot = deps.leaderboards.snapshot
+			if snapshot then
+				for _, board in ipairs(snapshot.boards) do
+					if board.id == boardId then
+						labelText = board.label
+					end
 				end
 			end
 		end
-		table.insert(items, { id = boardId, label = labelText })
+		table.insert(items, { id = boardId, label = labelText or humanise(boardId) })
 	end
 	tabsHandle = Tabs.build(container, {
 		items = items,

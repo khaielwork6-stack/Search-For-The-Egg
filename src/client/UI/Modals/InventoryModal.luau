@@ -32,7 +32,15 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 	local z = container.ZIndex + 1
 	local catalog = SkinCatalog.all(cfg)
 
-	type Row = { frame: Frame, label: TextLabel, equip: any, skin: SkinCatalog.Skin }
+	type Row = {
+		frame: Frame,
+		label: TextLabel,
+		caption: TextLabel,
+		lockBadge: TextLabel,
+		icon: ImageLabel?,
+		equip: any,
+		skin: SkinCatalog.Skin,
+	}
 	local rows: { Row } = {}
 	local order = 0
 	local firstButton: TextButton? = nil
@@ -52,9 +60,18 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 				toolIcon.AnchorPoint = Vector2.new(0, 0.5)
 				toolIcon.Position = UDim2.fromScale(0, 0.5)
 			end
-			local label = FrameKit.text(frame, "Label", skin.displayName, "body", { zIndex = z + 1, color = Tokens.color.inkStrong })
-			label.Position = UDim2.fromOffset(if toolIcon then Tokens.icon.lg + Tokens.spacing.sm else 0, 0)
-			label.Size = UDim2.new(1, -(tap * 3) - (if toolIcon then Tokens.icon.lg + Tokens.spacing.sm else 0), 1, 0)
+			local textLeft = if toolIcon then Tokens.icon.lg + Tokens.spacing.md else 0
+			local textWidth = -(tap * 3) - textLeft
+			local label = FrameKit.text(frame, "Label", skin.displayName, "label", { zIndex = z + 1, color = Tokens.color.inkStrong })
+			label.Position = UDim2.new(0, textLeft, 0.5, -(Tokens.typography.label.size + Tokens.spacing.xs) + 2)
+			label.Size = UDim2.new(1, textWidth, 0, Tokens.typography.label.size + Tokens.spacing.xs)
+			local caption = FrameKit.text(frame, "Caption", "", "caption", { zIndex = z + 1, color = Tokens.color.inkMuted })
+			caption.Position = UDim2.new(0, textLeft, 0.5, 2)
+			caption.Size = UDim2.new(1, textWidth, 0, Tokens.typography.caption.size + Tokens.spacing.xs)
+			local lockBadge = FrameKit.badge(frame, "LockBadge", "Moonlit Chest", Tokens.color.strawDeep, z + 1)
+			lockBadge.AnchorPoint = Vector2.new(1, 0.5)
+			lockBadge.Position = UDim2.fromScale(1, 0.5)
+			lockBadge.Visible = false
 			local equip = Button.build(frame, {
 				text = "Equip",
 				variant = "teal",
@@ -87,7 +104,15 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 			equip.button.Position = UDim2.fromScale(1, 0.5)
 			firstButton = firstButton or equip.button
 			table.insert(cleanups, equip.destroy)
-			table.insert(rows, { frame = frame, label = label, equip = equip, skin = skin })
+			table.insert(rows, {
+				frame = frame,
+				label = label,
+				caption = caption,
+				lockBadge = lockBadge,
+				icon = toolIcon,
+				equip = equip,
+				skin = skin,
+			})
 		end
 	end
 	if firstButton then
@@ -106,11 +131,22 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 			row.equip.setText(if equipped then "Equipped" else "Equip")
 			row.equip.setEnabled(not equipped)
 			row.equip.setSelected(equipped)
-			row.label.Text = if owned
-				then row.skin.displayName .. (if equipped then "  -  on the rack" else "")
-				else row.skin.displayName .. "  -  from the Moonlit Chest"
+			row.label.Text = row.skin.displayName
+			row.caption.Text = if equipped
+				then "On the rack"
+				elseif owned then "Owned  -  tap Equip to use it"
+				else "Drops from the Moonlit Chest"
 			row.label.TextColor3 = if owned then Tokens.color.inkStrong else Tokens.color.inkMuted
-			row.frame.BackgroundTransparency = if owned then 0 else 0.5
+			row.lockBadge.Visible = not owned
+			row.frame.BackgroundTransparency = if owned then 0 else 0.45
+			if row.icon then
+				row.icon.ImageTransparency = if owned then 0 else 0.45
+			end
+			local stroke = row.frame:FindFirstChildOfClass("UIStroke")
+			if stroke then
+				stroke.Color = if equipped then Tokens.color.gold else Tokens.color.strawDeep
+				stroke.Thickness = if equipped then Tokens.stroke.standard + 1 else Tokens.stroke.standard
+			end
 		end
 	end
 
