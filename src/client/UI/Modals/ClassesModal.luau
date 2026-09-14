@@ -67,10 +67,11 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	for index = 1, cfg.classes.maximumSlots do
 		local handle = Button.build(slots, {
 			text = "Slot " .. index,
-			variant = "pill",
+			variant = "secondary",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromOffset(150, tap),
+			size = UDim2.fromOffset(220, tap),
+			textSize = Tokens.typography.body.size,
 			zIndex = z + 1,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTab)
@@ -105,7 +106,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	grid.LayoutOrder = 4
 	grid.ZIndex = z
 	local gridLayout = Instance.new("UIGridLayout")
-	gridLayout.CellSize = UDim2.new(0.5, -Tokens.spacing.xs, 0, tap * 2 + Tokens.spacing.xl)
+	gridLayout.CellSize = UDim2.new(0.5, -Tokens.spacing.xs, 0, tap * 2 + Tokens.spacing.xxl)
 	gridLayout.CellPadding = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
 	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	gridLayout.Parent = grid
@@ -163,18 +164,26 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		ribbonCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
 		ribbonCorner.Parent = ribbon
 		ribbon.Parent = frame
+		-- Content sits in a padded child so the art frame keeps the card's full size.
+		local content = Instance.new("Frame")
+		content.Name = "Content"
+		content.Size = UDim2.fromScale(1, 1)
+		content.BackgroundTransparency = 1
+		content.ZIndex = z + 3
+		content.Parent = frame
 		local padding = Instance.new("UIPadding")
-		padding.PaddingLeft = UDim.new(0, Tokens.spacing.md)
-		padding.PaddingRight = UDim.new(0, Tokens.spacing.md)
-		padding.PaddingTop = UDim.new(0, Tokens.spacing.md)
-		padding.Parent = frame
+		padding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
+		padding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
+		padding.PaddingTop = UDim.new(0, Tokens.spacing.md + Tokens.spacing.xs)
+		padding.PaddingBottom = UDim.new(0, Tokens.spacing.md)
+		padding.Parent = content
 		local scale = Instance.new("UIScale")
 		scale.Parent = frame
 		-- State badge (lock / check) top-right.
 		local stateBadge = Instance.new("Frame")
 		stateBadge.Name = "StateBadge"
 		stateBadge.AnchorPoint = Vector2.new(1, 0)
-		stateBadge.Position = UDim2.fromScale(1, 0)
+		stateBadge.Position = UDim2.new(1, -Tokens.spacing.sm, 0, Tokens.spacing.sm)
 		stateBadge.Size = UDim2.fromOffset(Tokens.icon.md + 6, Tokens.icon.md + 6)
 		stateBadge.BackgroundColor3 = Tokens.color.creamPill
 		stateBadge.ZIndex = z + 4
@@ -189,32 +198,32 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		local lockIcon = Icons.lock(stateBadge, Tokens.icon.md - 2, { zIndex = z + 5 })
 		lockIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 		lockIcon.Position = UDim2.fromScale(0.5, 0.5)
-		local checkIcon = Icons.check(stateBadge, Tokens.icon.md - 2, { zIndex = z + 5 })
+		local checkIcon = Icons.check(stateBadge, Tokens.icon.md - 2, { zIndex = z + 5, color = Tokens.color.featherWhite })
 		checkIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 		checkIcon.Position = UDim2.fromScale(0.5, 0.5)
 		checkIcon.Visible = false
-		local name = FrameKit.pill(frame, "Name", entry.displayName, {
+		local name = FrameKit.pill(content, "Name", entry.displayName, {
 			size = UDim2.new(1, -(Tokens.icon.md + Tokens.spacing.md), 0, Tokens.typography.label.size + Tokens.spacing.sm),
 			textSize = Tokens.typography.body.size,
-			zIndex = z + 3,
+			zIndex = z + 4,
 			art = false,
 			fill = rarity.fill,
 			textColor = Tokens.color.featherWhite,
 		})
 		name.TextStrokeTransparency = 0.4
 		name.Position = UDim2.fromOffset(0, 0)
-		local odds = FrameKit.text(frame, "Odds", "", "caption", { zIndex = z + 3, color = Tokens.color.inkMuted })
+		local odds = FrameKit.text(content, "Odds", "", "caption", { zIndex = z + 4, color = Tokens.color.inkMuted })
 		odds.Position = UDim2.fromOffset(0, Tokens.typography.label.size + Tokens.spacing.md)
-		local effect = FrameKit.text(frame, "Effect", "", "caption", { zIndex = z + 3, color = Tokens.color.inkStrong })
+		local effect = FrameKit.text(content, "Effect", "", "caption", { zIndex = z + 4, color = Tokens.color.inkStrong })
 		effect.Position = UDim2.fromOffset(0, Tokens.typography.label.size + Tokens.spacing.md + Tokens.typography.caption.size + 2)
 		effect.Size = UDim2.new(1, -(tap + Tokens.spacing.sm), 0, Tokens.typography.caption.size * 2 + 4)
-		local equip = Button.build(frame, {
+		local equip = Button.build(content, {
 			text = "Equip",
 			variant = "teal",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromOffset(tap + Tokens.spacing.xl, tap - Tokens.spacing.xs),
-			zIndex = z + 3,
+			size = UDim2.fromOffset(tap * 2 + Tokens.spacing.sm, tap - Tokens.spacing.xs),
+			zIndex = z + 4,
 			textSize = Tokens.typography.caption.size,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTap)
@@ -240,7 +249,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			end,
 		})
 		equip.button.AnchorPoint = Vector2.new(1, 1)
-		equip.button.Position = UDim2.new(1, 0, 1, -Tokens.spacing.sm)
+		equip.button.Position = UDim2.fromScale(1, 1)
 		table.insert(cleanups, equip.destroy)
 		frame.Parent = grid
 		local card: Card = {
