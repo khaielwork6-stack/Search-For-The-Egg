@@ -274,3 +274,15 @@ pull 0.34 s, 3 streaks, 3 chevrons); `interaction.aimMissToleranceStuds` 2.0, `c
 - `luau-lsp analyze` is not installed on the laptop toolchain (advisory only).
 - In Studio the place is unpublished, so DataStores are replaced by the in-memory store; the Play Solo place also
   contains two stray Creator Store meshes in Workspace (`feather`, `Egg`) that are not part of this repository.
+
+
+## UI system (13 Sep 2026)
+
+Every ScreenGui has a `Stage` frame from `SafeArea.applyScale` that carries the responsive UIScale and
+can be shrunk to a device size (`emulate(w, h)` debug action / `SafeArea.setViewportOverride`). Art
+comes from `Shared/Design/AssetManifest.luau` (`images`, `slices`, `sliceScale`) through
+`UI/Components/Skin.luau`; every component keeps its token-drawn fallback when a role has no art.
+Components: Button (variants primary / secondary / ghost / teal / pill / danger, states, art per
+state), Tabs, Switch, Dialog, Confetti, Toast, ModalShell, Frame kit, Icons. UI sounds are Roblox
+built-ins mapped in `AudioDirector` with per-role pitch / volume / minimum gap; world and music roles
+remain silent stubs for the audio pass.

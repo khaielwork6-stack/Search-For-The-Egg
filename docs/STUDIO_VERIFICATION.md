@@ -988,3 +988,34 @@ should be cosmetic, everything should be pickable".
   codes; stack 2..12 tracked bag 3..23 of 25 exactly; settings menu unlocks the mouse (Default +
   icon, stack hidden) and re-locks on close; sale of 23 feathers started the crate run and cleared
   the bag and the bundle; camera stayed LockFirstPerson; 295 headless tests pass.
+
+
+## UI rebuild (13 Sep 2026)
+
+Commits "UI rebuild 1/5" (foundation) through "4/5" (screens) plus the fixes that followed. Verified
+through the edit-mode UI probe (`docs/studio/ui_probe.luau`, Play-mode `screen_capture` is blank on
+this laptop) at desktop (Studio viewport), phone (812x375 override, touch mode) and tablet (1024x700).
+
+- **Foundation.** Tokens retuned to warm cream / feather-white / gold / soft brown with teal accents;
+  vector icon kit; frame kit (cream panels in gold bevels, nameplate pills, badges, animated meters);
+  button states hover / press / release / selected / disabled / pending / focus with per-state art;
+  tabs, switch, confetti, dialog; modal shell (lift-in, content-sized card, ambient sheen, art close
+  button and leaves); toasts with tone glyphs; built-in UI sounds with pitch and per-role throttles.
+- **Art.** 136 of the 152 PNGs in `/ui` uploaded and mapped in `AssetManifest` with nine-slice rects
+  (2x export, sliceScale 0.5). Left out: `modal.card` and the toast backgrounds (teal fills), the
+  `stack.*` pictures (the bundle is a live viewport), the duplicate `button.gold` set and the ripple.
+- **HUD.** Iconed currency chips, art banner (pops on objective change), keycap prompt (hidden on
+  touch), round gear button, art reticle that locks/grows on a target plus a hold ring, round strip
+  with art bag fill and a FULL - DEPOSIT state that breathes only while full, floating cash deltas,
+  hotbar slots with tool art / keycap hints / tone bars, sale popup with count-up and confetti,
+  loading veil, settings modal with switches and quality tabs.
+- **Screens.** Shop cards (affordable / dimmed / MAX), class cards with rarity art per state, daily
+  cells with a pulse only on the claimable day, codes box with idle / focused / error art and shake,
+  inventory tool rows, stats tiles + tab strip, party destinations with locked / unavailable art and a
+  leave confirmation dialog, workbench rows, victory plate + results confetti, cutscene caption plate,
+  station rail pressed art while open and a Daily pulse when claimable.
+- **Layout rules found on the way.** No AutomaticSize on frames with scale-sized shadow/art children
+  (size from TextBounds); UIPadding on a Content child, not on the art holder; UIStroke on text objects
+  needs `ApplyStrokeMode.Border`; a fitted nameplate must not truncate.
+- **Checks.** 295 headless tests pass; selene / stylua clean. Emulation captures showed no overlap or
+  cropping on phone (strip + hotbar in the centre band, bundle above the jump button) or tablet.
