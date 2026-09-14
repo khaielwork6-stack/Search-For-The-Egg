@@ -412,7 +412,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		if offer.pass then
 			local tag = FrameKit.badge(tile, "Tag", "PERMANENT", Tokens.color.gemDeep, z + 5)
 			tag.AnchorPoint = Vector2.new(0, 0)
-			tag.Position = UDim2.new(0, -Tokens.spacing.xs, 0, -Tokens.spacing.sm)
+			tag.Position = UDim2.fromOffset(-Tokens.spacing.xs, -Tokens.spacing.sm)
 			tag.Rotation = -6
 			tag.TextSize = Tokens.typography.caption.size - 2
 		end
