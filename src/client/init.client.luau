@@ -31,6 +31,7 @@ local CrateController = require(Controllers.CrateController)
 local ToolController = require(Controllers.ToolController)
 local ToolVisualController = require(Controllers.ToolVisualController)
 local InteractionController = require(Controllers.InteractionController)
+local DisplayController = require(Controllers.DisplayController)
 local PromptController = require(Controllers.PromptController)
 local ObjectiveController = require(Controllers.ObjectiveController)
 local VictoryController = require(Controllers.VictoryController)
@@ -128,6 +129,18 @@ local victory = trove:add(VictoryController.new({
 	config = config,
 }))
 hud:bindRound(round, interaction)
+-- Barn shop displays: price cards on the owner's item models and their Buy prompts.
+local displays = trove:add(DisplayController.new({
+	net = net,
+	round = round,
+	profile = profile,
+	audio = audio,
+	haptics = haptics,
+	vfx = vfx,
+	hud = hud,
+	config = config,
+	interaction = interaction,
+}))
 trove:add(pile.targetChanged:Connect(function(targeting)
 	hud:setTargeting(targeting)
 end))
@@ -249,6 +262,7 @@ if RunService:IsStudio() then
 			snap.layoutClass = hud.gui:GetAttribute("SFE_LayoutClass")
 			snap.viewport = tostring(workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize)
 			snap.strands = lobby:strandCount() + arena:strandCount()
+			snap.displays = displays:cardCount()
 			snap.audioState = audio:state()
 			snap.vfxInstances = vfx:instanceCount()
 			snap.vfxStats = vfx.stats

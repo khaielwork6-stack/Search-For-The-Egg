@@ -38,6 +38,7 @@ function InteractionController.new(
 		claimed = Signal.new(),
 		openUpgrades = Signal.new(),
 		stationRequested = Signal.new(),
+		displayRequested = Signal.new(),
 		_trove = Trove.new(),
 		stats = { prompts = 0 },
 	}, InteractionController)
@@ -119,6 +120,10 @@ function InteractionController.handle(self: InteractionController, promptName: s
 	elseif promptName == "SFE_Upgrade" then
 		deps.audio:play(Tokens.sound.uiOpen)
 		self.openUpgrades:Fire()
+		return nil
+	elseif string.match(promptName, "^SFE_Display_(%w+)$") then
+		-- Barn shop displays: the DisplayController buys what the model sells.
+		self.displayRequested:Fire(string.match(promptName, "^SFE_Display_(%w+)$"))
 		return nil
 	elseif promptName == "SFE_EggClaim" then
 		local token = deps.round:sessionToken()

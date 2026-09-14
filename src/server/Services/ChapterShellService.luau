@@ -343,10 +343,63 @@ function ChapterShellService.buildFromMap(workspaceService: Workspace, mapModel:
 		drift.CanQuery = false
 		drift:SetAttribute("SFE_Ambient", "featherDrift")
 	end
+	ChapterShellService.placeDisplays(workspaceService, config)
 
 	folder:SetAttribute("SFE_ChildCount", #folder:GetChildren())
 	folder.Parent = workspaceService
 	return folder
+end
+
+-- The owner's item models become shop displays inside the supplies barn: two bags on the counter,
+-- the pitchfork and the dynamite on the rear wall boards. Each carries a Buy prompt; the client
+-- draws the price card from the round previews. Missing models are skipped, never rebuilt.
+local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string } } = {
+	{
+		key = "bag",
+		model = "FeatherBag",
+		cframe = CFrame.new(-50.5, 58.75, 299) * CFrame.Angles(0, math.rad(180), 0),
+		name = "Upgrade Bag",
+	},
+	{
+		key = "infiniteBag",
+		model = "InfiniteBag",
+		cframe = CFrame.new(-41.5, 58.75, 299) * CFrame.Angles(0, math.rad(180), 0),
+		name = "Infinite Bag",
+	},
+	{
+		key = "nestRake",
+		model = "Pitchfork",
+		cframe = CFrame.new(-40, 62.9, 291.65) * CFrame.Angles(0, 0, math.rad(-62)) * CFrame.new(0, -4.2, 0),
+		name = "Nest Rake",
+	},
+	{
+		key = "confettiCharge",
+		model = "Dynamite",
+		cframe = CFrame.new(-54, 61.1, 292.1) * CFrame.Angles(0, 0, math.rad(-8)),
+		name = "Confetti Charge",
+	},
+}
+
+function ChapterShellService.placeDisplays(workspaceService: Workspace, config: { [string]: any }): number
+	local placed = 0
+	for _, spec in ipairs(DISPLAYS) do
+		local model = workspaceService:FindFirstChild(spec.model)
+		if not (model and model:IsA("Model")) then
+			continue
+		end
+		model:PivotTo(spec.cframe)
+		model:SetAttribute("SFE_Display", spec.key)
+		local host = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+		if host then
+			local old = host:FindFirstChild("SFE_Display_" .. spec.key)
+			if old then
+				old:Destroy()
+			end
+			prompt(host, "SFE_Display_" .. spec.key, "Buy", spec.name, 0, math.min(config.interaction.upgradeRangeStuds, 8))
+		end
+		placed += 1
+	end
+	return placed
 end
 
 -- Builds the Chapter 1 arena: the owner's map when present, the greybox otherwise.

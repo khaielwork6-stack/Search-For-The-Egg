@@ -54,6 +54,7 @@ local VictoryService = require(script.Services.VictoryService)
 local ObjectiveService = require(script.Services.ObjectiveService)
 local ClassService = require(script.Services.ClassService)
 local PerkService = require(script.Services.PerkService)
+local CommerceService = require(script.Services.CommerceService)
 local RewardService = require(script.Services.RewardService)
 local InventoryService = require(script.Services.InventoryService)
 local LeaderboardService = require(script.Services.LeaderboardService)
@@ -87,6 +88,12 @@ local rng = WeightedRandom.fromFunction(function()
 	return math.random()
 end)
 local productMap = ProductMap.new(config, ProductIds)
+-- Studio without deployment ids runs the whole purchase pipeline against synthetic ids and the
+-- mock Marketplace (prompts complete themselves), so shops can be exercised in Play Solo.
+local studioCommerce = RunService:IsStudio() and #productMap:missingKeys() > 0
+if studioCommerce then
+	productMap = ProductMap.new(config, ProductMap.studioMockDeployment(config))
+end
 local security = SecurityService.new({ log = log, sampleRate = ServerPolicy.securityLogSampleRate })
 -- Studio uses the counting adapter (Roblox AnalyticsService prints a line per event in Studio and
 -- would flood Output); published servers use the real adapter.
@@ -119,7 +126,7 @@ local profiles = ProfileStore.new({
 local receiptLedger = ReceiptLedger.new(receiptDataStore)
 
 -- 4. Marketplace / entitlements / receipts.
-local marketplace = MarketplaceAdapter.real()
+local marketplace: any = if studioCommerce then MarketplaceAdapter.mock() else MarketplaceAdapter.real()
 local entitlements = EntitlementService.new({
 	marketplace = marketplace,
 	productMap = productMap,
@@ -322,6 +329,25 @@ local tools = ToolService.new({
 })
 local egg =
 	EggService.new({ config = config, rounds = rounds, clock = clock, getCharacterPosition = getCharacterPosition, analytics = analytics })
+-- Robux commerce: native prompts, pass verification, receipt grants. Grants push a fresh
+-- projection so the client sees the new gems or entitlement at once.
+local commerce = CommerceService.new({
+	config = config,
+	productMap = productMap,
+	marketplace = marketplace,
+	receipts = receipts,
+	entitlements = entitlements,
+	profiles = profiles,
+	rounds = rounds,
+	tools = tools,
+	upgrades = upgrades,
+	rng = rng,
+	playerOf = function(userId)
+		return Players:GetPlayerByUserId(userId)
+	end,
+	analytics = analytics,
+	log = log,
+})
 local victory = VictoryService.new({
 	config = config,
 	clock = clock,
@@ -886,6 +912,33 @@ end)
 registry:onRequest("PerkPurchase", function(player, payload)
 	return pushAfter(player, perks:purchase(player.UserId, payload.perkId, payload.expectedLevel))
 end)
+registry:onRequest("PurchasePromptRequest", function(player, payload)
+	local result = commerce:prompt(player.UserId, payload.productKey)
+	if result.ok and studioCommerce then
+		-- Mock Marketplace: the "native dialog" completes on its own after a beat.
+		local entry = productMap:resolve(payload.productKey)
+		task.delay(1.2, function()
+			if not entry or not entry.id then
+				return
+			end
+			if entry.kind == "gamePass" then
+				marketplace:finishPassPurchase(player.UserId, entry.id, true)
+			else
+				marketplace:completeProductPurchase(player.UserId, entry.id)
+			end
+		end)
+	end
+	return result
+end)
+registry:onRequest("ProductCatalogRequest", function(player)
+	return Envelope.ok({ items = commerce:catalog(player.UserId) })
+end)
+commerce.granted:Connect(function(userId)
+	local player = Players:GetPlayerByUserId(userId)
+	if player then
+		playerData:pushProjection(player, config)
+	end
+end)
 registry:onRequest("DailyClaim", function(player)
 	return pushAfter(player, rewards:claimDaily(player.UserId))
 end)
@@ -1137,6 +1190,8 @@ local container = {
 	egg = egg,
 	tools = tools,
 	entitlements = entitlements,
+	commerce = commerce,
+	marketplace = marketplace,
 	debugEntitlements = debugEntitlements,
 	pushPreviews = pushPreviews,
 	log = log,

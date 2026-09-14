@@ -5,11 +5,14 @@
 -- level and re-renders from the result. Maxed rows celebrate; permanent grants say so.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local EconomyMath = require(Shared.EconomyMath)
 local ToolSpecs = require(Shared.Domain.ToolSpecs)
 local Button = require(script.Parent.Components.Button)
+local Confetti = require(script.Parent.Components.Confetti)
+local UpgradeActions = require(script.Parent.UpgradeActions)
 local FrameKit = require(script.Parent.Components.Frame)
 local Skin = require(script.Parent.Components.Skin)
 
@@ -220,30 +223,26 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 	end
 
 	local function purchase(upgradeId: string)
-		local latest = nil
-		for _, p in ipairs(deps.round.previews or {}) do
-			if p.upgradeId == upgradeId then
-				latest = p
+		local latest = UpgradeActions.previewFor(deps.round, upgradeId)
+		local result = UpgradeActions.purchase(deps, upgradeId, latest and titleFor(latest) or nil)
+		if result and result.ok then
+			local row = rows[upgradeId]
+			if row then
+				-- The bought row flashes and its button hops so the purchase lands with weight.
+				local face = row.frame
+				local stroke = face:FindFirstChildOfClass("UIStroke")
+				if stroke then
+					local before = stroke.Color
+					stroke.Color = Tokens.color.gold
+					stroke.Thickness = Tokens.stroke.standard + 1.5
+					TweenService:Create(stroke, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+						Color = before,
+						Thickness = Tokens.stroke.standard,
+					}):Play()
+				end
+				row.handle.punch()
+				Confetti.burst(row.frame, { origin = UDim2.fromScale(0.85, 0.5), count = 14, spread = 110 })
 			end
-		end
-		local token = deps.round:sessionToken()
-		if not latest or latest.maxed or not token then
-			return
-		end
-		local result = deps.net:request("UpgradePurchase", { sessionToken = token, upgradeId = upgradeId, expectedLevel = latest.level })
-		if result.ok then
-			deps.audio:play(Tokens.sound.upgradeChord)
-			deps.haptics:pulse(0.5, 0.1)
-			local title = titleFor(latest)
-			deps.toasts:push(if latest.kind == "acquire" then title .. " acquired" else title .. " improved", "success")
-		else
-			deps.audio:play(Tokens.sound.uiError)
-			local message = if result.code == "insufficient_funds"
-				then (if result.message == "gems" then "Not enough Gems" else "Not enough round cash")
-				elseif result.code == "out_of_range" then "Stand at the workbench"
-				elseif result.code == "stale_token" then "Prices changed - try again"
-				else "Upgrade unavailable"
-			deps.toasts:push(message, "warning")
 		end
 	end
 
