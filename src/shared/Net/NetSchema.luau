@@ -211,8 +211,9 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		serverEvent("PartyProjection", Schema.object({}), 1),
 		serverEvent("PadPrompt", Schema.object({ pad = Schema.number({ min = 1, max = 16, integer = true }) }), 1),
 		serverEvent("SessionProjection", Schema.object({}), 1),
-		serverEvent("RoundSnapshot", Schema.object({}), 2),
-		serverEvent("RoundDelta", Schema.object({}), 2),
+		-- The snapshot carries every pile cell (48x48 remaining + base arrays); deltas batch cells.
+		serverEvent("RoundSnapshot", Schema.object({}), 2, 393216),
+		serverEvent("RoundDelta", Schema.object({}), 2, 131072),
 		serverEvent("ObjectiveChanged", Schema.object({}), 2),
 		serverEvent("ActionResult", Schema.object({}), 2),
 		serverEvent("SaleResult", Schema.object({}), 2),
