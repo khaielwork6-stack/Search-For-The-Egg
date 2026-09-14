@@ -50,7 +50,7 @@ export type ToolHotbar = typeof(setmetatable(
 	ToolHotbar
 ))
 
-local SLOT_WIDTH = 118
+local SLOT_WIDTH = 134
 
 function ToolHotbar.new(
 	gui: Instance,
@@ -178,6 +178,7 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	bar.BackgroundColor3 = Tokens.color.creamDeep
 	bar.BorderSizePixel = 0
 	bar.ZIndex = z + 2
+	bar.Visible = false
 	local barCorner = Instance.new("UICorner")
 	barCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
 	barCorner.Parent = bar

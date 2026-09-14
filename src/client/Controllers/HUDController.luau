@@ -136,19 +136,32 @@ function HUDController.new(deps: any): HUDController
 	local bannerScale = Instance.new("UIScale")
 	bannerScale.Parent = banner
 	FrameKit.shadow(banner, { radius = Tokens.radius.lg })
-	local bannerPadding = Instance.new("UIPadding")
-	bannerPadding.PaddingLeft = UDim.new(0, Tokens.spacing.xl)
-	bannerPadding.PaddingRight = UDim.new(0, Tokens.spacing.xl)
-	bannerPadding.PaddingTop = UDim.new(0, Tokens.spacing.md + Tokens.spacing.xs)
-	bannerPadding.PaddingBottom = UDim.new(0, Tokens.spacing.md)
-	bannerPadding.Parent = banner
 	banner.Parent = stage
 	if Skin.label(banner, "hud.banner", { zIndex = banner.ZIndex + 1, inset = 3, name = "ArtFrame" }) then
 		bannerStroke.Enabled = false
-		banner.BackgroundTransparency = 0.08
-		bannerPadding.PaddingLeft = UDim.new(0, Tokens.spacing.xxl)
-		bannerPadding.PaddingRight = UDim.new(0, Tokens.spacing.xxl)
+		banner.BackgroundTransparency = 1
+		local shadowFrame = banner:FindFirstChild("Shadow")
+		local halo = banner:FindFirstChild("Halo")
+		if shadowFrame then
+			shadowFrame.Visible = false
+		end
+		if halo then
+			halo.Visible = false
+		end
 	end
+	-- Text lives in a padded content child so the art frame keeps the banner's full size.
+	local bannerContent = Instance.new("Frame")
+	bannerContent.Name = "Content"
+	bannerContent.Size = UDim2.fromScale(1, 1)
+	bannerContent.BackgroundTransparency = 1
+	bannerContent.ZIndex = banner.ZIndex + 2
+	bannerContent.Parent = banner
+	local bannerPadding = Instance.new("UIPadding")
+	bannerPadding.PaddingLeft = UDim.new(0, Tokens.spacing.xxl)
+	bannerPadding.PaddingRight = UDim.new(0, Tokens.spacing.xxl)
+	bannerPadding.PaddingTop = UDim.new(0, Tokens.spacing.md)
+	bannerPadding.PaddingBottom = UDim.new(0, Tokens.spacing.md)
+	bannerPadding.Parent = bannerContent
 	local bannerTitle = Instance.new("TextLabel")
 	bannerTitle.Name = "Text"
 	bannerTitle.Size = UDim2.new(1, 0, 0, Tokens.typography.heading.size + Tokens.spacing.xs)
@@ -157,8 +170,8 @@ function HUDController.new(deps: any): HUDController
 	bannerTitle.TextSize = Tokens.typography.label.size + 1
 	bannerTitle.TextColor3 = Tokens.color.inkStrong
 	bannerTitle.Text = "Loading your nest..."
-	bannerTitle.ZIndex = banner.ZIndex + 2
-	bannerTitle.Parent = banner
+	bannerTitle.ZIndex = banner.ZIndex + 3
+	bannerTitle.Parent = bannerContent
 	self._labels.banner = bannerTitle
 	local detail = Instance.new("TextLabel")
 	detail.Name = "Detail"
@@ -170,8 +183,8 @@ function HUDController.new(deps: any): HUDController
 	detail.TextSize = Tokens.typography.caption.size
 	detail.TextColor3 = Tokens.color.inkMuted
 	detail.Text = ""
-	detail.ZIndex = banner.ZIndex + 2
-	detail.Parent = banner
+	detail.ZIndex = banner.ZIndex + 3
+	detail.Parent = bannerContent
 	self._labels.detail = detail
 	self._bannerScale = bannerScale
 	-- Banner width follows the longer of its two lines (never AutomaticSize: the art and shadow

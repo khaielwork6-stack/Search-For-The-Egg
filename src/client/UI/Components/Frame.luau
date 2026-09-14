@@ -525,7 +525,7 @@ function Frame.chip(
 	content.Name = "Content"
 	content.Size = UDim2.fromScale(1, 1)
 	content.BackgroundTransparency = 1
-	content.ZIndex = z + 2
+	content.ZIndex = z + 3
 	content.Parent = frame
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
@@ -543,7 +543,7 @@ function Frame.chip(
 	iconSlot.LayoutOrder = 1
 	iconSlot.Size = UDim2.fromOffset(Tokens.icon.md, Tokens.icon.md)
 	iconSlot.BackgroundTransparency = 1
-	iconSlot.ZIndex = z + 3
+	iconSlot.ZIndex = z + 4
 	iconSlot.Visible = false
 	iconSlot.Parent = content
 	local label = Instance.new("TextLabel")
@@ -556,7 +556,7 @@ function Frame.chip(
 	label.TextColor3 = Tokens.color.inkStrong
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Text = ""
-	label.ZIndex = z + 3
+	label.ZIndex = z + 4
 	label.Parent = content
 	-- Width follows the text (never AutomaticSize: scale-sized shadow and art children would feed
 	-- back into it). Fixed-width chips keep their width and centre the text.

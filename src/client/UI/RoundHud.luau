@@ -83,7 +83,7 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 
 	-- Bag: art track (or cream track) with an art fill that grows from the left.
 	local bagFrame, bagText = chip(root, "Bag", 2, BAG_WIDTH, "hud.bag.track", nil)
-	bagText.ZIndex = bagFrame.ZIndex + 4
+	bagText.ZIndex = bagFrame.ZIndex + 5
 	local bagFill: GuiObject
 	local bagArt = Skin.has("hud.bag.fill.normal")
 	if bagArt then
@@ -91,8 +91,8 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 		fill.Name = "Fill"
 		fill.BackgroundTransparency = 1
 		fill.AnchorPoint = Vector2.new(0, 0.5)
-		fill.Position = UDim2.new(0, -Tokens.spacing.md, 0.5, 0)
-		fill.Size = UDim2.fromScale(0, 1)
+		fill.Position = UDim2.new(0, 5, 0.5, 0)
+		fill.Size = UDim2.new(0, 0, 1, -10)
 		fill.ZIndex = bagFrame.ZIndex + 2
 		Skin.apply(fill, "hud.bag.fill.normal")
 		fill.Parent = bagFrame
@@ -101,8 +101,8 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 		local fill = Instance.new("Frame")
 		fill.Name = "Fill"
 		fill.AnchorPoint = Vector2.new(0, 0.5)
-		fill.Position = UDim2.new(0, -Tokens.spacing.md, 0.5, 0)
-		fill.Size = UDim2.new(0, 0, 1, -6)
+		fill.Position = UDim2.new(0, 5, 0.5, 0)
+		fill.Size = UDim2.new(0, 0, 1, -10)
 		fill.BackgroundColor3 = Tokens.color.straw
 		fill.BorderSizePixel = 0
 		fill.ZIndex = bagFrame.ZIndex + 2
@@ -192,9 +192,9 @@ function RoundHud.setBag(self: RoundHud, carried: number, capacity: number, infi
 	end
 	local full = not infinite and carried >= capacity and capacity > 0
 	local width = self._bagFrame.AbsoluteSize.X / math.max(0.01, self._bagScale.Scale)
-	local fillWidth = math.floor((BAG_WIDTH + Tokens.spacing.md * 2) * fraction)
 	local _ = width
-	local target = if self._bagArt then UDim2.new(0, fillWidth, 1, 0) else UDim2.new(0, fillWidth, 1, -6)
+	local fillWidth = math.floor((BAG_WIDTH - 10) * fraction)
+	local target = UDim2.new(0, fillWidth, 1, -10)
 	if animate then
 		TweenService:Create(self.bagFill, TweenInfo.new(Motion.duration("quick", self._motion()), Tokens.motion.easeOut), { Size = target })
 			:Play()
