@@ -90,7 +90,19 @@ end)
 local productMap = ProductMap.new(config, ProductIds)
 -- Studio without deployment ids runs the whole purchase pipeline against synthetic ids and the
 -- mock Marketplace (prompts complete themselves), so shops can be exercised in Play Solo.
-local studioCommerce = RunService:IsStudio() and #productMap:missingKeys() > 0
+-- Only missing pass / product ids force the mock; missing place ids alone keep the real
+-- Marketplace so Studio test purchases exercise the live prompts.
+local function missingCommerceIds(): number
+	local count = 0
+	for _, key in ipairs(productMap:missingKeys()) do
+		local entry = productMap:resolve(key)
+		if entry and entry.kind ~= "place" then
+			count += 1
+		end
+	end
+	return count
+end
+local studioCommerce = RunService:IsStudio() and missingCommerceIds() > 0
 if studioCommerce then
 	productMap = ProductMap.new(config, ProductMap.studioMockDeployment(config))
 end
