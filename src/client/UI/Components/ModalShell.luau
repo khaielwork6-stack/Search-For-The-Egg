@@ -14,6 +14,7 @@ local FrameKit = require(script.Parent.Frame)
 local Icons = require(script.Parent.Icons)
 local Tween = require(script.Parent.Tween)
 local Skin = require(script.Parent.Skin)
+local SafeArea = require(script.Parent.Parent.SafeArea)
 
 local ModalShell = {}
 
@@ -232,9 +233,21 @@ function ModalShell.create(
 		end
 		local footerHeight = if footer.Visible then footer.AbsoluteSize.Y + Tokens.spacing.md else 0
 		content.Size = UDim2.new(1, 0, 1, -(tap + Tokens.spacing.md + footerHeight))
+		-- The card is only as tall as its content needs (up to the viewport cap), so short screens
+		-- like Daily or Codes never float in an empty card; long ones scroll inside.
+		local stageHeight = (gui :: GuiBase2d).AbsoluteSize.Y / SafeArea.scaleOf(gui)
+		local maxHeight = stageHeight * Tokens.layout.cardMaxHeightFraction
+		local chrome = tap + Tokens.spacing.md + footerHeight + (Tokens.spacing.md + Tokens.spacing.sm) * 2 + Tokens.spacing.lg
+		local wanted = math.clamp(content.AbsoluteCanvasSize.Y / SafeArea.scaleOf(gui) + chrome, 220, maxHeight)
+		card.Size = UDim2.new(card.Size.X.Scale, 0, 0, math.floor(wanted))
 	end
 	footer:GetPropertyChangedSignal("Visible"):Connect(relayout)
 	footer:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+	content
+		:GetPropertyChangedSignal("AbsoluteCanvasSize")
+		:Connect(relayout)(gui :: GuiBase2d)
+		:GetPropertyChangedSignal("AbsoluteSize")
+		:Connect(relayout)
 
 	root.Parent = gui
 

@@ -195,8 +195,8 @@ function Frame.pill(
 	if opts.art ~= false and skinLabel(label, "modal.title", label.ZIndex + 1, 2) then
 		stroke.Enabled = false
 		-- The art's rounded ends are wider than the drawn stroke: keep the text clear of them.
-		padding.PaddingLeft = UDim.new(0, Tokens.spacing.xl + Tokens.spacing.xs)
-		padding.PaddingRight = UDim.new(0, Tokens.spacing.xl + Tokens.spacing.xs)
+		padding.PaddingLeft = UDim.new(0, Tokens.spacing.xxl + Tokens.spacing.xs)
+		padding.PaddingRight = UDim.new(0, Tokens.spacing.xxl + Tokens.spacing.xs)
 	end
 	if opts.fitText then
 		-- Width follows the text plus padding (AutomaticSize would feed back on the art child).
