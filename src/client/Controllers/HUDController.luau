@@ -48,6 +48,10 @@ export type HUDController = typeof(setmetatable(
 		_bannerScale: UIScale?,
 		_reticleArt: ImageLabel?,
 		_reticleScale: UIScale,
+		_heatFill: Frame?,
+		_heatFlame: UIScale?,
+		_heatLabel: TextLabel?,
+		_heatState: string?,
 		_holdRing: GuiObject?,
 		_targeting: boolean?,
 		_veil: Frame?,
@@ -396,6 +400,75 @@ function HUDController.new(deps: any): HUDController
 	if workspace.CurrentCamera then
 		self._trove:add(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(placeReticle))
 	end
+
+	-- Feather Vac heat: a vertical meter with a flame that swells as the motor heats; red and
+	-- flashing while it cools down. Shown only while the vac is equipped in a search.
+	local heat = Instance.new("Frame")
+	heat.Name = "HeatMeter"
+	heat.AnchorPoint = Vector2.new(1, 0.5)
+	heat.Position = UDim2.new(1, -(Tokens.layout.safeAreaPaddingPx + 10), 0.5, 0)
+	heat.Size = UDim2.fromOffset(30, 190)
+	heat.BackgroundTransparency = 1
+	heat.Visible = false
+	heat.ZIndex = Tokens.zIndex.hud
+	heat.Parent = stage
+	local heatFlame = Icons.flame(heat, 30, { zIndex = Tokens.zIndex.hud + 3, outline = true })
+	heatFlame.AnchorPoint = Vector2.new(0.5, 0)
+	heatFlame.Position = UDim2.fromScale(0.5, 0)
+	local heatFlameScale = Instance.new("UIScale")
+	heatFlameScale.Parent = heatFlame
+	local heatTrack = Instance.new("Frame")
+	heatTrack.Name = "Track"
+	heatTrack.AnchorPoint = Vector2.new(0.5, 1)
+	heatTrack.Position = UDim2.new(0.5, 0, 1, -(Tokens.typography.caption.size + 6))
+	heatTrack.Size = UDim2.fromOffset(16, 190 - 30 - Tokens.typography.caption.size - 12)
+	heatTrack.BackgroundColor3 = Tokens.color.creamDeep
+	heatTrack.BorderSizePixel = 0
+	heatTrack.ClipsDescendants = true
+	heatTrack.ZIndex = Tokens.zIndex.hud + 1
+	local heatCorner = Instance.new("UICorner")
+	heatCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
+	heatCorner.Parent = heatTrack
+	local heatStroke = Instance.new("UIStroke")
+	heatStroke.Thickness = Tokens.stroke.bold
+	heatStroke.Color = Tokens.color.outline
+	heatStroke.Parent = heatTrack
+	heatTrack.Parent = heat
+	local heatFill = Instance.new("Frame")
+	heatFill.Name = "Fill"
+	heatFill.AnchorPoint = Vector2.new(0.5, 1)
+	heatFill.Position = UDim2.fromScale(0.5, 1)
+	heatFill.Size = UDim2.fromScale(1, 0)
+	heatFill.BackgroundColor3 = Tokens.color.gold
+	heatFill.BorderSizePixel = 0
+	heatFill.ZIndex = Tokens.zIndex.hud + 2
+	local heatFillCorner = Instance.new("UICorner")
+	heatFillCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
+	heatFillCorner.Parent = heatFill
+	local heatGradient = Instance.new("UIGradient")
+	heatGradient.Rotation = 90
+	heatGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Tokens.color.danger),
+		ColorSequenceKeypoint.new(0.45, Tokens.color.ember),
+		ColorSequenceKeypoint.new(1, Tokens.color.goldLight),
+	})
+	heatGradient.Parent = heatFill
+	heatFill.Parent = heatTrack
+	local heatLabel = FrameKit.text(heat, "Label", "HEAT", "caption", {
+		zIndex = Tokens.zIndex.hud + 3,
+		color = Tokens.color.featherWhite,
+		align = Enum.TextXAlignment.Center,
+	})
+	heatLabel.AnchorPoint = Vector2.new(0.5, 1)
+	heatLabel.Position = UDim2.fromScale(0.5, 1)
+	heatLabel.Size = UDim2.new(2.4, 0, 0, Tokens.typography.caption.size + 4)
+	heatLabel.TextSize = Tokens.typography.caption.size - 1
+	FrameKit.outline(heatLabel, 1.6)
+	self._labels.heat = heat
+	self._heatFill = heatFill
+	self._heatFlame = heatFlameScale
+	self._heatLabel = heatLabel
+	self._heatState = "hidden"
 
 	-- Loading veil: cream curtain with the game name and three bobbing eggs until the profile lands.
 	local veil = Instance.new("Frame")
@@ -807,6 +880,42 @@ function HUDController.setTargeting(self: HUDController, targeting: boolean)
 		TweenInfo.new(Motion.duration("quick", motion), Tokens.motion.easeBack),
 		{ Scale = if targeting then 1.35 else 1 }
 	):Play()
+end
+
+-- Feather Vac heat meter: `fraction` 0..1 of the runtime, `state` hidden | idle | running | overheated.
+function HUDController.setHeat(self: HUDController, fraction: number, state: string)
+	local frame = self._labels.heat
+	local fill = self._heatFill
+	if not frame or not fill then
+		return
+	end
+	local visible = state ~= "hidden"
+	if frame.Visible ~= visible then
+		frame.Visible = visible
+	end
+	if not visible then
+		self._heatState = state
+		return
+	end
+	local f = math.clamp(fraction, 0, 1)
+	fill.Size = UDim2.fromScale(1, f)
+	local flame = self._heatFlame
+	if flame then
+		flame.Scale = 0.8 + 0.5 * f + (if state == "running" then math.abs(math.sin(os.clock() * 14)) * 0.08 else 0)
+	end
+	if state ~= self._heatState then
+		self._heatState = state
+		local label = self._heatLabel
+		if label then
+			label.Text = if state == "overheated" then "COOLING" elseif state == "running" then "PULLING" else "HEAT"
+			label.TextColor3 = if state == "overheated" then Tokens.color.danger else Tokens.color.featherWhite
+		end
+	end
+	if state == "overheated" then
+		fill.BackgroundColor3 = if math.sin(os.clock() * 10) > 0 then Tokens.color.danger else Tokens.color.ember
+	else
+		fill.BackgroundColor3 = Tokens.color.gold
+	end
 end
 
 -- Hold-to-gather progress around the reticle: the ring closes in as the next pull readies.

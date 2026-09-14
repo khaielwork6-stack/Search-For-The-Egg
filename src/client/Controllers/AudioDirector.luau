@@ -46,6 +46,10 @@ local BUILTIN = {
 	bass = "rbxasset://sounds/bass.wav",
 	splat = "rbxasset://sounds/splat.wav",
 	uuhhh = "rbxasset://sounds/uuhhh.mp3",
+	swing = "rbxasset://sounds/swoosh.wav",
+	boom = "rbxasset://sounds/Rocket shot.wav",
+	rocket = "rbxasset://sounds/Launching rocket.wav",
+	collide = "rbxasset://sounds/collide.wav",
 }
 -- Owner-supplied sound ids (13 Sep 2026) for the UI and gameplay beats; built-ins fill the gaps.
 local OWNER = {
@@ -103,6 +107,16 @@ local MANIFEST: { [string]: string } = {
 	["music.victory"] = OWNER.musicLoop,
 	["music.results"] = OWNER.musicLoop,
 	["ambience.henhouse"] = "",
+	-- Tool feel: PLACEHOLDER built-ins (owner ids pending for the motor loop, fuse hiss and blast).
+	[Tokens.sound.rakeSwing] = BUILTIN.swing,
+	[Tokens.sound.rakeImpact] = BUILTIN.collide,
+	[Tokens.sound.fuseLight] = BUILTIN.snap,
+	[Tokens.sound.fuseHiss] = "",
+	[Tokens.sound.throw] = BUILTIN.swing,
+	[Tokens.sound.blast] = BUILTIN.boom,
+	[Tokens.sound.vacMotor] = BUILTIN.rocket,
+	[Tokens.sound.vacSuck] = BUILTIN.swing,
+	[Tokens.sound.chickChirp] = BUILTIN.ping,
 }
 
 -- Per-role tuning: base pitch, pitch variance, volume, and the minimum gap between repeats so a
@@ -140,6 +154,13 @@ local ROLE_TUNING: { [string]: { pitch: number?, variance: number?, volume: numb
 	[Tokens.sound.partyReady] = { pitch = 1.0, variance = 0.02, volume = 0.65, minGap = 0.4 },
 	[Tokens.sound.countdownGo] = { pitch = 1.0, variance = 0.02, volume = 0.65, minGap = 0.5 },
 	[Tokens.sound.stationChime] = { pitch = 1.1, variance = 0.05, volume = 0.35, minGap = 0.5 },
+	[Tokens.sound.rakeSwing] = { pitch = 1.15, variance = 0.08, volume = 0.35, minGap = 0.08 },
+	[Tokens.sound.rakeImpact] = { pitch = 0.8, variance = 0.1, volume = 0.45, minGap = 0.08 },
+	[Tokens.sound.fuseLight] = { pitch = 1.1, variance = 0.05, volume = 0.5, minGap = 0.2 },
+	[Tokens.sound.throw] = { pitch = 0.9, variance = 0.08, volume = 0.4, minGap = 0.2 },
+	[Tokens.sound.blast] = { pitch = 0.95, variance = 0.06, volume = 0.8, minGap = 0.15 },
+	[Tokens.sound.vacSuck] = { pitch = 0.7, variance = 0.05, volume = 0.3, minGap = 0.3 },
+	[Tokens.sound.chickChirp] = { pitch = 1.9, variance = 0.15, volume = 0.3, minGap = 0.25 },
 }
 
 local MUSIC_STATES: { [string]: string } =

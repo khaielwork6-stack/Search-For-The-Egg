@@ -30,6 +30,7 @@ local PileVisualController = require(Controllers.PileVisualController)
 local CrateController = require(Controllers.CrateController)
 local ToolController = require(Controllers.ToolController)
 local ToolVisualController = require(Controllers.ToolVisualController)
+local ToolViewmodelController = require(Controllers.ToolViewmodelController)
 local InteractionController = require(Controllers.InteractionController)
 local DisplayController = require(Controllers.DisplayController)
 local NameplateController = require(Controllers.NameplateController)
@@ -94,6 +95,8 @@ local toolVisuals = trove:add(ToolVisualController.new({
 	accessibility = accessibility,
 	quality = quality,
 	config = config,
+	pile = pile,
+	camera = camera,
 }))
 local tools = trove:add(ToolController.new({
 	net = net,
@@ -110,6 +113,30 @@ local tools = trove:add(ToolController.new({
 	config = config,
 }))
 local hand = tools -- Phase 2 automation helpers keep working through the tool controller
+-- First-person tool models (no hands): the rake, dynamite and vacuum drawn under the camera.
+local viewmodel = trove:add(ToolViewmodelController.new({
+	tools = tools,
+	round = round,
+	accessibility = accessibility,
+	audio = audio,
+	vfx = vfx,
+	pile = pile,
+	config = config,
+}))
+toolVisuals:setProviders({
+	nozzle = function(userId)
+		if userId == player.UserId then
+			return viewmodel:nozzlePosition()
+		end
+		return nil
+	end,
+	throwOrigin = function(userId)
+		if userId == player.UserId then
+			return viewmodel:muzzlePosition()
+		end
+		return nil
+	end,
+})
 local interaction = trove:add(
 	InteractionController.new({ net = net, round = round, party = party, audio = audio, haptics = haptics, hud = hud, config = config })
 )
@@ -864,7 +891,19 @@ if RunService:IsStudio() then
 		toolStatus = function()
 			local status = tools:status()
 			status.visuals = toolVisuals:counts()
+			status.viewmodel = viewmodel:status()
 			return status
+		end,
+		viewmodelStatus = function()
+			return viewmodel:status()
+		end,
+		lightCharge = function()
+			tools:_lightCharge()
+			return tools:status()
+		end,
+		throwCharge = function()
+			tools:_throwCharge()
+			return tools:status()
 		end,
 		gather = function(bundleId)
 			return tools:gather(bundleId)

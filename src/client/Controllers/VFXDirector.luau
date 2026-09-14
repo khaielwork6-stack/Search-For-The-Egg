@@ -27,10 +27,32 @@ export type VFXDirector = typeof(setmetatable(
 	VFXDirector
 ))
 
-local KINDS: { [string]: { color: Color3, rate: number, lifetime: number, size: number } } = {
+type Kind = { color: Color3, rate: number, lifetime: number, size: number, speed: NumberRange?, spread: number?, light: boolean? }
+local KINDS: { [string]: Kind } = {
 	featherPuff = { color = Tokens.color.cream, rate = 12, lifetime = 1.4, size = 0.6 },
 	dust = { color = Tokens.color.creamDeep, rate = 4, lifetime = 3, size = 0.3 },
 	sparkle = { color = Tokens.color.straw, rate = 20, lifetime = 0.8, size = 0.25 },
+	-- Tool feel: blast fire, rolling smoke, fast sparks, wind wisps.
+	blast = {
+		color = Tokens.color.ember,
+		rate = 90,
+		lifetime = 0.55,
+		size = 1.1,
+		speed = NumberRange.new(8, 16),
+		spread = 180,
+		light = true,
+	},
+	smoke = { color = Color3.fromRGB(168, 158, 146), rate = 16, lifetime = 2.4, size = 1.8, speed = NumberRange.new(1.5, 4), spread = 120 },
+	spark = {
+		color = Tokens.color.honey,
+		rate = 60,
+		lifetime = 0.35,
+		size = 0.12,
+		speed = NumberRange.new(6, 12),
+		spread = 180,
+		light = true,
+	},
+	wind = { color = Tokens.color.featherWhite, rate = 30, lifetime = 0.3, size = 0.15, speed = NumberRange.new(4, 8), spread = 40 },
 }
 
 local function newEffect(container: Folder): Effect
@@ -94,8 +116,10 @@ function VFXDirector.burst(self: VFXDirector, kind: string, position: Vector3, s
 	emitter.Rate = spec.rate
 	emitter.Lifetime = NumberRange.new(spec.lifetime * 0.7, spec.lifetime)
 	emitter.Size = NumberSequence.new(spec.size)
-	emitter.Speed = NumberRange.new(1, 3)
-	emitter.SpreadAngle = Vector2.new(60, 60)
+	emitter.Speed = spec.speed or NumberRange.new(1, 3)
+	emitter.SpreadAngle = Vector2.new(spec.spread or 60, spec.spread or 60)
+	emitter.LightEmission = if spec.light then 0.8 else 0
+	emitter.Transparency = if spec.light then NumberSequence.new(0, 1) else NumberSequence.new(0.1, 1)
 	emitter.Enabled = true
 	table.insert(self._active, effect)
 	self.stats.emitted += 1

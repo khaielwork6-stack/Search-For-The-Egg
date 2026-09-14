@@ -42,6 +42,14 @@ export type ToolController = typeof(setmetatable(
 		collected: any,
 		rejected: any,
 		equippedChanged: any,
+		swung: any, -- rake swing sent (viewmodel thrust)
+		chargeLit: any, -- dynamite fuse lit (Primary pressed)
+		chargeThrown: any, -- (data) throw accepted by the server
+		chargeExtinguished: any, -- throw refused or cancelled
+		vacChanged: any, -- (running: boolean)
+		_chargeLitAt: number?,
+		_lastAimAt: number,
+		_aimInFlight: boolean,
 		_trove: Trove.Trove,
 		stats: {
 			sent: number,
@@ -60,10 +68,10 @@ export type ToolController = typeof(setmetatable(
 	ToolController
 ))
 
-local RENDER_NAME = "SFE_ToolViewmodel"
+local RENDER_NAME = "SFE_ToolController"
 local GATHER_RADIUS = 6
--- No first-person hands, gloves, or tool props are ever drawn (owner requirement): the equipped tool
--- is only the hotbar selection. Camera/haptic feedback carries the feel of a strike.
+-- No first-person hands or arms are ever drawn (owner requirement): ToolViewmodelController draws
+-- only the equipped tool model and listens to this controller's signals for its motion.
 
 function ToolController.new(deps: {
 	net: any,
@@ -97,6 +105,14 @@ function ToolController.new(deps: {
 		collected = Signal.new(),
 		rejected = Signal.new(),
 		equippedChanged = Signal.new(),
+		swung = Signal.new(),
+		chargeLit = Signal.new(),
+		chargeThrown = Signal.new(),
+		chargeExtinguished = Signal.new(),
+		vacChanged = Signal.new(),
+		_chargeLitAt = nil,
+		_lastAimAt = 0,
+		_aimInFlight = false,
 		_trove = Trove.new(),
 		stats = {
 			sent = 0,
@@ -118,8 +134,9 @@ function ToolController.new(deps: {
 		self:setEnabled(active)
 		if phase ~= "Searching" then
 			self:_stopHold()
-			self._vacRunning = false
+			self:_setVacRunning(false)
 			self._chickActive = false
+			self._chargeLitAt = nil
 		end
 		if phase == "Cutscene" then
 			self._equipped = "hand"
@@ -172,7 +189,7 @@ function ToolController.new(deps: {
 		self._vac.coolingSeconds = payload.coolingSeconds or self._vac.coolingSeconds
 		if payload.state == "overheated" then
 			self._vac.overheated = true
-			self._vacRunning = false
+			self:_setVacRunning(false)
 			deps.audio:play(Tokens.sound.bagFull)
 			deps.haptics:pulse(0.7, 0.15)
 			deps.hud.toasts:push("Feather Vac overheated - cooling", "warning")
@@ -180,12 +197,14 @@ function ToolController.new(deps: {
 			self._vac.overheated = false
 			deps.audio:play(Tokens.sound.uiConfirm)
 		elseif payload.state == "idle" then
-			self._vacRunning = false
+			self:_setVacRunning(false)
 			if payload.reason == "bag_full" then
 				deps.audio:play(Tokens.sound.bagFull)
+			elseif payload.reason == "range" then
+				deps.hud.toasts:push("Aim at the nest", "info")
 			end
 		elseif payload.state == "running" then
-			self._vacRunning = true
+			self:_setVacRunning(true)
 		end
 		self:_refreshStatus()
 	end))
@@ -196,24 +215,26 @@ function ToolController.new(deps: {
 		if payload.removed and not payload.oneTrip then
 			self._chickActive = false
 		end
-		if payload.cents then
-			deps.hud.toasts:push(string.format("Scout Chick traded %d feathers", payload.load or 0), "success")
-		end
 		self:_refreshStatus()
 	end))
 	self._trove:add(deps.visuals.chargeExploded:Connect(function(payload)
 		if payload.userId == Players.LocalPlayer.UserId then
-			deps.camera:impulse(if payload.mini then 0.08 else 0.2)
-			deps.haptics:pulse(0.5, 0.1)
+			deps.haptics:pulse(if payload.mini then 0.3 else 0.6, 0.12)
 		end
 	end))
 	self._trove:add(deps.net:on("ToolEvent", function(payload)
-		if payload.kind == "tools_granted" and payload.userId == Players.LocalPlayer.UserId then
+		if payload.userId ~= Players.LocalPlayer.UserId then
+			return
+		end
+		if payload.kind == "tools_granted" then
 			for _, toolId in ipairs(payload.tools) do
 				self._owned[toolId] = true
 				deps.hud.toasts:push((deps.config.tools[toolId] and deps.config.tools[toolId].displayName or toolId) .. " ready", "success")
 			end
 			self:_refreshHotbar()
+		elseif payload.kind == "chick_deposit" then
+			-- The deposit event carries the traded count (the unit's load is already zeroed by then).
+			deps.hud.toasts:push(string.format("Scout Chick traded %d feathers", payload.feathers or 0), "success")
 		end
 	end))
 	return self
@@ -250,8 +271,17 @@ function ToolController._refreshHotbar(self: ToolController)
 	self:_refreshStatus()
 end
 
+function ToolController._setVacRunning(self: ToolController, running: boolean)
+	if self._vacRunning == running then
+		return
+	end
+	self._vacRunning = running
+	self.vacChanged:Fire(running)
+end
+
 function ToolController._refreshStatus(self: ToolController)
 	local hotbar = self._deps.hud.hotbar
+	local hud = self._deps.hud
 	if self._owned.featherVac then
 		local fraction = if self._vac.runtimeSeconds > 0 then self._vac.heat / self._vac.runtimeSeconds else 0
 		local text = if self._vac.overheated then "Overheated" elseif self._vacRunning then "Pulling" else "Ready"
@@ -261,6 +291,18 @@ function ToolController._refreshStatus(self: ToolController)
 			text,
 			if self._vac.overheated then "danger" elseif fraction > 0.7 then "warning" else "info"
 		)
+		if hud.setHeat then
+			hud:setHeat(
+				fraction,
+				if self._equipped ~= "featherVac" or not self._enabled
+					then "hidden"
+					elseif self._vac.overheated then "overheated"
+					elseif self._vacRunning then "running"
+					else "idle"
+			)
+		end
+	elseif hud.setHeat then
+		hud:setHeat(0, "hidden")
 	end
 	if self._owned.confettiCharge then
 		local remaining = math.max(0, self._chargeReadyAt - os.clock())
@@ -306,6 +348,30 @@ end
 
 function ToolController._render(self: ToolController, dt: number)
 	self._swing = math.max(0, self._swing - dt * 4)
+	local now = os.clock()
+	-- Dynamite: a lit stick leaves the hand after the light beat even if the button is held on.
+	local litAt = self._chargeLitAt
+	if litAt and self._equipped == "confettiCharge" then
+		local feel = (self._deps.config.toolFeel or {}).confettiCharge or {}
+		if now - litAt >= (feel.maxHoldSeconds or 1.1) then
+			self:_throwCharge()
+		end
+	end
+	-- Vac: follow the reticle while running (the server re-resolves every aim and stops out of range).
+	if self._vacRunning and self._equipped == "featherVac" then
+		local feel = (self._deps.config.toolFeel or {}).featherVac or {}
+		local interval = 1 / math.max(1, feel.aimUpdateHz or 6)
+		if not self._aimInFlight and now - self._lastAimAt >= interval then
+			self._lastAimAt = now
+			self:_sendVacAim()
+		end
+		local player = self._deps.round.player
+		if player and player.bagCapacity and not player.bagInfinite then
+			if (player.carriedStandard or 0) + (player.carriedRainbow or 0) >= player.bagCapacity then
+				self:endAction()
+			end
+		end
+	end
 	-- Local heat interpolation between authoritative vac events (the server owns the real value).
 	if self._owned.featherVac and self._vac.runtimeSeconds > 0 then
 		if self._vacRunning then
@@ -346,7 +412,8 @@ function ToolController.equip(self: ToolController, toolId: string): boolean
 		return false
 	end
 	self._equipped = toolId
-	self._vacRunning = false
+	self:_setVacRunning(false)
+	self._chargeLitAt = nil
 	self.stats.equips += 1
 	self._deps.hud.hotbar:setEquipped(toolId)
 	self._deps.audio:play(Tokens.sound.uiTap)
@@ -439,6 +506,9 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 	self.stats.sent += 1
 	self._requestCounter = (self._requestCounter or 0) + 1
 	self._inFlight = true
+	if toolId == "nestRake" then
+		self.swung:Fire()
+	end
 	local result = self._deps.net:request("CollectAction", {
 		sessionToken = token,
 		origin = origin,
@@ -555,7 +625,9 @@ function ToolController.onPrimaryBegin(self: ToolController)
 		if self:_holdEnabled() then
 			self:_startHold()
 		end
-	elseif toolId == "confettiCharge" or toolId == "featherVac" then
+	elseif toolId == "confettiCharge" then
+		self:_lightCharge()
+	elseif toolId == "featherVac" then
 		self:beginAction()
 	elseif toolId == "scoutChick" then
 		if self._chickActive then
@@ -566,11 +638,82 @@ function ToolController.onPrimaryBegin(self: ToolController)
 	end
 end
 
-function ToolController.onPrimaryEnd(self: ToolController, _reason: string?)
+function ToolController.onPrimaryEnd(self: ToolController, reason: string?)
 	self:_stopHold()
 	if self._equipped == "featherVac" and self._vacRunning then
 		self:endAction()
+	elseif self._equipped == "confettiCharge" and self._chargeLitAt then
+		if reason == "cancelled" or reason == "suspended" then
+			self._chargeLitAt = nil
+			self.chargeExtinguished:Fire()
+			return
+		end
+		-- Release throws once the light beat has played (a quick tap still lights, then throws).
+		local feel = (self._deps.config.toolFeel or {}).confettiCharge or {}
+		local remaining = (feel.lightSeconds or 0.28) - (os.clock() - self._chargeLitAt)
+		if remaining > 0 then
+			local litAt = self._chargeLitAt
+			task.delay(remaining, function()
+				if self._chargeLitAt == litAt then
+					self:_throwCharge()
+				end
+			end)
+		else
+			self:_throwCharge()
+		end
 	end
+end
+
+-- Dynamite, beat one: light the fuse. Refused locally while the last charge cools or is still live
+-- (the server enforces both again on the throw).
+function ToolController._lightCharge(self: ToolController)
+	if self._chargeLitAt then
+		return
+	end
+	if os.clock() < self._chargeReadyAt then
+		self._deps.audio:play(Tokens.sound.uiError)
+		self._deps.hud.toasts:push("Confetti Charge is cooling", "info")
+		return
+	end
+	self._chargeLitAt = os.clock()
+	self.chargeLit:Fire()
+end
+
+-- Dynamite, beat two: the throw request. Success spawns the world projectile through ToolEvent.
+function ToolController._throwCharge(self: ToolController)
+	if not self._chargeLitAt then
+		return
+	end
+	self._chargeLitAt = nil
+	local result = self:beginAction()
+	if result.ok then
+		self.chargeThrown:Fire(result.data)
+	else
+		self.chargeExtinguished:Fire()
+	end
+end
+
+-- Vac aim update from the reticle (camera ray), never yielding the render step.
+function ToolController._sendVacAim(self: ToolController)
+	local token = self._deps.round:sessionToken()
+	local origin, direction = aimRay(nil)
+	if not token or not origin or not direction then
+		return
+	end
+	self._aimInFlight = true
+	task.spawn(function()
+		local result = self._deps.net:request("ToolActionAim", {
+			sessionToken = token,
+			toolId = "featherVac",
+			origin = origin,
+			direction = direction,
+		})
+		self._aimInFlight = false
+		if result.ok and result.data and result.data.running == false then
+			self:_setVacRunning(false)
+			self:_refreshStatus()
+		end
+	end)
 end
 
 -- Sends ToolActionBegin for the equipped continuous/area tool. Returns the envelope.
@@ -594,8 +737,8 @@ function ToolController.beginAction(self: ToolController, aimTarget: Vector3?): 
 			self._deps.haptics:pulse(0.3, 0.05)
 		elseif toolId == "featherVac" then
 			self.stats.vacStarts += 1
-			self._vacRunning = true
-			self._deps.audio:play(Tokens.sound.collectTug, { pitchVariance = 0.05 })
+			self._lastAimAt = os.clock()
+			self:_setVacRunning(true)
 		elseif toolId == "scoutChick" then
 			self.stats.chickToggles += 1
 			self._chickActive = true
@@ -630,7 +773,7 @@ function ToolController.endAction(self: ToolController): any
 	end
 	local result = self._deps.net:request("ToolActionEnd", { sessionToken = token, toolId = toolId })
 	if toolId == "featherVac" then
-		self._vacRunning = false
+		self:_setVacRunning(false)
 		self.stats.vacStops += 1
 	elseif toolId == "scoutChick" then
 		self._chickActive = false
@@ -687,6 +830,7 @@ function ToolController.status(self: ToolController): { [string]: any }
 		vac = table.clone(self._vac),
 		vacRunning = self._vacRunning,
 		chickActive = self._chickActive,
+		chargeLit = self._chargeLitAt ~= nil,
 		chargeReadyIn = math.max(0, self._chargeReadyAt - os.clock()),
 		holdEnabled = self:_holdEnabled(),
 		stats = table.clone(self.stats),
@@ -699,6 +843,11 @@ function ToolController.destroy(self: ToolController)
 	self.collected:Destroy()
 	self.rejected:Destroy()
 	self.equippedChanged:Destroy()
+	self.swung:Destroy()
+	self.chargeLit:Destroy()
+	self.chargeThrown:Destroy()
+	self.chargeExtinguished:Destroy()
+	self.vacChanged:Destroy()
 end
 
 ToolController.TOOL_IDS = ToolSpecs.TOOL_IDS

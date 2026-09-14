@@ -162,6 +162,16 @@ Tokens.sound = table.freeze({
 	stationHum = "station.hum",
 	stationChime = "station.chime",
 	partyReady = "party.ready",
+	-- Tool feel (viewmodels, projectiles, blasts). PLACEHOLDER built-ins until the owner supplies ids.
+	rakeSwing = "tool.rakeSwing",
+	rakeImpact = "tool.rakeImpact",
+	fuseLight = "tool.fuseLight",
+	fuseHiss = "tool.fuseHiss",
+	throw = "tool.throw",
+	blast = "tool.blast",
+	vacMotor = "tool.vacMotor",
+	vacSuck = "tool.vacSuck",
+	chickChirp = "tool.chickChirp",
 })
 
 -- Input prompt glyph keys per input mode; prompts swap without rebuilding UI.

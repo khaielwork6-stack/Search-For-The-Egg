@@ -1059,11 +1059,18 @@ end
 -- Server-confirmed pick of one record: that exact part lifts out (slightly enlarged), then arcs to
 -- the held bundle and vanishes - about a quarter of a second so rapid picks stay crisp. The column
 -- re-applies at once so the next record shows where this one was; nothing else moves.
-function PileVisualController.collectFeather(self: PileVisualController, featherId: number, hitPosition: Vector3, target: () -> Vector3)
+function PileVisualController.collectFeather(
+	self: PileVisualController,
+	featherId: number,
+	hitPosition: Vector3,
+	target: () -> Vector3,
+	options: { pullSeconds: number?, quiet: boolean? }?
+)
 	local folder = self._folder
 	if not folder then
 		return
 	end
+	local opts = (options or {}) :: any
 	local visual = self._config.pile.visual
 	local motion = self._accessibility:motionSettings()
 	local cellIndex, slot = FeatherLayout.decode(featherId)
@@ -1105,7 +1112,7 @@ function PileVisualController.collectFeather(self: PileVisualController, feather
 	end
 	self.stats.streamed += 1
 	local liftSeconds = Motion.clampSeconds(visual.liftSeconds, motion)
-	local pullSeconds = Motion.clampSeconds(visual.pullSeconds, motion)
+	local pullSeconds = Motion.clampSeconds(opts.pullSeconds or visual.pullSeconds, motion)
 	local startCFrame = part.CFrame
 	local baseSize = part.Size
 	local flying = part
@@ -1139,6 +1146,9 @@ function PileVisualController.collectFeather(self: PileVisualController, feather
 		flying.Size = baseSize
 		releasePart(self, flying)
 	end)
+	if opts.quiet then
+		return
+	end
 	self:_chevrons(from)
 	self._vfx:burst("featherPuff", from, 0.15)
 	self._audio:play(Tokens.sound.collectTug, { pitchVariance = 0.1 })

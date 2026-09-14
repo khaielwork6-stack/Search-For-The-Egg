@@ -272,6 +272,38 @@ function Icons.keycap(parent: Instance, text: string, px: number, options: Optio
 end
 
 -- Builds a named icon by role ("gem", "coin", "feather", ...). Unknown roles draw a plain dot.
+-- Flame: a rotated rounded square for the tongue over a round base, with a lighter core.
+function Icons.flame(parent: Instance, px: number, options: Options?): Frame
+	local opts = (options or {}) :: any
+	local z = opts.zIndex or 1
+	local color = opts.color or Tokens.color.ember
+	local frame = container(parent, "Icon_flame", px, z)
+	shape(
+		frame,
+		"Tongue",
+		UDim2.fromScale(0.5, 0.5),
+		UDim2.fromScale(0.5, 0.38),
+		color,
+		z,
+		math.floor(px * 0.12),
+		45,
+		opts.outline and Tokens.color.outline or nil
+	)
+	shape(
+		frame,
+		"Base",
+		UDim2.fromScale(0.66, 0.5),
+		UDim2.fromScale(0.5, 0.68),
+		color,
+		z + 1,
+		nil,
+		0,
+		opts.outline and Tokens.color.outline or nil
+	)
+	shape(frame, "Core", UDim2.fromScale(0.3, 0.3), UDim2.fromScale(0.5, 0.7), opts.secondary or Tokens.color.honey, z + 2)
+	return frame
+end
+
 function Icons.build(role: string, parent: Instance, px: number, options: Options?): Frame
 	local builder = (Icons :: any)[role]
 	if type(builder) == "function" and role ~= "build" and role ~= "keycap" then
