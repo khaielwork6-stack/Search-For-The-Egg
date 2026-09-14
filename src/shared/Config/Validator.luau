@@ -566,6 +566,9 @@ function Validator.validate(raw: any): Report
 			isNonNegativeNumber(pile.coverRadiusCells) and pile.coverRadiusCells % 1 == 0,
 			"pile.coverRadiusCells must be a non-negative integer"
 		)
+		if pile.rainbowChance ~= nil then
+			check(isNonNegativeNumber(pile.rainbowChance) and pile.rainbowChance <= 1, "pile.rainbowChance must be within [0, 1]")
+		end
 		check(isPositiveNumber(pile.maxVisualHeightStuds), "pile.maxVisualHeightStuds must be > 0")
 		-- Collision core and visual coat (ASSUMED A-PILE-01..02)
 		local collision = pile.collision

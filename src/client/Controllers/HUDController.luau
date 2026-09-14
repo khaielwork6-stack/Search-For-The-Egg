@@ -609,6 +609,13 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 		if sale.finalCents >= 100 then
 			deps.audio:play(Tokens.sound.sellBurst)
 		end
+		if (sale.rainbowCount or 0) > 0 then
+			deps.audio:play(Tokens.sound.collectRainbow)
+			self.toasts:reward(
+				string.format("%d Rainbow Feather%s sold at 10x", sale.rainbowCount, if sale.rainbowCount == 1 then "" else "s"),
+				sale.rainbowCents or 0
+			)
+		end
 		SalePopup.show(self.stage, {
 			feathers = sale.standardCount + sale.rainbowCount,
 			cents = sale.finalCents,

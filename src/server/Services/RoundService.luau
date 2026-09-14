@@ -206,6 +206,7 @@ function RoundService.createForParty(
 		eggNode = eggNode,
 		eggDepthFraction = eggDepthFraction,
 		eggLucky = eggLucky,
+		rainbowSeed = math.floor(self._rng:next() * 1000000),
 		eggSlot = eggSlot,
 		eggCoverCleared = false,
 		players = {},
@@ -509,6 +510,7 @@ function RoundService.project(self: RoundService, roundId: string, includePile: 
 	projection.removedFraction = PileGrid.removedFraction(runtime.grid)
 	if includePile then
 		projection.pile = PileGrid.snapshot(runtime.grid)
+		projection.pile.rainbowSeed = runtime.rainbowSeed or 0
 		local bundles = {}
 		for _, bundle in pairs(runtime.bundles) do
 			table.insert(bundles, {

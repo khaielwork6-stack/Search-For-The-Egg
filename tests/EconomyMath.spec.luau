@@ -65,11 +65,11 @@ return function(describe, it, expect)
 				classSellMultiplier = 1.2,
 				perkSellMultiplier = 1.5,
 			})
-			-- base 10, rainbow 2*1*5 = 10, class (20*1.2)=24, perk 24*1.5 = 36
+			-- base 10, rainbow 2*1*10 = 20, class (30*1.2)=36, perk 36*1.5 = 54
 			expect(sale.baseCents).toBe(10)
-			expect(sale.rainbowCents).toBe(10)
-			expect(sale.classAdjustedCents).toBe(24)
-			expect(sale.finalCents).toBe(36)
+			expect(sale.rainbowCents).toBe(20)
+			expect(sale.classAdjustedCents).toBe(36)
+			expect(sale.finalCents).toBe(54)
 		end)
 
 		it("never drifts across 10,000 transactions", function()
@@ -77,7 +77,7 @@ return function(describe, it, expect)
 			for _ = 1, 10000 do
 				total += EconomyMath.computeSale({ standardCount = 3, rainbowCount = 1 }, neutral).finalCents
 			end
-			expect(total).toBe(10000 * 8)
+			expect(total).toBe(10000 * 13) -- 3 standard + one rainbow at 10x
 			expect(total % 1).toBe(0)
 		end)
 

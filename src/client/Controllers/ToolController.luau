@@ -474,6 +474,10 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 			warn("[SFE][Tool] pick feedback failed: " .. tostring(visualError))
 		end
 		self._deps.audio:play(Tokens.sound.collectRelease, { pitchVariance = 0.12 })
+		if (data.rainbow or 0) > 0 then
+			self._deps.audio:play(Tokens.sound.collectRainbow)
+			self._deps.haptics:pulse(0.6, 0.12)
+		end
 		self._deps.haptics:pulse(if toolId == "nestRake" then 0.4 else 0.25, 0.05)
 		self._deps.camera:impulse(if toolId == "nestRake" then visual.cameraImpulseRake else visual.cameraImpulseHand)
 		if data.bagFull then

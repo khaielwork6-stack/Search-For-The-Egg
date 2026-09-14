@@ -158,5 +158,35 @@ return function(describe, it, expect)
 				runtime.grid.cells[12 * runtime.grid.width + 3 + 1].base
 			)
 		end)
+
+		describe("Rainbow Feathers", function()
+			it("are a deterministic, seed-dependent subset of records at about the configured rate", function()
+				local FeatherLayout = require(Shared.Domain.FeatherLayout)
+				local cfgRainbow = Config.fromRaw(require(ServerStorage.SFE.SystemConfig))
+				local chance = cfgRainbow.pile.rainbowChance
+				expect(chance).toBeGreaterThan(0)
+				local hits, total = 0, 0
+				for cell = 1, 400 do
+					for slot = 1, 8 do
+						total += 1
+						local a = FeatherLayout.isRainbow(cfgRainbow, 4242, cell, slot)
+						expect(FeatherLayout.isRainbow(cfgRainbow, 4242, cell, slot)).toBe(a)
+						if a then
+							hits += 1
+						end
+					end
+				end
+				local rate = hits / total
+				expect(rate).toBeGreaterThan(chance * 0.4)
+				expect(rate).toBeLessThan(chance * 2.5)
+				local differs = false
+				for cell = 1, 50 do
+					if FeatherLayout.isRainbow(cfgRainbow, 1, cell, 1) ~= FeatherLayout.isRainbow(cfgRainbow, 2, cell, 1) then
+						differs = true
+					end
+				end
+				expect(differs).toBe(true)
+			end)
+		end)
 	end)
 end

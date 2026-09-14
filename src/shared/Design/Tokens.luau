@@ -148,6 +148,7 @@ Tokens.sound = table.freeze({
 	rollLand = "class.land",
 	collectTug = "collect.tug",
 	collectRelease = "collect.release",
+	collectRainbow = "collect.rainbow",
 	bagFull = "collect.bagFull",
 	sellArc = "sell.arc",
 	sellTick = "sell.tick",

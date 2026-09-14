@@ -37,7 +37,7 @@ tool_upgrade,featherVac,cooling,1,18,seconds,12,cash,15.5,VERIFIED/ASSUMED,First
 tool_upgrade,scoutChick,speed,0,12.5,walk_speed,0.50,cash,14.5,VERIFIED,
 tool_upgrade,scoutChick,speed,1,14.5,walk_speed,2,cash,17,VERIFIED/ASSUMED,First step observed; continuation assumed
 sale,selling,standardFeather,0,1,feather,0.01,cash,0.01,VERIFIED,Later transactions support one cent per feather
-sale,selling,rainbowFeather,0,1,feather,0.05,cash,0.05,ASSUMED,Five-times value
+sale,selling,rainbowFeather,0,1,feather,0.1,cash,0.1,ASSUMED,Ten-times value
 reward,chapter1,normal,0,1,completion,0,,5_cash_10_gems_1_win,ASSUMED,Party receives base reward; finder gets 5 bonus gems
 reward,chapter1,hard,0,1,completion,0,,15_cash_25_gems_10_tokens_1_win,ASSUMED,
 reward,chapter2,normal,0,1,completion,0,,25_cash_35_gems_15_tokens_1_win,ASSUMED,

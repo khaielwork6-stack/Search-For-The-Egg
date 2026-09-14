@@ -132,6 +132,9 @@ function PileVisualController.new(
 		_lastPile = nil,
 		_lastChapter = nil,
 		_trove = Trove.new(),
+		_rainbowParts = {},
+		_rainbowSeed = 0,
+		_rainbowLoop = nil,
 		target = nil,
 		stats = { dents = 0, streamed = 0, feathersPlaced = 0, fluffPlaced = 0, reseats = 0, domeKind = "terrain", coatKind = "none" },
 	}, PileVisualController)
@@ -343,6 +346,9 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 			part.Color = paletteColor(self._config, placement.tint)
 			part:SetAttribute(FEATHER_ID_ATTRIBUTE, FeatherLayout.featherId(column.index, slot))
 			column.feathers[slot] = part
+			if FeatherLayout.isRainbow(self._config, self._rainbowSeed or 0, column.index, slot) then
+				self:_dressRainbow(part, column.index, slot)
+			end
 			local yaw = self:_downslope(wx, wz) + (placement.yaw / (math.pi * 2) - 0.5) * math.rad(visual.downslopeYawJitterDegrees) * 2
 			placeFeather(
 				part,
@@ -641,6 +647,7 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 		masks = table.clone(pile.masks or {}),
 	}
 	self._lastChapter = chapter
+	self._rainbowSeed = pile.rainbowSeed or 0
 	self._generation += 1
 	local generation = self._generation
 	local folder = Instance.new("Folder")
@@ -1068,6 +1075,10 @@ function PileVisualController.collectFeather(self: PileVisualController, feather
 		column.feathers[slot] = nil -- detached: no longer part of the coat, never re-targetable
 		part:SetAttribute(FEATHER_ID_ATTRIBUTE, nil)
 		part.CanQuery = false
+		if self._rainbowParts[part] then
+			-- A Rainbow Feather leaves with a shimmer burst and keeps its colour flow in flight.
+			self._deps.vfx:burst("sparkle", part.Position + Vector3.new(0, 0.6, 0), 1.0)
+		end
 	else
 		part = acquirePart(self)
 		part.CanQuery = false
@@ -1161,6 +1172,63 @@ function PileVisualController.revealSpiral(self: PileVisualController, eggPositi
 		end)
 	end
 	self._vfx:burst("sparkle", eggPosition + Vector3.new(0, 1, 0), 1.2)
+end
+
+-- Dresses a record as a Rainbow Feather: registered for the colour flow, a soft glow and a few
+-- drifting motes. Cheap per part; the count is bounded by pile.rainbowChance.
+function PileVisualController._dressRainbow(self: PileVisualController, part: BasePart, cellIndex: number, slot: number)
+	part:SetAttribute("SFE_Rainbow", true)
+	part.Material = Enum.Material.Neon
+	local light = Instance.new("PointLight")
+	light.Name = "RainbowGlow"
+	light.Brightness = 0.9
+	light.Range = 5
+	light.Color = Color3.fromRGB(255, 200, 255)
+	light.Parent = part
+	local motes = Instance.new("ParticleEmitter")
+	motes.Name = "RainbowMotes"
+	motes.Rate = 3
+	motes.Lifetime = NumberRange.new(0.8, 1.4)
+	motes.Speed = NumberRange.new(0.3, 0.8)
+	motes.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.12), NumberSequenceKeypoint.new(1, 0) })
+	motes.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 1) })
+	motes.LightEmission = 0.8
+	motes.Color = ColorSequence.new(Color3.fromRGB(255, 240, 255))
+	motes.Parent = part
+	self._rainbowParts[part] = FeatherLayout.hash(cellIndex, slot, 7) -- phase offset for the hue flow
+	self:_ensureRainbowLoop()
+end
+
+-- One shared heartbeat drives the hue of every rainbow record (and any in flight): a smooth,
+-- desaturated rainbow rather than raw neon.
+function PileVisualController._ensureRainbowLoop(self: PileVisualController)
+	if self._rainbowLoop then
+		return
+	end
+	self._rainbowLoop = RunService.Heartbeat:Connect(function()
+		local t = os.clock() * 0.35
+		for part, phase in pairs(self._rainbowParts) do
+			if part.Parent == nil then
+				self._rainbowParts[part] = nil
+			else
+				local hue = (t + phase) % 1
+				part.Color = Color3.fromHSV(hue, 0.55, 1)
+				local light = part:FindFirstChild("RainbowGlow")
+				if light and light:IsA("PointLight") then
+					light.Color = Color3.fromHSV(hue, 0.35, 1)
+				end
+			end
+		end
+	end)
+	self._trove:add(self._rainbowLoop)
+end
+
+function PileVisualController.rainbowCount(self: PileVisualController): number
+	local count = 0
+	for _ in pairs(self._rainbowParts) do
+		count += 1
+	end
+	return count
 end
 
 function PileVisualController.clear(self: PileVisualController)

@@ -170,6 +170,7 @@ function VictoryController.onVictory(self: VictoryController, payload: { [string
 	)
 	local isMe = payload.finderUserId == Players.LocalPlayer.UserId
 	local text = if isMe then "You found the Egg!" else (tostring(payload.finderName) .. " found the Egg!")
+	deps.hud:setObjective(text, "Rewards on the way")
 	local label = Instance.new("TextLabel")
 	label.Name = "Announcement"
 	label.AnchorPoint = Vector2.new(0.5, 0.5)

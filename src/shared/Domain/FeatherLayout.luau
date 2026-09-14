@@ -26,6 +26,16 @@ function FeatherLayout.featherId(cellIndex: number, slot: number): number
 	return cellIndex * FeatherLayout.SLOT_STRIDE + slot
 end
 
+-- Whether a record is a Rainbow Feather. Deterministic from the round's seed, so server and
+-- client agree without any per-record replication; `pile.rainbowChance` is the rate.
+function FeatherLayout.isRainbow(cfg: { [string]: any }, seed: number, cellIndex: number, slot: number): boolean
+	local chance = cfg.pile.rainbowChance or 0
+	if chance <= 0 then
+		return false
+	end
+	return FeatherLayout.hash(cellIndex, slot, seed + 0.5) < chance
+end
+
 -- Returns (cellIndex, slot) or nil for a malformed id.
 function FeatherLayout.decode(featherId: any): (number?, number?)
 	if type(featherId) ~= "number" or featherId % 1 ~= 0 or featherId < FeatherLayout.SLOT_STRIDE then

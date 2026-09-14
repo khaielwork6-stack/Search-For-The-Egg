@@ -113,6 +113,8 @@
     "surfaceVariance": 0.25,
     "coverDepthMultiplier": 2.0,
     "coverRadiusCells": 1,
+    "rainbowChance": 0.015,
+    "rainbowChanceEvidence": "ASSUMED initial rate; one record in ~67 is a Rainbow Feather",
     "maxVisualHeightStuds": 16,
     "aimPlaneHeightStuds": 1.75,
     "collision": {
@@ -292,7 +294,7 @@
   },
   "selling": {
     "cashPerStandardFeather": 0.01,
-    "rainbowFeatherMultiplier": 5,
+    "rainbowFeatherMultiplier": 10,
     "minimumTransaction": 0.01,
     "cashRounding": "round_half_up_to_cent",
     "sellAllOnInteract": true,
