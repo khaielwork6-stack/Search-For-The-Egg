@@ -1173,3 +1173,51 @@ tests; selene / stylua clean; console clean.
   feathers`, `BUY ($1.00)`), money line; `closeBook` removed it.
 - Not verified here: phone-preset session for the book / inspection (owner checkpoint), real
   Robux dialogs (need a published place), multi-player pad joins (Play Solo only).
+
+## Tools pass: first-person viewmodels, dynamite, vac, DodoBird scout, queue screen (14 Sep 2026)
+
+Build label `phase5-live-shops`. Play Solo (map mode) on this laptop; 298 headless tests; selene /
+stylua clean. The owner's three tool clips were not attached to the brief, so the motion is built
+from the written spec with every timing in `SYSTEM_CONFIG.toolFeel` (ASSUMED) for tuning once the
+clips arrive. Play-mode screen captures come back blank on this machine, so the viewmodels were
+captured in Edit mode under the editor camera (same module, stub deps) and every Play check is a
+state readout through the debug bridges.
+
+- **Pile untouched.** `pileReport` after the whole pass: `feathers=9699 fluff=0 coatKind=feathers`
+  (records only).
+- **Staged models.** `ChapterShellService.stageToolModels` copied Pitchfork (32), Dynamite (16),
+  Vacuum (50) and Bird.DodoBird (74 descendants, 55 bones) into `ReplicatedStorage.SFE_ToolModels`
+  with scripts / prompts / emitters removed and every part anchored, non-colliding, non-queryable.
+- **Viewmodels (Edit captures).** Pitchfork low right, tines toward the reticle; Dynamite upright
+  lower right with the fuse up; Vacuum at the hip, nozzle forward. In Play the rake viewmodel
+  was 32 parts under `workspace.CurrentCamera` named `SFE_Viewmodel_nestRake`; no character parts
+  are ever drawn. Rake sweep: `swung` -> thrust (`thrusts 1`), server accepted 1 sweep (27 removed,
+  25 awarded into a 25 bag, 2 bundled), then `bag_full` refusals with no pile change.
+- **Dynamite.** `lightCharge` -> `chargeLit true`, viewmodel action `lit`, fuse sparks; `throwCharge`
+  -> server ok, `SFE_Charge` model (19 parts, FuseSparks) in `SFE_ToolVisuals`, viewmodel action
+  `thrown`; after the 1.4 s fuse: `charges 0`, `craters 1` (`SFE_Crater` persists), bag 25 / 25
+  (19 standard + rainbow from Lucky Blast). Bag-full case: with 25 / 25 the throw exploded (crater)
+  and the client pile count stayed 9699 - nothing removed, nothing destroyed (server clamp; test).
+- **Vacuum.** Full bag: `ToolActionBegin` refused `bag_full`, pile unchanged. After selling, a
+  2.5 s hold: `vacRunning true`, viewmodel `vacRunning true` with 6 streak parts under the camera,
+  `Intake` emitter on the nozzle, heat meter `PULLING` and rising, `carried 25 -> 69 -> 93`
+  (max-level 26 / s), `pileStats.streamed 117` (each validated record animated into the nozzle);
+  release -> `vacRunning false`, streaks 0, meter `HEAT` draining. Server runtime showed
+  `aimHitX/Z` updated from `ToolActionAim` while running (unit test covers the re-aim and the
+  out-of-range stop).
+- **Scout Chick.** `SFE_ScoutChick` is the DodoBird (6 mesh parts, 55 bones); it hopped from the
+  nest edge to the crate and the toast read `Scout Chick traded 52 feathers` (was "traded 0").
+- **Queue screen.** Edit-mode probe: destination card (preview band, `SUNLIT HENHOUSE / CREATE
+  PARTY`, `NORMAL` + locked `1 Win`, `PARTY SIZE: - 1 +`, green `CREATE`) beside the Henhouse and
+  locked Cellar cards (`1 Win`, `Coming soon`); phone (812x375) fits without scrolling. Play: pad
+  prompt opened it, `More` -> size 2, `CREATE` -> party (pad board `1/2 Henhouse - waiting for 1
+  more`), modal closed.
+- **Keys.** Backquote opened and closed the book in a search (cursor free while open, first person
+  locked again after); Tab shares the binding (virtual input cannot send Tab). Alt held -> cursor
+  free, `MouseBehavior Default`; released -> `LockCenter`, `LockFirstPerson`. Farmer before the
+  egg: `SFE_EggDeliver` refused `not_revealed` and the Farmer bubble read "Find me the egg buddy!".
+- Console: clean apart from `swoosh.wav` (not a bundled asset; replaced by `unsheath.wav`) and the
+  rainbow shimmer `vfx` handle bug that vac pulls exposed (fixed).
+- Not verified here: a second player in the round (Play Solo only; the blast, vac pull and chick
+  events are broadcast to every member and animate from their character when no viewmodel is
+  local); Tab itself; the owner's clips (not attached).

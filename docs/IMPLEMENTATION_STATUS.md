@@ -315,3 +315,17 @@ item models as displays (`ChapterShellService.placeDisplays`, client `DisplayCon
 through `UpgradePurchase` / `PurchasePromptRequest` via `UI/UpgradeActions.luau`. `CommerceService`
 is wired in `init.server` (mock Marketplace + synthetic ids in Studio). `ShopModal` (perk tiles +
 Robux column) and `ClassesModal` (deck / spotlight / slots) were rebuilt to the owner's reference.
+
+**Tool feel (14 Sep 2026).** First-person viewmodels (`ToolViewmodelController`: the owner's
+Pitchfork / Dynamite / Vacuum staged script-free by `ChapterShellService.stageToolModels` into
+`ReplicatedStorage.SFE_ToolModels`; sway, look-lag spring, rake thrust + eased return, dynamite
+light-then-throw, vac recoil / jitter / intake particles / wind streaks / motor loop; no hands). The
+Feather Vac follows the reticle (`ToolActionAim` every `toolFeel.featherVac.aimUpdateHz`; an aim off
+the nest stops it) and every pulled record is announced as `vac_pull` and animated into the nozzle;
+the HUD shows a vertical heat meter with a flame. Confetti Charge blasts remove only what fits in the
+bag (a full bag destroys nothing) and are drawn as the Dynamite model arcing to the target, fuse
+sparks, flash / fire / smoke / debris / distance-scaled shake and a persistent scorch crater. The
+Scout Chick is the owner's DodoBird (bones animated procedurally: hop, head turns, flaps, pecks) and
+its trade toast reads the `chick_deposit` count. All timings live in `SYSTEM_CONFIG.toolFeel`
+(ASSUMED: the owner's clips were not attached). Sound roles `tool.*` use bundled placeholders; the
+fuse hiss is a silent stub until the owner supplies ids.
