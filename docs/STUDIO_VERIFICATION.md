@@ -1100,3 +1100,24 @@ and through the edit-mode UI probe at the Studio viewport and the 812x375 phone 
 - **Workbench.** Rows carry large item art on the left; purchases flash the row, hop the button and
   burst confetti.
 - 295 headless tests pass; selene / stylua clean. Console clean apart from the music asset permission.
+
+## Hierarchy pass: Stats, Tool Rack, Perk Shop, barn (14 Sep 2026)
+
+Owner brief: less text, bigger art, chunkier cards, stronger colour per menu; barn displays at eye
+level. Verified in the edit-mode probe (Studio viewport) and Play Solo.
+
+- **Stats.** Teal header with the player's headshot, display name and TOTAL PLAYTIME; six tinted
+  picture cards (CLASS, TIME RECORD, EGGS WON, FEATHERS, EGGS FOUND, SEARCHES) with big art and a
+  single value; leaderboard tabs with medal-coloured rank badges. The ledger tiles and refresh line
+  are gone.
+- **Tool Rack.** Four tool tabs (Rake / Charge / Vac / Chick) over big square skin cards: art, a
+  one-word name strip, a green check when equipped, LOCKED over unowned skins (event skins tinted).
+  Tap a card to equip; a locked card shakes and toasts. Red Close.
+- **Perk Shop.** PERMANENT PERKS title only; taller tiles with larger art, an `LV 2 · +20%` badge
+  above the pips and one title-size price button. Offers: big art, giant `R$` button, POPULAR and
+  PERMANENT corner tags, no captions.
+- **Barn.** Rear display boards lowered to y 60.2; pitchfork on the left board, dynamite on the
+  right; both bags scaled to 0.8 on the counter at x -47 / -36.5. With the player's eye at y 58.3 the
+  items span 55.9-64.5 and the cards read name + price only (`Nest Rake | $8.00`, `Infinite Bag |
+  R$ 99`); states (OWNED / MAX) keep a one-line caption.
+- Tiles carry a 4 px cocoa outline everywhere (`FrameKit.tile`). 295 tests, selene / stylua clean.
