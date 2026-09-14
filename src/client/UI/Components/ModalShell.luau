@@ -85,10 +85,14 @@ function ModalShell.create(
 
 	-- Header band across the top of the panel (sits above the panel padding).
 	local headerHeight = tap + Tokens.spacing.md
-	local band, title =
-		FrameKit.headerBand(panel, "Header", options.title, { height = headerHeight, zIndex = panel.ZIndex + 1, radius = Tokens.radius.lg })
-	band.Position = UDim2.fromOffset(-Tokens.spacing.lg + Tokens.spacing.xs, -Tokens.spacing.lg + Tokens.spacing.xs)
-	band.Size = UDim2.new(1, (Tokens.spacing.lg - Tokens.spacing.xs) * 2, 0, headerHeight)
+	-- The band lives on the outer card (no list layout there) and spans the full width.
+	local band, title = FrameKit.headerBand(card, "Header", options.title, {
+		height = headerHeight,
+		zIndex = panel.ZIndex + 2,
+		radius = Tokens.radius.xl,
+	})
+	band.Position = UDim2.fromOffset(0, 0)
+	band.Size = UDim2.new(1, 0, 0, headerHeight)
 	if options.icon then
 		local glyph = Skin.icon(band, options.icon, headerHeight - Tokens.spacing.sm, band.ZIndex + 3)
 		if glyph then

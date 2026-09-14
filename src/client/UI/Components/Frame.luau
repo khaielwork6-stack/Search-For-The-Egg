@@ -116,7 +116,7 @@ function Frame.goldPanel(
 	})
 	light.Parent = panel
 	if opts.texture ~= false then
-		local weave = texture(panel, "texture.studs", 0.94, Tokens.color.cocoa, 96, z + 1)
+		local weave = texture(panel, "texture.studs", 0.965, Tokens.color.cocoa, 28, z + 1)
 		if weave then
 			local weaveCorner = Instance.new("UICorner")
 			weaveCorner.CornerRadius = UDim.new(0, radius)
