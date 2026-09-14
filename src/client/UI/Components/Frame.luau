@@ -116,8 +116,12 @@ function Frame.goldPanel(
 	})
 	light.Parent = panel
 	if opts.texture ~= false then
-		local weave = texture(panel, "texture.studs", 0.965, Tokens.color.cocoa, 28, z + 1)
+		-- On the outer card (not inside the panel's list layout), drawn above the panel body and
+		-- below its content.
+		local weave = texture(outer, "texture.studs", 0.965, Tokens.color.cocoa, 28, z + 1)
 		if weave then
+			weave.Name = "Weave"
+			weave.Size = UDim2.new(1, 0, 1, -LIP)
 			local weaveCorner = Instance.new("UICorner")
 			weaveCorner.CornerRadius = UDim.new(0, radius)
 			weaveCorner.Parent = weave
