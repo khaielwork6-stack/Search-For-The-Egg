@@ -104,7 +104,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	grid.LayoutOrder = 2
 	grid.ZIndex = z
 	local gridLayout = Instance.new("UIGridLayout")
-	gridLayout.CellSize = UDim2.new(0.5, -Tokens.spacing.xs, 0, tap + Tokens.spacing.xl)
+	gridLayout.CellSize = UDim2.new(0.5, -Tokens.spacing.xs, 0, tap + Tokens.spacing.xxl + Tokens.spacing.sm)
 	gridLayout.CellPadding = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
 	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	gridLayout.Parent = grid
@@ -122,7 +122,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				variant = "secondary",
 				minimumTapTarget = tap,
 				motion = motion,
-				size = UDim2.new(0.5, 0, 0, tap + Tokens.spacing.xl),
+				size = UDim2.new(0.5, 0, 0, tap + Tokens.spacing.xxl + Tokens.spacing.sm),
 				zIndex = z + 1,
 				sound = function()
 					deps.audio:play(Tokens.sound.uiSelect)
@@ -147,6 +147,11 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			handle.button.LayoutOrder = order
 			handle.button.TextWrapped = true
 			handle.button.TextSize = Tokens.typography.body.size
+			handle.button.TextYAlignment = Enum.TextYAlignment.Top
+			local textPad = handle.button:FindFirstChildOfClass("UIPadding")
+			if textPad then
+				textPad.PaddingTop = UDim.new(0, Tokens.spacing.sm)
+			end
 			local sub = FrameKit.text(
 				handle.button,
 				"Sub",
@@ -159,7 +164,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				stateArt.Visible = false
 			end
 			sub.AnchorPoint = Vector2.new(0.5, 1)
-			sub.Position = UDim2.new(0.5, 0, 1, -2)
+			sub.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.sm)
 			sub.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 2)
 			cards[key] = { handle = handle, sub = sub, stateArt = stateArt }
 			table.insert(cleanups, handle.destroy)
