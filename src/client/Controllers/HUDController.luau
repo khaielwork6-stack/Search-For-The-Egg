@@ -271,7 +271,7 @@ function HUDController.new(deps: any): HUDController
 	})
 	local settingsButton = settingsHandle.button
 	settingsButton.Name = "Button_Settings"
-	settingsButton.Text = ""
+	settingsHandle.setText("")
 	settingsButton.AnchorPoint = Vector2.new(1, 0)
 	settingsButton.Position = UDim2.new(1, -Tokens.layout.safeAreaPaddingPx, 0, Tokens.layout.safeAreaPaddingPx)
 	local gear = Skin.icon(settingsButton, "hud.gear", Tokens.icon.md + 2, settingsButton.ZIndex + 3)
