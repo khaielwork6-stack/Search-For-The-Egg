@@ -38,7 +38,7 @@ local POSES: { [string]: Pose } = {
 	},
 	featherVac = {
 		model = "Vacuum",
-		offset = CFrame.new(0.5, -0.56, -0.85),
+		offset = CFrame.new(0.42, -0.5, -1.15),
 		rotation = CFrame.Angles(math.rad(-4), math.rad(-90), 0),
 		nozzle = "WideIntake",
 	},
@@ -583,7 +583,9 @@ function ToolViewmodelController.nozzlePosition(self: ToolViewmodelController): 
 	end
 	local nozzle = model:FindFirstChild(pose.nozzle, true)
 	if nozzle and nozzle:IsA("BasePart") then
-		return (nozzle.CFrame * CFrame.new(-nozzle.Size.X * 0.5, 0, 0)).Position
+		-- The intake mouth: the model's -X axis is the nozzle direction.
+		local forward = -model:GetPivot().RightVector
+		return nozzle.Position + forward * (nozzle.Size.Magnitude * 0.3)
 	end
 	return model:GetPivot().Position
 end

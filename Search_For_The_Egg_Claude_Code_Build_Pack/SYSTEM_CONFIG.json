@@ -1432,7 +1432,7 @@
       "craterTransparency": 0.35
     },
     "featherVac": {
-      "viewmodelScale": 0.28,
+      "viewmodelScale": 0.22,
       "pullSeconds": 0.24,
       "pullStaggerSeconds": 0.035,
       "aimUpdateHz": 6,
