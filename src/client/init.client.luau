@@ -32,6 +32,7 @@ local ToolController = require(Controllers.ToolController)
 local ToolVisualController = require(Controllers.ToolVisualController)
 local InteractionController = require(Controllers.InteractionController)
 local DisplayController = require(Controllers.DisplayController)
+local NameplateController = require(Controllers.NameplateController)
 local PromptController = require(Controllers.PromptController)
 local ObjectiveController = require(Controllers.ObjectiveController)
 local VictoryController = require(Controllers.VictoryController)
@@ -129,6 +130,8 @@ local victory = trove:add(VictoryController.new({
 	config = config,
 }))
 hud:bindRound(round, interaction)
+-- Player nameplates: display name and record time over every character.
+local nameplates = trove:add(NameplateController.new())
 -- Barn shop displays: price cards on the owner's item models and their Buy prompts.
 local displays = trove:add(DisplayController.new({
 	net = net,
@@ -263,6 +266,7 @@ if RunService:IsStudio() then
 			snap.viewport = tostring(workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize)
 			snap.strands = lobby:strandCount() + arena:strandCount()
 			snap.displays = displays:cardCount()
+			snap.nameplates = nameplates:count()
 			snap.audioState = audio:state()
 			snap.vfxInstances = vfx:instanceCount()
 			snap.vfxStats = vfx.stats

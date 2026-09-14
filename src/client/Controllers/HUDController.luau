@@ -647,6 +647,63 @@ function HUDController.onCollected(self: HUDController, data: { [string]: any })
 	self.round:setBag(data.carried, data.capacity, data.infinite == true, true)
 	self.carriedStack:setBag(data.carried, data.capacity, data.infinite == true, true)
 	self.carriedStack:pulse()
+	local awarded = (data.awarded or 0) + (data.rainbow or 0)
+	if awarded > 0 and data.hitX and data.hitZ then
+		self:floatPickup(Vector3.new(data.hitX, data.hitY or 0, data.hitZ), awarded, (data.rainbow or 0) > 0)
+	end
+end
+
+-- A "+N" that rises from the pickup point in the world, timed with the bag tick and the pickup
+-- sound. Rainbow pickups get the gem purple and a bigger pop.
+function HUDController.floatPickup(self: HUDController, position: Vector3, amount: number, rainbow: boolean?)
+	local motion = self._deps.accessibility:motionSettings()
+	local anchor = Instance.new("Part")
+	anchor.Name = "SFE_PickupFloat"
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanQuery = false
+	anchor.CanTouch = false
+	anchor.Transparency = 1
+	anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+	anchor.CFrame = CFrame.new(position + Vector3.new(0, 1.2, 0))
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "Float"
+	gui.Size = UDim2.fromOffset(120, 44)
+	gui.AlwaysOnTop = true
+	gui.LightInfluence = 0
+	gui.Adornee = anchor
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(1, 1)
+	label.Font = Tokens.typography.label.font
+	label.TextSize = if rainbow then Tokens.typography.display.size else Tokens.typography.title.size + 4
+	label.TextColor3 = if rainbow then Tokens.color.gem else Tokens.color.goldLight
+	label.Text = "+" .. tostring(amount)
+	label.Parent = gui
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 2.6
+	stroke.Color = Tokens.color.outline
+	stroke.Parent = label
+	local scale = Instance.new("UIScale")
+	scale.Scale = 0.6
+	scale.Parent = label
+	gui.Parent = anchor
+	anchor.Parent = workspace
+	local rise = Motion.amplitude(if rainbow then 4 else 2.6, motion)
+	local seconds = Motion.clampSeconds(0.9, motion)
+	TweenService
+		:Create(scale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = if rainbow then 1.25 else 1 })
+		:Play()
+	TweenService:Create(anchor, TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		CFrame = anchor.CFrame + Vector3.new(0, rise, 0),
+	}):Play()
+	task.delay(seconds * 0.55, function()
+		TweenService:Create(label, TweenInfo.new(seconds * 0.45), { TextTransparency = 1 }):Play()
+		TweenService:Create(stroke, TweenInfo.new(seconds * 0.45), { Transparency = 1 }):Play()
+	end)
+	task.delay(seconds + 0.1, function()
+		anchor:Destroy()
+	end)
 end
 
 -- World point a couple of studs in front of the camera at the carried stack's screen position: the

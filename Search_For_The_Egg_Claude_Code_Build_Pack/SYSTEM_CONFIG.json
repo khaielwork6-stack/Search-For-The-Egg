@@ -35,7 +35,7 @@
   },
   "round": {
     "cutsceneSeconds": 18,
-    "countdownSeconds": 3,
+    "countdownSeconds": 5,
     "timerMode": "count_up",
     "maximumRoundSeconds": 1800,
     "emptyRoundShutdownSeconds": 30,

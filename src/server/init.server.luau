@@ -216,6 +216,13 @@ local function getProfileData(userId: number): any?
 	local profile = profiles:get(userId)
 	return profile and profile.data or nil
 end
+-- The record time lives on the Player as an attribute so every client can draw it over the head.
+local function publishBestTime(player: Player)
+	local data = getProfileData(player.UserId)
+	local chapter = data and data.progression.bestTimeMs.chapter1
+	player:SetAttribute("SFE_BestTimeMs", chapter and chapter.normal or 0)
+end
+
 -- Verified entitlements (Roblox ownership through the adapter) merged with Studio-only debug overrides
 -- (the mock entitlement adapter for Phase 3 verification; never active outside Studio/allowlist).
 local debugEntitlements: { [number]: { [string]: boolean } } = {}
@@ -828,6 +835,7 @@ victory.committed:Connect(function(runtime, results)
 	for _, player in ipairs(memberPlayers(runtime.state.members)) do
 		local result = results[player.UserId]
 		if result then
+			publishBestTime(player)
 			send(player, "RewardsCommitted", { roundId = runtime.state.roundId, saved = result.saved })
 			local finder = playerData:playerOf(result.finderUserId)
 			local payload = table.clone(result)
@@ -1069,6 +1077,8 @@ local function onCharacterAdded(player: Player, character: Model)
 	end
 	local humanoid = character:WaitForChild("Humanoid", 5) :: Humanoid?
 	if humanoid then
+		-- Clients draw their own nameplate (name + record); the default overhead label would double it.
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 		humanoid.Died:Connect(function()
 			analytics:track("player_died", { inRound = rounds:roundOf(player.UserId) ~= nil }, player.UserId)
 			tools:onDeath(player.UserId)
@@ -1083,6 +1093,7 @@ local function onCharacterAdded(player: Player, character: Model)
 end
 
 local function onPlayerLoaded(player: Player)
+	publishBestTime(player)
 	objectives:load(player.UserId)
 	sendObjective(player.UserId)
 	send(player, "PartyListProjection", partyListPayload())
