@@ -81,7 +81,7 @@ local function offers(cfg: { [string]: any }): { Offer }
 			art = "hud.gem",
 			icon = "gem",
 			robux = bundle.robux,
-			popular = index == #bundles,
+			popular = bundle.popular == true or (index == #bundles and not bundle.popular),
 		})
 	end
 	local passes = cfg.monetization and cfg.monetization.passes or {}
@@ -167,6 +167,14 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	plus.button.AnchorPoint = Vector2.new(1, 0.5)
 	plus.button.Position = UDim2.fromScale(1, 0.5)
 	table.insert(cleanups, plus.destroy)
+	if deps.openGemShop then
+		table.insert(
+			cleanups,
+			plus.button.Activated:Connect(function()
+				deps.openGemShop()
+			end)
+		)
+	end
 
 	-- Body: perk grid (left) and the Robux column (right), sized by scale so phones fit.
 	local body = Instance.new("Frame")

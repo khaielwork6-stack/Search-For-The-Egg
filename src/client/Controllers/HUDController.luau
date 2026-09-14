@@ -52,6 +52,7 @@ export type HUDController = typeof(setmetatable(
 		_heatFlame: UIScale?,
 		_heatLabel: TextLabel?,
 		_heatState: string?,
+		_gemShopOpener: (() -> ())?,
 		_holdRing: GuiObject?,
 		_targeting: boolean?,
 		_veil: Frame?,
@@ -124,7 +125,34 @@ function HUDController.new(deps: any): HUDController
 		return label
 	end
 	self._labels.gems = currencyChip("Gems", 1, "hud.gem", "gem")
-	self._labels.tokens = currencyChip("Tokens", 2, "hud.token", "coin")
+	-- "+" beside the Gems chip opens the Gem Shop (the lobby registers the opener).
+	local plusHandle = Button.build(row, {
+		text = "+",
+		variant = "success",
+		round = true,
+		minimumTapTarget = SafeArea.minimumTapTarget(gui, deps.config),
+		motion = deps.accessibility:motionSettings(),
+		size = UDim2.fromOffset(Tokens.layout.minimumTapTargetPx - 10, Tokens.layout.minimumTapTargetPx - 10),
+		zIndex = Tokens.zIndex.hud + 1,
+		textSize = Tokens.typography.title.size,
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTap)
+		end,
+		hoverSound = function()
+			deps.audio:play(Tokens.sound.uiHover)
+		end,
+		onActivated = function()
+			if self._gemShopOpener then
+				self._gemShopOpener()
+			end
+		end,
+	})
+	plusHandle.button.Name = "GemPlus"
+	plusHandle.button.LayoutOrder = 2
+	plusHandle.button.Visible = false
+	self._labels.gemPlus = plusHandle.button
+	self._trove:add(plusHandle.destroy)
+	self._labels.tokens = currencyChip("Tokens", 3, "hud.token", "coin")
 
 	-- Top-center objective ribbon: gold band with the outlined objective, cream tail with the detail.
 	local bannerHeight = Tokens.layout.minimumTapTargetPx + Tokens.typography.caption.size + Tokens.spacing.lg
@@ -295,6 +323,30 @@ function HUDController.new(deps: any): HUDController
 		bookArt.AnchorPoint = Vector2.new(0.5, 0.5)
 		bookArt.Position = UDim2.fromScale(0.5, 0.5)
 	end
+	-- Keycap and caption: the book opens with Tab (or backtick); the cap swaps to Y on a gamepad.
+	local bookCap = Icons.keycap(bookHandle.button, "Tab", Tokens.icon.md, { zIndex = Tokens.zIndex.hud + 5 })
+	bookCap.Name = "Keycap"
+	bookCap.AnchorPoint = Vector2.new(0.5, 0)
+	bookCap.Position = UDim2.new(0.5, 0, 0, -Tokens.spacing.sm)
+	local bookCapText = bookCap:FindFirstChild("Glyph") :: TextLabel?
+	local bookLabel = FrameKit.pill(bookHandle.button, "Caption", "Upgrades", {
+		size = UDim2.fromOffset(0, Tokens.typography.caption.size + Tokens.spacing.sm),
+		textSize = Tokens.typography.caption.size - 1,
+		zIndex = Tokens.zIndex.hud + 4,
+		fill = Tokens.color.creamPill,
+		textColor = Tokens.color.inkStrong,
+		fitText = true,
+		outline = true,
+	})
+	bookLabel.AnchorPoint = Vector2.new(0.5, 0)
+	bookLabel.Position = UDim2.new(0.5, 0, 1, Tokens.spacing.xs)
+	local function refreshBookCap(mode: string)
+		if bookCapText then
+			bookCapText.Text = if mode == "gamepad" then "Y" elseif mode == "touch" then "Tap" else "Tab"
+		end
+	end
+	refreshBookCap(deps.input:mode())
+	self._trove:add(deps.input.modeChanged:Connect(refreshBookCap))
 	self._labels.bookButton = bookHandle.button
 	self._trove:add(bookHandle.destroy)
 
@@ -932,6 +984,14 @@ function HUDController.setHold(self: HUDController, active: boolean, fraction: n
 		if ring:IsA("ImageLabel") then
 			ring.ImageTransparency = 0.6 - f * 0.5
 		end
+	end
+end
+
+-- The lobby registers the Gem Shop opener; the "+" only shows once something can open it.
+function HUDController.setGemShopOpener(self: HUDController, opener: (() -> ())?)
+	self._gemShopOpener = opener
+	if self._labels.gemPlus then
+		self._labels.gemPlus.Visible = opener ~= nil
 	end
 end
 

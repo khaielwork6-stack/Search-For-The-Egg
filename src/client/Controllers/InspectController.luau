@@ -59,6 +59,13 @@ local COPY: { [string]: { name: string, story: string, tag: string, toolId: stri
 		toolId = "confettiCharge",
 		upgradeId = "tool:confettiCharge",
 	},
+	scoutChick = {
+		name = "Scout Chick",
+		story = "A little forager that works the nest while you do.\n\nSend it out and it pecks feathers, hops them to the crate and trades them for cash on its own, trip after trip.",
+		tag = "WORKS FOR YOU",
+		toolId = "scoutChick",
+		upgradeId = "tool:scoutChick",
+	},
 }
 
 function InspectController.new(deps: any): InspectController
@@ -156,12 +163,14 @@ function InspectController._options(
 				UpgradeActions.promptPurchase(promptDeps, copy.toolId .. "OneRound", tool.displayName)
 			end,
 		})
+		local gemPriced = tool.softGemPrice ~= nil and tool.softCashPrice == nil
 		table.insert(options, {
-			caption = "CASH",
+			caption = if gemPriced then "GEMS" else "CASH",
 			text = if ownedRound
 				then "OWNED"
+				elseif gemPriced then string.format("%d Gems", (preview and preview.costGems) or tool.softGemPrice or 0)
 				else EconomyMath.formatCents((preview and preview.costCents) or math.floor((tool.softCashPrice or 0) * 100 + 0.5)),
-			variant = if ownedRound then "success" else "primary",
+			variant = if ownedRound then "success" elseif gemPriced then "gem" else "primary",
 			enabled = not ownedRound and preview ~= nil,
 			run = function()
 				local result = UpgradeActions.purchase(actionDeps, copy.upgradeId :: string, tool.displayName)
@@ -206,6 +215,8 @@ function InspectController._headline(self: InspectController, key: string): stri
 		return string.format("%d per sweep", cfg.tools.nestRake.baseYield or 0)
 	elseif key == "confettiCharge" then
 		return string.format("%d per blast", cfg.tools.confettiCharge.baseYield or 0)
+	elseif key == "scoutChick" then
+		return string.format("%d per trip", cfg.tools.scoutChick.baseCapacity or 0)
 	end
 	return ""
 end

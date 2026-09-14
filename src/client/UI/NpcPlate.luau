@@ -31,9 +31,11 @@ local function billboard(name: string, adornee: BasePart, size: UDim2, offset: V
 	return gui
 end
 
-function NpcPlate.build(adornee: BasePart, name: string, role: string, heightStuds: number): Handle
+function NpcPlate.build(adornee: BasePart, name: string, role: string, heightStuds: number, options: { onTop: boolean? }?): Handle
+	local opts = (options or {}) :: any
 	-- Nameplate: outlined name over a small gold role pill.
 	local plate = billboard("Nameplate", adornee, UDim2.fromOffset(220, 62), Vector3.new(0, heightStuds, 0))
+	plate.AlwaysOnTop = opts.onTop == true
 	local nameLabel = FrameKit.text(plate, "Name", name, "title", {
 		zIndex = 2,
 		color = Tokens.color.featherWhite,
@@ -55,7 +57,8 @@ function NpcPlate.build(adornee: BasePart, name: string, role: string, heightStu
 	pill.Position = UDim2.fromScale(0.5, 1)
 
 	-- Speech bubble: cream card with a cocoa outline; grows in from the vendor's head.
-	local bubble = billboard("Speech", adornee, UDim2.fromOffset(260, 74), Vector3.new(0, heightStuds - 1.2, 0))
+	local bubble = billboard("Speech", adornee, UDim2.fromOffset(260, 74), Vector3.new(0, heightStuds + 1.4, 0))
+	bubble.AlwaysOnTop = opts.onTop == true
 	bubble.Enabled = false
 	local card = Instance.new("Frame")
 	card.Name = "Card"

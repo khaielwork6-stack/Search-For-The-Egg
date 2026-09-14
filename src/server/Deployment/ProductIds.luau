@@ -24,6 +24,7 @@ return {
 	developerProducts = {
 		gemBundle100 = 3712859281,
 		gemBundle400 = 3712859307,
+		gemBundle1500 = nil :: number?, -- 1,500 Gems (POPULAR, 199 R$): owner to create the product
 		nestRakeOneRound = 3712859325,
 		confettiChargeOneRound = 3712859341,
 		featherVacOneRound = 3712859353,

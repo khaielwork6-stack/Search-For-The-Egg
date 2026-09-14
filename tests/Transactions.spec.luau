@@ -205,17 +205,24 @@ return function(describe, it, expect)
 			expect(map:placeId("chapter1")).toBeNil()
 		end)
 
-		it("loads the shipped deployment file: every pass and product has an id, only place ids are missing", function()
-			local ProductIds = require(Server.Deployment.ProductIds)
-			local map = ProductMap.new(cfg, ProductIds)
-			for _, key in ipairs(map:missingKeys()) do
-				local entry = map:resolve(key)
-				expect(entry and entry.kind).toBe("place")
+		it(
+			"loads the shipped deployment file: every pass and product has an id except the pending 1,500 Gem bundle; place ids are missing",
+			function()
+				local ProductIds = require(Server.Deployment.ProductIds)
+				local map = ProductMap.new(cfg, ProductIds)
+				for _, key in ipairs(map:missingKeys()) do
+					local entry = map:resolve(key)
+					-- gemBundle1500 was added on 14 Sep 2026; the owner still has to create its product.
+					if key ~= "gemBundle1500" then
+						expect(entry and entry.kind).toBe("place")
+					end
+				end
+				expect(map:isConfigured("gemBundle1500")).toBe(false)
+				expect(map:isConfigured("infiniteBag")).toBe(true)
+				expect(map:isConfigured("gemBundle100")).toBe(true)
+				expect(map:lookupGamePass(1976757816).key).toBe("confettiChargePermanent")
 			end
-			expect(map:isConfigured("infiniteBag")).toBe(true)
-			expect(map:isConfigured("gemBundle100")).toBe(true)
-			expect(map:lookupGamePass(1976757816).key).toBe("confettiChargePermanent")
-		end)
+		)
 
 		it("accepts valid ids and refuses unknown keys, duplicates, and bad ids", function()
 			local map = ProductMap.new(

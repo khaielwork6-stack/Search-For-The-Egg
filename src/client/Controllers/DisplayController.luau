@@ -33,6 +33,7 @@ local DISPLAYS: { [string]: { name: string, upgradeId: string?, productKey: stri
 	infiniteBag = { name = "Infinite Bag", productKey = "infiniteBag", pass = "infiniteBag" },
 	nestRake = { name = "Nest Rake", upgradeId = "tool:nestRake" },
 	confettiCharge = { name = "Confetti Charge", upgradeId = "tool:confettiCharge" },
+	scoutChick = { name = "Scout Chick", upgradeId = "tool:scoutChick" },
 }
 
 function DisplayController.new(deps: any): DisplayController
@@ -193,6 +194,14 @@ function DisplayController.refresh(self: DisplayController)
 				text = if preview.kind == "acquire" then "OWNED" else "MAX"
 				caption = if preview.kind == "acquire" then "In your hotbar" else "Fully upgraded"
 				fill = Tokens.color.leafBright
+			elseif preview.costGems then
+				-- Gem-priced (the Scout Chick): the price reads in Gems against the profile balance.
+				text = string.format("%d Gems", preview.costGems)
+				caption = "Adds the chick this search"
+				local gems = projection and projection.currencies and projection.currencies.gems or 0
+				local affordable = gems >= preview.costGems
+				fill = if affordable then Tokens.color.gem else Tokens.color.creamDeep
+				textColor = if affordable then Tokens.color.featherWhite else Tokens.color.inkMuted
 			else
 				local cents = preview.costCents or 0
 				text = EconomyMath.formatCents(cents)

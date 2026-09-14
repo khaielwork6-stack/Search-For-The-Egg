@@ -55,6 +55,33 @@ local function label(target: BasePart, text: string, face: Enum.NormalId, pixels
 	gui.Parent = target
 end
 
+-- Big world-space word over a station (the "SELL" sign over the crates): red outlined letters that
+-- scale with distance so they read from anywhere in the yard.
+local function worldSign(parent: BasePart, text: string, offset: Vector3)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "SFE_Sign_" .. text
+	gui.Adornee = parent
+	gui.Size = UDim2.fromScale(9, 3)
+	gui.StudsOffsetWorldSpace = offset
+	gui.MaxDistance = 160
+	gui.LightInfluence = 0
+	gui.AlwaysOnTop = false
+	gui.ResetOnSpawn = false
+	local label = Instance.new("TextLabel")
+	label.Name = "Text"
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.Text = text
+	label.TextColor3 = Color3.fromRGB(226, 66, 56)
+	label.TextStrokeColor3 = Color3.fromRGB(255, 250, 238)
+	label.TextStrokeTransparency = 0
+	label.Parent = gui
+	gui.Parent = parent
+	return gui
+end
+
 local function prompt(parent: BasePart, name: string, actionText: string, objectText: string, hold: number?, maxDistance: number)
 	local p = Instance.new("ProximityPrompt")
 	p.Name = name
@@ -257,6 +284,7 @@ function ChapterShellService.buildGreybox(workspaceService: Workspace, config: {
 		folder
 	)
 	label(crate, "Trade Feathers", Enum.NormalId.Top)
+	worldSign(crate, "SELL", Vector3.new(0, 5.5, 0))
 	local crateLid = part(
 		"SellStationLid",
 		Vector3.new(7.4, 0.6, 7.4),
@@ -267,7 +295,7 @@ function ChapterShellService.buildGreybox(workspaceService: Workspace, config: {
 		false
 	)
 	crateLid:SetAttribute("SFE_Ambient", "bob")
-	prompt(crate, "SFE_Sell", "Trade", "Feather crate", 0, config.interaction.sellRangeStuds)
+	prompt(crate, "SFE_Sell", "Sell feathers", "Feather crate", 0, config.interaction.sellRangeStuds)
 
 	-- Workbench (upgrade board).
 	local bench = part(
@@ -332,7 +360,8 @@ function ChapterShellService.buildFromMap(workspaceService: Workspace, mapModel:
 	end
 	-- Selling: the processor's green button; the conveyors already tell the story.
 	local sellAnchor = anchor("SellStation", layout.sellPrompt, Vector3.new(1.6, 1.6, 0.8))
-	prompt(sellAnchor, "SFE_Sell", "Trade", "Feather processor", 0, config.interaction.sellRangeStuds)
+	prompt(sellAnchor, "SFE_Sell", "Sell feathers", "Feather crates", 0, config.interaction.sellRangeStuds)
+	worldSign(sellAnchor, "SELL", Vector3.new(0, 6.5, 0))
 	-- Upgrades: the FEATHER SUPPLIES counter inside the shop.
 	local upgradeAnchor = anchor("UpgradeBoard", layout.upgradePrompt, Vector3.new(6, 1.2, 1.2))
 	prompt(upgradeAnchor, "SFE_Upgrade", "Upgrade", "Feather supplies", 0, config.interaction.upgradeRangeStuds)
@@ -444,7 +473,7 @@ end
 -- The owner's item models become shop displays inside the supplies barn: two bags on the counter,
 -- the pitchfork and the dynamite on the rear wall boards. Each carries a Buy prompt; the client
 -- draws the price card from the round previews. Missing models are skipped, never rebuilt.
-local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, scale: number? } } = {
+local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, scale: number?, stand: CFrame? } } = {
 	{
 		key = "bag",
 		model = "FeatherBag",
@@ -471,7 +500,31 @@ local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, sc
 		cframe = CFrame.new(-40, 58.4, 292.1) * CFrame.Angles(0, 0, math.rad(-8)),
 		name = "Confetti Charge",
 	},
+	-- The Scout Chick (owner's Bird) perches on a rope-tied crate beside the counter.
+	{
+		key = "scoutChick",
+		model = "Bird",
+		cframe = CFrame.new(-31.5, 58.15, 303.5) * CFrame.Angles(0, math.rad(35), 0),
+		name = "Scout Chick",
+		scale = 0.38,
+		stand = CFrame.new(-31.5, 55.3, 303.5),
+	},
 }
+
+-- A cream crate tied with two tan ropes: the stand under a display (the reference's drone crate).
+local function buildStand(parent: Instance, cframe: CFrame): Part
+	local crate =
+		part("ScoutStand", Vector3.new(3.6, 3, 3.6), cframe, Color3.fromRGB(240, 229, 200), Enum.Material.SmoothPlastic, parent, true)
+	crate.CanQuery = false
+	local rope = Color3.fromRGB(206, 160, 104)
+	part("StandRopeX", Vector3.new(3.7, 0.4, 0.5), cframe * CFrame.new(0, 0.85, 0), rope, Enum.Material.Fabric, parent, false)
+	part("StandRopeZ", Vector3.new(0.5, 0.4, 3.7), cframe * CFrame.new(0, 0.85, 0), rope, Enum.Material.Fabric, parent, false)
+	part("StandRopeXFront", Vector3.new(0.5, 3.05, 0.1), cframe * CFrame.new(0, 0, 1.83), rope, Enum.Material.Fabric, parent, false)
+	part("StandRopeXBack", Vector3.new(0.5, 3.05, 0.1), cframe * CFrame.new(0, 0, -1.83), rope, Enum.Material.Fabric, parent, false)
+	part("StandRopeZLeft", Vector3.new(0.1, 3.05, 0.5), cframe * CFrame.new(-1.83, 0, 0), rope, Enum.Material.Fabric, parent, false)
+	part("StandRopeZRight", Vector3.new(0.1, 3.05, 0.5), cframe * CFrame.new(1.83, 0, 0), rope, Enum.Material.Fabric, parent, false)
+	return crate
+end
 -- The rear-wall display boards the owner built sit high; they come down to eye level with the items.
 local BOARD_Y = 60.2
 
@@ -494,9 +547,27 @@ function ChapterShellService.placeDisplays(workspaceService: Workspace, config: 
 		if spec.scale and math.abs(model:GetScale() - spec.scale) > 0.01 then
 			model:ScaleTo(spec.scale)
 		end
+		-- Display models never move or collide (the Bird's rig is unanchored in the Toolbox asset).
+		for _, descendant in ipairs(model:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				descendant.Anchored = true
+				descendant.CanCollide = false
+			end
+		end
+		if spec.stand then
+			local holder = model.Parent or workspaceService
+			local old = holder:FindFirstChild("ScoutStand")
+			if old then
+				old:Destroy()
+			end
+			buildStand(holder, spec.stand)
+		end
 		model:PivotTo(spec.cframe)
 		model:SetAttribute("SFE_Display", spec.key)
-		local host = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+		if not model.PrimaryPart then
+			model.PrimaryPart = model:FindFirstChildWhichIsA("BasePart", true)
+		end
+		local host = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
 		if host then
 			local old = host:FindFirstChild("SFE_Display_" .. spec.key)
 			if old then

@@ -422,8 +422,20 @@ function LobbyShellController._presentVendor(self: LobbyShellController, part: B
 	local _, size = model:GetBoundingBox()
 	local root = model:FindFirstChild("HumanoidRootPart")
 	local adornee = if root and root:IsA("BasePart") then root else part
-	local plate = NpcPlate.build(adornee, name, role, size.Y * 0.62 + 1.4)
+	-- Plate just over the hat and drawn on top, so the stall roof and sign never hide the name.
+	local plate = NpcPlate.build(adornee, name, role, size.Y * 0.5 + 0.9, { onTop = true })
 	self._trove:add(plate.destroy)
+	-- Outline while the prompt is in reach: a gold Highlight on the whole rig.
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "SFE_VendorOutline"
+	highlight.FillTransparency = 1
+	highlight.OutlineColor = Tokens.color.goldLight
+	highlight.OutlineTransparency = 0
+	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+	highlight.Enabled = false
+	highlight.Adornee = model
+	highlight.Parent = model
+	self._trove:add(highlight)
 
 	local base = model:GetPivot()
 	local baseYaw = 0
@@ -456,14 +468,18 @@ function LobbyShellController._presentVendor(self: LobbyShellController, part: B
 	})
 
 	local myPrompt = part:FindFirstChildOfClass("ProximityPrompt")
-	if myPrompt and line ~= "" then
+	if myPrompt then
 		self._trove:add(ProximityPromptService.PromptShown:Connect(function(prompt)
 			if prompt == myPrompt then
-				plate.say(line)
+				highlight.Enabled = true
+				if line ~= "" then
+					plate.say(line)
+				end
 			end
 		end))
 		self._trove:add(ProximityPromptService.PromptHidden:Connect(function(prompt)
 			if prompt == myPrompt then
+				highlight.Enabled = false
 				plate.hush()
 			end
 		end))

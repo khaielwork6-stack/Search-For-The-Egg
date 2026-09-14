@@ -161,13 +161,14 @@ function InteractionController.handle(self: InteractionController, promptName: s
 			local farmer = arena and arena:FindFirstChild("Farmer")
 			local farmerRoot = farmer and farmer:FindFirstChild("HumanoidRootPart")
 			if result.message == "not_revealed" or result.message == "not_carrier" then
-				-- The Farmer answers in his own words; no error tone for asking early.
+				-- The Farmer answers in his own words in the dialogue frame; no error tone for asking early.
 				deps.audio:play(Tokens.sound.uiTap)
-				NpcPlate.sayOn(
-					farmerRoot,
-					if result.message == "not_revealed" then "Find me the egg buddy!" else "Bring me the Egg first, buddy!",
-					2.8
-				)
+				local line = if result.message == "not_revealed" then "Find me the egg buddy!" else "Bring me the Egg first, buddy!"
+				if deps.dialogue and farmer and farmer:IsA("Model") then
+					deps.dialogue:open(farmer, line, { seconds = 2.2, name = "Farmer" })
+				else
+					NpcPlate.sayOn(farmerRoot, line, 2.8)
+				end
 			else
 				deps.audio:play(Tokens.sound.uiError)
 				deps.hud.toasts:push(

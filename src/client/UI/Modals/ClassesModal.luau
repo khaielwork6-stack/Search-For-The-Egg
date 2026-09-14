@@ -9,6 +9,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local ClassRoll = require(Shared.Domain.ClassRoll)
@@ -52,33 +53,136 @@ local CLASS_COPY: { [string]: { art: string, icon: string, story: string } } = {
 	masterForager = { art = "station.classes.normal", icon = "star", story = "Every passive bonus at once, with golden rush moments." },
 }
 
-local RARITY_LABEL = { common = "Common", uncommon = "Uncommon", rare = "Rare", epic = "Epic", legendary = "Legendary" }
+local RARITY_LABEL = { common = "Common", uncommon = "Uncommon", rare = "Rare", epic = "Epic", legendary = "Legendary", mythic = "Mythic" }
+-- Visual tier: the 0.1 % class gets its own band above legendary (rainbow border, shimmer, aura).
+local MYTHIC_WEIGHT = 0.5
+local RAINBOW = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 80, 80)),
+	ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 190, 60)),
+	ColorSequenceKeypoint.new(0.34, Color3.fromRGB(120, 230, 90)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(80, 210, 255)),
+	ColorSequenceKeypoint.new(0.67, Color3.fromRGB(140, 110, 255)),
+	ColorSequenceKeypoint.new(0.84, Color3.fromRGB(255, 110, 220)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 80, 80)),
+})
+local MYTHIC_COLORS = { fill = Color3.fromRGB(58, 40, 72), deep = Color3.fromRGB(30, 20, 40) }
 
-local function describeEffect(entry: any): string
-	local parts = {}
-	for key, value in pairs(entry.effect or {}) do
-		if key == "bagCapacityMultiplier" then
-			table.insert(parts, string.format("Bag x%.1f", value))
-		elseif key == "sellMultiplier" then
-			table.insert(parts, string.format("Sales x%.1f", value))
-		elseif key == "rakeYieldMultiplier" then
-			table.insert(parts, string.format("Rake x%.2f", value))
-		elseif key == "rakeUpgradeCostMultiplier" then
-			table.insert(parts, string.format("Rake paths %d%% off", math.floor((1 - value) * 100 + 0.5)))
-		elseif key == "blastRadiusMultiplier" then
-			table.insert(parts, string.format("Blast x%.1f", value))
-		elseif key == "miniChargeChance" then
-			table.insert(parts, string.format("%d%% mini-charges", math.floor(value * 100 + 0.5)))
-		elseif key == "gemFindChance" then
-			table.insert(parts, string.format("%d%% Gem finds", math.floor(value * 100 + 0.5)))
-		elseif key == "grantsScoutChick" then
-			table.insert(parts, "Free Scout Chick")
-		elseif key == "grantsAllPassiveBonuses" then
-			table.insert(parts, "Every passive bonus")
+local function tierFor(entry: any): string
+	if entry.weight < MYTHIC_WEIGHT then
+		return "mythic"
+	end
+	return ClassRoll.rarity(entry.weight)
+end
+
+local function colorsFor(tier: string): { fill: Color3, deep: Color3 }
+	if tier == "mythic" then
+		return MYTHIC_COLORS
+	end
+	return (Tokens.rarity :: any)[tier]
+end
+
+local function percent(value: number): string
+	local pct = value * 100
+	if pct == math.floor(pct) then
+		return string.format("%d%%", pct)
+	end
+	return string.format("%.1f%%", pct)
+end
+
+-- One line per effect with its exact number, in a stable order. "Every passive bonus" expands to
+-- the passive bonuses of every other class so the 0.1 % card lists everything it grants.
+local ORDER = {
+	"bagCapacityMultiplier",
+	"sellMultiplier",
+	"rakeYieldMultiplier",
+	"rakeUpgradeCostMultiplier",
+	"blastRadiusMultiplier",
+	"miniChargeChance",
+	"gemFindChance",
+	"diamondFeatherChance",
+	"grantsScoutChick",
+	"droneSpeedMultiplier",
+	"droneCapacityMultiplier",
+	"swarmChancePerTrip",
+	"goldenRushChancePerMinute",
+}
+local function lineFor(key: string, value: any, effect: { [string]: any }): string?
+	if key == "bagCapacityMultiplier" then
+		return string.format("+%s bag capacity", percent(value - 1))
+	elseif key == "sellMultiplier" then
+		return string.format("Feathers sell for +%s", percent(value - 1))
+	elseif key == "rakeYieldMultiplier" then
+		return string.format("+%s feathers per rake sweep", percent(value - 1))
+	elseif key == "rakeUpgradeCostMultiplier" then
+		return string.format("Rake upgrades cost %s less", percent(1 - value))
+	elseif key == "blastRadiusMultiplier" then
+		return string.format("+%s blast radius", percent(value - 1))
+	elseif key == "miniChargeChance" then
+		local count = effect.miniChargeCount or 0
+		return string.format("%s chance a blast spawns %d mini-charges", percent(value), count)
+	elseif key == "gemFindChance" then
+		return string.format("%s chance a feather drops Gems", percent(value))
+	elseif key == "diamondFeatherChance" then
+		return string.format("%s chance of a diamond feather", percent(value))
+	elseif key == "grantsScoutChick" and value == true then
+		return "Free Scout Chick every search"
+	elseif key == "droneSpeedMultiplier" then
+		return string.format("Chick moves +%s faster", percent(value - 1))
+	elseif key == "droneCapacityMultiplier" then
+		return string.format("Chick carries +%s more", percent(value - 1))
+	elseif key == "swarmChancePerTrip" then
+		local count = effect.swarmCount or 0
+		return string.format("%s chance per trip of %d helper chicks", percent(value), count)
+	elseif key == "goldenRushChancePerMinute" then
+		local seconds = effect.goldenRushSeconds or 0
+		return string.format("%s chance each minute of a %ds Golden Rush", percent(value), seconds)
+	end
+	return nil
+end
+
+local function effectLines(entry: any, weights: { any }): { string }
+	local lines = {}
+	local effect = entry.effect or {}
+	for _, key in ipairs(ORDER) do
+		local value = effect[key]
+		if value ~= nil then
+			local line = lineFor(key, value, effect)
+			if line then
+				table.insert(lines, line)
+			end
 		end
 	end
-	table.sort(parts)
-	return if #parts == 0 then "Steady and dependable" else table.concat(parts, "  -  ")
+	if effect.grantsAllPassiveBonuses == true then
+		-- Every other class's passive bonuses (multipliers and grants; class procs stay theirs).
+		local seen = {}
+		for _, other in ipairs(weights) do
+			if other.id ~= entry.id then
+				for _, key in ipairs(ORDER) do
+					local value = (other.effect or {})[key]
+					if value ~= nil and not seen[key] then
+						local line = lineFor(key, value, other.effect or {})
+						if line then
+							seen[key] = true
+							table.insert(lines, line)
+						end
+					end
+				end
+			end
+		end
+	end
+	return lines
+end
+
+local function describeEffect(entry: any, weights: { any }?): string
+	local lines = effectLines(entry, weights or {})
+	if #lines == 0 then
+		return "No bonuses. Steady and dependable."
+	end
+	local out = {}
+	for _, line in ipairs(lines) do
+		table.insert(out, "•  " .. line)
+	end
+	return table.concat(out, "\n")
 end
 
 local function centredArt(parent: GuiObject, art: string, icon: string, px: number, z: number): GuiObject
@@ -196,9 +300,12 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	local rows: { Row } = {}
 	local byId: { [string]: Row } = {}
 	local selectClass -- forward
+	local animated: { { gradient: UIGradient, speed: number } } = {}
+	local sheens: { UIGradient } = {}
+	local pulses: { { stroke: UIStroke, phase: number } } = {}
 	for index, entry in ipairs(weights) do
-		local rarityName = ClassRoll.rarity(entry.weight)
-		local rarity = (Tokens.rarity :: any)[rarityName]
+		local rarityName = tierFor(entry)
+		local rarity = colorsFor(rarityName)
 		local tile, face = FrameKit.tile(deck, "Row_" .. entry.id, {
 			fill = rarity.fill,
 			deep = rarity.deep,
@@ -210,6 +317,45 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		tile.LayoutOrder = index
 		local scale = Instance.new("UIScale")
 		scale.Parent = tile
+		-- Rarity escalation: rare / epic get a travelling sheen, legendary a pulsing gold glow,
+		-- mythic a rotating rainbow border and shimmer.
+		if rarityName == "rare" or rarityName == "epic" or rarityName == "legendary" or rarityName == "mythic" then
+			local sheenFrame = Instance.new("Frame")
+			sheenFrame.Name = "Sheen"
+			sheenFrame.Size = UDim2.fromScale(1, 1)
+			sheenFrame.BackgroundColor3 = Color3.new(1, 1, 1)
+			sheenFrame.BackgroundTransparency = if rarityName == "mythic" then 0.45 else 0.65
+			sheenFrame.BorderSizePixel = 0
+			sheenFrame.ZIndex = z + 2
+			local sheenCorner = Instance.new("UICorner")
+			sheenCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
+			sheenCorner.Parent = sheenFrame
+			local sheen = Instance.new("UIGradient")
+			sheen.Rotation = 20
+			sheen.Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1),
+				NumberSequenceKeypoint.new(0.42, 1),
+				NumberSequenceKeypoint.new(0.5, 0.35),
+				NumberSequenceKeypoint.new(0.58, 1),
+				NumberSequenceKeypoint.new(1, 1),
+			})
+			sheen.Offset = Vector2.new(-1 + (index * 0.13) % 1, 0)
+			sheen.Parent = sheenFrame
+			sheenFrame.Parent = face
+			table.insert(sheens, sheen)
+		end
+		local outline = tile:FindFirstChild("Outline") :: UIStroke?
+		if outline and rarityName == "legendary" then
+			outline.Color = Tokens.color.goldLight
+			table.insert(pulses, { stroke = outline, phase = index })
+		elseif outline and rarityName == "mythic" then
+			outline.Thickness = Tokens.stroke.frame + 1
+			outline.Color = Color3.new(1, 1, 1)
+			local gradient = Instance.new("UIGradient")
+			gradient.Color = RAINBOW
+			gradient.Parent = outline
+			table.insert(animated, { gradient = gradient, speed = 50 })
+		end
 		local copy = CLASS_COPY[entry.id] or { art = "icon.feather", icon = "feather", story = "" }
 		local artHolder = Instance.new("Frame")
 		artHolder.Name = "Art"
@@ -398,6 +544,28 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		burstCorner.CornerRadius = UDim.new(1, 0)
 		burstCorner.Parent = burst
 	end
+	-- Aura behind the emblem: soft coloured disc that pulses for legendary and cycles for mythic.
+	local aura = Instance.new("Frame")
+	aura.Name = "Aura"
+	aura.AnchorPoint = Vector2.new(0.5, 0.5)
+	aura.Position = UDim2.new(0.5, 0, 0, emblemTop + emblemSize / 2)
+	aura.Size = UDim2.fromOffset(emblemSize + Tokens.spacing.xl, emblemSize + Tokens.spacing.xl)
+	aura.BackgroundColor3 = Tokens.color.goldLight
+	aura.BackgroundTransparency = 1
+	aura.BorderSizePixel = 0
+	aura.ZIndex = z
+	local auraCorner = Instance.new("UICorner")
+	auraCorner.CornerRadius = UDim.new(1, 0)
+	auraCorner.Parent = aura
+	local auraGradient = Instance.new("UIGradient")
+	auraGradient.Color = RAINBOW
+	auraGradient.Enabled = false
+	auraGradient.Parent = aura
+	aura.Parent = spotlight
+	local emblemGradient = Instance.new("UIGradient")
+	emblemGradient.Color = RAINBOW
+	emblemGradient.Enabled = false
+	emblemGradient.Parent = emblemStroke
 	local emblemArt: GuiObject? = nil
 	local function setEmblemArt(entry: any)
 		if emblemArt then
@@ -417,11 +585,11 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	controls.ZIndex = z
 	controls.Parent = spotlight
 	local rollHandle, autoHandle, luckHandle, fastHandle
-	local function passButton(name: string, passKey: string, label: string, priceKey: string, anchorX: number): any
+	local function passButton(name: string, passKey: string, label: string, priceKey: string, anchorX: number, variant: string): any
 		local price = cfg.classes.products and cfg.classes.products[priceKey] or nil
 		local handle = Button.build(controls, {
 			text = if price then string.format("%s  R$ %d", label, price) else label,
-			variant = "gem",
+			variant = variant :: any,
 			minimumTapTarget = tap,
 			motion = motion,
 			size = UDim2.new(0.5, -Tokens.spacing.xs, 0, tap - Tokens.spacing.sm),
@@ -443,8 +611,20 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		table.insert(cleanups, handle.destroy)
 		return handle
 	end
-	luckHandle = passButton("LuckPass", "doubleLuck", "2x Luck", "doubleLuckRobux", 0)
-	fastHandle = passButton("FastPass", "fastRolls", "Fast Rolls", "fastRollsRobux", 1)
+	luckHandle = passButton("LuckPass", "doubleLuck", "2x Luck", "doubleLuckRobux", 0, "success")
+	fastHandle = passButton("FastPass", "fastRolls", "Fast Rolls", "fastRollsRobux", 1, "teal")
+	-- Premium presentation: a rotating rainbow border on 2x Luck, a sheen on both.
+	do
+		local luckOutline = luckHandle.button:FindFirstChild("Outline", true) :: UIStroke?
+		if luckOutline then
+			luckOutline.Color = Color3.new(1, 1, 1)
+			luckOutline.Thickness = Tokens.stroke.bold + 1
+			local gradient = Instance.new("UIGradient")
+			gradient.Color = RAINBOW
+			gradient.Parent = luckOutline
+			table.insert(animated, { gradient = gradient, speed = 70 })
+		end
+	end
 
 	-- Side panel -----------------------------------------------------------------------------------
 	local slotsRow = Instance.new("Frame")
@@ -520,19 +700,32 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	FrameKit.divider(story, "Rule", z + 1).Position = UDim2.fromOffset(0, Tokens.typography.title.size + Tokens.spacing.sm)
 	local storyText = FrameKit.text(story, "Text", "", "body", { zIndex = z + 1, color = Tokens.color.ink, wrap = true })
 	storyText.Position = UDim2.fromOffset(0, Tokens.typography.title.size + Tokens.spacing.lg)
-	storyText.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size * 4)
+	storyText.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size * 2 + 4)
 	storyText.TextYAlignment = Enum.TextYAlignment.Top
-	local storyEffect = FrameKit.text(story, "Effect", "", "caption", { zIndex = z + 1, color = Tokens.color.goldDeep, wrap = true })
+	storyText.TextSize = Tokens.typography.body.size - 1
+	-- Exact bonuses, one per line; the box scrolls when a class grants many.
+	local effectTop = Tokens.typography.title.size + Tokens.spacing.lg + Tokens.typography.body.size * 2 + Tokens.spacing.sm
+	local effectScroll = Instance.new("ScrollingFrame")
+	effectScroll.Name = "Effects"
+	effectScroll.BackgroundTransparency = 1
+	effectScroll.BorderSizePixel = 0
+	effectScroll.Position = UDim2.fromOffset(0, effectTop)
+	effectScroll.Size = UDim2.new(1, 0, 1, -(effectTop + tap + Tokens.typography.caption.size + Tokens.spacing.lg))
+	effectScroll.CanvasSize = UDim2.new()
+	effectScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	effectScroll.ScrollBarThickness = 4
+	effectScroll.ScrollBarImageColor3 = Tokens.color.strawDeep
+	effectScroll.ZIndex = z + 1
+	effectScroll.Parent = story
+	local storyEffect = FrameKit.text(effectScroll, "Effect", "", "caption", { zIndex = z + 1, color = Tokens.color.goldDeep, wrap = true })
 	storyEffect.Font = Tokens.typography.label.font
 	storyEffect.TextSize = Tokens.typography.caption.size + 1
-	storyEffect.Position = UDim2.fromOffset(0, Tokens.typography.title.size + Tokens.spacing.lg + Tokens.typography.body.size * 4 + 2)
-	storyEffect.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size * 2 + 6)
+	storyEffect.Size = UDim2.new(1, -6, 0, 0)
+	storyEffect.AutomaticSize = Enum.AutomaticSize.Y
 	storyEffect.TextYAlignment = Enum.TextYAlignment.Top
 	local storyOdds = FrameKit.text(story, "Odds", "", "caption", { zIndex = z + 1, color = Tokens.color.inkMuted })
-	storyOdds.Position = UDim2.fromOffset(
-		0,
-		Tokens.typography.title.size + Tokens.spacing.lg + Tokens.typography.body.size * 4 + Tokens.typography.caption.size * 2 + 12
-	)
+	storyOdds.AnchorPoint = Vector2.new(0, 1)
+	storyOdds.Position = UDim2.new(0, 0, 1, -(tap + Tokens.spacing.xs))
 	storyOdds.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 4)
 	local equipHandle = Button.build(story, {
 		text = "Equip",
@@ -604,17 +797,22 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	local function refreshSpotlight()
 		local entry = weights[state.selected]
 		local row = rows[state.selected]
-		local rarity = (Tokens.rarity :: any)[row.rarity]
+		local rarity = colorsFor(row.rarity)
 		spotTitle.Text = entry.displayName
 		rarityBadge.Text = string.upper(RARITY_LABEL[row.rarity] or row.rarity)
 		rarityBadge.BackgroundColor3 = rarity.deep
 		emblem.BackgroundColor3 = rarity.fill
-		emblemStroke.Color = rarity.deep
+		emblemStroke.Color = if row.rarity == "mythic" then Color3.new(1, 1, 1) else rarity.deep
+		emblemStroke.Thickness = if row.rarity == "mythic" then Tokens.stroke.frame + 2 else Tokens.stroke.frame
+		emblemGradient.Enabled = row.rarity == "mythic"
+		auraGradient.Enabled = row.rarity == "mythic"
+		aura.BackgroundColor3 = if row.rarity == "legendary" then Tokens.color.goldLight else Tokens.color.featherWhite
+		aura.BackgroundTransparency = if row.rarity == "mythic" then 0.45 elseif row.rarity == "legendary" then 0.6 else 1
 		setEmblemArt(entry)
 		local copy = CLASS_COPY[entry.id]
 		storyName.Text = entry.displayName
-		storyText.Text = if copy and copy.story ~= "" then copy.story else describeEffect(entry)
-		storyEffect.Text = "Bonus: " .. describeEffect(entry)
+		storyText.Text = if copy and copy.story ~= "" then copy.story else "A class of its own."
+		storyEffect.Text = describeEffect(entry, weights)
 		for _, other in ipairs(rows) do
 			local outline = other.tile:FindFirstChild("Outline") :: UIStroke?
 			if outline then
@@ -644,7 +842,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			else
 				local price = cfg.classes.products and cfg.classes.products.extraSlotRobux or nil
 				handle.setText(if price then string.format("+1 Slot  R$ %d", price) else "+1 Slot")
-				handle.setVariant("gem")
+				handle.setVariant("primary")
 				handle.setSelected(false)
 			end
 		end
@@ -720,7 +918,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 				row.scale.Scale = 1.05
 				lastHighlight = row
 				spotTitle.Text = weights[row.index].displayName
-				local rarity = (Tokens.rarity :: any)[row.rarity]
+				local rarity = colorsFor(row.rarity)
 				emblem.BackgroundColor3 = rarity.fill
 				deps.audio:play(Tokens.sound.uiTap, { pitchVariance = 0.08 })
 				task.wait(0.05 + t * t * 0.28) -- decelerate toward the landing
@@ -731,22 +929,47 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			if state.closed then
 				return
 			end
-			-- Land: spotlight the committed class, pop it, shower it.
+			-- Land: spotlight the committed class, pop it, shower it (a mythic gets a bigger reveal).
 			state.selected = landing.index
 			refreshSpotlight()
-			landing.scale.Scale = 1.1
+			local mythic = landing.rarity == "mythic"
+			local legendary = landing.rarity == "legendary"
+			landing.scale.Scale = if mythic then 1.16 else 1.1
 			Tween.scale(landing.scale, "release", motion, 1)
-			emblemScale.Scale = 1.18
+			emblemScale.Scale = if mythic then 1.35 elseif legendary then 1.24 else 1.18
 			Tween.scale(emblemScale, "release", motion, 1)
 			Tween.rotationPunch(emblem, motion, 0)
 			Confetti.burst(spotlight, {
 				origin = UDim2.new(0.5, 0, 0, emblemTop + emblemSize / 2),
-				count = 28,
-				spread = 170,
+				count = if mythic then 70 elseif legendary then 44 else 28,
+				spread = if mythic then 220 else 170,
 				motion = motion,
 				tier = tier,
 				zIndex = z + 8,
 			})
+			if mythic and not motion.reducedMotion then
+				-- White flash and a second, wider shower a beat later.
+				local flash = Instance.new("Frame")
+				flash.Size = UDim2.fromScale(1, 1)
+				flash.BackgroundColor3 = Color3.new(1, 1, 1)
+				flash.BackgroundTransparency = 0.2
+				flash.BorderSizePixel = 0
+				flash.ZIndex = z + 12
+				flash.Parent = container
+				TweenService:Create(flash, TweenInfo.new(0.6, Enum.EasingStyle.Quad), { BackgroundTransparency = 1 }):Play()
+				task.delay(0.65, function()
+					flash:Destroy()
+				end)
+				task.delay(0.35, function()
+					if not state.closed then
+						Confetti.burst(
+							container,
+							{ origin = UDim2.fromScale(0.5, 0.3), count = 60, spread = 260, motion = motion, tier = tier, zIndex = z + 9 }
+						)
+						deps.audio:play(Tokens.sound.rollLand)
+					end
+				end)
+			end
 			deps.audio:play(Tokens.sound.uiConfetti)
 			deps.audio:play(Tokens.sound.rollLand)
 			deps.haptics:pulse(0.8, 0.12)
@@ -891,6 +1114,31 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	end
 	refreshSpotlight()
 	render()
+	-- Rarity animation: rainbow borders rotate, sheens sweep, legendary glows pulse, the aura breathes.
+	local sheenT = 0
+	table.insert(
+		cleanups,
+		RunService.RenderStepped:Connect(function(dt)
+			local now = os.clock()
+			for _, entry in ipairs(animated) do
+				entry.gradient.Rotation = (entry.gradient.Rotation + dt * entry.speed) % 360
+			end
+			sheenT = (sheenT + dt * 0.35) % 2
+			for index, sheen in ipairs(sheens) do
+				sheen.Offset = Vector2.new(-1 + ((sheenT + index * 0.31) % 2), 0)
+			end
+			for _, pulse in ipairs(pulses) do
+				pulse.stroke.Transparency = 0.25 + 0.25 * math.sin(now * 3 + pulse.phase)
+			end
+			if aura.BackgroundTransparency < 1 then
+				local breathe = 1 + 0.05 * math.sin(now * 2.2)
+				aura.Size = UDim2.fromOffset((emblemSize + Tokens.spacing.xl) * breathe, (emblemSize + Tokens.spacing.xl) * breathe)
+				if auraGradient.Enabled then
+					auraGradient.Rotation = (auraGradient.Rotation + dt * 60) % 360
+				end
+			end
+		end)
+	)
 	table.insert(
 		cleanups,
 		deps.profile.changed:Connect(function()

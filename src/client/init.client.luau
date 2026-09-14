@@ -31,6 +31,7 @@ local CrateController = require(Controllers.CrateController)
 local ToolController = require(Controllers.ToolController)
 local ToolVisualController = require(Controllers.ToolVisualController)
 local ToolViewmodelController = require(Controllers.ToolViewmodelController)
+local DialogueController = require(Controllers.DialogueController)
 local InteractionController = require(Controllers.InteractionController)
 local DisplayController = require(Controllers.DisplayController)
 local NameplateController = require(Controllers.NameplateController)
@@ -137,9 +138,25 @@ toolVisuals:setProviders({
 		return nil
 	end,
 })
-local interaction = trove:add(
-	InteractionController.new({ net = net, round = round, party = party, audio = audio, haptics = haptics, hud = hud, config = config })
-)
+-- NPC dialogue frame (the Farmer's lines): camera close-up, outline, typewriter box.
+local dialogue = trove:add(DialogueController.new({
+	input = input,
+	modals = modals,
+	hud = hud,
+	audio = audio,
+	accessibility = accessibility,
+	config = config,
+}))
+local interaction = trove:add(InteractionController.new({
+	net = net,
+	round = round,
+	party = party,
+	audio = audio,
+	haptics = haptics,
+	hud = hud,
+	config = config,
+	dialogue = dialogue,
+}))
 local objectives = trove:add(ObjectiveController.new({ net = net, hud = hud, round = round }))
 local prompts = trove:add(PromptController.new({ input = input, audio = audio, accessibility = accessibility }))
 local _ = prompts
@@ -160,7 +177,7 @@ local victory = trove:add(VictoryController.new({
 }))
 hud:bindRound(round, interaction)
 -- Player nameplates: display name and record time over every character.
-local nameplates = trove:add(NameplateController.new())
+local nameplates = trove:add(NameplateController.new(round))
 -- The upgrade book: Tab, the book button, or the supplies counter opens it during a search.
 local book = trove:add(UpgradeBookController.new({
 	net = net,
@@ -269,6 +286,13 @@ local lobbyMeta = trove:add(LobbyController.new({
 	interaction = interaction,
 	lobbyShell = lobby,
 }))
+hud:setGemShopOpener(function()
+	if round:phase() == nil or round:phase() == "Lobby" then
+		lobbyMeta:open("gems")
+	else
+		hud.toasts:push("The Gem Shop opens between searches", "info")
+	end
+end)
 
 audio:setState("Lobby")
 lobby:start()

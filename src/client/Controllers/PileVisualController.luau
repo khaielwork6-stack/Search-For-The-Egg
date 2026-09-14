@@ -1188,13 +1188,32 @@ end
 -- drifting motes. Cheap per part; the count is bounded by pile.rainbowChance.
 function PileVisualController._dressRainbow(self: PileVisualController, part: BasePart, cellIndex: number, slot: number)
 	part:SetAttribute("SFE_Rainbow", true)
+	-- Local emissive colour only: no light source, so neighbouring feathers keep their own colour
+	-- and brightness (owner requirement). The glow is the Neon surface plus motes and a halo sprite.
 	part.Material = Enum.Material.Neon
-	local light = Instance.new("PointLight")
-	light.Name = "RainbowGlow"
-	light.Brightness = 0.9
-	light.Range = 5
-	light.Color = Color3.fromRGB(255, 200, 255)
-	light.Parent = part
+	local halo = Instance.new("BillboardGui")
+	halo.Name = "RainbowHalo"
+	halo.Size = UDim2.fromScale(2.4, 2.4)
+	halo.LightInfluence = 0
+	halo.AlwaysOnTop = false
+	halo.MaxDistance = 90
+	local haloDot = Instance.new("Frame")
+	haloDot.Size = UDim2.fromScale(1, 1)
+	haloDot.BackgroundColor3 = Color3.fromRGB(255, 220, 255)
+	haloDot.BackgroundTransparency = 0.82
+	haloDot.BorderSizePixel = 0
+	local haloCorner = Instance.new("UICorner")
+	haloCorner.CornerRadius = UDim.new(1, 0)
+	haloCorner.Parent = haloDot
+	local haloGradient = Instance.new("UIGradient")
+	haloGradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.5, 0.35),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	haloGradient.Parent = haloDot
+	haloDot.Parent = halo
+	halo.Parent = part
 	local motes = Instance.new("ParticleEmitter")
 	motes.Name = "RainbowMotes"
 	motes.Rate = 3
@@ -1223,9 +1242,10 @@ function PileVisualController._ensureRainbowLoop(self: PileVisualController)
 			else
 				local hue = (t + phase) % 1
 				part.Color = Color3.fromHSV(hue, 0.55, 1)
-				local light = part:FindFirstChild("RainbowGlow")
-				if light and light:IsA("PointLight") then
-					light.Color = Color3.fromHSV(hue, 0.35, 1)
+				local halo = part:FindFirstChild("RainbowHalo")
+				local haloDot = halo and halo:FindFirstChildOfClass("Frame")
+				if haloDot then
+					haloDot.BackgroundColor3 = Color3.fromHSV(hue, 0.45, 1)
 				end
 			end
 		end

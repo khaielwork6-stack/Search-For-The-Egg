@@ -16,6 +16,7 @@ local SafeArea = require(script.Parent.Parent.UI.SafeArea)
 local Button = require(script.Parent.Parent.UI.Components.Button)
 local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
 local PartyModal = require(script.Parent.Parent.UI.Modals.PartyModal)
+local GemShopModal = require(script.Parent.Parent.UI.Modals.GemShopModal)
 local ClassesModal = require(script.Parent.Parent.UI.Modals.ClassesModal)
 local ShopModal = require(script.Parent.Parent.UI.Modals.ShopModal)
 local DailyModal = require(script.Parent.Parent.UI.Modals.DailyModal)
@@ -53,6 +54,7 @@ local SIDE_MENU: { { id: string, title: string, short: string, image: string } }
 }
 -- Titles for the modals that open from the world rather than the side menu.
 local WORLD_TITLES: { [string]: string } = {
+	gems = "Gem Shop",
 	party = "Sunlit Henhouse",
 	daily = "Daily Nest",
 	classes = "Class Cards",
@@ -319,9 +321,13 @@ function LobbyController.open(self: LobbyController, id: string): boolean
 			local projection = deps.profile.projection
 			return projection and projection.entitlements or {}
 		end,
+		openGemShop = function()
+			self:open("gems")
+		end,
 	}
 	local builders: { [string]: any } = {
 		party = PartyModal.build,
+		gems = GemShopModal.build,
 		classes = ClassesModal.build,
 		shop = ShopModal.build,
 		daily = DailyModal.build,

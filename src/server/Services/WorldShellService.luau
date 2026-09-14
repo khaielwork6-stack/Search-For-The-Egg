@@ -732,7 +732,7 @@ function WorldShellService.buildFromMap(workspaceService: Workspace, mapModel: I
 				focus:SetAttribute("SFE_NpcName", npc.name)
 				focus:SetAttribute("SFE_NpcRole", npc.role)
 				focus:SetAttribute("SFE_NpcLine", npc.line)
-				objectText = npc.name
+				objectText, actionText = npc.name, "Talk"
 				retitleStall(mapModel, layout.host, npc.sign, npc.subtitle)
 				local humanoid = vendor:FindFirstChildOfClass("Humanoid")
 				if humanoid then
@@ -744,7 +744,11 @@ function WorldShellService.buildFromMap(workspaceService: Workspace, mapModel: I
 			end
 			focus:SetAttribute("SFE_Station", id)
 			focus:SetAttribute("SFE_Modal", layout.modal)
-			prompt(focus, "SFE_Station_" .. id, actionText, objectText, range)
+			local stationPrompt = prompt(focus, "SFE_Station_" .. id, actionText, objectText, range)
+			if actionText == "Talk" then
+				-- Chest height on the vendor, under the nameplate and clear of the stall sign.
+				stationPrompt.UIOffset = Vector2.new(0, -70)
+			end
 			local audioAnchor = anchor(folder, id .. "Audio", layout.position + Vector3.new(0, 2, 0))
 			audioAnchor:SetAttribute("SFE_AudioRole", "station.hum")
 		end
