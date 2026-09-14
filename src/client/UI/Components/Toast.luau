@@ -186,7 +186,7 @@ function Toast._drain(self: Toast)
 		local function fit()
 			local extra = if item.amount then 120 + Tokens.spacing.lg else Tokens.spacing.lg
 			local wanted = textLeft + math.ceil(label.TextBounds.X) + extra + Tokens.spacing.sm
-			card.Size = UDim2.new(0, math.clamp(wanted, 240, 440), 0, Tokens.layout.minimumTapTargetPx + Tokens.spacing.xs)
+			card.Size = UDim2.fromOffset(math.clamp(wanted, 240, 440), Tokens.layout.minimumTapTargetPx + Tokens.spacing.xs)
 		end
 		label:GetPropertyChangedSignal("TextBounds"):Connect(fit)
 		fit()
