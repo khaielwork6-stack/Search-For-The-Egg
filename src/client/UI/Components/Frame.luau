@@ -187,6 +187,7 @@ function Frame.pill(
 	local stroke = Instance.new("UIStroke")
 	stroke.Thickness = Tokens.stroke.bold
 	stroke.Color = Tokens.color.outline
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = label
 	local gradient = Instance.new("UIGradient")
 	gradient.Rotation = 90
@@ -477,6 +478,7 @@ function Frame.badge(parent: Instance, name: string, text: string, tone: Color3?
 	stroke.Thickness = Tokens.stroke.hairline + 0.5
 	stroke.Color = Tokens.color.outline
 	stroke.Transparency = 0.3
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = label
 	label.Parent = parent
 	return label

@@ -176,6 +176,7 @@ function Button.build(parent: Instance, options: Options): Handle
 	stroke.Name = "Outline"
 	stroke.Thickness = style.strokeWidth
 	stroke.Color = style.stroke
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = button
 	local gradient = Instance.new("UIGradient")
 	gradient.Name = "Fill"
@@ -214,6 +215,7 @@ function Button.build(parent: Instance, options: Options): Handle
 	ring.Color = Tokens.color.goldLight
 	ring.Transparency = 0.1
 	ring.Enabled = false
+	ring.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	ring.Parent = button
 	local shadow: Frame? = nil
 	if style.shadow and not options.image then

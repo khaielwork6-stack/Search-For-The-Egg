@@ -44,6 +44,7 @@ function Switch.build(parent: Instance, options: Options): Handle
 	stroke.Thickness = Tokens.stroke.hairline + 0.5
 	stroke.Color = Tokens.color.strawDeep
 	stroke.Transparency = 0.45
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = row
 	local padding = Instance.new("UIPadding")
 	padding.PaddingLeft = UDim.new(0, Tokens.spacing.md)

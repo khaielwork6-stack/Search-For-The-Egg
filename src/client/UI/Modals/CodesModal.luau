@@ -58,6 +58,7 @@ function CodesModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local stroke = Instance.new("UIStroke")
 	stroke.Thickness = Tokens.stroke.bold
 	stroke.Color = Tokens.color.outline
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = box
 	local padding = Instance.new("UIPadding")
 	padding.PaddingLeft = UDim.new(0, Tokens.spacing.xl)

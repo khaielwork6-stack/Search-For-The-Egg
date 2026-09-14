@@ -130,6 +130,7 @@ function ModalShell.create(
 	local closeStroke = Instance.new("UIStroke")
 	closeStroke.Thickness = Tokens.stroke.bold
 	closeStroke.Color = Tokens.color.outline
+	closeStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	closeStroke.Parent = closeButton
 	local closeGradient = Instance.new("UIGradient")
 	closeGradient.Rotation = 90

@@ -119,6 +119,7 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	stroke.Name = "Outline"
 	stroke.Thickness = Tokens.stroke.bold
 	stroke.Color = Tokens.color.outline
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = frame
 	local scale = Instance.new("UIScale")
 	scale.Parent = frame
