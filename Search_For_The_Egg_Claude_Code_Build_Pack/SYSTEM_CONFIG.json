@@ -1049,7 +1049,7 @@
       "high": 40
     },
     "stationPromptRangeStuds": 10,
-    "padFullAutoStartSeconds": 5,
+    "padFullAutoStartSeconds": 0.5,
     "padZoneHeightStuds": 6,
     "assumption": "ASSUMED"
   },

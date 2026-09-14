@@ -197,11 +197,82 @@ function LobbyController.new(deps: any): LobbyController
 	end
 	self._trove:add(deps.modals.changed:Connect(refreshRail))
 	refreshRail()
+	-- Stepping onto an empty nest pad opens the party screen.
+	self._trove:add(deps.net:on("PadPrompt", function()
+		if not self._inRound and deps.modals:openCount() == 0 and deps.party.party == nil then
+			self:open("party")
+		end
+	end))
+	-- The banner narrates the party: waiting count, then the countdown with a tick per second.
+	local lastPhase: string? = nil
+	local lastMembers = 0
+	local lastTick = -1
+	local countdownThread: thread? = nil
+	local function stopCountdown()
+		if countdownThread then
+			task.cancel(countdownThread)
+			countdownThread = nil
+		end
+	end
 	self._trove:add(deps.party.changed:Connect(function(party)
 		if deps.lobbyShell and deps.lobbyShell.setPartySilhouettes then
 			deps.lobbyShell:setPartySilhouettes(party)
 		end
+		if self._inRound then
+			return
+		end
+		if not party then
+			stopCountdown()
+			if lastPhase then
+				deps.hud:setObjective("Step onto a nest pad", "Create a party there and set off together")
+			end
+			lastPhase, lastMembers = nil, 0
+			return
+		end
+		local members = #party.members
+		if members > lastMembers and lastMembers > 0 then
+			deps.audio:play(Tokens.sound.uiConfirm)
+		elseif members < lastMembers then
+			deps.audio:play(Tokens.sound.uiCancel)
+		end
+		lastMembers = members
+		if party.phase == "Countdown" then
+			if lastPhase ~= "Countdown" then
+				deps.audio:play(Tokens.sound.partyReady)
+				stopCountdown()
+				lastTick = -1
+				countdownThread = task.spawn(function()
+					while true do
+						local remaining = deps.party:countdownRemaining()
+						if not remaining then
+							break
+						end
+						local whole = math.max(1, math.ceil(remaining))
+						if whole ~= lastTick then
+							lastTick = whole
+							deps.hud:setObjective(string.format("Setting off in %d", whole), "Stay on the pad")
+							deps.audio:play(Tokens.sound.countdownTick)
+						end
+						task.wait(0.1)
+					end
+				end)
+			end
+		else
+			stopCountdown()
+			local max = party.maxMembers or deps.config.project.maxPartyPlayers
+			if party.phase == "Reserving" or party.phase == "Teleporting" then
+				deps.hud:setObjective("Good luck!", "Off to the henhouse")
+			elseif members >= max then
+				deps.hud:setObjective("Party full", "Setting off in a moment")
+			else
+				deps.hud:setObjective(string.format("Party %d / %d", members, max), string.format("Waiting for %d more", max - members))
+			end
+		end
+		lastPhase = party.phase
 	end))
+	self._trove:add(function()
+		stopCountdown()
+	end)
 	self._trove:add(deps.round.phaseChanged:Connect(function(phase)
 		local inRound = phase ~= nil and phase ~= "Returning" and phase ~= "Abandoned"
 		self._inRound = inRound

@@ -750,10 +750,65 @@ function WorldShellService.buildFromMap(workspaceService: Workspace, mapModel: I
 		end
 	end
 
-	-- Party nest pads: zone volumes (server-checked) and a "set off" prompt on each sign post.
+	-- Party nest pads: zone volumes (server-checked), a glowing floor disc with a ring of light
+	-- posts as the barrier, a floating board (client-drawn from SFE_PadText), and a "set off"
+	-- prompt on each sign post.
 	for _, pad in ipairs(lobby.pads) do
 		local zone = anchor(folder, "PadZone" .. pad.index, pad.center, pad.zoneSize)
 		zone:SetAttribute("SFE_Pad", pad.index)
+		zone:SetAttribute("SFE_Ambient", "padBoard")
+		zone:SetAttribute("SFE_PadText", string.format("0/%d\nTouch to create a party", config.project.maxPartyPlayers))
+		local floorY = lobby.groundY + 0.06
+		local radius = pad.zoneSize.X / 2 - 0.6
+		local glow = part(
+			"PadGlow" .. pad.index,
+			Vector3.new(0.12, radius * 2, radius * 2),
+			CFrame.new(pad.center.X, floorY, pad.center.Z) * CFrame.Angles(0, 0, math.rad(90)),
+			PALETTE.tealLight,
+			Enum.Material.Neon,
+			folder,
+			false
+		)
+		glow.Shape = Enum.PartType.Cylinder
+		glow.Transparency = 0.55
+		glow.CanQuery = false
+		glow:SetAttribute("SFE_Ambient", "padPulse")
+		glow:SetAttribute("SFE_Pad", pad.index)
+		local rim = part(
+			"PadRim" .. pad.index,
+			Vector3.new(0.3, radius * 2 + 1.2, radius * 2 + 1.2),
+			CFrame.new(pad.center.X, floorY - 0.05, pad.center.Z) * CFrame.Angles(0, 0, math.rad(90)),
+			PALETTE.gold,
+			Enum.Material.SmoothPlastic,
+			folder,
+			false
+		)
+		rim.Shape = Enum.PartType.Cylinder
+		rim.Transparency = 0.15
+		rim.CanQuery = false
+		for postIndex = 1, 12 do
+			local angle = (postIndex - 1) / 12 * math.pi * 2
+			local postPosition =
+				Vector3.new(pad.center.X + math.cos(angle) * (radius + 0.3), floorY + 1.4, pad.center.Z + math.sin(angle) * (radius + 0.3))
+			local lightPost = part(
+				"PadPost" .. pad.index .. "_" .. postIndex,
+				Vector3.new(0.35, 2.8, 0.35),
+				CFrame.new(postPosition),
+				PALETTE.tealLight,
+				Enum.Material.Neon,
+				folder,
+				false
+			)
+			lightPost.Transparency = 0.35
+			lightPost.CanQuery = false
+			lightPost:SetAttribute("SFE_Pad", pad.index)
+			lightPost:SetAttribute("SFE_PadPost", true)
+		end
+		local light = Instance.new("PointLight")
+		light.Color = PALETTE.tealLight
+		light.Brightness = 1.2
+		light.Range = 14
+		light.Parent = glow
 		local post = anchor(folder, "PadStart" .. pad.index, pad.signPost + Vector3.new(0, 1.2, 0), Vector3.new(2, 3, 2))
 		post.CanQuery = true
 		prompt(post, "SFE_PadStart_" .. pad.index, "Set off", "Party nest " .. pad.index, range)
@@ -790,6 +845,15 @@ function WorldShellService.isMapMode(folder: Instance?): boolean
 end
 
 -- Writes the map's queue sign for a pad (map mode only).
+-- Mirrors the pad's status onto its zone anchor so clients draw the floating board from it.
+function WorldShellService.setPadText(workspaceService: Workspace, index: number, text: string)
+	local shell = workspaceService:FindFirstChild(WorldShellService.FOLDER_NAME)
+	local zone = shell and shell:FindFirstChild("PadZone" .. index)
+	if zone and zone:GetAttribute("SFE_PadText") ~= text then
+		zone:SetAttribute("SFE_PadText", text)
+	end
+end
+
 function WorldShellService.setPadSign(workspaceService: Workspace, index: number, text: string)
 	local mapModel = workspaceService:FindFirstChild(ChapterLayout.LOBBY_MAP_NAME)
 	local queues = mapModel and mapModel:FindFirstChild("Queues")

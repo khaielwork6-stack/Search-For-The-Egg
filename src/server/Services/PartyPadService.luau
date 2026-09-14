@@ -9,6 +9,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
+local Signal = require(Shared.Util.Signal)
 
 local PartyPadService = {}
 PartyPadService.__index = PartyPadService
@@ -27,7 +28,9 @@ export type PartyPadService = typeof(setmetatable(
 		_partyPad: { [string]: number }, -- partyId -> pad index
 		_fullSince: { [number]: number? },
 		_signText: { [number]: string },
-		stats: { joins: number, leaves: number, autoStarts: number, creates: number },
+		_prompted: { [number]: number? }, -- userId -> pad index the party screen was offered for
+		padPrompt: any, -- (userId, padIndex)
+		stats: { joins: number, leaves: number, autoStarts: number, creates: number, prompts: number },
 	},
 	PartyPadService
 ))
@@ -54,7 +57,9 @@ function PartyPadService.new(options: {
 		_partyPad = {},
 		_fullSince = {},
 		_signText = {},
-		stats = { joins = 0, leaves = 0, autoStarts = 0, creates = 0 },
+		_prompted = {},
+		padPrompt = Signal.new(),
+		stats = { joins = 0, leaves = 0, autoStarts = 0, creates = 0, prompts = 0 },
 	}, PartyPadService)
 end
 
@@ -95,20 +100,20 @@ function PartyPadService.padUnder(self: PartyPadService, userId: number): number
 	return nil
 end
 
-local function signTextFor(party: any?, remaining: number?): string
+local function signTextFor(party: any?, remaining: number?, maxPlayers: number): string
 	if not party then
-		return "Join Match\n0/4"
+		return string.format("0/%d\nTouch to create a party", maxPlayers)
 	end
 	local count = #party.members
-	local max = party.maxMembers or 4
+	local max = party.maxMembers or maxPlayers
 	if party.phase == "Countdown" then
-		return string.format("Setting off\nin %d", math.max(1, math.ceil(remaining or 0)))
+		return string.format("Setting off in %d", math.max(1, math.ceil(remaining or 0)))
 	elseif party.phase == "Reserving" or party.phase == "Teleporting" then
 		return "Good luck!"
 	end
 	local chapterName = party.chapter == "chapter2" and "Cellar" or "Henhouse"
 	local suffix = if party.difficulty == "hard" then " (Hard)" else ""
-	return string.format("Join Match\n%d/%d  %s%s", count, max, chapterName, suffix)
+	return string.format("%d/%d\n%s%s  -  waiting for %d more", count, max, chapterName, suffix, math.max(0, max - count))
 end
 
 -- One pass over every pad and lobby player. Returns the number of membership changes.
@@ -145,7 +150,7 @@ function PartyPadService.tick(self: PartyPadService): number
 				end
 			end
 		elseif index and not current then
-			-- Lobby player on a pad: join the pad's party or found it.
+			-- Lobby player on a pad: join the pad's party, or get the party screen to found one.
 			local party = self:partyAt(index)
 			if party then
 				if party.phase == "Forming" or party.phase == "Ready" then
@@ -155,15 +160,22 @@ function PartyPadService.tick(self: PartyPadService): number
 						changes += 1
 					end
 				end
-			else
-				local created = self._parties:create(userId, "chapter1", "normal")
-				if created then
-					self._padParty[index] = created.partyId
-					self._partyPad[created.partyId] = index
-					self.stats.creates += 1
-					changes += 1
-				end
+			elseif self._prompted[userId] ~= index then
+				self._prompted[userId] = index
+				self.stats.prompts += 1
+				self.padPrompt:Fire(userId, index)
 			end
+		elseif index and current and not self._partyPad[current.partyId] and current.leaderUserId == userId then
+			-- The leader founded a party from the screen while standing on an empty pad: the pad is theirs.
+			if not self:partyAt(index) then
+				self._padParty[index] = current.partyId
+				self._partyPad[current.partyId] = index
+				self.stats.creates += 1
+				changes += 1
+			end
+		end
+		if not index then
+			self._prompted[userId] = nil
 		end
 	end
 
@@ -193,7 +205,7 @@ function PartyPadService.tick(self: PartyPadService): number
 		else
 			self._fullSince[pad.index] = nil
 		end
-		local text = signTextFor(party, remaining)
+		local text = signTextFor(party, remaining, self._config.project.maxPartyPlayers)
 		if self._signText[pad.index] ~= text then
 			self._signText[pad.index] = text
 			self._setSign(pad.index, text)

@@ -83,8 +83,8 @@ function PartyController._request(self: PartyController, name: string, payload: 
 	return result
 end
 
-function PartyController.create(self: PartyController, chapter: string, difficulty: string): any
-	return self:_request("PartyCreate", { chapter = chapter, difficulty = difficulty })
+function PartyController.create(self: PartyController, chapter: string, difficulty: string, size: number?): any
+	return self:_request("PartyCreate", { chapter = chapter, difficulty = difficulty, size = size })
 end
 
 function PartyController.join(self: PartyController, partyId: string): any

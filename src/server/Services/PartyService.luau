@@ -128,7 +128,13 @@ local function reevaluate(self: PartyService, state: PartyReducer.PartyState): P
 	return PartyReducer.evaluate(state, valid)
 end
 
-function PartyService.create(self: PartyService, userId: number, chapter: string, difficulty: string): (PartyReducer.PartyState?, string?)
+function PartyService.create(
+	self: PartyService,
+	userId: number,
+	chapter: string,
+	difficulty: string,
+	size: number?
+): (PartyReducer.PartyState?, string?)
 	if self._memberParty[userId] then
 		return nil, PartyService.Errors.IN_PARTY
 	end
@@ -141,7 +147,9 @@ function PartyService.create(self: PartyService, userId: number, chapter: string
 		return nil, reason
 	end
 	local partyId = self._idGen()
-	local state = PartyReducer.create(partyId, userId, chapter, difficulty, self._config.project.maxPartyPlayers)
+	local maxMembers = self._config.project.maxPartyPlayers
+	local wanted = math.clamp(math.floor(size or maxMembers), 1, maxMembers)
+	local state = PartyReducer.create(partyId, userId, chapter, difficulty, wanted)
 	local sessionNext, sessionErr = self._sessions:apply(userId, SessionReducer.joinParty, partyId)
 	if not sessionNext then
 		return nil, sessionErr

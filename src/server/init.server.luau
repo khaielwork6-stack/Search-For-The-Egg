@@ -479,11 +479,19 @@ local pads = PartyPadService.new({
 		return ids
 	end,
 	setSign = function(index, text)
+		WorldShellService.setPadText(workspace, index, text)
 		if mapMode then
 			WorldShellService.setPadSign(workspace, index, text)
 		end
 	end,
 })
+-- Stepping onto an empty nest pad opens the party screen on that player's client.
+pads.padPrompt:Connect(function(userId, index)
+	local player = playerData:playerOf(userId)
+	if player and typeof(player) == "Instance" then
+		send(player, "PadPrompt", { pad = index })
+	end
+end)
 leaderboards.refreshed:Connect(function(snapshot)
 	if mapMode then
 		WorldShellService.applyLeaderboards(workspace, snapshot)
@@ -892,7 +900,7 @@ local function fail(err: string?): Envelope.Envelope<any>
 	return Envelope.fail(Envelope.Codes.INVALID_STATE, err)
 end
 registry:onRequest("PartyCreate", function(player, payload)
-	local party, err = parties:create(player.UserId, payload.chapter, payload.difficulty)
+	local party, err = parties:create(player.UserId, payload.chapter, payload.difficulty, payload.size)
 	return if party then Envelope.ok(parties:project(party)) else fail(err)
 end)
 registry:onRequest("PartyJoin", function(player, payload)

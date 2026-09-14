@@ -48,7 +48,8 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local motion = deps.accessibility:motionSettings()
 	local tap = deps.minimumTapTarget
 	local z = container.ZIndex + 1
-	local selected = { chapter = "chapter1", difficulty = "normal" }
+	local selected = { chapter = "chapter1", difficulty = "normal", size = 1 }
+	local maxSize = cfg.project.maxPartyPlayers
 	local pending = false
 
 	local function toast(text: string, tone: string?)
@@ -193,7 +194,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	actions.BackgroundTransparency = 1
 	actions.Size = UDim2.new(1, 0, 0, tap)
 	actions.AutomaticSize = Enum.AutomaticSize.Y
-	actions.LayoutOrder = 6
+	actions.LayoutOrder = 7
 	actions.ZIndex = z
 	local actionsLayout = Instance.new("UIListLayout")
 	actionsLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -204,9 +205,65 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	actionsLayout.Parent = actions
 	actions.Parent = container
 
+	-- Party size: big stepper, then one CREATE. A full party (size reached) sets off by itself.
+	local sizeRow = Instance.new("Frame")
+	sizeRow.Name = "SizeRow"
+	sizeRow.BackgroundTransparency = 1
+	sizeRow.Size = UDim2.new(1, 0, 0, tap + Tokens.spacing.xl)
+	sizeRow.LayoutOrder = 6
+	sizeRow.ZIndex = z
+	sizeRow.Parent = container
+	local sizeCaption = FrameKit.text(sizeRow, "Caption", "PARTY SIZE", "label", {
+		zIndex = z + 1,
+		color = Tokens.color.goldDeep,
+		align = Enum.TextXAlignment.Center,
+	})
+	sizeCaption.Size = UDim2.new(1, 0, 0, Tokens.typography.label.size + 2)
+	local sizeValue = FrameKit.text(sizeRow, "Value", "1", "display", {
+		zIndex = z + 1,
+		color = Tokens.color.inkStrong,
+		align = Enum.TextXAlignment.Center,
+	})
+	sizeValue.AnchorPoint = Vector2.new(0.5, 1)
+	sizeValue.Position = UDim2.fromScale(0.5, 1)
+	sizeValue.Size = UDim2.fromOffset(tap * 2, tap)
+	local function stepper(name: string, glyph: string, anchorX: number, step: number)
+		local handle = Button.build(sizeRow, {
+			text = glyph,
+			variant = "secondary",
+			minimumTapTarget = tap,
+			motion = motion,
+			size = UDim2.fromOffset(tap, tap),
+			zIndex = z + 1,
+			textSize = Tokens.typography.display.size,
+			sound = function()
+				deps.audio:play(Tokens.sound.uiTab)
+			end,
+			hoverSound = function()
+				deps.audio:play(Tokens.sound.uiHover)
+			end,
+			onActivated = function()
+				selected.size = math.clamp(selected.size + step, 1, maxSize)
+				sizeValue.Text = tostring(selected.size)
+			end,
+		})
+		handle.button.Name = name
+		handle.button.AnchorPoint = Vector2.new(anchorX, 1)
+		handle.button.Position = UDim2.new(
+			0.5,
+			(anchorX - 0.5) * 2 * (tap + Tokens.spacing.lg) + (if anchorX == 0 then Tokens.spacing.lg else -Tokens.spacing.lg),
+			1,
+			0
+		)
+		table.insert(cleanups, handle.destroy)
+		return handle
+	end
+	stepper("Fewer", "-", 1, -1)
+	stepper("More", "+", 0, 1)
+
 	local soloHandle = Button.build(actions, {
-		text = "Set off alone",
-		variant = "primary",
+		text = "CREATE",
+		variant = "success",
 		sound = function()
 			deps.audio:play(Tokens.sound.uiTap)
 		end,
@@ -215,35 +272,21 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		end,
 		minimumTapTarget = tap,
 		motion = motion,
-		size = UDim2.fromOffset(180, tap),
+		size = UDim2.fromOffset(180, tap + Tokens.spacing.xs),
 		zIndex = z + 1,
+		textSize = Tokens.typography.title.size,
 		onActivated = function()
 			local created = send(function()
-				return deps.party:create(selected.chapter, selected.difficulty)
-			end)
+				return deps.party:create(selected.chapter, selected.difficulty, selected.size)
+			end, Tokens.sound.partyReady)
 			if created and created.ok then
-				send(function()
-					return deps.party:start()
-				end, Tokens.sound.partyReady)
+				-- Back to the world: the pad board and the banner carry the wait and the countdown.
+				api.close()
 			end
 		end,
 	})
 	soloHandle.button.LayoutOrder = 1
 	soloHandle.button.Name = "SoloButton"
-	local createHandle = Button.build(actions, {
-		text = "Open a party",
-		variant = "secondary",
-		minimumTapTarget = tap,
-		motion = motion,
-		size = UDim2.fromOffset(160, tap),
-		zIndex = z + 1,
-		onActivated = function()
-			send(function()
-				return deps.party:create(selected.chapter, selected.difficulty)
-			end)
-		end,
-	})
-	createHandle.button.LayoutOrder = 2
 	local startHandle = Button.build(actions, {
 		text = "Start",
 		variant = "primary",
@@ -303,19 +346,19 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		end,
 	})
 	leaveHandle.button.LayoutOrder = 5
-	for _, handle in ipairs({ soloHandle, createHandle, startHandle, cancelHandle, leaveHandle }) do
+	for _, handle in ipairs({ soloHandle, startHandle, cancelHandle, leaveHandle }) do
 		table.insert(cleanups, handle.destroy)
 	end
 	api.setInitialFocus(soloHandle.button)
 
 	-- Open parties -----------------------------------------------------------------------------
-	FrameKit.heading(container, "ListHeader", "Parties forming", z).LayoutOrder = 7
+	FrameKit.heading(container, "ListHeader", "Parties forming", z).LayoutOrder = 8
 	local listFrame = Instance.new("Frame")
 	listFrame.Name = "OpenParties"
 	listFrame.BackgroundTransparency = 1
 	listFrame.Size = UDim2.fromScale(1, 0)
 	listFrame.AutomaticSize = Enum.AutomaticSize.Y
-	listFrame.LayoutOrder = 8
+	listFrame.LayoutOrder = 9
 	listFrame.ZIndex = z
 	local listLayout = Instance.new("UIListLayout")
 	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -329,7 +372,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		"caption",
 		{ zIndex = z, color = Tokens.color.inkMuted }
 	)
-	emptyList.LayoutOrder = 9
+	emptyList.LayoutOrder = 10
 
 	local rowHandles: { any } = {}
 	local function renderList()
@@ -459,16 +502,16 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				status.Text = "Waiting for the leader to start"
 			end
 			soloHandle.button.Visible = false
-			createHandle.button.Visible = false
+			sizeRow.Visible = false
 			startHandle.button.Visible = isLeader and phase ~= "Countdown" and phase ~= "Reserving" and phase ~= "Teleporting"
 			startHandle.setEnabled(party.valid == true)
 			cancelHandle.button.Visible = isLeader and phase == "Countdown"
 			leaveHandle.button.Visible = phase ~= "Reserving" and phase ~= "Teleporting"
 		else
 			members.Visible = false
-			status.Text = "Set off alone, open a party for friends, or join one below"
+			status.Text = "Pick a size, press Create, and stay on the pad"
 			soloHandle.button.Visible = true
-			createHandle.button.Visible = true
+			sizeRow.Visible = true
 			startHandle.button.Visible = false
 			cancelHandle.button.Visible = false
 			leaveHandle.button.Visible = false

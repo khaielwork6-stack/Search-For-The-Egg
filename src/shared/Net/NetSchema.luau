@@ -81,6 +81,7 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 			Schema.object({
 				chapter = Schema.id(),
 				difficulty = DIFFICULTY,
+				size = Schema.optional(Schema.number({ min = 1, max = 8, integer = true })),
 			}),
 			uiRate,
 			1
@@ -199,6 +200,7 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		-- Server -> client projections/events ------------------------------------------------
 		serverEvent("ProfileProjection", Schema.object({ projection = Schema.object({}) }), 1),
 		serverEvent("PartyProjection", Schema.object({}), 1),
+		serverEvent("PadPrompt", Schema.object({ pad = Schema.number({ min = 1, max = 16, integer = true }) }), 1),
 		serverEvent("SessionProjection", Schema.object({}), 1),
 		serverEvent("RoundSnapshot", Schema.object({}), 2),
 		serverEvent("RoundDelta", Schema.object({}), 2),
