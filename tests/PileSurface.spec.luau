@@ -24,9 +24,10 @@ return function(describe, it, expect)
 		it("is a dome: tallest at the centre, lower at the rim, never above the configured apex", function()
 			local _, snapshot = fullGrid()
 			local field = PileSurface.buildField(cfg, snapshot, layout)
-			local centre = PileSurface.columnHeight(field, 8, 8)
-			local mid = PileSurface.columnHeight(field, 4, 8)
-			local rim = PileSurface.columnHeight(field, 0, 8)
+			local cx, cz = field.width // 2, field.depth // 2
+			local centre = PileSurface.columnHeight(field, cx, cz)
+			local mid = PileSurface.columnHeight(field, cx // 2, cz)
+			local rim = PileSurface.columnHeight(field, 0, cz)
 			expect(centre).toBeGreaterThan(mid)
 			expect(mid).toBeGreaterThan(rim)
 			expect(rim).toBeGreaterThan(0)
@@ -39,30 +40,30 @@ return function(describe, it, expect)
 		it("one record barely moves the surface; an emptied column reaches the floor", function()
 			local grid, snapshot = fullGrid()
 			local before = PileSurface.buildField(cfg, snapshot, layout)
-			local centreIndex = 8 * grid.width + 8 + 1
-			local cell = grid.cells[centreIndex]
+			local cx, cz = grid.width // 2, grid.depth // 2
+			local cell = grid.cells[PileGrid.index(grid.width, cx, cz)]
 			PileGrid.remove(grid, cell, 1)
 			local one = PileSurface.buildField(cfg, PileGrid.snapshot(grid), layout)
-			local full = PileSurface.columnHeight(before, 8, 8)
-			local drop = full - PileSurface.columnHeight(one, 8, 8)
+			local full = PileSurface.columnHeight(before, cx, cz)
+			local drop = full - PileSurface.columnHeight(one, cx, cz)
 			-- Centre weight 4/16 of one record's share of the column.
 			expect(drop).toBeCloseTo(full * (1 / cell.base) * 4 / 16, 1e-9)
-			expect(PileSurface.columnHeight(one, 12, 8)).toBeCloseTo(PileSurface.columnHeight(before, 12, 8), 1e-9)
+			expect(PileSurface.columnHeight(one, cx + cx // 2, cz)).toBeCloseTo(PileSurface.columnHeight(before, cx + cx // 2, cz), 1e-9)
 			PileGrid.remove(grid, cell, cell.remaining)
 			local after = PileSurface.buildField(cfg, PileGrid.snapshot(grid), layout)
-			expect(PileSurface.columnHeight(after, 8, 8)).toBeLessThan(PileSurface.columnHeight(one, 8, 8))
-			expect(PileSurface.columnHeight(after, 9, 8)).toBeLessThan(PileSurface.columnHeight(before, 9, 8))
+			expect(PileSurface.columnHeight(after, cx, cz)).toBeLessThan(PileSurface.columnHeight(one, cx, cz))
+			expect(PileSurface.columnHeight(after, cx + 1, cz)).toBeLessThan(PileSurface.columnHeight(before, cx + 1, cz))
 			for _, c in ipairs(grid.cells) do
 				PileGrid.remove(grid, c, c.remaining)
 			end
 			local empty = PileSurface.buildField(cfg, PileGrid.snapshot(grid), layout)
 			for x = 0, grid.width - 1 do
-				expect(PileSurface.columnHeight(empty, x, 8)).toBe(0)
+				expect(PileSurface.columnHeight(empty, x, cz)).toBe(0)
 			end
 			-- Full-depth columns: records follow the dome, capped at the mask width.
-			local records = PileSurface.columnRecords(cfg, grid.width, grid.depth, grid.cellSize, 8, 8)
+			local records = PileSurface.columnRecords(cfg, grid.width, grid.depth, grid.cellSize, cx, cz)
 			expect(records).toBeCloseTo(
-				PileSurface.columnFullHeight(cfg, grid.width, grid.depth, grid.cellSize, 8, 8) / cfg.pile.recordSpacingStuds,
+				PileSurface.columnFullHeight(cfg, grid.width, grid.depth, grid.cellSize, cx, cz) / cfg.pile.recordSpacingStuds,
 				1e-9
 			)
 			expect(PileSurface.columnRecords(cfg, grid.width, grid.depth, grid.cellSize, 0, 0)).toBeGreaterThanOrEqual(1)
@@ -81,7 +82,7 @@ return function(describe, it, expect)
 			expect(PileSurface.heightAt(field, centre.X + 100, centre.Z)).toBe(0)
 			-- Column centres agree with the continuous surface, and the rim meets the floor just
 			-- outside the footprint (no cliff at the grid edge).
-			local column = ChapterLayout.cellWorldPosition(layout, 16, 16, cfg.pile.cellSizeStuds, 3, 11, 0)
+			local column = ChapterLayout.cellWorldPosition(layout, field.width, field.depth, cfg.pile.cellSizeStuds, 3, 11, 0)
 			expect(PileSurface.heightAt(field, column.X, column.Z)).toBeCloseTo(PileSurface.columnHeight(field, 3, 11), 1e-3)
 			local radius = field.radius
 			local edge = PileSurface.heightAt(field, centre.X + radius, centre.Z)

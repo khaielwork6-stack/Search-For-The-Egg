@@ -644,6 +644,12 @@ function Validator.validate(raw: any): Report
 				"pile.visual.visibleSlotsPerCell must be an integer 1..12"
 			)
 			check(
+				isPositiveNumber(visual.visibleSlotsPerCellMobile)
+					and visual.visibleSlotsPerCellMobile % 1 == 0
+					and visual.visibleSlotsPerCellMobile <= (tonumber(visual.visibleSlotsPerCell) or 0),
+				"pile.visual.visibleSlotsPerCellMobile must be an integer 1..visibleSlotsPerCell"
+			)
+			check(
 				isPositiveNumber(visual.featherSpreadFraction) and visual.featherSpreadFraction <= 1,
 				"pile.visual.featherSpreadFraction must be within (0, 1]"
 			)
@@ -691,9 +697,9 @@ function Validator.validate(raw: any): Report
 			local function gridOk(grid)
 				return type(grid) == "table"
 					and #grid == 2
-					and isPositiveNumber(grid[1])
-					and isPositiveNumber(grid[2])
+					and isNonNegativeNumber(grid[1])
 					and grid[1] % 1 == 0
+					and isNonNegativeNumber(grid[2])
 					and grid[2] % 1 == 0
 			end
 			check(
@@ -708,13 +714,13 @@ function Validator.validate(raw: any): Report
 				"pile.visual.underlayerDepths must be two positive depths"
 			)
 			check(
-				isPositiveNumber(visual.wallStrandsPerLevel)
+				isNonNegativeNumber(visual.wallStrandsPerLevel)
 					and visual.wallStrandsPerLevel % 1 == 0
 					and isPositiveNumber(visual.wallLevelSpacingStuds),
 				"pile.visual wall strand rule must be a positive integer count and spacing"
 			)
 			check(
-				isPositiveNumber(visual.floorStrandsPerLevel)
+				isNonNegativeNumber(visual.floorStrandsPerLevel)
 					and visual.floorStrandsPerLevel % 1 == 0
 					and isPositiveNumber(visual.floorLevelSpacingStuds),
 				"pile.visual floor strand rule must be a positive integer count and spacing"

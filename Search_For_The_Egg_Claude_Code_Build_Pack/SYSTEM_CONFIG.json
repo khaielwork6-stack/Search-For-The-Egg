@@ -97,7 +97,7 @@
     "personalBag": true,
     "personalCash": true,
     "pileRepresentation": {
-      "serverGridCells": 256,
+      "serverGridCells": 1024,
       "clientVisualStrandPoolDesktop": 9000,
       "clientVisualStrandPoolMobile": 3200,
       "replicationHz": 8,
@@ -106,9 +106,9 @@
     }
   },
   "pile": {
-    "gridWidth": 16,
-    "gridDepth": 16,
-    "cellSizeStuds": 1.8,
+    "gridWidth": 32,
+    "gridDepth": 32,
+    "cellSizeStuds": 0.9,
     "baseFeathersPerCell": 6,
     "surfaceVariance": 0.25,
     "coverDepthMultiplier": 2.0,
@@ -140,11 +140,11 @@
       "shellFolderName": "SFE_PileCollision"
     },
     "visual": {
-      "partBudgetDesktop": 20000,
-      "partBudgetMobile": 6500,
+      "partBudgetDesktop": 26000,
+      "partBudgetMobile": 8500,
       "featherLengthRange": [
-        2.0,
-        3.0
+        2.4,
+        3.4
       ],
       "tiltRangeDegrees": [
         3,
@@ -191,9 +191,10 @@
       "bagFullToastCooldownSeconds": 1.5,
       "assumption": "ASSUMED",
       "visibleSlotsPerCell": 12,
+      "visibleSlotsPerCellMobile": 4,
       "featherWidthRange": [
-        1.0,
-        1.5
+        1.3,
+        1.9
       ],
       "featherSpreadFraction": 0.8,
       "rollRangeDegrees": 110,
@@ -211,8 +212,8 @@
         4,
         34
       ],
-      "fluffPerCellDesktop": 42,
-      "fluffPerCellMobile": 14,
+      "fluffPerCellDesktop": 0,
+      "fluffPerCellMobile": 0,
       "fluffTintShift": 0.35,
       "selectionOutlineColor": [
         255,
@@ -226,34 +227,34 @@
       "liftSeconds": 0.09,
       "liftStuds": 0.5,
       "pickScale": 1.25,
-      "rimStrandsDesktop": 1800,
-      "rimStrandsMobile": 550,
+      "rimStrandsDesktop": 0,
+      "rimStrandsMobile": 0,
       "fluffBandDepths": [
-        0.0,
-        0.4,
-        0.8
+        2.2,
+        2.6,
+        3.0
       ],
       "fluffBandShares": [
         0.4,
         0.32,
         0.28
       ],
-      "wallStrandsPerLevel": 5,
+      "wallStrandsPerLevel": 0,
       "wallLevelSpacingStuds": 0.5,
-      "floorStrandsPerLevel": 14,
+      "floorStrandsPerLevel": 0,
       "floorLevelSpacingStuds": 0.5,
       "rimMinScale": 0.85,
       "underlayerGridDesktop": [
-        4,
-        3
+        0,
+        0
       ],
       "underlayerGridMobile": [
-        2,
-        2
+        0,
+        0
       ],
       "underlayerDepths": [
-        1.1,
-        1.6
+        1.6,
+        2.0
       ],
       "underlayerLengthRange": [
         0.9,
@@ -269,7 +270,7 @@
       ]
     },
     "assumption": "ASSUMED",
-    "recordSpacingStuds": 0.55
+    "recordSpacingStuds": 0.45
   },
   "eggSpawn": {
     "spawnNodeCountTarget": 24,

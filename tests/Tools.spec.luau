@@ -327,7 +327,7 @@ return function(describe, it, expect)
 			acquire(h, 1, "confettiCharge")
 			local state = runtime.players[1]
 			local spec = h.collection:spec(runtime, 1, "confettiCharge")
-			expect(h.beginAt(1, runtime, "confettiCharge", 8, 8).message).toBe("not_equipped")
+			expect(h.beginAt(1, runtime, "confettiCharge", runtime.grid.width // 2, runtime.grid.depth // 2).message).toBe("not_equipped")
 			expect(h.equip(1, "confettiCharge").ok).toBe(true)
 			expect(h.beginAt(1, runtime, "nestRake", 8, 8).code).toBe("invalid_payload") -- discrete tools never use begin
 			expect(h.beginAt(1, runtime, "featherVac", 8, 8).code).toBe("not_authorized") -- not owned
@@ -341,16 +341,16 @@ return function(describe, it, expect)
 				direction = direction,
 			})
 			expect(far.code).toBe("out_of_range")
-			local thrown = h.beginAt(1, runtime, "confettiCharge", 8, 8)
+			local thrown = h.beginAt(1, runtime, "confettiCharge", runtime.grid.width // 2, runtime.grid.depth // 2)
 			expect(thrown.ok).toBe(true)
 			expect(thrown.data.fuseMs).toBe(math.floor(spec.fuseSeconds * 1000))
 			expect(thrown.data.radius).toBe(spec.radiusStuds)
 			local chargeId = thrown.data.chargeId
 			expect(runtime.charges[chargeId]).toBeTruthy()
 			-- Cooldown then one-live-charge rules.
-			expect(h.beginAt(1, runtime, "confettiCharge", 8, 8).message).toBe("cooldown")
+			expect(h.beginAt(1, runtime, "confettiCharge", runtime.grid.width // 2, runtime.grid.depth // 2).message).toBe("cooldown")
 			h.advanceTools(spec.cooldownSeconds + 0.05)
-			expect(h.beginAt(1, runtime, "confettiCharge", 8, 8).message).toBe("charge_live")
+			expect(h.beginAt(1, runtime, "confettiCharge", runtime.grid.width // 2, runtime.grid.depth // 2).message).toBe("charge_live")
 			-- Not before the fuse ends.
 			local elapsed = spec.cooldownSeconds + 0.05
 			h.advanceTools(spec.fuseSeconds - elapsed - 0.15)
@@ -418,7 +418,7 @@ return function(describe, it, expect)
 			expect(spec.miniChargeCount).toBe(effects.miniChargeCount)
 			h.tools._rng = fixedRng(0.01)
 			h.setEntitlement(1, "infiniteBag", true)
-			expect(h.beginAt(1, runtime, "confettiCharge", 8, 8).ok).toBe(true)
+			expect(h.beginAt(1, runtime, "confettiCharge", runtime.grid.width // 2, runtime.grid.depth // 2).ok).toBe(true)
 			h.advanceTools(spec.fuseSeconds + 0.2)
 			expect(h.tools.stats.explosions).toBe(1)
 			expect(h.tools.stats.miniCharges).toBe(effects.miniChargeCount)
@@ -734,19 +734,20 @@ return function(describe, it, expect)
 			h.equip(2, "featherVac")
 			h.equip(3, "scoutChick")
 			h.equip(4, "nestRake")
-			expect(h.beginAt(3, runtime, "scoutChick", 8, 8).ok).toBe(true)
+			expect(h.beginAt(3, runtime, "scoutChick", runtime.grid.width // 2, runtime.grid.depth // 2).ok).toBe(true)
 			local started = os.clock()
 			local ticks = 0
 			for second = 1, 60 do
 				if second % 3 == 1 then
-					h.beginAt(1, runtime, "confettiCharge", 4 + second % 8, 4 + (second * 3) % 8)
+					h.beginAt(1, runtime, "confettiCharge", 2 * (4 + second % 8), 2 * (4 + (second * 3) % 8))
 				end
 				if runtime.players[2].toolRuntime.featherVac == nil or not runtime.players[2].toolRuntime.featherVac.running then
-					h.beginAt(2, runtime, "featherVac", 10, 6 + second % 5)
+					h.beginAt(2, runtime, "featherVac", 20, 2 * (6 + second % 5))
 				end
-				local sweep = h.collectAt(4, runtime, 2 + (second * 5) % 12, 2 + (second * 7) % 12, "nestRake")
-				if not sweep.ok then
-					-- The only legitimate refusal under load is an already-cleared neighbourhood.
+				local sweep = h.collectAt(4, runtime, 2 * (2 + (second * 5) % 12), 2 * (2 + (second * 7) % 12), "nestRake")
+				if not sweep.ok and runtime.state.phase == "Searching" then
+					-- The only legitimate refusal under load is an already-cleared neighbourhood (once
+					-- the area tools dig out the Egg the round leaves Searching and refuses by phase).
 					expect(sweep.message).toBe("no_feathers")
 				end
 				for _ = 1, 10 do
@@ -778,7 +779,8 @@ return function(describe, it, expect)
 				expect(state.carriedStandard % 1).toBe(0)
 				expect(state.carriedRainbow % 1).toBe(0)
 			end
-			expect(h.tools.stats.explosions).toBeGreaterThanOrEqual(15)
+			-- Charges only fire while Searching; the area tools can end the search early on the finer grid.
+			expect(h.tools.stats.explosions).toBeGreaterThanOrEqual(if runtime.state.phase == "Searching" then 15 else 5)
 			expect(h.tools.stats.vacFeathers).toBeGreaterThan(0)
 			expect(h.tools.stats.chickTrips).toBeGreaterThanOrEqual(1)
 			expect(h.collection.stats.accepted).toBeGreaterThanOrEqual(20)

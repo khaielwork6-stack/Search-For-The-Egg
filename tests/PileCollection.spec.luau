@@ -20,7 +20,7 @@ return function(describe, it, expect)
 			local h = GameplayHarness.new(cfg)
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
-			local origin, direction, featherId = h.aimAt(1, runtime, 8, 8)
+			local origin, direction, featherId = h.aimAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			h.clock:advance(1)
 			local payload =
 				{ sessionToken = h.token(1), origin = origin, direction = direction, toolId = "hand", requestId = 7, featherId = featherId }
@@ -32,7 +32,7 @@ return function(describe, it, expect)
 			expect(again.message).toBe("duplicate")
 			expect(runtime.players[1].carriedStandard).toBe(1)
 			payload.requestId = 8
-			local _, _, nextFeather = h.aimAt(1, runtime, 8, 8)
+			local _, _, nextFeather = h.aimAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			payload.featherId = nextFeather
 			expect(h.collection:collect(1, payload).ok).toBe(true)
 		end)
@@ -43,19 +43,19 @@ return function(describe, it, expect)
 			local _, runtime = h.startRound({ 1 })
 			local before = runtime.grid.removed
 			h.setLineOfSightBlocked(true)
-			local result = h.collectAt(1, runtime, 8, 8)
+			local result = h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			expect(result.ok).toBe(false)
 			expect(result.message).toBe("line_of_sight")
 			expect(runtime.grid.removed).toBe(before)
 			h.setLineOfSightBlocked(false)
-			expect(h.collectAt(1, runtime, 8, 8).ok).toBe(true)
+			expect(h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2).ok).toBe(true)
 		end)
 
 		it("a feather out of range or off the aim direction is refused before any removal", function()
 			local h = GameplayHarness.new(cfg)
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
-			local origin, direction, featherId = h.aimAt(1, runtime, 8, 8)
+			local origin, direction, featherId = h.aimAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			local centre = layout.nestCenter
 			local far = Vector3.new(centre.X + 30, layout.nestBaseY + 2, centre.Z)
 			h.standAt(1, far)
@@ -94,10 +94,10 @@ return function(describe, it, expect)
 			local player = runtime.players[1]
 			local capacity = cfg.bags.levels[player.bagLevel].capacity
 			player.carriedStandard = capacity
-			local cell = runtime.grid.cells[8 * 16 + 8 + 1]
+			local cell = runtime.grid.cells[PileGrid.index(runtime.grid.width, runtime.grid.width // 2, runtime.grid.depth // 2)]
 			local remaining, removed, carves = cell.remaining, runtime.grid.removed, h.pileTerrain.stats.carves
 			for _ = 1, 3 do
-				local result = h.collectAt(1, runtime, 8, 8)
+				local result = h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 				expect(result.ok).toBe(false)
 				expect(result.message).toBe("bag_full")
 			end
@@ -129,11 +129,11 @@ return function(describe, it, expect)
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
 			local before = PileGrid.snapshot(runtime.grid)
-			local cell = runtime.grid.cells[7 * 16 + 9 + 1]
-			local _, _, featherId = h.aimAt(1, runtime, 9, 7)
+			local cell = runtime.grid.cells[PileGrid.index(runtime.grid.width, runtime.grid.width // 2 + 1, runtime.grid.depth // 2 - 1)]
+			local _, _, featherId = h.aimAt(1, runtime, runtime.grid.width // 2 + 1, runtime.grid.depth // 2 - 1)
 			local _, slot = FeatherLayout.decode(featherId)
 			expect(slot).toBe(cell.base) -- the exposed top of the stack
-			local result = h.collectAt(1, runtime, 9, 7)
+			local result = h.collectAt(1, runtime, runtime.grid.width // 2 + 1, runtime.grid.depth // 2 - 1)
 			expect(result.ok).toBe(true)
 			expect(result.data.awarded).toBe(1)
 			expect(result.data.removed).toBe(1)
@@ -155,16 +155,18 @@ return function(describe, it, expect)
 			local h = GameplayHarness.new(cfg)
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
-			local cell = runtime.grid.cells[7 * 16 + 9 + 1]
+			local cell = runtime.grid.cells[PileGrid.index(runtime.grid.width, runtime.grid.width // 2 + 1, runtime.grid.depth // 2 - 1)]
 			expect(cell.base).toBeGreaterThanOrEqual(4)
-			local origin, direction = h.aimAt(1, runtime, 9, 7)
+			local origin = h.aimAt(1, runtime, runtime.grid.width // 2 + 1, runtime.grid.depth // 2 - 1)
 			local visible = cfg.pile.visual.visibleSlotsPerCell
 			local function collectSlot(slot)
 				h.clock:advance(1)
+				-- Aim at that slot's own seat (deeper slots sit lower in the column), as the client does.
+				local seat = h.collection:featherPosition(runtime, cell, slot)
 				return h.collection:collect(1, {
 					sessionToken = h.token(1),
 					origin = origin,
-					direction = direction,
+					direction = (seat - origin).Unit,
 					toolId = "hand",
 					featherId = FeatherLayout.featherId(cell.index, slot),
 				})
@@ -187,6 +189,7 @@ return function(describe, it, expect)
 			expect(collectSlot(exposed[1]).message).toBe("already_collected")
 			-- The cell persists until its last record is gone.
 			while cell.remaining > 0 do
+				runtime.players[1].carriedStandard = 0 -- the column outlasts one bag; keep the bag open
 				local top = PileGrid.topSlot(cell)
 				expect(collectSlot(top).ok).toBe(true)
 			end
@@ -223,7 +226,7 @@ return function(describe, it, expect)
 			local h = GameplayHarness.new(cfg)
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
-			local result = h.collectAt(1, runtime, 8, 8)
+			local result = h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			expect(result.ok).toBe(true)
 			expect(result.data.mask).toBe(bit32.lshift(1, result.data.slot - 1))
 			local pending = runtime.pendingDelta[result.data.cellIndex]
@@ -241,12 +244,12 @@ return function(describe, it, expect)
 			h.join(2)
 			local _, runtime = h.startRound({ 1, 2 })
 			runtime.players[1].alive = false
-			local dead = h.collectAt(1, runtime, 8, 8)
+			local dead = h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			expect(dead.ok).toBe(false)
 			expect(dead.message).toBe("not_alive")
 			runtime.players[1].alive = true
 			local staleToken = h.token(2)
-			local origin, direction = h.aimAt(2, runtime, 8, 8)
+			local origin, direction = h.aimAt(2, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			h.sessions:close(2)
 			local removedBefore = runtime.grid.removed
 			local gone = h.collection:collect(2, { sessionToken = staleToken, origin = origin, direction = direction, toolId = "hand" })
@@ -258,12 +261,18 @@ return function(describe, it, expect)
 			local h = GameplayHarness.new(cfg)
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
-			h.collectAt(1, runtime, 8, 8)
-			h.collectAt(1, runtime, 8, 8)
+			h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
+			h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			local snapshot = h.rounds:project(runtime.state.roundId, true)
 			expect(snapshot.pile).toBeTruthy()
 			expect(#snapshot.pile.remaining).toBe(runtime.grid.width * runtime.grid.depth)
-			expect(snapshot.pile.remaining[runtime.grid.cells[8 * 16 + 8 + 1].index]).toBe(runtime.grid.cells[8 * 16 + 8 + 1].remaining)
+			expect(
+				snapshot.pile.remaining[runtime.grid.cells[PileGrid.index(
+					runtime.grid.width,
+					runtime.grid.width // 2,
+					runtime.grid.depth // 2
+				)].index]
+			).toBe(runtime.grid.cells[PileGrid.index(runtime.grid.width, runtime.grid.width // 2, runtime.grid.depth // 2)].remaining)
 			local encoded = game:GetService("HttpService"):JSONEncode(snapshot)
 			expect(string.find(encoded, "eggNode", 1, true)).toBeNil()
 			expect(string.find(encoded, "coverIndexes", 1, true)).toBeNil()
@@ -278,13 +287,13 @@ return function(describe, it, expect)
 			local roundId, runtime = h.startRound({ 1 })
 			expect(h.terrainAdapter.writes).toBe(1)
 			expect(h.terrainAdapter.field.apex).toBe(cfg.pile.maxVisualHeightStuds)
-			local result = h.collectAt(1, runtime, 8, 8)
+			local result = h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			expect(result.ok).toBe(true)
 			expect(h.pileTerrain.stats.carves).toBe(1)
 			-- Voxels re-write at record thresholds, never on every pick.
 			expect(#h.terrainAdapter.regionWrites).toBe(if cfg.pile.collision.rewriteEveryRecords == 1 then 1 else 0)
 			for _ = 2, cfg.pile.collision.rewriteEveryRecords do
-				expect(h.collectAt(1, runtime, 8, 8).ok).toBe(true)
+				expect(h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2).ok).toBe(true)
 			end
 			expect(#h.terrainAdapter.regionWrites).toBe(1)
 			-- The re-written region covers the strike plus the configured margin.
@@ -303,9 +312,13 @@ return function(describe, it, expect)
 			-- Repeated strikes at one spot deepen the pit (every feather of the cell, then its neighbours).
 			local strikes = cfg.pile.collision.rewriteEveryRecords
 			for _, offset in ipairs({ { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } }) do
-				local cell = runtime.grid.cells[(8 + offset[2]) * 16 + (8 + offset[1]) + 1]
+				local cell = runtime.grid.cells[PileGrid.index(
+					runtime.grid.width,
+					runtime.grid.width // 2 + offset[1],
+					runtime.grid.depth // 2 + offset[2]
+				)]
 				while cell.remaining > 0 and strikes < 10 do
-					expect(h.collectAt(1, runtime, 8 + offset[1], 8 + offset[2]).ok).toBe(true)
+					expect(h.collectAt(1, runtime, runtime.grid.width // 2 + offset[1], runtime.grid.depth // 2 + offset[2]).ok).toBe(true)
 					strikes += 1
 				end
 			end
@@ -316,7 +329,7 @@ return function(describe, it, expect)
 			-- Rejected strikes never dent or re-write.
 			runtime.players[1].alive = false
 			local carves, writes = h.pileTerrain.stats.carves, #h.terrainAdapter.regionWrites
-			h.collectAt(1, runtime, 8, 8)
+			h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			expect(h.pileTerrain.stats.carves).toBe(carves)
 			expect(#h.terrainAdapter.regionWrites).toBe(writes)
 			runtime.players[1].alive = true
@@ -343,7 +356,7 @@ return function(describe, it, expect)
 			local h = GameplayHarness.new(cfg)
 			h.join(1)
 			local roundId, runtime = h.startRound({ 1 })
-			h.collectAt(1, runtime, 8, 8)
+			h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			h.rounds:markEggRevealed(roundId)
 			h.rounds:claim(roundId, 1, h.token(1))
 			h.rounds:commitAndFinish(roundId, function()

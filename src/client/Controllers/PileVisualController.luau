@@ -257,6 +257,13 @@ local function placeFeather(
 		* CFrame.new(0, length * 0.5, 0)
 end
 
+-- Records rendered (and targetable) per cell on this device. The server accepts any of the top
+-- `visibleSlotsPerCell`; a low tier renders fewer, so it can only ever ask for what it shows.
+function PileVisualController._visibleSlots(self: PileVisualController): number
+	local visual = self._config.pile.visual
+	return if self._quality:tier() == "low" then visual.visibleSlotsPerCellMobile else visual.visibleSlotsPerCell
+end
+
 function PileVisualController._fluffPerCell(self: PileVisualController): number
 	local visual = self._config.pile.visual
 	local tier = self._quality:tier()
@@ -273,7 +280,7 @@ function PileVisualController._fluffPerCell(self: PileVisualController): number
 	for _ in pairs(self._columns) do
 		cells += 1
 	end
-	local exposed = cells * visual.visibleSlotsPerCell
+	local exposed = cells * self:_visibleSlots()
 	local fluffBudget = math.max(0, budget - exposed)
 	return math.min(perCell, math.floor(fluffBudget / math.max(1, cells)))
 end
@@ -303,7 +310,7 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 	local visual = self._config.pile.visual
 	local field = (self._seatField or self._field) :: PileSurface.Field
 	local minCorner = self._minCorner :: Vector3
-	local exposed = if self._culled then {} else FeatherLayout.exposedSlots(column.base, column.mask, visual.visibleSlotsPerCell)
+	local exposed = if self._culled then {} else FeatherLayout.exposedSlots(column.base, column.mask, self:_visibleSlots())
 	local wanted: { [number]: boolean } = {}
 	for _, slot in ipairs(exposed) do
 		wanted[slot] = true
@@ -495,7 +502,7 @@ function PileVisualController._exposeFloor(self: PileVisualController, column: C
 	local spread = field.cellSize * 0.98
 	-- The records themselves fill the column down to the bottom of the rendered window (the top
 	-- `visibleSlotsPerCell` untaken slots); filler only goes below that, never into the dug space.
-	local windowBottom = math.min(column.base, column.base - column.remaining + visual.visibleSlotsPerCell) * column.step
+	local windowBottom = math.min(column.base, column.base - column.remaining + self:_visibleSlots()) * column.step
 	local level = math.max(column.floorDepth, windowBottom - spacing) + spacing
 	local added = 0
 	while level <= depthNow + 0.01 and added < 40 do
@@ -574,7 +581,7 @@ function PileVisualController._exposeWalls(self: PileVisualController, dug: Colu
 		local topY = field.baseY + self:_columnTop(neighbour)
 		-- The neighbour's own rendered records cover its side down to the bottom of its window;
 		-- wall filler starts below that.
-		local neighbourWindow = math.min(neighbour.base, neighbour.base - neighbour.remaining + visual.visibleSlotsPerCell) * neighbour.step
+		local neighbourWindow = math.min(neighbour.base, neighbour.base - neighbour.remaining + self:_visibleSlots()) * neighbour.step
 		local depthFrom = math.max(neighbour.wallDepth, neighbourWindow - visual.wallLevelSpacingStuds)
 		local levelsAdded = 0
 		local depthNow = depthFrom + visual.wallLevelSpacingStuds

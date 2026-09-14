@@ -6,6 +6,7 @@
 return function(describe, it, expect)
 	local ServerStorage = game:GetService("ServerStorage")
 	local Shared = game:GetService("ReplicatedStorage").Shared
+	local PileGrid = require(Shared.Domain.PileGrid)
 	local Server = game:GetService("ServerScriptService").Server
 	local Config = require(Shared.Config)
 	local CrateService = require(Server.Services.CrateService)
@@ -149,18 +150,19 @@ return function(describe, it, expect)
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
 			local every = cfg.pile.collision.rewriteEveryRecords
-			local cell = runtime.grid.cells[8 * 16 + 8 + 1]
+			local cell = runtime.grid.cells[PileGrid.index(runtime.grid.width, runtime.grid.width // 2, runtime.grid.depth // 2)]
 			expect(cell.base).toBeGreaterThanOrEqual(every + 1)
 			local writes = #h.terrainAdapter.regionWrites
 			for i = 1, every - 1 do
-				expect(h.collectAt(1, runtime, 8, 8).ok).toBe(true)
+				expect(h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2).ok).toBe(true)
 				expect(#h.terrainAdapter.regionWrites).toBe(writes) -- no rewrite yet
 				expect(h.pileTerrain.stats.carves).toBe(i) -- dents are still recorded
 			end
-			expect(h.collectAt(1, runtime, 8, 8).ok).toBe(true)
+			expect(h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2).ok).toBe(true)
 			expect(#h.terrainAdapter.regionWrites).toBe(writes + 1)
 			while cell.remaining > 0 do
-				expect(h.collectAt(1, runtime, 8, 8).ok).toBe(true)
+				runtime.players[1].carriedStandard = 0 -- the column outlasts one bag; keep the bag open
+				expect(h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2).ok).toBe(true)
 			end
 			expect(#h.terrainAdapter.regionWrites).toBeGreaterThanOrEqual(writes + 2) -- the empty cell forced one
 		end)
