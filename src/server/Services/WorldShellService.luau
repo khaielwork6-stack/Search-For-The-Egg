@@ -36,8 +36,8 @@ local PALETTE = {
 local STATIONS: { [string]: { title: string, action: string, color: Color3, ambient: string, kind: string } } = {
 	party = { title = "Sunlit Henhouse", action = "Form a party", color = PALETTE.sky, ambient = "portalShimmer", kind = "portal" },
 	daily = { title = "Daily Nest", action = "Open the nest", color = PALETTE.ember, ambient = "bob", kind = "nest" },
-	classes = { title = "Class Cards", action = "Browse classes", color = PALETTE.leaf, ambient = "spin", kind = "cards" },
-	shop = { title = "Perk Bench", action = "Open the shop", color = PALETTE.gold, ambient = "bob", kind = "bench" },
+	classes = { title = "Class Cards", action = "Roll a class", color = PALETTE.leaf, ambient = "spin", kind = "cards" },
+	shop = { title = "Perk Shop", action = "Browse permanent perks", color = PALETTE.gold, ambient = "bob", kind = "bench" },
 	event = { title = "Moonlit Chest", action = "Peek inside", color = PALETTE.gem, ambient = "moonPulse", kind = "chest" },
 	inventory = { title = "Tool Rack", action = "Open the rack", color = PALETTE.wood, ambient = "sway", kind = "rack" },
 	stats = { title = "Forager Ledger", action = "Read the ledger", color = PALETTE.sky, ambient = "pageFlip", kind = "ledger" },
@@ -564,6 +564,30 @@ local function anchor(folder: Instance, name: string, position: Vector3, size: V
 	return p
 end
 
+-- Rewrites the owner's stall signs so the vendor's purpose reads from across the yard.
+local function retitleStall(mapModel: Instance, hostName: string, sign: string?, subtitle: string?)
+	local host = mapModel:FindFirstChild(hostName)
+	if not host then
+		return
+	end
+	local function setText(partName: string, text: string?)
+		if not text then
+			return
+		end
+		local partInstance = host:FindFirstChild(partName, true)
+		local gui = partInstance and partInstance:FindFirstChildOfClass("SurfaceGui")
+		if gui then
+			for _, descendant in ipairs(gui:GetDescendants()) do
+				if descendant:IsA("TextLabel") then
+					descendant.Text = text
+				end
+			end
+		end
+	end
+	setText("ShopSign", sign)
+	setText("ShopSubtitle", subtitle)
+end
+
 -- Daily Nest: a straw ring with three eggs on the barn floor in front of the nesting shelf.
 local function buildDailyNest(folder: Instance, base: Vector3)
 	local ring = part(
@@ -688,20 +712,39 @@ function WorldShellService.buildFromMap(workspaceService: Workspace, mapModel: I
 	local dailyFocus = buildDailyNest(folder, lobby.stations.daily.position - Vector3.new(0, 0.8, 0))
 	local chestFocus = buildMoonChest(folder, lobby.stations.event.position - Vector3.new(0, 1.1, 0))
 
-	-- Station prompts on the map's own props (counters, boards, coops) or on our props.
+	-- Station prompts on the map's own props (counters, boards, coops) or on our props. Stations
+	-- with a vendor NPC in the map put their prompt on the vendor and speak through them.
 	local focusByStation: { [string]: BasePart } = { daily = dailyFocus, event = chestFocus }
 	for _, id in ipairs(lobby.stationOrder) do
 		if id ~= "party" then
 			local spec = STATIONS[id]
 			local layout = ChapterLayout.station(id) :: { [string]: any }
 			local focus = focusByStation[id]
-			if not focus then
+			local npc = lobby.npcs[id]
+			local vendor = npc and workspaceService:FindFirstChild(npc.model)
+			local vendorRoot = vendor and vendor:FindFirstChild("HumanoidRootPart")
+			local objectText, actionText = spec.title, spec.action
+			if not focus and vendorRoot and vendorRoot:IsA("BasePart") then
+				focus = anchor(folder, id .. "Vendor", vendorRoot.Position, Vector3.new(4, 6, 3))
+				focus.CanQuery = true
+				focus:SetAttribute("SFE_Ambient", "npc")
+				focus:SetAttribute("SFE_NpcModel", npc.model)
+				focus:SetAttribute("SFE_NpcName", npc.name)
+				focus:SetAttribute("SFE_NpcRole", npc.role)
+				focus:SetAttribute("SFE_NpcLine", npc.line)
+				objectText = npc.name
+				retitleStall(mapModel, layout.host, npc.sign, npc.subtitle)
+				local humanoid = vendor:FindFirstChildOfClass("Humanoid")
+				if humanoid then
+					humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+				end
+			elseif not focus then
 				focus = anchor(folder, id .. "Anchor", layout.position, Vector3.new(4, 3, 2))
 				focus.CanQuery = true
 			end
 			focus:SetAttribute("SFE_Station", id)
 			focus:SetAttribute("SFE_Modal", layout.modal)
-			prompt(focus, "SFE_Station_" .. id, spec.action, spec.title, range)
+			prompt(focus, "SFE_Station_" .. id, actionText, objectText, range)
 			local audioAnchor = anchor(folder, id .. "Audio", layout.position + Vector3.new(0, 2, 0))
 			audioAnchor:SetAttribute("SFE_AudioRole", "station.hum")
 		end

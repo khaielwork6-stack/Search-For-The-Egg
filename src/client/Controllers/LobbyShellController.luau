@@ -7,10 +7,13 @@
 -- Everything is cleaned up through one trove; the scheduler owns the only Heartbeat.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
 local Tokens = require(Shared.Design.Tokens)
 local AssetManifest = require(Shared.Design.AssetManifest)
+local NpcPlate = require(script.Parent.Parent.UI.NpcPlate)
 
 local LobbyShellController = {}
 LobbyShellController.__index = LobbyShellController
@@ -140,6 +143,8 @@ function LobbyShellController.start(self: LobbyShellController)
 					end,
 				})
 			end
+		elseif kind == "npc" then
+			self:_presentVendor(part, register)
 		elseif kind == "portalShimmer" or kind == "sunShimmer" then
 			local base = part.Transparency
 			register({
@@ -314,6 +319,71 @@ function LobbyShellController.setLeaderboard(self: LobbyShellController, snapsho
 	end
 	if #board.rows == 0 then
 		line(1, "Be the first forager here", Tokens.color.creamDeep, 14)
+	end
+end
+
+-- A vendor NPC: breathes in place, turns to face whoever walks up, wears a nameplate and greets
+-- the player with a speech bubble while their prompt is showing.
+function LobbyShellController._presentVendor(self: LobbyShellController, part: BasePart, register: (any) -> ())
+	local modelName = part:GetAttribute("SFE_NpcModel")
+	local model = if type(modelName) == "string" then workspace:FindFirstChild(modelName) else nil
+	if not (model and model:IsA("Model")) then
+		return
+	end
+	local name = tostring(part:GetAttribute("SFE_NpcName") or modelName)
+	local role = tostring(part:GetAttribute("SFE_NpcRole") or "")
+	local line = tostring(part:GetAttribute("SFE_NpcLine") or "")
+	local _, size = model:GetBoundingBox()
+	local root = model:FindFirstChild("HumanoidRootPart")
+	local adornee = if root and root:IsA("BasePart") then root else part
+	local plate = NpcPlate.build(adornee, name, role, size.Y * 0.62 + 1.4)
+	self._trove:add(plate.destroy)
+
+	local base = model:GetPivot()
+	local baseYaw = 0
+	local yaw = 0
+	local reduced = false
+	register({
+		id = part.Name .. ":vendor",
+		position = function()
+			return part.Position
+		end,
+		interval = 1 / 20,
+		update = function(dt: number, t: number)
+			local character = Players.LocalPlayer and Players.LocalPlayer.Character
+			local playerRoot = character and character:FindFirstChild("HumanoidRootPart")
+			local targetYaw = baseYaw
+			if playerRoot and playerRoot:IsA("BasePart") then
+				local toPlayer = playerRoot.Position - base.Position
+				local flat = Vector3.new(toPlayer.X, 0, toPlayer.Z)
+				if flat.Magnitude < 22 and flat.Magnitude > 0.5 then
+					-- Angle from the vendor's resting facing to the player, clamped so they never spin fully round.
+					local facing = base.LookVector
+					local angle = math.atan2(flat.Unit:Cross(facing).Y, facing:Dot(flat.Unit))
+					targetYaw = math.clamp(-angle, -1.2, 1.2)
+				end
+			end
+			yaw += (targetYaw - yaw) * math.min(1, dt * 6)
+			local breathe = if reduced then 0 else math.sin(t * 1.6) * 0.06
+			model:PivotTo(base * CFrame.Angles(0, yaw, 0) * CFrame.new(0, breathe, 0))
+		end,
+	})
+
+	local myPrompt = part:FindFirstChildOfClass("ProximityPrompt")
+	if myPrompt and line ~= "" then
+		self._trove:add(ProximityPromptService.PromptShown:Connect(function(prompt)
+			if prompt == myPrompt then
+				plate.say(line)
+			end
+		end))
+		self._trove:add(ProximityPromptService.PromptHidden:Connect(function(prompt)
+			if prompt == myPrompt then
+				plate.hush()
+			end
+		end))
+		self._trove:add(myPrompt.Triggered:Connect(function()
+			plate.say("Take a good look!", 2.4)
+		end))
 	end
 end
 

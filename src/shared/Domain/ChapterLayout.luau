@@ -110,6 +110,25 @@ ChapterLayout.lobby = table.freeze({
 		Board2 = "totalWins",
 		Board3 = "feathersCollected",
 	}),
+	-- Vendors the owner placed in the map: each one hosts its station's prompt and speaks for it.
+	npcs = table.freeze({
+		shop = table.freeze({
+			model = "Cow Boy Brother",
+			name = "Perk Seller",
+			role = "Permanent Perks Shop",
+			line = "Perks bought here stay with you on every search, friend!",
+			sign = "PERMANENT PERKS",
+			subtitle = "UPGRADES THAT STAY WITH YOU",
+		}),
+		classes = table.freeze({
+			model = "Cow Boy",
+			name = "Class Master",
+			role = "Roll a class",
+			line = "Spin the deck and see what kind of forager you are!",
+			sign = "CLASSES",
+			subtitle = "ROLL YOUR STYLE",
+		}),
+	}),
 	ambientAnchors = table.freeze({
 		Vector3.new(-0.5, 12, -164), -- feathers drifting out of the barn door
 		Vector3.new(-43.5, 9, -136), -- over the left pads
