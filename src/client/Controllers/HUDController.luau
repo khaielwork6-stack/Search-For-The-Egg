@@ -122,7 +122,7 @@ function HUDController.new(deps: any): HUDController
 	banner.Name = "Banner"
 	banner.AnchorPoint = Vector2.new(0.5, 0)
 	banner.Position = UDim2.new(0.5, 0, 0, Tokens.layout.safeAreaPaddingPx)
-	local bannerHeight = Tokens.layout.minimumTapTargetPx + Tokens.typography.caption.size + Tokens.spacing.md
+	local bannerHeight = Tokens.layout.minimumTapTargetPx + Tokens.typography.caption.size + Tokens.spacing.xl
 	banner.Size = UDim2.fromOffset(240, bannerHeight)
 	banner.BackgroundColor3 = Tokens.color.featherWhite
 	banner.ZIndex = Tokens.zIndex.hud
@@ -139,7 +139,8 @@ function HUDController.new(deps: any): HUDController
 	local bannerPadding = Instance.new("UIPadding")
 	bannerPadding.PaddingLeft = UDim.new(0, Tokens.spacing.xl)
 	bannerPadding.PaddingRight = UDim.new(0, Tokens.spacing.xl)
-	bannerPadding.PaddingTop = UDim.new(0, Tokens.spacing.sm)
+	bannerPadding.PaddingTop = UDim.new(0, Tokens.spacing.md + Tokens.spacing.xs)
+	bannerPadding.PaddingBottom = UDim.new(0, Tokens.spacing.md)
 	bannerPadding.Parent = banner
 	banner.Parent = stage
 	if Skin.label(banner, "hud.banner", { zIndex = banner.ZIndex + 1, inset = 3, name = "ArtFrame" }) then
@@ -162,7 +163,7 @@ function HUDController.new(deps: any): HUDController
 	local detail = Instance.new("TextLabel")
 	detail.Name = "Detail"
 	detail.AnchorPoint = Vector2.new(0.5, 1)
-	detail.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.sm)
+	detail.Position = UDim2.new(0.5, 0, 1, 0)
 	detail.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 2)
 	detail.BackgroundTransparency = 1
 	detail.Font = Tokens.typography.caption.font

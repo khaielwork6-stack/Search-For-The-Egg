@@ -520,24 +520,32 @@ function Frame.chip(
 		stroke.Enabled = false
 		frame.BackgroundTransparency = 0.1
 	end
+	-- Content lives in its own frame so the list layout never counts the shadow / art children.
+	local content = Instance.new("Frame")
+	content.Name = "Content"
+	content.Size = UDim2.fromScale(1, 1)
+	content.BackgroundTransparency = 1
+	content.ZIndex = z + 2
+	content.Parent = frame
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
 	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.HorizontalAlignment = if opts.width then Enum.HorizontalAlignment.Center else Enum.HorizontalAlignment.Left
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Padding = UDim.new(0, Tokens.spacing.sm)
-	layout.Parent = frame
+	layout.Parent = content
 	local padding = Instance.new("UIPadding")
 	padding.PaddingLeft = UDim.new(0, Tokens.spacing.md)
 	padding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
-	padding.Parent = frame
+	padding.Parent = content
 	local iconSlot = Instance.new("Frame")
 	iconSlot.Name = "IconSlot"
 	iconSlot.LayoutOrder = 1
 	iconSlot.Size = UDim2.fromOffset(Tokens.icon.md, Tokens.icon.md)
 	iconSlot.BackgroundTransparency = 1
-	iconSlot.ZIndex = z + 1
+	iconSlot.ZIndex = z + 3
 	iconSlot.Visible = false
-	iconSlot.Parent = frame
+	iconSlot.Parent = content
 	local label = Instance.new("TextLabel")
 	label.Name = "Text"
 	label.LayoutOrder = 2
@@ -548,8 +556,8 @@ function Frame.chip(
 	label.TextColor3 = Tokens.color.inkStrong
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Text = ""
-	label.ZIndex = z + 1
-	label.Parent = frame
+	label.ZIndex = z + 3
+	label.Parent = content
 	-- Width follows the text (never AutomaticSize: scale-sized shadow and art children would feed
 	-- back into it). Fixed-width chips keep their width and centre the text.
 	if not opts.width then

@@ -48,15 +48,15 @@ local function chip(parent: Instance, name: string, order: number, width: number
 	frame.LayoutOrder = order
 	text.Font = Tokens.typography.numeral.font
 	text.TextSize = Tokens.typography.numeral.size - 1
-	text.AutomaticSize = Enum.AutomaticSize.None
-	text.Size = UDim2.new(1, -(Tokens.icon.md + Tokens.spacing.sm), 1, 0)
+	text.Size = UDim2.fromOffset(
+		width - Tokens.spacing.md - Tokens.spacing.lg - (if icon then Tokens.icon.md + Tokens.spacing.sm else 0),
+		Tokens.layout.minimumTapTargetPx
+	)
 	text.TextXAlignment = Enum.TextXAlignment.Center
 	if icon then
 		iconSlot.Visible = true
-		local built = Icons.build(icon, iconSlot, Tokens.icon.md, { zIndex = frame.ZIndex + 2 })
+		local built = Icons.build(icon, iconSlot, Tokens.icon.md, { zIndex = iconSlot.ZIndex + 1 })
 		built.Position = UDim2.fromScale(0, 0)
-	else
-		text.Size = UDim2.fromScale(1, 1)
 	end
 	return frame, text
 end
@@ -83,7 +83,7 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 
 	-- Bag: art track (or cream track) with an art fill that grows from the left.
 	local bagFrame, bagText = chip(root, "Bag", 2, BAG_WIDTH, "hud.bag.track", nil)
-	bagText.ZIndex = bagFrame.ZIndex + 3
+	bagText.ZIndex = bagFrame.ZIndex + 4
 	local bagFill: GuiObject
 	local bagArt = Skin.has("hud.bag.fill.normal")
 	if bagArt then
