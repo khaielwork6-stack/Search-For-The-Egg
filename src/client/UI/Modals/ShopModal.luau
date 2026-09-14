@@ -403,22 +403,19 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		artHolder.Name = "Art"
 		artHolder.AnchorPoint = Vector2.new(0.5, 0)
 		artHolder.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.sm)
-		artHolder.Size = UDim2.fromOffset(tap, tap)
+		artHolder.Size = UDim2.fromOffset(tap + Tokens.spacing.lg, tap + Tokens.spacing.lg)
 		artHolder.BackgroundTransparency = 1
 		artHolder.ZIndex = z + 2
 		artHolder.Parent = face
-		Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 2, transparency = 0.7, color = Tokens.color.featherWhite })
-		centredArt(artHolder, offer.art, offer.icon, tap - Tokens.spacing.sm, z + 4)
-		local caption = FrameKit.badge(
-			face,
-			"Caption",
-			string.upper(offer.caption),
-			if offer.pass then Tokens.color.gemDeep else Tokens.color.skyDeep,
-			z + 4
-		)
-		caption.AnchorPoint = Vector2.new(0.5, 0)
-		caption.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.sm + tap - 6)
-		caption.TextSize = Tokens.typography.caption.size - 2
+		Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 2, transparency = 0.62, color = Tokens.color.featherWhite })
+		centredArt(artHolder, offer.art, offer.icon, tap + Tokens.spacing.sm, z + 4)
+		if offer.pass then
+			local tag = FrameKit.badge(tile, "Tag", "PERMANENT", Tokens.color.gemDeep, z + 5)
+			tag.AnchorPoint = Vector2.new(0, 0)
+			tag.Position = UDim2.new(0, -Tokens.spacing.xs, 0, -Tokens.spacing.sm)
+			tag.Rotation = -6
+			tag.TextSize = Tokens.typography.caption.size - 2
+		end
 		local buy = Button.build(face, {
 			text = if offer.robux then string.format("R$ %d", offer.robux) else "R$",
 			variant = "primary",
