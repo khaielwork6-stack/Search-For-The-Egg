@@ -41,6 +41,7 @@ export type HUDController = typeof(setmetatable(
 		_labels: { [string]: any },
 		_displayed: { [string]: number },
 		_chipScales: { [string]: UIScale },
+		_promptWanted: boolean,
 		_infiniteBag: boolean?,
 		_timerConnection: RBXScriptConnection?,
 		_bannerScale: UIScale?,
@@ -75,6 +76,7 @@ function HUDController.new(deps: any): HUDController
 		_labels = {},
 		_displayed = {},
 		_chipScales = {},
+		_promptWanted = false,
 		_timerConnection = nil,
 		_bannerScale = nil,
 		_reticleArt = nil,
@@ -245,7 +247,8 @@ function HUDController.new(deps: any): HUDController
 		local prompts = Tokens.prompts[mode]
 		promptItem(1, prompts.primary, "Gather")
 		promptItem(3, prompts.interact, "Interact")
-		prompt.Visible = mode ~= "touch"
+		-- Only shown while gathering: the lobby explains itself through its world prompts.
+		prompt.Visible = mode ~= "touch" and self._promptWanted == true
 	end
 
 	-- Settings: round gear button, top-right.
@@ -567,6 +570,8 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 		self.hotbar:setVisible(phase == "Cutscene" or phase == "Countdown" or phase == "Searching" or phase == "EggRevealed")
 		self._labels.reticle.Visible = phase == "Searching" or phase == "EggRevealed"
 		self.carriedStack:setVisible(phase == "Searching" or phase == "EggRevealed")
+		self._promptWanted = phase == "Searching" or phase == "EggRevealed"
+		self._labels.prompt.Visible = self._promptWanted and deps.input:mode() ~= "touch"
 		if inRound and not self._timerConnection then
 			self._timerConnection = RunService.RenderStepped:Connect(function()
 				self.round:setTimer(round:elapsedMs())

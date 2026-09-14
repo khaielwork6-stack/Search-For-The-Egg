@@ -6,14 +6,17 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Motion = require(Shared.Design.Motion)
 local AssetManifest = require(Shared.Design.AssetManifest)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local Signal = require(Shared.Util.Signal)
 local Trove = require(Shared.Util.Trove)
 local SafeArea = require(script.Parent.Parent.UI.SafeArea)
 local Button = require(script.Parent.Parent.UI.Components.Button)
+local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
 local PartyModal = require(script.Parent.Parent.UI.Modals.PartyModal)
 local ClassesModal = require(script.Parent.Parent.UI.Modals.ClassesModal)
 local ShopModal = require(script.Parent.Parent.UI.Modals.ShopModal)
@@ -124,6 +127,33 @@ function LobbyController.new(deps: any): LobbyController
 		})
 		handle.button.LayoutOrder = index
 		handle.button.Name = "Station_" .. entry.id
+		-- Hover nameplate: the station's title rises above its tile so the icons explain themselves.
+		local plate = FrameKit.pill(handle.button, "Nameplate", entry.title, {
+			size = UDim2.fromOffset(0, Tokens.typography.caption.size + Tokens.spacing.md),
+			textSize = Tokens.typography.caption.size + 1,
+			zIndex = rail.ZIndex + 3,
+			fitText = true,
+			outline = true,
+		})
+		plate.AnchorPoint = Vector2.new(0.5, 1)
+		plate.Position = UDim2.new(0.5, 0, 0, -Tokens.spacing.xs)
+		plate.Visible = false
+		local plateMotion = deps.accessibility:motionSettings()
+		handle.button.MouseEnter:Connect(function()
+			plate.Visible = true
+			plate.Position = UDim2.new(0.5, 0, 0, Tokens.spacing.xs)
+			plate.TextTransparency = 1
+			plate.BackgroundTransparency = 1
+			local info = TweenInfo.new(Motion.duration("quick", plateMotion), Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+			TweenService:Create(plate, info, {
+				Position = UDim2.new(0.5, 0, 0, -Tokens.spacing.xs),
+				TextTransparency = 0,
+				BackgroundTransparency = 0,
+			}):Play()
+		end)
+		handle.button.MouseLeave:Connect(function()
+			plate.Visible = false
+		end)
 		if not image then
 			handle.button.TextSize = Tokens.typography.caption.size + 1
 		end

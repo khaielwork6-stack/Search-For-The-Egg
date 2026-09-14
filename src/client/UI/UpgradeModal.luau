@@ -349,7 +349,7 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 			row.frame.LayoutOrder = order
 			row.title.Text = titleFor(preview)
 			-- Pips follow the title text so they never collide with it.
-			row.pips.Position = UDim2.new(0, math.ceil(row.title.TextBounds.X) + Tokens.spacing.sm, 0.5, -(Tokens.spacing.xs + 4))
+			row.pips.Position = UDim2.new(0, math.ceil(row.title.TextBounds.X) + Tokens.spacing.md, 0.5, -(Tokens.spacing.xs + 4))
 			row.pips.Visible = #row.pipDots > 1
 			for index, dot in ipairs(row.pipDots) do
 				local lit = index <= (preview.level or 0)
