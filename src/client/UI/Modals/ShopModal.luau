@@ -381,7 +381,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	-- Robux offers ---------------------------------------------------------------------------------
 	type OfferCard = { offer: Offer, tile: Frame, buy: any, owned: TextLabel, scale: UIScale }
 	local offerCards: { OfferCard } = {}
-	local offerHeight = tap * 3 - Tokens.spacing.xs
+	local offerHeight = tap * 3 + Tokens.spacing.xs
 	for index, offer in ipairs(offers(cfg)) do
 		local fill = if offer.pass then Tokens.color.gem else Tokens.color.sky
 		local deep = if offer.pass then Tokens.color.gemDeep else Tokens.color.skyDeep
@@ -408,12 +408,12 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		artHolder.Name = "Art"
 		artHolder.AnchorPoint = Vector2.new(0.5, 0)
 		artHolder.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.sm)
-		artHolder.Size = UDim2.fromOffset(tap + Tokens.spacing.sm, tap + Tokens.spacing.sm)
+		artHolder.Size = UDim2.fromOffset(tap, tap)
 		artHolder.BackgroundTransparency = 1
 		artHolder.ZIndex = z + 2
 		artHolder.Parent = face
 		Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 2, transparency = 0.7, color = Tokens.color.featherWhite })
-		centredArt(artHolder, offer.art, offer.icon, tap - Tokens.spacing.xs, z + 4)
+		centredArt(artHolder, offer.art, offer.icon, tap - Tokens.spacing.sm, z + 4)
 		local caption = FrameKit.badge(
 			face,
 			"Caption",
@@ -422,7 +422,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 			z + 4
 		)
 		caption.AnchorPoint = Vector2.new(0.5, 0)
-		caption.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.sm + tap + Tokens.spacing.sm - 6)
+		caption.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.sm + tap - 6)
 		caption.TextSize = Tokens.typography.caption.size - 2
 		local buy = Button.build(face, {
 			text = if offer.robux then string.format("R$ %d", offer.robux) else "R$",
