@@ -360,6 +360,12 @@ function RoundService.markEggRevealed(self: RoundService, roundId: string): (Rou
 end
 
 -- Atomic first-valid claim. Requires a valid session token for the claimant.
+-- Session-token check for round actions that do not change the round state themselves.
+function RoundService.validateToken(self: RoundService, userId: number, token: any): (boolean, string?)
+	local okToken, err = self._sessions:validate(userId, token, "Round")
+	return okToken == true, err
+end
+
 function RoundService.claim(self: RoundService, roundId: string, userId: number, token: any): (RoundReducer.RoundState?, string?)
 	local runtime = self._rounds[roundId]
 	if not runtime then

@@ -45,12 +45,21 @@ function VictoryController.new(deps: {
 	accessibility: any,
 	config: { [string]: any },
 }): VictoryController
-	local self = setmetatable(
-		{ _deps = deps, _announcement = nil, _trove = Trove.new(), stats = { reveals = 0, victories = 0, results = 0 } },
-		VictoryController
-	)
+	local self = setmetatable({
+		_deps = deps,
+		_announcement = nil,
+		_carrierGlow = nil,
+		_trove = Trove.new(),
+		stats = { reveals = 0, victories = 0, results = 0 },
+	}, VictoryController)
 	self._trove:add(deps.round.eggRevealed:Connect(function(payload)
 		self:onRevealed(payload)
+	end))
+	self._trove:add(deps.net:on("EggCarried", function(payload)
+		self:onCarried(payload)
+	end))
+	self._trove:add(deps.net:on("EggDropped", function(payload)
+		self:onDropped(payload)
 	end))
 	self._trove:add(deps.round.victory:Connect(function(payload)
 		self:onVictory(payload)
@@ -105,10 +114,51 @@ function VictoryController.onRevealed(self: VictoryController, payload: { [strin
 	end
 end
 
+-- Someone picked the Egg up: the carrier glows for everyone and the banner says where it goes.
+function VictoryController.onCarried(self: VictoryController, payload: { [string]: any })
+	local deps = self._deps
+	local isMe = payload.carrierUserId == Players.LocalPlayer.UserId
+	if isMe then
+		deps.hud:setObjective("Bring the Egg to the Farmer", "He is waiting between the barn and the nest")
+	else
+		deps.hud:setObjective(tostring(payload.carrierName) .. " has the Egg!", "Follow them to the Farmer")
+		deps.hud.toasts:push(tostring(payload.carrierName) .. " picked up the Egg", "info")
+	end
+	deps.audio:play(Tokens.sound.eggChime)
+	local carrier = Players:GetPlayerByUserId(payload.carrierUserId)
+	local character = carrier and carrier.Character
+	if character then
+		local highlight = Instance.new("Highlight")
+		highlight.Name = "SFE_CarrierGlow"
+		highlight.FillColor = Tokens.color.goldLight
+		highlight.FillTransparency = 0.75
+		highlight.OutlineColor = Tokens.color.gold
+		highlight.Parent = character
+		local this = self :: any
+		this._carrierGlow = highlight
+	end
+end
+
+function VictoryController.onDropped(self: VictoryController, _payload: { [string]: any })
+	local deps = self._deps
+	local this = self :: any
+	if this._carrierGlow then
+		this._carrierGlow:Destroy()
+		this._carrierGlow = nil
+	end
+	deps.hud:setObjective("Claim the Egg!", "Hold Interact on the Egg before anyone else")
+	deps.hud.toasts:push("The Egg was dropped", "info")
+end
+
 -- Winner announcement with gameplay input lock for inputLockSeconds.
 function VictoryController.onVictory(self: VictoryController, payload: { [string]: any })
 	local deps = self._deps
 	self.stats.victories += 1
+	local this = self :: any
+	if this._carrierGlow then
+		this._carrierGlow:Destroy()
+		this._carrierGlow = nil
+	end
 	deps.input:setSuspended(true)
 	deps.audio:play(Tokens.sound.victoryStem)
 	deps.haptics:pulse(1, 0.25)

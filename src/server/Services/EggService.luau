@@ -24,7 +24,9 @@ export type EggService = typeof(setmetatable(
 		_analytics: any?,
 		revealed: any, -- (runtime, position)
 		claimed: any, -- (runtime, userId)
-		stats: { reveals: number, claims: number, rejected: number },
+		carried: any, -- (runtime, userId)
+		dropped: any, -- (runtime, userId, position)
+		stats: { reveals: number, claims: number, rejected: number, pickups: number, drops: number },
 	},
 	EggService
 ))
@@ -44,7 +46,9 @@ function EggService.new(options: {
 		_analytics = options.analytics,
 		revealed = Signal.new(),
 		claimed = Signal.new(),
-		stats = { reveals = 0, claims = 0, rejected = 0 },
+		carried = Signal.new(),
+		dropped = Signal.new(),
+		stats = { reveals = 0, claims = 0, rejected = 0, pickups = 0, drops = 0 },
 	}, EggService)
 end
 
@@ -153,6 +157,34 @@ function EggService.checkReveal(self: EggService, runtime: any): boolean
 	return true
 end
 
+-- Where the Egg must be handed over; nil for chapters without a Farmer (the claim itself wins).
+function EggService.farmerPosition(_self: EggService, runtime: any): Vector3?
+	local layout = ChapterLayout[runtime.state.chapter]
+	return layout.farmer
+end
+
+function EggService.carrier(_self: EggService, runtime: any): number?
+	return runtime.eggCarrier
+end
+
+local function winNow(self: EggService, runtime: any, userId: number, token: any): Envelope.Envelope<any>
+	local next, err = self._rounds:claim(runtime.state.roundId, userId, token)
+	if not next then
+		self.stats.rejected += 1
+		local code = if err == "stale_token"
+			then Envelope.Codes.STALE_TOKEN
+			elseif err == "already_won" then Envelope.Codes.ALREADY_DONE
+			else Envelope.Codes.INVALID_STATE
+		return Envelope.fail(code, err)
+	end
+	runtime.eggCarrier = nil
+	self.stats.claims += 1
+	self.claimed:Fire(runtime, userId)
+	return Envelope.ok({ finderUserId = userId, elapsedMs = next.victory and next.victory.elapsedMs or 0 })
+end
+
+-- Picking the Egg up at its resting place. With a Farmer in the chapter this only makes the
+-- player the carrier (the win comes from `deliver`); without one it is the win itself.
 function EggService.claim(self: EggService, userId: number, token: any): Envelope.Envelope<any>
 	local runtime = self._rounds:roundOf(userId)
 	if not runtime then
@@ -162,6 +194,10 @@ function EggService.claim(self: EggService, userId: number, token: any): Envelop
 	if not RoundReducer.acceptsClaim(runtime.state) then
 		self.stats.rejected += 1
 		return Envelope.fail(Envelope.Codes.INVALID_STATE, if runtime.state.victory then "already_won" else "not_revealed")
+	end
+	if runtime.eggCarrier then
+		self.stats.rejected += 1
+		return Envelope.fail(Envelope.Codes.INVALID_STATE, if runtime.eggCarrier == userId then "already_carrying" else "carried")
 	end
 	local characterPosition = self._getCharacterPosition(userId)
 	if not characterPosition then
@@ -173,18 +209,59 @@ function EggService.claim(self: EggService, userId: number, token: any): Envelop
 		self.stats.rejected += 1
 		return Envelope.fail(Envelope.Codes.OUT_OF_RANGE, "egg")
 	end
-	local next, err = self._rounds:claim(runtime.state.roundId, userId, token)
-	if not next then
-		self.stats.rejected += 1
-		local code = if err == "stale_token"
-			then Envelope.Codes.STALE_TOKEN
-			elseif err == "already_won" then Envelope.Codes.ALREADY_DONE
-			else Envelope.Codes.INVALID_STATE
-		return Envelope.fail(code, err)
+	if not self:farmerPosition(runtime) then
+		return winNow(self, runtime, userId, token)
 	end
-	self.stats.claims += 1
-	self.claimed:Fire(runtime, userId)
-	return Envelope.ok({ finderUserId = userId, elapsedMs = next.victory and next.victory.elapsedMs or 0 })
+	local okToken, tokenErr = self._rounds:validateToken(userId, token)
+	if not okToken then
+		self.stats.rejected += 1
+		return Envelope.fail(Envelope.Codes.STALE_TOKEN, tokenErr)
+	end
+	runtime.eggCarrier = userId
+	self.stats.pickups += 1
+	self.carried:Fire(runtime, userId)
+	return Envelope.ok({ carrierUserId = userId, carrying = true })
+end
+
+-- Handing the Egg to the Farmer: the carrier, in range, wins the round.
+function EggService.deliver(self: EggService, userId: number, token: any): Envelope.Envelope<any>
+	local runtime = self._rounds:roundOf(userId)
+	if not runtime then
+		self.stats.rejected += 1
+		return Envelope.fail(Envelope.Codes.INVALID_STATE, "no_round")
+	end
+	if not RoundReducer.acceptsClaim(runtime.state) then
+		self.stats.rejected += 1
+		return Envelope.fail(Envelope.Codes.INVALID_STATE, if runtime.state.victory then "already_won" else "not_revealed")
+	end
+	if runtime.eggCarrier ~= userId then
+		self.stats.rejected += 1
+		return Envelope.fail(Envelope.Codes.INVALID_STATE, "not_carrier")
+	end
+	local farmer = self:farmerPosition(runtime)
+	local characterPosition = self._getCharacterPosition(userId)
+	if not farmer or not characterPosition then
+		self.stats.rejected += 1
+		return Envelope.fail(Envelope.Codes.INVALID_STATE, "no_character")
+	end
+	local flat = Vector3.new(characterPosition.X - farmer.X, 0, characterPosition.Z - farmer.Z)
+	if flat.Magnitude > (self._config.eggSpawn.deliverRadiusStuds or self._config.eggSpawn.claimRadiusStuds) then
+		self.stats.rejected += 1
+		return Envelope.fail(Envelope.Codes.OUT_OF_RANGE, "farmer")
+	end
+	return winNow(self, runtime, userId, token)
+end
+
+-- The carrier died or left: the Egg goes back to where it was uncovered.
+function EggService.drop(self: EggService, userId: number): boolean
+	local runtime = self._rounds:roundOf(userId)
+	if not runtime or runtime.eggCarrier ~= userId then
+		return false
+	end
+	runtime.eggCarrier = nil
+	self.stats.drops += 1
+	self.dropped:Fire(runtime, userId, self:position(runtime))
+	return true
 end
 
 return EggService

@@ -170,6 +170,8 @@ ChapterLayout.chapter1 = table.freeze({
 	}),
 	upgradeBoard = Vector3.new(-45, 53.8, 303), -- in front of the supplies counter (inside the shop)
 	upgradePrompt = Vector3.new(-45, 58.9, 301.2),
+	farmer = Vector3.new(-28, 52.1, 338), -- the Farmer stands between the barn door and the mound
+	farmerFacing = Vector3.new(0, 52.1, 372),
 	chickPathY = 52.1, -- scout chicks walk at ground level between the mound and the crate
 	roofHeight = 26,
 	ambientAnchors = table.freeze({

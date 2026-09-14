@@ -284,6 +284,7 @@
     "revealRadiusStuds": 5,
     "claimRadiusStuds": 8,
     "claimHoldSeconds": 0.65,
+    "deliverRadiusStuds": 9,
     "oneWinnerPerRound": true,
     "partySharesWin": true,
     "repeatProtectionRounds": 3,

@@ -1031,6 +1031,31 @@ end)
 registry:onRequest("EggClaim", function(player, payload)
 	return egg:claim(player.UserId, payload.sessionToken)
 end)
+registry:onRequest("EggDeliver", function(player, payload)
+	return egg:deliver(player.UserId, payload.sessionToken)
+end)
+-- Carrying: the Egg rides on the carrier, everyone hears who has it; a drop puts it back.
+egg.carried:Connect(function(runtime, userId)
+	local carrier = playerData:playerOf(userId)
+	local character = carrier and typeof(carrier) == "Instance" and (carrier :: Player).Character
+	if character then
+		ChapterShellService.attachEgg(arena, character)
+	end
+	local name = if carrier and typeof(carrier) == "Instance" then (carrier :: Player).DisplayName else "A forager"
+	for _, player in ipairs(memberPlayers(runtime.state.members)) do
+		send(player, "EggCarried", { carrierUserId = userId, carrierName = name, roundId = runtime.state.roundId })
+	end
+end)
+egg.dropped:Connect(function(runtime, userId, position)
+	ChapterShellService.detachEgg(arena, position)
+	for _, player in ipairs(memberPlayers(runtime.state.members)) do
+		send(
+			player,
+			"EggDropped",
+			{ carrierUserId = userId, x = position.X, y = position.Y, z = position.Z, roundId = runtime.state.roundId }
+		)
+	end
+end)
 registry:onRequest("ResultsAction", function(player, payload)
 	local runtime = rounds:roundOf(player.UserId)
 	if not runtime then
@@ -1090,6 +1115,7 @@ local function onCharacterAdded(player: Player, character: Model)
 		humanoid.Died:Connect(function()
 			analytics:track("player_died", { inRound = rounds:roundOf(player.UserId) ~= nil }, player.UserId)
 			tools:onDeath(player.UserId)
+			egg:drop(player.UserId)
 			-- Death preserves bag/cash/tools (ASSUMED A-RND-07); respawn after the configured delay.
 			task.delay(config.death.respawnSeconds, function()
 				if player.Parent then
@@ -1130,6 +1156,7 @@ Players.PlayerRemoving:Connect(function(player)
 	local runtime = rounds:roundOf(player.UserId)
 	if runtime then
 		tools:onLeave(player.UserId)
+		egg:drop(player.UserId)
 		rounds:setPresent(runtime.state.roundId, player.UserId, false)
 	end
 	if parties:partyOf(player.UserId) then

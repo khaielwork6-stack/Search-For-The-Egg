@@ -131,8 +131,39 @@ function InteractionController.handle(self: InteractionController, promptName: s
 			return nil
 		end
 		local result = deps.net:request("EggClaim", { sessionToken = token })
-		if not result.ok and result.message ~= "already_won" then
-			deps.hud.toasts:push("Get closer to the Egg", "warning")
+		if result.ok then
+			deps.audio:play(Tokens.sound.eggChime)
+			deps.haptics:pulse(0.7, 0.15)
+			if result.data and result.data.carrying then
+				deps.hud.toasts:push("You have the Egg! Take it to the Farmer", "success")
+			end
+		else
+			deps.audio:play(Tokens.sound.uiError)
+			deps.hud.toasts:push(
+				if result.message == "carried"
+					then "Someone already has the Egg"
+					elseif result.code == "out_of_range" then "Get closer to the Egg"
+					else "Could not take the Egg",
+				"warning"
+			)
+		end
+		self.claimed:Fire(result)
+		return result
+	elseif promptName == "SFE_EggDeliver" then
+		local token = deps.round:sessionToken()
+		if not token then
+			return nil
+		end
+		local result = deps.net:request("EggDeliver", { sessionToken = token })
+		if not result.ok then
+			deps.audio:play(Tokens.sound.uiError)
+			deps.hud.toasts:push(
+				if result.message == "not_carrier"
+					then "Bring the Egg to the Farmer first"
+					elseif result.code == "out_of_range" then "Stand next to the Farmer"
+					else "The Farmer is not ready",
+				"warning"
+			)
 		end
 		self.claimed:Fire(result)
 		return result

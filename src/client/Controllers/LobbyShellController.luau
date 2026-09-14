@@ -410,7 +410,9 @@ end
 
 function LobbyShellController._presentVendor(self: LobbyShellController, part: BasePart, register: (any) -> ())
 	local modelName = part:GetAttribute("SFE_NpcModel")
-	local model = if type(modelName) == "string" then workspace:FindFirstChild(modelName) else nil
+	local model = if type(modelName) == "string"
+		then (workspace:FindFirstChild(modelName) or (part.Parent and part.Parent:FindFirstChild(modelName)))
+		else nil
 	if not (model and model:IsA("Model")) then
 		return
 	end

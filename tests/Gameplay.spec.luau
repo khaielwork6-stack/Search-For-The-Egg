@@ -343,7 +343,7 @@ return function(describe, it, expect)
 			expect(runtime.state.phase).toBe("EggRevealed")
 		end)
 
-		it("100 simultaneous claims choose one finder; range and phase are enforced", function()
+		it("100 simultaneous claims choose one carrier; range and phase are enforced; the Farmer decides the win", function()
 			local h = harness()
 			for userId = 1, 4 do
 				h.join(userId)
@@ -368,9 +368,28 @@ return function(describe, it, expect)
 				end
 			end
 			expect(#winners).toBe(1)
+			expect(h.egg:carrier(runtime)).toBe(winners[1])
+			expect(runtime.state.phase).toBe("EggRevealed")
+			-- Only the carrier can hand it over, and only next to the Farmer.
+			local other = (winners[1] % 4) + 1
+			expect(h.egg:deliver(other, h.token(other)).message).toBe("not_carrier")
+			expect(h.egg:deliver(winners[1], h.token(winners[1])).code).toBe("out_of_range")
+			h.standAt(winners[1], ChapterLayout.chapter1.farmer)
+			expect(h.egg:deliver(winners[1], h.token(winners[1])).ok).toBe(true)
 			expect(runtime.state.victory.finderUserId).toBe(winners[1])
+			expect(h.egg:drop(winners[1])).toBe(false)
 		end)
 	end)
+
+	-- Picks the Egg up at its resting place, walks it to the Farmer and hands it over.
+	local function winEgg(h, runtime, userId)
+		local claim = h.egg:claim(userId, h.token(userId))
+		expect(claim.ok).toBe(true)
+		expect(claim.data.carrying).toBe(true)
+		expect(runtime.state.phase).toBe("EggRevealed")
+		h.standAt(userId, ChapterLayout.chapter1.farmer)
+		return h.egg:deliver(userId, h.token(userId))
+	end
 
 	describe("Victory", function()
 		local function playToVictory(h, members, finder)
@@ -382,8 +401,8 @@ return function(describe, it, expect)
 				h.standAt(userId, position)
 			end
 			h.clock:advance(42.5) -- elapsed time for the record
-			local claim = h.egg:claim(finder, h.token(finder))
-			expect(claim.ok).toBe(true)
+			local delivered = winEgg(h, runtime, finder)
+			expect(delivered.ok).toBe(true)
 			return roundId, runtime
 		end
 
@@ -454,7 +473,7 @@ return function(describe, it, expect)
 			h.egg:checkReveal(runtime2)
 			h.standAt(1, h.egg:position(runtime2))
 			h.clock:advance(90)
-			expect(h.egg:claim(1, h.token(1)).ok).toBe(true)
+			expect(winEgg(h, runtime2, 1).ok).toBe(true)
 			local data = h.profiles:get(1).data
 			expect(data.progression.bestTimeMs.chapter1.normal).toBe(42500)
 			expect(data.progression.totalWins).toBe(2)
@@ -492,7 +511,7 @@ return function(describe, it, expect)
 			h.clearGridExcept(runtime, {})
 			h.egg:checkReveal(runtime)
 			h.standAt(1, h.egg:position(runtime))
-			expect(h.egg:claim(1, h.token(1)).ok).toBe(true)
+			expect(winEgg(h, runtime, 1).ok).toBe(true)
 			expect(h.profiles:get(1).data.currencies.gems).toBeGreaterThan(0)
 			expect(h.profiles:get(2).data.currencies.gems).toBe(0)
 			expect(runtime.results[2]).toBeNil()

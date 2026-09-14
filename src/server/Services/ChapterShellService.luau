@@ -344,10 +344,101 @@ function ChapterShellService.buildFromMap(workspaceService: Workspace, mapModel:
 		drift:SetAttribute("SFE_Ambient", "featherDrift")
 	end
 	ChapterShellService.placeDisplays(workspaceService, config)
+	ChapterShellService.spawnFarmer(workspaceService, folder, layout, config)
 
 	folder:SetAttribute("SFE_ChildCount", #folder:GetChildren())
 	folder.Parent = workspaceService
 	return folder
+end
+
+-- The Farmer: a clone of the owner's Cow Boy rig standing between the barn and the mound. His
+-- anchor carries the vendor presentation attributes and the hand-over prompt.
+function ChapterShellService.spawnFarmer(workspaceService: Workspace, folder: Instance, layout: any, config: { [string]: any }): Model?
+	if not layout.farmer then
+		return nil
+	end
+	local source = workspaceService:FindFirstChild("Cow Boy")
+	if not (source and source:IsA("Model")) then
+		return nil
+	end
+	local farmer = source:Clone()
+	farmer.Name = "Farmer"
+	for _, descendant in ipairs(farmer:GetDescendants()) do
+		if descendant:IsA("BaseScript") then
+			descendant:Destroy()
+		elseif descendant:IsA("BasePart") then
+			descendant.Anchored = true
+		end
+	end
+	local _, size = farmer:GetBoundingBox()
+	local look = CFrame.lookAt(layout.farmer, Vector3.new(layout.farmerFacing.X, layout.farmer.Y, layout.farmerFacing.Z))
+	farmer:PivotTo(look * CFrame.new(0, size.Y / 2, 0))
+	local humanoid = farmer:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	end
+	farmer.Parent = folder
+	local root = farmer:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local anchorPart = part(
+		"farmerVendor",
+		Vector3.new(4, 6, 3),
+		CFrame.new(root and root.Position or layout.farmer),
+		Color3.fromRGB(252, 246, 234),
+		Enum.Material.SmoothPlastic,
+		folder,
+		false
+	)
+	anchorPart.Transparency = 1
+	anchorPart.CanQuery = true
+	anchorPart:SetAttribute("SFE_Ambient", "npc")
+	anchorPart:SetAttribute("SFE_NpcModel", "Farmer")
+	anchorPart:SetAttribute("SFE_NpcName", "Farmer")
+	anchorPart:SetAttribute("SFE_NpcRole", "Bring the Egg here")
+	anchorPart:SetAttribute("SFE_NpcLine", "Found the Egg? Bring it to me and the search is yours!")
+	prompt(anchorPart, "SFE_EggDeliver", "Hand over the Egg", "Farmer", 0, config.eggSpawn.deliverRadiusStuds or 8)
+	return farmer
+end
+
+-- The Egg rides above the carrier's head; its pickup prompt hides while it is carried.
+function ChapterShellService.attachEgg(folder: Instance, character: Model): boolean
+	local egg = folder:FindFirstChild("SFE_Egg")
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not (egg and egg:IsA("BasePart") and root and root:IsA("BasePart")) then
+		return false
+	end
+	local eggPrompt = egg:FindFirstChildOfClass("ProximityPrompt")
+	if eggPrompt then
+		eggPrompt.Enabled = false
+	end
+	egg.Anchored = false
+	egg.CanCollide = false
+	egg.Massless = true
+	egg.CFrame = root.CFrame * CFrame.new(0, 4.2, 0)
+	local weld = Instance.new("Weld")
+	weld.Name = "SFE_EggCarry"
+	weld.Part0 = root
+	weld.Part1 = egg
+	weld.C0 = CFrame.new(0, 4.2, 0)
+	weld.Parent = egg
+	return true
+end
+
+function ChapterShellService.detachEgg(folder: Instance, position: Vector3): boolean
+	local egg = folder:FindFirstChild("SFE_Egg")
+	if not (egg and egg:IsA("BasePart")) then
+		return false
+	end
+	local weld = egg:FindFirstChild("SFE_EggCarry")
+	if weld then
+		weld:Destroy()
+	end
+	egg.Anchored = true
+	egg.CFrame = CFrame.new(position + Vector3.new(0, 0.6, 0))
+	local eggPrompt = egg:FindFirstChildOfClass("ProximityPrompt")
+	if eggPrompt then
+		eggPrompt.Enabled = true
+	end
+	return true
 end
 
 -- The owner's item models become shop displays inside the supplies barn: two bags on the counter,
