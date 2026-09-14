@@ -85,7 +85,7 @@ function Tabs.build(parent: Instance, options: Options): Handle
 		end
 	end
 	for index, item in ipairs(options.items) do
-		local width = options.width or math.max(options.minimumTapTarget * 2, #item.label * 9 + Tokens.spacing.xl)
+		local width = options.width or math.max(options.minimumTapTarget * 2, #item.label * 11 + Tokens.spacing.xl + Tokens.spacing.sm)
 		local handle = Button.build(frame, {
 			text = item.label,
 			variant = "ghost",
