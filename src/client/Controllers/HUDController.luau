@@ -6,6 +6,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
+local GuiService = game:GetService("GuiService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Trove = require(Shared.Util.Trove)
@@ -178,6 +179,26 @@ function HUDController.new(deps: any): HUDController
 	reticleCorner.Parent = reticle
 	reticle.Parent = gui
 	self._labels.reticle = reticle
+	-- The reticle sits on the true viewport centre (where the locked first-person mouse is and where
+	-- the pick ray goes), not the centre of the inset-adjusted gui: this gui excludes the core UI
+	-- inset, so its own centre would draw the dot below the aim point.
+	local function placeReticle()
+		local camera = workspace.CurrentCamera
+		if not camera then
+			return
+		end
+		local inset = GuiService:GetGuiInset()
+		local uiScale = gui:FindFirstChildOfClass("UIScale")
+		local factor = if uiScale then uiScale.Scale else 1
+		local viewport = camera.ViewportSize
+		reticle.Position = UDim2.fromOffset((viewport.X * 0.5 - inset.X) / factor, (viewport.Y * 0.5 - inset.Y) / factor)
+	end
+	placeReticle()
+	self._trove:add(gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeReticle))
+	self._trove:add(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(placeReticle))
+	if workspace.CurrentCamera then
+		self._trove:add(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(placeReticle))
+	end
 
 	self.toasts = Toast.new(gui, function()
 		return deps.accessibility:motionSettings()

@@ -211,8 +211,8 @@
         4,
         34
       ],
-      "fluffPerCellDesktop": 10,
-      "fluffPerCellMobile": 4,
+      "fluffPerCellDesktop": 42,
+      "fluffPerCellMobile": 14,
       "fluffTintShift": 0.35,
       "selectionOutlineColor": [
         255,
@@ -229,9 +229,9 @@
       "rimStrandsDesktop": 1800,
       "rimStrandsMobile": 550,
       "fluffBandDepths": [
-        7.0,
-        7.5,
-        8.0
+        0.0,
+        0.4,
+        0.8
       ],
       "fluffBandShares": [
         0.4,
@@ -252,8 +252,8 @@
         2
       ],
       "underlayerDepths": [
-        6.7,
-        7.2
+        1.1,
+        1.6
       ],
       "underlayerLengthRange": [
         0.9,
