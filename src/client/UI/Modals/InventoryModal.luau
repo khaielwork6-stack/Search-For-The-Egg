@@ -210,7 +210,7 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 			cleanups,
 			hit.Activated:Connect(function()
 				local projection = deps.profile.projection
-				local owned = projection and projection.inventory.toolSkins[skin.id] == true
+				local owned = skin.source == "default" or (projection and projection.inventory.toolSkins[skin.id] == true)
 				if not owned then
 					deps.audio:play(Tokens.sound.uiError)
 					Tween.shake(tile, motion)
@@ -260,7 +260,7 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 				continue
 			end
 			first = first or card.hit
-			local owned = projection ~= nil and projection.inventory.toolSkins[card.skin.id] == true
+			local owned = card.skin.source == "default" or (projection ~= nil and projection.inventory.toolSkins[card.skin.id] == true)
 			local equipped = projection ~= nil and projection.inventory.equippedSkins[card.skin.category] == card.skin.id
 			card.face.BackgroundColor3 = if equipped
 				then Tokens.color.leafBright

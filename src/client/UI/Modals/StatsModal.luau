@@ -67,7 +67,7 @@ local CARDS: { CardSpec } = {
 	{
 		key = "record",
 		caption = "TIME RECORD",
-		art = "hud.timer",
+		art = "none",
 		icon = "clock",
 		fill = Tokens.color.ember,
 		deep = Tokens.color.emberDeep,

@@ -178,7 +178,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	body.ZIndex = z
 	body.Parent = container
 
-	local tileHeight = tap * 5 + Tokens.spacing.sm
+	local tileHeight = tap * 4 + Tokens.spacing.xxl + Tokens.spacing.lg
 	local grid = Instance.new("Frame")
 	grid.Name = "Perks"
 	grid.BackgroundColor3 = Tokens.color.creamDeep
@@ -252,12 +252,12 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		artHolder.Name = "Art"
 		artHolder.AnchorPoint = Vector2.new(0.5, 0)
 		artHolder.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.md)
-		artHolder.Size = UDim2.fromOffset(tap * 2 + Tokens.spacing.lg, tap * 2 + Tokens.spacing.lg)
+		artHolder.Size = UDim2.fromOffset(tap * 2 + Tokens.spacing.sm, tap * 2 + Tokens.spacing.sm)
 		artHolder.BackgroundTransparency = 1
 		artHolder.ZIndex = z + 2
 		artHolder.Parent = face
 		Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 2, transparency = 0.66, color = Tokens.color.featherWhite })
-		centredArt(artHolder, copy.art, copy.icon, tap * 2 + Tokens.spacing.xs, z + 4)
+		centredArt(artHolder, copy.art, copy.icon, tap * 2 - Tokens.spacing.xs, z + 4)
 		-- Level pips: one per level, lit up to the current one.
 		local pips = Instance.new("Frame")
 		pips.Name = "Pips"
@@ -292,8 +292,8 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		end
 		-- Level badge in the top-left corner; the bonus reads from the pips.
 		local levelLabel = FrameKit.badge(face, "Level", "LV 0", Tokens.color.overlay, z + 4)
-		levelLabel.AnchorPoint = Vector2.new(0, 0)
-		levelLabel.Position = UDim2.fromOffset(Tokens.spacing.xs, Tokens.spacing.xs)
+		levelLabel.AnchorPoint = Vector2.new(0.5, 1)
+		levelLabel.Position = UDim2.new(0.5, 0, 1, -(tap + Tokens.spacing.md + 22))
 		levelLabel.BackgroundTransparency = 0.35
 		-- Price button across the bottom.
 		local buy = Button.build(face, {
