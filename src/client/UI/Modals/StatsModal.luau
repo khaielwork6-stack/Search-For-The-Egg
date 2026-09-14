@@ -8,7 +8,7 @@ local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
-local Button = require(script.Parent.Parent.Components.Button)
+local Tabs = require(script.Parent.Parent.Components.Tabs)
 
 local StatsModal = {}
 
@@ -46,7 +46,7 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local tap = deps.minimumTapTarget
 	local z = container.ZIndex + 1
 
-	FrameKit.text(container, "PersonalHeader", "Your ledger", "heading", { zIndex = z, color = Tokens.color.goldDeep }).LayoutOrder = 1
+	FrameKit.heading(container, "PersonalHeader", "Your ledger", z).LayoutOrder = 1
 	local personal = Instance.new("Frame")
 	personal.Name = "Personal"
 	personal.BackgroundTransparency = 1
@@ -64,26 +64,13 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	for index, key in ipairs({ "playtime", "class", "wins", "eggs", "feathers", "best1n", "best1h", "rounds" }) do
 		local cell = FrameKit.row(personal, "Stat_" .. key, Tokens.typography.body.size * 2 + Tokens.spacing.sm, z)
 		cell.LayoutOrder = index
-		local label = FrameKit.text(cell, "Value", "", "body", { zIndex = z + 1 })
+		local label = FrameKit.text(cell, "Value", "", "body", { zIndex = z + 1, color = Tokens.color.inkStrong })
 		label.Size = UDim2.fromScale(1, 1)
+		label.RichText = true
 		statLabels[key] = label
 	end
 
-	FrameKit.text(container, "BoardHeader", "Leaderboards", "heading", { zIndex = z, color = Tokens.color.goldDeep }).LayoutOrder = 3
-	local tabs = Instance.new("Frame")
-	tabs.Name = "Tabs"
-	tabs.BackgroundTransparency = 1
-	tabs.Size = UDim2.new(1, 0, 0, tap)
-	tabs.AutomaticSize = Enum.AutomaticSize.Y
-	tabs.LayoutOrder = 4
-	tabs.ZIndex = z
-	local tabsLayout = Instance.new("UIListLayout")
-	tabsLayout.FillDirection = Enum.FillDirection.Horizontal
-	tabsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	tabsLayout.Padding = UDim.new(0, Tokens.spacing.xs)
-	tabsLayout.Wraps = true
-	tabsLayout.Parent = tabs
-	tabs.Parent = container
+	FrameKit.heading(container, "BoardHeader", "Leaderboards", z).LayoutOrder = 3
 	local age = FrameKit.text(container, "Age", "", "caption", { zIndex = z, color = Tokens.color.inkMuted })
 	age.LayoutOrder = 5
 	local rowsFrame = Instance.new("Frame")
@@ -100,7 +87,7 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	rowsFrame.Parent = container
 
 	local selectedBoard = cfg.leaderboards.boards[1]
-	local tabHandles: { [string]: any } = {}
+	local tabsHandle
 
 	local function renderBoard()
 		for _, child in ipairs(rowsFrame:GetChildren()) do
@@ -117,10 +104,6 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			then string.format("Refreshed %ds ago  -  updates every %ds", snapshot.ageSeconds, snapshot.refreshSeconds)
 			else "Waiting for the first refresh"
 		for _, board in ipairs(snapshot.boards) do
-			local handle = tabHandles[board.id]
-			if handle then
-				handle.button.BackgroundColor3 = if board.id == selectedBoard then Tokens.color.gold else Tokens.color.creamPill
-			end
 			if board.id ~= selectedBoard then
 				continue
 			end
@@ -163,7 +146,8 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		end
 	end
 
-	for index, boardId in ipairs(cfg.leaderboards.boards) do
+	local items = {}
+	for _, boardId in ipairs(cfg.leaderboards.boards) do
 		local labelText = boardId
 		local snapshot = deps.leaderboards.snapshot
 		if snapshot then
@@ -173,26 +157,30 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				end
 			end
 		end
-		local handle = Button.build(tabs, {
-			text = labelText,
-			variant = "pill",
-			minimumTapTarget = tap,
-			motion = motion,
-			size = UDim2.fromOffset(170, tap),
-			zIndex = z + 1,
-			onActivated = function()
-				selectedBoard = boardId
-				deps.audio:play(Tokens.sound.uiTap)
-				renderBoard()
-			end,
-		})
-		handle.button.LayoutOrder = index
-		handle.button.TextSize = Tokens.typography.caption.size
-		tabHandles[boardId] = handle
-		table.insert(cleanups, handle.destroy)
-		if index == 1 then
-			api.setInitialFocus(handle.button)
-		end
+		table.insert(items, { id = boardId, label = labelText })
+	end
+	tabsHandle = Tabs.build(container, {
+		items = items,
+		selected = selectedBoard,
+		minimumTapTarget = tap,
+		motion = motion,
+		zIndex = z + 1,
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTab)
+		end,
+		hoverSound = function()
+			deps.audio:play(Tokens.sound.uiHover)
+		end,
+		onSelect = function(id)
+			selectedBoard = id
+			renderBoard()
+		end,
+	})
+	tabsHandle.frame.LayoutOrder = 4
+	table.insert(cleanups, tabsHandle.destroy)
+	local firstTab = tabsHandle.buttons[selectedBoard]
+	if firstTab then
+		api.setInitialFocus(firstTab.button)
 	end
 
 	local function renderPersonal()
@@ -214,15 +202,24 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				end
 			end
 		end
-		statLabels.playtime.Text = "Time in the nest\n" .. playtime(projection.stats.playtimeSeconds)
-		statLabels.class.Text = "Class\n" .. className .. extra
-		statLabels.wins.Text = "Eggs won\n" .. tostring(projection.progression.totalWins)
-		statLabels.eggs.Text = "Eggs found first\n" .. tostring(projection.stats.eggsFound)
-		statLabels.feathers.Text = "Feathers gathered\n" .. tostring(projection.stats.feathersCollected)
+		local muted = string.format(
+			"rgb(%d,%d,%d)",
+			math.floor(Tokens.color.inkMuted.R * 255),
+			math.floor(Tokens.color.inkMuted.G * 255),
+			math.floor(Tokens.color.inkMuted.B * 255)
+		)
+		local function tile(caption: string, value: string): string
+			return string.format('<font color="%s" size="%d">%s</font>\n<b>%s</b>', muted, Tokens.typography.caption.size, caption, value)
+		end
+		statLabels.playtime.Text = tile("Time in the nest", playtime(projection.stats.playtimeSeconds))
+		statLabels.class.Text = tile("Class", className .. extra)
+		statLabels.wins.Text = tile("Eggs won", tostring(projection.progression.totalWins))
+		statLabels.eggs.Text = tile("Eggs found first", tostring(projection.stats.eggsFound))
+		statLabels.feathers.Text = tile("Feathers gathered", tostring(projection.stats.feathersCollected))
 		local best = projection.progression.bestTimeMs.chapter1 or {}
-		statLabels.best1n.Text = "Best Henhouse (Normal)\n" .. formatTime(best.normal)
-		statLabels.best1h.Text = "Best Henhouse (Hard)\n" .. formatTime(best.hard)
-		statLabels.rounds.Text = "Searches finished\n" .. tostring(projection.stats.roundsCompleted)
+		statLabels.best1n.Text = tile("Best Henhouse (Normal)", formatTime(best.normal))
+		statLabels.best1h.Text = tile("Best Henhouse (Hard)", formatTime(best.hard))
+		statLabels.rounds.Text = tile("Searches finished", tostring(projection.stats.roundsCompleted))
 	end
 
 	renderPersonal()
@@ -235,10 +232,7 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			local snapshot = deps.leaderboards.snapshot
 			if snapshot then
 				for _, board in ipairs(snapshot.boards) do
-					local handle = tabHandles[board.id]
-					if handle then
-						handle.setText(board.label)
-					end
+					tabsHandle.setLabel(board.id, board.label)
 				end
 			end
 			renderBoard()

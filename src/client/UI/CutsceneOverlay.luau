@@ -9,6 +9,7 @@ local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
 local Button = require(script.Parent.Components.Button)
+local Skin = require(script.Parent.Components.Skin)
 
 local CutsceneOverlay = {}
 
@@ -38,25 +39,41 @@ function CutsceneOverlay.create(parent: Instance, options: { seconds: number, mo
 	gradient.Color = ColorSequence.new(Tokens.color.overlay, Tokens.color.inkStrong)
 	gradient.Rotation = 90
 	gradient.Parent = vignette
+	local vignetteArt = Skin.label(vignette, "cutscene.vignette", { zIndex = vignette.ZIndex + 1, name = "Art" })
+	if vignetteArt then
+		vignetteArt.ScaleType = Enum.ScaleType.Stretch
+		vignetteArt.ImageTransparency = 1
+	end
 
 	local caption = Instance.new("TextLabel")
 	caption.Name = "Caption"
 	caption.AnchorPoint = Vector2.new(0.5, 1)
-	caption.Position = UDim2.fromScale(0.5, 0.82)
+	caption.Position = UDim2.fromScale(0.5, 0.86)
 	caption.Size = UDim2.new(0.7, 0, 0, 90)
 	caption.BackgroundTransparency = 1
 	caption.Font = Tokens.typography.title.font
 	caption.TextSize = Tokens.typography.title.size
-	caption.TextColor3 = Tokens.color.cream
-	caption.TextStrokeTransparency = 0.5
+	caption.TextColor3 = Tokens.color.inkStrong
+	caption.TextStrokeTransparency = 1
 	caption.TextWrapped = true
 	caption.TextTransparency = 1
 	caption.Text = BEATS[1]
+	caption.ZIndex = 3
+	local captionMax = Instance.new("UISizeConstraint")
+	captionMax.MaxSize = Vector2.new(720, 90)
+	captionMax.Parent = caption
+	local captionArt = Skin.label(caption, "cutscene.caption", { zIndex = 2, inset = 8, name = "Plate" })
+	if captionArt then
+		captionArt.ImageTransparency = 1
+	else
+		caption.TextColor3 = Tokens.color.cream
+		caption.TextStrokeTransparency = 0.5
+	end
 	caption.Parent = gui
 
 	local skip, skipCleanup = Button.create(gui, {
 		text = "Skip story",
-		variant = "ghost",
+		variant = "secondary",
 		minimumTapTarget = Tokens.layout.minimumTapTargetPx,
 		motion = options.motion,
 		onActivated = options.onSkip,
@@ -68,7 +85,13 @@ function CutsceneOverlay.create(parent: Instance, options: { seconds: number, mo
 	local function tween(object: Instance, token: string, goal: { [string]: any })
 		TweenService:Create(object, TweenInfo.new(Motion.duration(token, options.motion), Tokens.motion.easeInOut), goal):Play()
 	end
-	tween(vignette, "slow", { BackgroundTransparency = 0.35 })
+	tween(vignette, "slow", { BackgroundTransparency = if vignetteArt then 0.75 else 0.35 })
+	if vignetteArt then
+		tween(vignetteArt, "slow", { ImageTransparency = 0.15 })
+	end
+	if captionArt then
+		tween(captionArt, "slow", { ImageTransparency = 0 })
+	end
 	tween(caption, "slow", { TextTransparency = 0 })
 
 	task.spawn(function()
@@ -99,6 +122,12 @@ function CutsceneOverlay.create(parent: Instance, options: { seconds: number, mo
 			local fade =
 				TweenService:Create(vignette, TweenInfo.new(Motion.duration("quick", options.motion)), { BackgroundTransparency = 1 })
 			tween(caption, "quick", { TextTransparency = 1 })
+			if captionArt then
+				tween(captionArt, "quick", { ImageTransparency = 1 })
+			end
+			if vignetteArt then
+				tween(vignetteArt, "quick", { ImageTransparency = 1 })
+			end
 			fade:Play()
 			fade.Completed:Once(function()
 				gui:Destroy()

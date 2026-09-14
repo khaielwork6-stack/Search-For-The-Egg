@@ -157,6 +157,24 @@ function LobbyController.new(deps: any): LobbyController
 		deps.hud:celebrateCurrency("gems", grant.gems or 0)
 		deps.audio:play(Tokens.sound.rewardTick)
 	end))
+	-- Rail state: the station whose modal is open lifts and holds its pressed art; the Daily station
+	-- breathes only while a reward is ready to claim.
+	local function refreshRail()
+		local open = deps.modals:topId()
+		for id, handle in pairs(self._buttons) do
+			handle.setSelected(open == id)
+		end
+		local projection = deps.profile.projection
+		local daily = projection and projection.rewards and projection.rewards.daily
+		local ready = daily ~= nil and (daily.status == "ready" or daily.status == "reset")
+		local dailyHandle = self._buttons.daily
+		if dailyHandle then
+			dailyHandle.pulse(ready and open ~= "daily")
+		end
+	end
+	self._trove:add(deps.modals.changed:Connect(refreshRail))
+	self._trove:add(deps.profile.changed:Connect(refreshRail))
+	refreshRail()
 	self._trove:add(deps.party.changed:Connect(function(party)
 		if deps.lobbyShell and deps.lobbyShell.setPartySilhouettes then
 			deps.lobbyShell:setPartySilhouettes(party)
@@ -202,6 +220,8 @@ function LobbyController.open(self: LobbyController, id: string): boolean
 		minimumTapTarget = minimumTap,
 		toasts = deps.hud.toasts,
 		leaderboards = self.leaderboards,
+		modals = deps.modals,
+		quality = deps.quality,
 		entitlements = function()
 			local projection = deps.profile.projection
 			return projection and projection.entitlements or {}

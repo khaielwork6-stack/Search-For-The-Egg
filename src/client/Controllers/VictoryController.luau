@@ -13,6 +13,9 @@ local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
 local EconomyMath = require(Shared.EconomyMath)
 local Button = require(script.Parent.Parent.UI.Components.Button)
+local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
+local Skin = require(script.Parent.Parent.UI.Components.Skin)
+local Confetti = require(script.Parent.Parent.UI.Components.Confetti)
 local SafeArea = require(script.Parent.Parent.UI.SafeArea)
 
 local VictoryController = {}
@@ -121,17 +124,38 @@ function VictoryController.onVictory(self: VictoryController, payload: { [string
 	label.Name = "Announcement"
 	label.AnchorPoint = Vector2.new(0.5, 0.5)
 	label.Position = UDim2.fromScale(0.5, 0.4)
-	label.Size = UDim2.new(0.8, 0, 0, 80)
+	label.Size = UDim2.new(0.8, 0, 0, 96)
 	label.BackgroundTransparency = 1
 	label.Font = Tokens.typography.display.font
 	label.TextSize = Tokens.typography.display.size
-	label.TextColor3 = Tokens.color.cream
-	label.TextStrokeTransparency = 0.3
-	label.TextStrokeColor3 = Tokens.color.emberDeep
+	label.TextColor3 = Tokens.color.inkStrong
+	label.TextStrokeTransparency = 0.6
+	label.TextStrokeColor3 = Tokens.color.goldLight
 	label.Text = text
 	label.TextTransparency = 1
-	label.ZIndex = Tokens.zIndex.toast
+	label.ZIndex = Tokens.zIndex.toast + 1
 	label.Parent = deps.hud.stage
+	local plateMax = Instance.new("UISizeConstraint")
+	plateMax.MaxSize = Vector2.new(720, 96)
+	plateMax.Parent = label
+	local plate = Skin.label(label, "victory.plate", { zIndex = Tokens.zIndex.toast, inset = 6, name = "Plate" })
+	if plate then
+		plate.ImageTransparency = 1
+		TweenService:Create(
+			plate,
+			TweenInfo.new(Motion.duration("standard", deps.accessibility:motionSettings()), Tokens.motion.easeOut),
+			{ ImageTransparency = 0 }
+		):Play()
+	end
+	Confetti.burst(deps.hud.stage, {
+		origin = UDim2.fromScale(0.5, 0.4),
+		count = 40,
+		spread = 260,
+		motion = deps.accessibility:motionSettings(),
+		tier = deps.quality and deps.quality:tier() or nil,
+		zIndex = Tokens.zIndex.toast + 2,
+	})
+	deps.audio:play(Tokens.sound.uiConfetti)
 	local scale = Instance.new("UIScale")
 	scale.Scale = 0.8
 	scale.Parent = label
@@ -144,7 +168,13 @@ function VictoryController.onVictory(self: VictoryController, payload: { [string
 	end)
 	task.delay(deps.config.round.discoverySequence.winnerAnnouncementSeconds, function()
 		if label.Parent then
-			TweenService:Create(label, TweenInfo.new(Motion.duration("quick", motion)), { TextTransparency = 1 }):Play()
+			TweenService
+				:Create(label, TweenInfo.new(Motion.duration("quick", motion)), { TextTransparency = 1, TextStrokeTransparency = 1 })
+				:Play()
+			local plateArt = label:FindFirstChild("Plate")
+			if plateArt and plateArt:IsA("ImageLabel") then
+				TweenService:Create(plateArt, TweenInfo.new(Motion.duration("quick", motion)), { ImageTransparency = 1 }):Play()
+			end
 		end
 	end)
 end
@@ -161,19 +191,31 @@ function VictoryController.onResults(self: VictoryController, payload: { [string
 	deps.modals:open("results", deps.modals.Priority.Results, true, function(container, api)
 		local cleanups: { any } = {}
 		local isFinder = payload.isFinder == true
+		local z = container.ZIndex + 1
 		local function line(order: number, text: string, color: Color3?, size: number?): TextLabel
+			local row = FrameKit.row(container, "Line" .. order, (size or Tokens.typography.body.size) + Tokens.spacing.lg, z)
+			row.LayoutOrder = order
 			local label = Instance.new("TextLabel")
-			label.LayoutOrder = order
-			label.Size = UDim2.new(1, 0, 0, (size or Tokens.typography.body.size) + Tokens.spacing.sm)
+			label.Size = UDim2.fromScale(1, 1)
 			label.BackgroundTransparency = 1
-			label.Font = Tokens.typography.body.font
+			label.Font = if size then Tokens.typography.label.font else Tokens.typography.body.font
 			label.TextSize = size or Tokens.typography.body.size
 			label.TextColor3 = color or Tokens.color.inkStrong
 			label.TextXAlignment = Enum.TextXAlignment.Left
+			label.TextWrapped = true
 			label.Text = text
-			label.Parent = container
+			label.ZIndex = z + 1
+			label.Parent = row
 			return label
 		end
+		Confetti.burst(container, {
+			origin = UDim2.fromScale(0.5, 0.2),
+			count = 32,
+			spread = 220,
+			motion = deps.accessibility:motionSettings(),
+			tier = deps.quality and deps.quality:tier() or nil,
+			zIndex = z + 8,
+		})
 		local time = payload.elapsedMs or 0
 		local totalSeconds = math.floor(time / 1000)
 		line(
@@ -210,7 +252,7 @@ function VictoryController.onResults(self: VictoryController, payload: { [string
 			Tokens.color.inkMuted
 		)
 		local rewards = payload.rewards or {}
-		local partyRow = line(4, "Party reward: 0 Gems", Tokens.color.gemDeep, Tokens.typography.heading.size)
+		local partyRow = line(4, "Party reward: 0 Gems", Tokens.color.tealDeep, Tokens.typography.heading.size)
 		local bonusRow = if (rewards.finderBonusGems or 0) > 0
 			then line(5, "Finder bonus: 0 Gems", Tokens.color.ember, Tokens.typography.heading.size)
 			else nil
@@ -263,6 +305,10 @@ function VictoryController.onResults(self: VictoryController, payload: { [string
 		local replay, replayCleanup = Button.create(container, {
 			text = "Search again",
 			variant = "primary",
+			zIndex = z + 1,
+			sound = function()
+				deps.audio:play(Tokens.sound.uiConfirm)
+			end,
 			minimumTapTarget = minimumTap,
 			motion = motion,
 			size = UDim2.new(1, 0, 0, minimumTap),
@@ -275,6 +321,10 @@ function VictoryController.onResults(self: VictoryController, payload: { [string
 		local lobby, lobbyCleanup = Button.create(container, {
 			text = "Back to the lobby",
 			variant = "secondary",
+			zIndex = z + 1,
+			sound = function()
+				deps.audio:play(Tokens.sound.uiTap)
+			end,
 			minimumTapTarget = minimumTap,
 			motion = motion,
 			size = UDim2.new(1, 0, 0, minimumTap),
@@ -302,7 +352,7 @@ function VictoryController.onResults(self: VictoryController, payload: { [string
 				end
 			end
 		end
-	end, "Round complete")
+	end, "Round complete", { icon = "header.results" })
 end
 
 function VictoryController.destroy(self: VictoryController)

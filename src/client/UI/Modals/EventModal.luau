@@ -32,7 +32,7 @@ function EventModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local z = container.ZIndex + 1
 	local chest = cfg.monetization.eventChest
 
-	local balance = FrameKit.text(container, "Balance", "", "heading", { zIndex = z, color = Tokens.color.goldDeep })
+	local balance = FrameKit.text(container, "Balance", "", "heading", { zIndex = z, color = Tokens.color.inkStrong })
 	balance.LayoutOrder = 1
 	local intro = FrameKit.text(
 		container,
@@ -49,7 +49,7 @@ function EventModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		local text = if reward.min
 			then string.format("%s  -  %d to %d Gems", prettify(reward.id), reward.min, reward.max)
 			else string.format("%s  -  tool skin", prettify(reward.id))
-		FrameKit.text(row, "Text", text, "body", { zIndex = z + 1 }).Size = UDim2.fromScale(0.75, 1)
+		FrameKit.text(row, "Text", text, "body", { zIndex = z + 1, color = Tokens.color.inkStrong }).Size = UDim2.fromScale(0.75, 1)
 		local odds = FrameKit.text(
 			row,
 			"Odds",

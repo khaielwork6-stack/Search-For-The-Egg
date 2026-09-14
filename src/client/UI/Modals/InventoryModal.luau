@@ -9,6 +9,7 @@ local Tokens = require(Shared.Design.Tokens)
 local SkinCatalog = require(Shared.Domain.SkinCatalog)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
+local Skin = require(script.Parent.Parent.Components.Skin)
 
 local InventoryModal = {}
 
@@ -37,30 +38,37 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 	local firstButton: TextButton? = nil
 	for _, category in ipairs(SkinCatalog.CATEGORIES) do
 		order += 1
-		local header = FrameKit.text(
-			container,
-			"Header_" .. category,
-			cfg.tools[category].displayName,
-			"heading",
-			{ zIndex = z, color = Tokens.color.goldDeep }
-		)
+		local header = FrameKit.heading(container, "Header_" .. category, cfg.tools[category].displayName, z)
 		header.LayoutOrder = order
 		for _, skin in ipairs(catalog) do
 			if skin.category ~= category then
 				continue
 			end
 			order += 1
-			local frame = FrameKit.row(container, "Skin_" .. skin.id, tap + Tokens.spacing.sm, z)
+			local frame = FrameKit.row(container, "Skin_" .. skin.id, tap + Tokens.spacing.md, z)
 			frame.LayoutOrder = order
-			local label = FrameKit.text(frame, "Label", skin.displayName, "body", { zIndex = z + 1 })
-			label.Size = UDim2.new(1, -(tap * 3), 1, 0)
+			local toolIcon = Skin.icon(frame, "tool." .. skin.category .. ".normal", Tokens.icon.lg, z + 1)
+			if toolIcon then
+				toolIcon.AnchorPoint = Vector2.new(0, 0.5)
+				toolIcon.Position = UDim2.fromScale(0, 0.5)
+			end
+			local label = FrameKit.text(frame, "Label", skin.displayName, "body", { zIndex = z + 1, color = Tokens.color.inkStrong })
+			label.Position = UDim2.fromOffset(if toolIcon then Tokens.icon.lg + Tokens.spacing.sm else 0, 0)
+			label.Size = UDim2.new(1, -(tap * 3) - (if toolIcon then Tokens.icon.lg + Tokens.spacing.sm else 0), 1, 0)
 			local equip = Button.build(frame, {
 				text = "Equip",
-				variant = "pill",
+				variant = "teal",
 				minimumTapTarget = tap,
 				motion = motion,
-				size = UDim2.fromOffset(tap * 3 - Tokens.spacing.md, tap),
+				size = UDim2.fromOffset(tap * 3 - Tokens.spacing.md, tap - Tokens.spacing.xs),
 				zIndex = z + 1,
+				textSize = Tokens.typography.body.size,
+				sound = function()
+					deps.audio:play(Tokens.sound.uiTap)
+				end,
+				hoverSound = function()
+					deps.audio:play(Tokens.sound.uiHover)
+				end,
 				onActivated = function()
 					local result = deps.net:request("InventoryEquip", { category = skin.category, itemId = skin.id })
 					if result.ok then
@@ -77,7 +85,6 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 			})
 			equip.button.AnchorPoint = Vector2.new(1, 0.5)
 			equip.button.Position = UDim2.fromScale(1, 0.5)
-			equip.button.TextSize = Tokens.typography.body.size
 			firstButton = firstButton or equip.button
 			table.insert(cleanups, equip.destroy)
 			table.insert(rows, { frame = frame, label = label, equip = equip, skin = skin })
@@ -98,6 +105,7 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 			row.equip.button.Visible = owned
 			row.equip.setText(if equipped then "Equipped" else "Equip")
 			row.equip.setEnabled(not equipped)
+			row.equip.setSelected(equipped)
 			row.label.Text = if owned
 				then row.skin.displayName .. (if equipped then "  -  on the rack" else "")
 				else row.skin.displayName .. "  -  from the Moonlit Chest"

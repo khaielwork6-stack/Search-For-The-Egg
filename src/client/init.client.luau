@@ -117,6 +117,7 @@ local victory = trove:add(VictoryController.new({
 	hud = hud,
 	input = input,
 	audio = audio,
+	quality = quality,
 	vfx = vfx,
 	camera = camera,
 	haptics = haptics,

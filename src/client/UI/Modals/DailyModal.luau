@@ -12,6 +12,9 @@ local DailyRewards = require(Shared.Domain.DailyRewards)
 local Tween = require(script.Parent.Parent.Components.Tween)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
+local Skin = require(script.Parent.Parent.Components.Skin)
+local Icons = require(script.Parent.Parent.Components.Icons)
+local Confetti = require(script.Parent.Parent.Components.Confetti)
 
 local DailyModal = {}
 
@@ -24,6 +27,7 @@ export type Deps = {
 	config: { [string]: any },
 	minimumTapTarget: number,
 	toasts: any,
+	quality: any?,
 }
 
 local function clock(seconds: number): string
@@ -55,36 +59,66 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	layout.Parent = grid
 	grid.Parent = container
 
-	type Cell = { frame: Frame, day: TextLabel, gems: TextLabel, stroke: UIStroke, scale: UIScale }
+	type Cell = {
+		frame: Frame,
+		day: TextLabel,
+		gems: TextLabel,
+		stroke: UIStroke,
+		scale: UIScale,
+		art: ImageLabel?,
+		check: Frame,
+		stopPulse: (() -> ())?,
+	}
 	local cells: { Cell } = {}
 	for _, entry in ipairs(cfg.dailyRewards) do
 		local frame = Instance.new("Frame")
 		frame.Name = "Day" .. entry.day
 		frame.LayoutOrder = entry.day
-		frame.BackgroundColor3 = Tokens.color.tealLight
+		frame.BackgroundColor3 = Tokens.color.featherWhite
 		frame.ZIndex = z + 1
 		local corner = Instance.new("UICorner")
 		corner.CornerRadius = UDim.new(0, Tokens.radius.md)
 		corner.Parent = frame
 		local stroke = Instance.new("UIStroke")
 		stroke.Thickness = Tokens.stroke.standard
-		stroke.Color = Tokens.color.tealDeep
+		stroke.Color = Tokens.color.strawDeep
 		stroke.Parent = frame
 		local scale = Instance.new("UIScale")
 		scale.Parent = frame
-		local day = FrameKit.text(frame, "Day", "Day " .. entry.day, "caption", { align = Enum.TextXAlignment.Center, zIndex = z + 2 })
-		day.Position = UDim2.fromOffset(0, Tokens.spacing.xs)
+		local art = Skin.label(frame, "daily.cell.future", { zIndex = z + 1, inset = 1, name = "ArtFrame" })
+		if art then
+			stroke.Enabled = false
+		end
+		local day = FrameKit.text(
+			frame,
+			"Day",
+			"Day " .. entry.day,
+			"caption",
+			{ align = Enum.TextXAlignment.Center, zIndex = z + 3, color = Tokens.color.inkMuted }
+		)
+		day.Position = UDim2.fromOffset(0, Tokens.spacing.sm)
+		local gemIcon = Skin.icon(frame, "hud.gem", Tokens.icon.sm, z + 3) or Icons.gem(frame, Tokens.icon.sm, { zIndex = z + 3 })
+		gemIcon.AnchorPoint = Vector2.new(1, 1)
+		gemIcon.Position = UDim2.new(0.5, -Tokens.spacing.xs, 1, -Tokens.spacing.sm)
 		local gems = FrameKit.text(
 			frame,
 			"Gems",
-			string.format("%d Gems", entry.gems),
+			tostring(entry.gems),
 			"heading",
-			{ align = Enum.TextXAlignment.Center, zIndex = z + 2, color = Tokens.color.goldDeep }
+			{ align = Enum.TextXAlignment.Left, zIndex = z + 3, color = Tokens.color.goldDeep }
 		)
 		gems.AnchorPoint = Vector2.new(0, 1)
-		gems.Position = UDim2.new(0, 0, 1, -Tokens.spacing.xs)
+		gems.Position = UDim2.new(0.5, Tokens.spacing.xs, 1, -Tokens.spacing.sm + 2)
+		gems.Size = UDim2.new(0.5, 0, 0, Tokens.typography.heading.size + 2)
+		local check = Icons.check(frame, Tokens.icon.md, { zIndex = z + 4 })
+		check.AnchorPoint = Vector2.new(1, 0)
+		check.Position = UDim2.new(1, -Tokens.spacing.xs, 0, Tokens.spacing.xs)
+		check.Visible = false
 		frame.Parent = grid
-		table.insert(cells, { frame = frame, day = day, gems = gems, stroke = stroke, scale = scale })
+		table.insert(
+			cells,
+			{ frame = frame, day = day, gems = gems, stroke = stroke, scale = scale, art = art, check = check, stopPulse = nil }
+		)
 	end
 
 	local grace = FrameKit.text(container, "Grace", "", "caption", { zIndex = z, color = Tokens.color.inkMuted })
@@ -93,7 +127,13 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 
 	local claim = Button.build(container, {
 		text = "Claim",
-		variant = "gold",
+		variant = "primary",
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTap)
+		end,
+		hoverSound = function()
+			deps.audio:play(Tokens.sound.uiHover)
+		end,
 		minimumTapTarget = tap,
 		motion = motion,
 		size = UDim2.new(1, 0, 0, tap),
@@ -117,18 +157,36 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		receivedAt = os.clock()
 		local fake = { dayIndex = daily.dayIndex }
 		local calendar = DailyRewards.calendar(cfg, fake :: any)
+		local ready = daily.status == "ready" or daily.status == "reset"
 		for index, cell in ipairs(cells) do
 			local info = calendar[index]
 			cell.stroke.Color = if info.current
-				then Tokens.color.goldLight
+				then Tokens.color.gold
 				elseif info.claimed then Tokens.color.leafBright
-				else Tokens.color.tealDeep
+				else Tokens.color.strawDeep
 			cell.stroke.Thickness = if info.current then Tokens.stroke.frame else Tokens.stroke.standard
 			cell.frame.BackgroundColor3 = if info.claimed
-				then Tokens.color.leafDeep
-				elseif info.current then Tokens.color.tealLight
-				else Tokens.color.tealPanel
-			cell.day.Text = if info.claimed then "Day " .. info.day .. "  -  done" else "Day " .. info.day
+				then Tokens.color.tealTint
+				elseif info.current then Tokens.color.creamPill
+				else Tokens.color.featherWhite
+			cell.day.Text = "Day " .. info.day
+			cell.day.TextColor3 = if info.current then Tokens.color.inkStrong else Tokens.color.inkMuted
+			cell.check.Visible = info.claimed
+			cell.gems.TextColor3 = if info.claimed then Tokens.color.leafDeep else Tokens.color.goldDeep
+			if cell.art then
+				Skin.apply(
+					cell.art,
+					if info.claimed then "daily.cell.claimed" elseif info.current then "daily.cell.current" else "daily.cell.future"
+				)
+			end
+			-- Only the claimable day breathes; everything else stays still.
+			local shouldPulse = info.current and ready
+			if shouldPulse and not cell.stopPulse then
+				cell.stopPulse = Tween.pulseLoop(cell.scale, motion, 0.04)
+			elseif not shouldPulse and cell.stopPulse then
+				cell.stopPulse()
+				cell.stopPulse = nil
+			end
 		end
 		if daily.status == "ready" or daily.status == "reset" then
 			status.Text = if daily.status == "reset"
@@ -169,8 +227,21 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 					deps.haptics:pulse(0.6, 0.1)
 					local cell = cells[data.dayIndex]
 					if cell then
+						if cell.stopPulse then
+							cell.stopPulse()
+							cell.stopPulse = nil
+						end
 						cell.scale.Scale = 1.12
 						Tween.scale(cell.scale, "release", motion, 1)
+						Confetti.burst(cell.frame, {
+							origin = UDim2.fromScale(0.5, 0.5),
+							count = 22,
+							spread = 130,
+							motion = motion,
+							tier = deps.quality and deps.quality:tier() or nil,
+							zIndex = z + 8,
+						})
+						deps.audio:play(Tokens.sound.uiConfetti)
 					end
 					deps.toasts:reward(string.format("Day %d nest opened", data.dayIndex), data.gems)
 				end
@@ -199,6 +270,11 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	deps.audio:play(Tokens.sound.uiOpen)
 
 	return function()
+		for _, cell in ipairs(cells) do
+			if cell.stopPulse then
+				cell.stopPulse()
+			end
+		end
 		for _, cleanup in ipairs(cleanups) do
 			if type(cleanup) == "function" then
 				cleanup()

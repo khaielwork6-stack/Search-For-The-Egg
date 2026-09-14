@@ -10,6 +10,8 @@ local Tokens = require(Shared.Design.Tokens)
 local EconomyMath = require(Shared.EconomyMath)
 local ToolSpecs = require(Shared.Domain.ToolSpecs)
 local Button = require(script.Parent.Components.Button)
+local FrameKit = require(script.Parent.Components.Frame)
+local Skin = require(script.Parent.Components.Skin)
 
 local UpgradeModal = {}
 
@@ -150,9 +152,9 @@ end
 
 local function costText(preview: any): string
 	if preview.costGems then
-		return string.format("Buy %d Gems", preview.costGems)
+		return string.format("%d Gems", preview.costGems)
 	end
-	return "Buy " .. EconomyMath.formatCents(preview.costCents or 0)
+	return EconomyMath.formatCents(preview.costCents or 0)
 end
 
 -- Builds the modal body inside `container`; returns a cleanup function.
@@ -170,24 +172,21 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 	cashLabel.TextColor3 = Tokens.color.leafDeep
 	cashLabel.TextXAlignment = Enum.TextXAlignment.Left
 	cashLabel.LayoutOrder = 0
+	cashLabel.ZIndex = container.ZIndex + 1
 	cashLabel.Parent = container
 
 	local function header(key: string, text: string, order: number)
 		if headers[key] then
 			return
 		end
-		local label = Instance.new("TextLabel")
-		label.Name = "Header_" .. key
-		label.LayoutOrder = order
-		label.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + Tokens.spacing.md)
-		label.BackgroundTransparency = 1
-		label.Font = Tokens.typography.heading.font
-		label.TextSize = Tokens.typography.caption.size
-		label.TextColor3 = Tokens.color.inkMuted
-		label.TextXAlignment = Enum.TextXAlignment.Left
-		label.Text = string.upper(text)
-		label.Parent = container
-		headers[key] = label
+		local row = FrameKit.heading(container, "Header_" .. key, text, container.ZIndex + 1)
+		row.LayoutOrder = order
+		local toolIcon = if key ~= "hand" then Skin.icon(row, "tool." .. key .. ".normal", Tokens.icon.md, container.ZIndex + 2) else nil
+		if toolIcon then
+			toolIcon.AnchorPoint = Vector2.new(1, 0.5)
+			toolIcon.Position = UDim2.fromScale(1, 0.5)
+		end
+		headers[key] = row:FindFirstChild("Text") :: TextLabel
 	end
 
 	local function titleFor(preview: any): string
@@ -259,17 +258,13 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 			end
 			local row = rows[preview.upgradeId]
 			if not row then
-				local frame = Instance.new("Frame")
-				frame.Name = "Row_" .. preview.upgradeId
-				frame.Size = UDim2.new(1, 0, 0, deps.minimumTapTarget + Tokens.spacing.md)
-				frame.BackgroundColor3 = Tokens.color.surfaceAlt
-				local corner = Instance.new("UICorner")
-				corner.CornerRadius = UDim.new(0, Tokens.radius.md)
-				corner.Parent = frame
+				local frame =
+					FrameKit.row(container, "Row_" .. preview.upgradeId, deps.minimumTapTarget + Tokens.spacing.lg, container.ZIndex + 1)
 				local label = Instance.new("TextLabel")
 				label.Name = "Label"
-				label.Position = UDim2.fromOffset(Tokens.spacing.md, 0)
+				label.Position = UDim2.fromOffset(0, 0)
 				label.Size = UDim2.new(0.62, -Tokens.spacing.md, 1, 0)
+				label.ZIndex = frame.ZIndex + 1
 				label.BackgroundTransparency = 1
 				label.Font = Tokens.typography.body.font
 				label.TextSize = Tokens.typography.body.size
@@ -288,8 +283,8 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 				cost.TextColor3 = Tokens.color.inkMuted
 				cost.TextXAlignment = Enum.TextXAlignment.Right
 				cost.Visible = false
+				cost.ZIndex = frame.ZIndex + 1
 				cost.Parent = frame
-				frame.Parent = container
 				row = { frame = frame, label = label, button = nil, cost = cost }
 				rows[preview.upgradeId] = row
 				local button, buttonCleanup = Button.create(frame, {
@@ -298,9 +293,17 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 					minimumTapTarget = deps.minimumTapTarget,
 					motion = deps.accessibility:motionSettings(),
 					size = UDim2.fromOffset(math.max(deps.minimumTapTarget, 132), deps.minimumTapTarget),
+					zIndex = frame.ZIndex + 2,
+					textSize = Tokens.typography.body.size,
+					sound = function()
+						deps.audio:play(Tokens.sound.uiTap)
+					end,
+					hoverSound = function()
+						deps.audio:play(Tokens.sound.uiHover)
+					end,
 				})
 				button.AnchorPoint = Vector2.new(1, 0.5)
-				button.Position = UDim2.new(1, -Tokens.spacing.sm, 0.5, 0)
+				button.Position = UDim2.fromScale(1, 0.5)
 				table.insert(cleanups, buttonCleanup)
 				row.button = button
 				table.insert(
@@ -348,6 +351,10 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 	local done, doneCleanup = Button.create(container, {
 		text = "Done",
 		variant = "secondary",
+		zIndex = container.ZIndex + 2,
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTap)
+		end,
 		minimumTapTarget = deps.minimumTapTarget,
 		motion = deps.accessibility:motionSettings(),
 		size = UDim2.new(1, 0, 0, deps.minimumTapTarget),

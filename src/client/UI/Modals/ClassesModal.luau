@@ -12,6 +12,9 @@ local ClassRoll = require(Shared.Domain.ClassRoll)
 local Tween = require(script.Parent.Parent.Components.Tween)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
+local Skin = require(script.Parent.Parent.Components.Skin)
+local Icons = require(script.Parent.Parent.Components.Icons)
+local Confetti = require(script.Parent.Parent.Components.Confetti)
 
 local ClassesModal = {}
 
@@ -25,6 +28,7 @@ export type Deps = {
 	minimumTapTarget: number,
 	toasts: any,
 	entitlements: () -> { [string]: boolean },
+	quality: any?,
 }
 
 function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): () -> ()
@@ -45,7 +49,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	end
 
 	-- Header: balance, odds note, slot chips.
-	local header = FrameKit.text(container, "Balance", "", "heading", { zIndex = z, color = Tokens.color.goldDeep })
+	local header = FrameKit.text(container, "Balance", "", "heading", { zIndex = z, color = Tokens.color.inkStrong })
 	header.LayoutOrder = 1
 	local slots = Instance.new("Frame")
 	slots.Name = "Slots"
@@ -68,11 +72,16 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			motion = motion,
 			size = UDim2.fromOffset(150, tap),
 			zIndex = z + 1,
+			sound = function()
+				deps.audio:play(Tokens.sound.uiTab)
+			end,
+			hoverSound = function()
+				deps.audio:play(Tokens.sound.uiHover)
+			end,
 			onActivated = function()
 				state.slot = index
-				deps.audio:play(Tokens.sound.uiTap)
 				for slotIndex, slotHandle in ipairs(slotHandles) do
-					slotHandle.button.BackgroundColor3 = if slotIndex == state.slot then Tokens.color.gold else Tokens.color.creamPill
+					slotHandle.setSelected(slotIndex == state.slot)
 				end
 			end,
 		})
@@ -96,7 +105,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	grid.LayoutOrder = 4
 	grid.ZIndex = z
 	local gridLayout = Instance.new("UIGridLayout")
-	gridLayout.CellSize = UDim2.new(0.5, -Tokens.spacing.xs, 0, tap * 2 + Tokens.spacing.md)
+	gridLayout.CellSize = UDim2.new(0.5, -Tokens.spacing.xs, 0, tap * 2 + Tokens.spacing.xl)
 	gridLayout.CellPadding = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
 	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	gridLayout.Parent = grid
@@ -111,15 +120,21 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		scale: UIScale,
 		equip: any,
 		id: string,
+		art: ImageLabel?,
+		rarity: string,
+		lockIcon: Frame,
+		checkIcon: Frame,
+		stateBadge: Frame,
 	}
 	local cards: { Card } = {}
 	local byId: { [string]: Card } = {}
 	for index, entry in ipairs(cfg.classes.weights) do
 		local rarity = (Tokens.rarity :: any)[ClassRoll.rarity(entry.weight)]
+		local rarityName = ClassRoll.rarity(entry.weight)
 		local frame = Instance.new("Frame")
 		frame.Name = "Card_" .. entry.id
 		frame.LayoutOrder = index
-		frame.BackgroundColor3 = rarity.fill
+		frame.BackgroundColor3 = Tokens.color.featherWhite
 		frame.ZIndex = z + 1
 		local corner = Instance.new("UICorner")
 		corner.CornerRadius = UDim.new(0, Tokens.radius.lg)
@@ -130,33 +145,83 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		stroke.Parent = frame
 		local gradient = Instance.new("UIGradient")
 		gradient.Rotation = 90
-		gradient.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, rarity.fill), ColorSequenceKeypoint.new(1, rarity.deep) })
+		gradient.Color =
+			ColorSequence.new({ ColorSequenceKeypoint.new(0, Tokens.color.featherWhite), ColorSequenceKeypoint.new(1, Tokens.color.cream) })
 		gradient.Parent = frame
+		local art = Skin.label(frame, "class." .. rarityName .. ".locked", { zIndex = z + 1, inset = 2, name = "ArtFrame" })
+		if art then
+			stroke.Enabled = false
+		end
+		-- Rarity ribbon along the top edge.
+		local ribbon = Instance.new("Frame")
+		ribbon.Name = "Ribbon"
+		ribbon.Size = UDim2.new(1, 0, 0, 6)
+		ribbon.BackgroundColor3 = rarity.fill
+		ribbon.BorderSizePixel = 0
+		ribbon.ZIndex = z + 2
+		local ribbonCorner = Instance.new("UICorner")
+		ribbonCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
+		ribbonCorner.Parent = ribbon
+		ribbon.Parent = frame
 		local padding = Instance.new("UIPadding")
-		padding.PaddingLeft = UDim.new(0, Tokens.spacing.sm)
-		padding.PaddingRight = UDim.new(0, Tokens.spacing.sm)
-		padding.PaddingTop = UDim.new(0, Tokens.spacing.xs)
+		padding.PaddingLeft = UDim.new(0, Tokens.spacing.md)
+		padding.PaddingRight = UDim.new(0, Tokens.spacing.md)
+		padding.PaddingTop = UDim.new(0, Tokens.spacing.md)
 		padding.Parent = frame
 		local scale = Instance.new("UIScale")
 		scale.Parent = frame
+		-- State badge (lock / check) top-right.
+		local stateBadge = Instance.new("Frame")
+		stateBadge.Name = "StateBadge"
+		stateBadge.AnchorPoint = Vector2.new(1, 0)
+		stateBadge.Position = UDim2.fromScale(1, 0)
+		stateBadge.Size = UDim2.fromOffset(Tokens.icon.md + 6, Tokens.icon.md + 6)
+		stateBadge.BackgroundColor3 = Tokens.color.creamPill
+		stateBadge.ZIndex = z + 4
+		local stateCorner = Instance.new("UICorner")
+		stateCorner.CornerRadius = UDim.new(1, 0)
+		stateCorner.Parent = stateBadge
+		local stateStroke = Instance.new("UIStroke")
+		stateStroke.Thickness = Tokens.stroke.standard
+		stateStroke.Color = Tokens.color.outline
+		stateStroke.Parent = stateBadge
+		stateBadge.Parent = frame
+		local lockIcon = Icons.lock(stateBadge, Tokens.icon.md - 2, { zIndex = z + 5 })
+		lockIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+		lockIcon.Position = UDim2.fromScale(0.5, 0.5)
+		local checkIcon = Icons.check(stateBadge, Tokens.icon.md - 2, { zIndex = z + 5 })
+		checkIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+		checkIcon.Position = UDim2.fromScale(0.5, 0.5)
+		checkIcon.Visible = false
 		local name = FrameKit.pill(frame, "Name", entry.displayName, {
-			size = UDim2.new(1, 0, 0, Tokens.typography.label.size + Tokens.spacing.sm),
+			size = UDim2.new(1, -(Tokens.icon.md + Tokens.spacing.md), 0, Tokens.typography.label.size + Tokens.spacing.sm),
 			textSize = Tokens.typography.body.size,
-			zIndex = z + 2,
+			zIndex = z + 3,
+			art = false,
+			fill = rarity.fill,
+			textColor = Tokens.color.featherWhite,
 		})
+		name.TextStrokeTransparency = 0.4
 		name.Position = UDim2.fromOffset(0, 0)
-		local odds = FrameKit.text(frame, "Odds", "", "caption", { zIndex = z + 2, color = Tokens.color.featherWhite })
+		local odds = FrameKit.text(frame, "Odds", "", "caption", { zIndex = z + 3, color = Tokens.color.inkMuted })
 		odds.Position = UDim2.fromOffset(0, Tokens.typography.label.size + Tokens.spacing.md)
-		local effect = FrameKit.text(frame, "Effect", "", "caption", { zIndex = z + 2, color = Tokens.color.featherWhite })
+		local effect = FrameKit.text(frame, "Effect", "", "caption", { zIndex = z + 3, color = Tokens.color.inkStrong })
 		effect.Position = UDim2.fromOffset(0, Tokens.typography.label.size + Tokens.spacing.md + Tokens.typography.caption.size + 2)
 		effect.Size = UDim2.new(1, -(tap + Tokens.spacing.sm), 0, Tokens.typography.caption.size * 2 + 4)
 		local equip = Button.build(frame, {
 			text = "Equip",
-			variant = "pill",
+			variant = "teal",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromOffset(tap + Tokens.spacing.lg, tap),
-			zIndex = z + 2,
+			size = UDim2.fromOffset(tap + Tokens.spacing.xl, tap - Tokens.spacing.xs),
+			zIndex = z + 3,
+			textSize = Tokens.typography.caption.size,
+			sound = function()
+				deps.audio:play(Tokens.sound.uiTap)
+			end,
+			hoverSound = function()
+				deps.audio:play(Tokens.sound.uiHover)
+			end,
 			onActivated = function()
 				if state.rolling then
 					return
@@ -175,12 +240,24 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			end,
 		})
 		equip.button.AnchorPoint = Vector2.new(1, 1)
-		equip.button.Position = UDim2.new(1, 0, 1, -Tokens.spacing.xs)
-		equip.button.TextSize = Tokens.typography.caption.size
+		equip.button.Position = UDim2.new(1, 0, 1, -Tokens.spacing.sm)
 		table.insert(cleanups, equip.destroy)
 		frame.Parent = grid
-		local card: Card =
-			{ frame = frame, name = name, odds = odds, effect = effect, stroke = stroke, scale = scale, equip = equip, id = entry.id }
+		local card: Card = {
+			frame = frame,
+			name = name,
+			odds = odds,
+			effect = effect,
+			stroke = stroke,
+			scale = scale,
+			equip = equip,
+			id = entry.id,
+			art = art,
+			rarity = rarityName,
+			lockIcon = lockIcon,
+			checkIcon = checkIcon,
+			stateBadge = stateBadge,
+		}
 		table.insert(cards, card)
 		byId[entry.id] = card
 	end
@@ -274,10 +351,21 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			card.equip.button.Visible = owned
 			card.equip.setText(if equippedIndex then "Equipped" else "Equip")
 			card.equip.setEnabled(equippedIndex == nil and not state.rolling)
-			card.stroke.Color = if equippedIndex
-				then Tokens.color.goldLight
-				else (Tokens.rarity :: any)[ClassRoll.rarity(entry.weight)].deep
+			card.equip.setSelected(equippedIndex ~= nil)
+			card.stroke.Color = if equippedIndex then Tokens.color.goldLight else (Tokens.rarity :: any)[card.rarity].deep
 			card.stroke.Thickness = if equippedIndex then Tokens.stroke.frame else Tokens.stroke.bold
+			if card.art then
+				Skin.apply(
+					card.art,
+					"class." .. card.rarity .. (if equippedIndex then ".equipped" elseif owned then ".owned" else ".locked")
+				)
+			end
+			card.lockIcon.Visible = not owned
+			card.checkIcon.Visible = equippedIndex ~= nil
+			card.stateBadge.Visible = not owned or equippedIndex ~= nil
+			card.stateBadge.BackgroundColor3 = if equippedIndex then Tokens.color.success else Tokens.color.creamPill
+			card.frame.BackgroundTransparency = if owned then 0 else 0.35
+			card.effect.TextTransparency = if owned then 0 else 0.35
 		end
 		if rollHandle then
 			local gems = projection.currencies.gems
@@ -317,6 +405,15 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			landing.scale.Scale = 1.1
 			Tween.scale(landing.scale, "release", motion, 1)
 			Tween.rotationPunch(landing.frame, motion, 0)
+			Confetti.burst(landing.frame, {
+				origin = UDim2.fromScale(0.5, 0.4),
+				count = 24,
+				spread = 140,
+				motion = motion,
+				tier = deps.quality and deps.quality:tier() or nil,
+				zIndex = z + 8,
+			})
+			deps.audio:play(Tokens.sound.uiConfetti)
 			deps.audio:play(Tokens.sound.rollLand)
 			deps.haptics:pulse(0.8, 0.12)
 			stats.reveals += 1
@@ -402,7 +499,14 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 
 	rollHandle = Button.build(controls, {
 		text = string.format("Roll  -  %d Gems", cfg.classes.rollGemCost),
-		variant = "gold",
+		variant = "primary",
+		icon = nil,
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTap)
+		end,
+		hoverSound = function()
+			deps.audio:play(Tokens.sound.uiHover)
+		end,
 		minimumTapTarget = tap,
 		motion = motion,
 		size = UDim2.fromOffset(200, tap),

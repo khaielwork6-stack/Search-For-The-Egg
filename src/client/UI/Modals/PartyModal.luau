@@ -12,6 +12,8 @@ local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
+local Dialog = require(script.Parent.Parent.Components.Dialog)
+local Skin = require(script.Parent.Parent.Components.Skin)
 
 local PartyModal = {}
 
@@ -19,6 +21,7 @@ export type Deps = {
 	net: any,
 	party: any,
 	profile: any,
+	modals: any?,
 	audio: any,
 	haptics: any,
 	accessibility: any,
@@ -92,7 +95,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	end
 
 	-- Destination section ----------------------------------------------------------------------
-	FrameKit.text(container, "DestinationHeader", "Where to?", "heading", { zIndex = z }).LayoutOrder = 1
+	FrameKit.heading(container, "DestinationHeader", "Where to?", z).LayoutOrder = 1
 	local grid = Instance.new("Frame")
 	grid.Name = "Destinations"
 	grid.BackgroundTransparency = 1
@@ -107,7 +110,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	gridLayout.Parent = grid
 	grid.Parent = container
 
-	local cards: { [string]: { handle: any, sub: TextLabel } } = {}
+	local cards: { [string]: { handle: any, sub: TextLabel, stateArt: ImageLabel? } } = {}
 	local order = 0
 	for _, chapterKey in ipairs({ "chapter1", "chapter2" }) do
 		local chapter = cfg.chapters[chapterKey]
@@ -116,11 +119,17 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			local key = chapterKey .. ":" .. difficulty
 			local handle = Button.build(grid, {
 				text = chapter.displayName .. "\n" .. DIFFICULTY_LABEL[difficulty],
-				variant = "ghost",
+				variant = "secondary",
 				minimumTapTarget = tap,
 				motion = motion,
 				size = UDim2.new(0.5, 0, 0, tap + Tokens.spacing.xl),
 				zIndex = z + 1,
+				sound = function()
+					deps.audio:play(Tokens.sound.uiSelect)
+				end,
+				hoverSound = function()
+					deps.audio:play(Tokens.sound.uiHover)
+				end,
 				onActivated = function()
 					selected.chapter = chapterKey
 					selected.difficulty = difficulty
@@ -143,18 +152,22 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				"Sub",
 				"",
 				"caption",
-				{ align = Enum.TextXAlignment.Center, zIndex = z + 2, color = Tokens.color.goldDeep }
+				{ align = Enum.TextXAlignment.Center, zIndex = z + 3, color = Tokens.color.inkMuted }
 			)
+			local stateArt = Skin.label(handle.button, "party.destination.locked", { zIndex = z + 2, inset = 2, name = "StateArt" })
+			if stateArt then
+				stateArt.Visible = false
+			end
 			sub.AnchorPoint = Vector2.new(0.5, 1)
 			sub.Position = UDim2.new(0.5, 0, 1, -2)
 			sub.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 2)
-			cards[key] = { handle = handle, sub = sub }
+			cards[key] = { handle = handle, sub = sub, stateArt = stateArt }
 			table.insert(cleanups, handle.destroy)
 		end
 	end
 
 	-- Party section ----------------------------------------------------------------------------
-	FrameKit.text(container, "PartyHeader", "Your party", "heading", { zIndex = z }).LayoutOrder = 3
+	FrameKit.heading(container, "PartyHeader", "Your party", z).LayoutOrder = 3
 	local members = Instance.new("Frame")
 	members.Name = "Members"
 	members.BackgroundTransparency = 1
@@ -187,7 +200,13 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 
 	local soloHandle = Button.build(actions, {
 		text = "Set off alone",
-		variant = "gold",
+		variant = "primary",
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTap)
+		end,
+		hoverSound = function()
+			deps.audio:play(Tokens.sound.uiHover)
+		end,
 		minimumTapTarget = tap,
 		motion = motion,
 		size = UDim2.fromOffset(180, tap),
@@ -221,7 +240,10 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	createHandle.button.LayoutOrder = 2
 	local startHandle = Button.build(actions, {
 		text = "Start",
-		variant = "gold",
+		variant = "primary",
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTap)
+		end,
 		minimumTapTarget = tap,
 		motion = motion,
 		size = UDim2.fromOffset(140, tap),
@@ -256,9 +278,22 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		size = UDim2.fromOffset(150, tap),
 		zIndex = z + 1,
 		onActivated = function()
-			send(function()
-				return deps.party:leave()
-			end, Tokens.sound.uiCancel)
+			Dialog.open(deps.modals, {
+				id = "confirm_leave_party",
+				title = "Leave party?",
+				message = "Your seat opens up for someone else and the leader keeps the destination.",
+				confirmText = "Leave",
+				cancelText = "Stay",
+				tone = "warning",
+				audio = deps.audio,
+				accessibility = deps.accessibility,
+				config = deps.config,
+				onConfirm = function()
+					send(function()
+						return deps.party:leave()
+					end, Tokens.sound.uiCancel)
+				end,
+			})
 		end,
 	})
 	leaveHandle.button.LayoutOrder = 5
@@ -268,7 +303,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	api.setInitialFocus(soloHandle.button)
 
 	-- Open parties -----------------------------------------------------------------------------
-	FrameKit.text(container, "ListHeader", "Parties forming", "heading", { zIndex = z }).LayoutOrder = 7
+	FrameKit.heading(container, "ListHeader", "Parties forming", z).LayoutOrder = 7
 	local listFrame = Instance.new("Frame")
 	listFrame.Name = "OpenParties"
 	listFrame.BackgroundTransparency = 1
@@ -327,7 +362,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			text.Size = UDim2.new(1, -(tap * 2 + Tokens.spacing.md), 1, 0)
 			local joinHandle = Button.build(row, {
 				text = "Join",
-				variant = "gold",
+				variant = "teal",
 				minimumTapTarget = tap,
 				motion = motion,
 				size = UDim2.fromOffset(tap * 2, tap),
@@ -362,6 +397,18 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				elseif not unlocked then "Locked - win Sunlit Henhouse"
 				else (if active then "Chosen" else "")
 			card.handle.setSelected(isSelected)
+			if card.stateArt then
+				local art = card.stateArt :: ImageLabel
+				if not available then
+					Skin.apply(art, "party.destination.unavailable")
+					art.Visible = true
+				elseif not unlocked then
+					Skin.apply(art, "party.destination.locked")
+					art.Visible = true
+				else
+					art.Visible = false
+				end
+			end
 		end
 		for _, child in ipairs(members:GetChildren()) do
 			if child:IsA("Frame") then
