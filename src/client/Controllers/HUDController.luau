@@ -163,7 +163,7 @@ function HUDController.new(deps: any): HUDController
 	local detail = Instance.new("TextLabel")
 	detail.Name = "Detail"
 	detail.AnchorPoint = Vector2.new(0.5, 1)
-	detail.Position = UDim2.new(0.5, 0, 1, 0)
+	detail.Position = UDim2.fromScale(0.5, 1)
 	detail.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 2)
 	detail.BackgroundTransparency = 1
 	detail.Font = Tokens.typography.caption.font
