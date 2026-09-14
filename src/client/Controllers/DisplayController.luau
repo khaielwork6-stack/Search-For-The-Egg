@@ -43,11 +43,35 @@ function DisplayController.new(deps: any): DisplayController
 		stats = { purchases = 0, prompts = 0 },
 	}, DisplayController)
 
-	local function scan()
+	-- The barn streams in and out with distance, so a display model can arrive before its parts
+	-- (or its attribute); every arrival re-runs the scan until each card exists.
+	local watched: { [Instance]: boolean } = {}
+	local scan
+	local function watch(model: Instance)
+		if watched[model] then
+			return
+		end
+		watched[model] = true
+		self._trove:add(model.ChildAdded:Connect(function()
+			task.defer(scan)
+		end))
+		self._trove:add(model.AttributeChanged:Connect(function()
+			task.defer(scan)
+		end))
+	end
+	scan = function()
 		for _, child in ipairs(workspace:GetChildren()) do
+			if not child:IsA("Model") then
+				continue
+			end
 			local key = child:GetAttribute("SFE_Display")
-			if child:IsA("Model") and type(key) == "string" and DISPLAYS[key] and not self._cards[key] then
-				self:_buildCard(key, child)
+			if type(key) == "string" and DISPLAYS[key] then
+				if not self._cards[key] and not self:_buildCard(key, child) then
+					watch(child)
+				end
+			elseif key == nil and not watched[child] and child.PrimaryPart == nil then
+				-- A model still arriving: its attribute may follow the instance.
+				watch(child)
 			end
 		end
 		self:refresh()
@@ -57,6 +81,14 @@ function DisplayController.new(deps: any): DisplayController
 		if child:IsA("Model") then
 			task.defer(scan)
 		end
+	end))
+	self._trove:add(workspace.ChildRemoved:Connect(function(child)
+		for key, card in pairs(self._cards) do
+			if card.model == child then
+				self._cards[key] = nil
+			end
+		end
+		watched[child] = nil
 	end))
 	self._trove:add(deps.round.upgrade:Connect(function()
 		self:refresh()
@@ -76,11 +108,11 @@ function DisplayController.new(deps: any): DisplayController
 	return self
 end
 
-function DisplayController._buildCard(self: DisplayController, key: string, model: Model)
+function DisplayController._buildCard(self: DisplayController, key: string, model: Model): boolean
 	local spec = DISPLAYS[key]
-	local adornee = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+	local adornee = model.PrimaryPart
 	if not adornee then
-		return
+		return false
 	end
 	local _, size = model:GetBoundingBox()
 	local gui = Instance.new("BillboardGui")
@@ -123,6 +155,7 @@ function DisplayController._buildCard(self: DisplayController, key: string, mode
 	gui.Parent = adornee
 	self._cards[key] = { model = model, gui = gui, price = price, caption = caption, scale = scale }
 	self._trove:add(gui)
+	return true
 end
 
 -- Re-reads price and state for every display from the round previews and entitlements.
