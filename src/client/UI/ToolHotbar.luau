@@ -50,7 +50,7 @@ export type ToolHotbar = typeof(setmetatable(
 	ToolHotbar
 ))
 
-local SLOT_WIDTH = 96
+local SLOT_WIDTH = 118
 
 function ToolHotbar.new(
 	gui: Instance,
@@ -65,7 +65,7 @@ function ToolHotbar.new(
 	root.AnchorPoint = Vector2.new(0.5, 1)
 	-- Above the round strip (safe padding + strip height + spacing).
 	root.Position = UDim2.new(0.5, 0, 1, -(Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx + Tokens.spacing.md))
-	root.Size = UDim2.fromOffset(0, minimumTapTarget + Tokens.spacing.md)
+	root.Size = UDim2.fromOffset(0, minimumTapTarget + Tokens.spacing.lg)
 	root.AutomaticSize = Enum.AutomaticSize.X
 	root.BackgroundTransparency = 1
 	root.Visible = false
@@ -107,7 +107,7 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	frame.LayoutOrder = index
 	frame.AutoButtonColor = false
 	frame.Text = ""
-	frame.Size = UDim2.fromOffset(SLOT_WIDTH, minimumTapTarget + Tokens.spacing.md)
+	frame.Size = UDim2.fromOffset(SLOT_WIDTH, minimumTapTarget + Tokens.spacing.lg)
 	frame.BackgroundColor3 = Tokens.color.featherWhite
 	frame.ZIndex = z
 	frame.Selectable = true
@@ -132,17 +132,13 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	-- Tool art (left) with the name beside it.
 	local icon = Skin.icon(frame, "tool." .. toolId .. ".normal", Tokens.icon.lg, z + 2)
 	if icon then
-		icon.Position = UDim2.fromOffset(Tokens.spacing.xs + 2, Tokens.spacing.xs)
+		icon.Position = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
 	end
 	local name = Instance.new("TextLabel")
 	name.Name = "Name"
-	name.Position = UDim2.fromOffset(if icon then Tokens.icon.lg + Tokens.spacing.sm else Tokens.spacing.sm, Tokens.spacing.xs + 2)
-	name.Size = UDim2.new(
-		1,
-		-(if icon then Tokens.icon.lg + Tokens.spacing.sm else Tokens.spacing.sm) - Tokens.spacing.xs,
-		0,
-		Tokens.typography.caption.size + 2
-	)
+	local nameLeft = if icon then Tokens.icon.lg + Tokens.spacing.md else Tokens.spacing.sm
+	name.Position = UDim2.fromOffset(nameLeft, Tokens.spacing.sm + 2)
+	name.Size = UDim2.new(1, -nameLeft - Tokens.icon.md - Tokens.spacing.sm, 0, Tokens.typography.caption.size + 2)
 	name.BackgroundTransparency = 1
 	name.Font = Tokens.typography.heading.font
 	name.TextSize = Tokens.typography.caption.size
@@ -157,14 +153,14 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	local hint = Icons.keycap(frame, "1", Tokens.icon.md - 2, { zIndex = z + 3 })
 	hint.Name = "Hint"
 	hint.AnchorPoint = Vector2.new(1, 0)
-	hint.Position = UDim2.new(1, -Tokens.spacing.xs, 0, -Tokens.spacing.xs)
+	hint.Position = UDim2.new(1, -Tokens.spacing.sm, 0, Tokens.spacing.sm)
 	local hintText = hint:FindFirstChild("Glyph") :: TextLabel
 
 	local status = Instance.new("TextLabel")
 	status.Name = "Status"
 	status.AnchorPoint = Vector2.new(0, 1)
-	status.Position = UDim2.new(0, Tokens.spacing.sm, 1, -(Tokens.spacing.xs + 8))
-	status.Size = UDim2.new(1, -Tokens.spacing.sm * 2, 0, Tokens.typography.caption.size + 2)
+	status.Position = UDim2.new(0, nameLeft, 1, -(Tokens.spacing.sm + 8))
+	status.Size = UDim2.new(1, -nameLeft - Tokens.spacing.sm, 0, Tokens.typography.caption.size + 2)
 	status.BackgroundTransparency = 1
 	status.Font = Tokens.typography.caption.font
 	status.TextSize = Tokens.typography.caption.size - 1
@@ -177,8 +173,8 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	local bar = Instance.new("Frame")
 	bar.Name = "Bar"
 	bar.AnchorPoint = Vector2.new(0, 1)
-	bar.Position = UDim2.new(0, Tokens.spacing.sm, 1, -(Tokens.spacing.xs + 2))
-	bar.Size = UDim2.new(1, -Tokens.spacing.sm * 2, 0, 5)
+	bar.Position = UDim2.new(0, Tokens.spacing.sm + 2, 1, -(Tokens.spacing.sm + 1))
+	bar.Size = UDim2.new(1, -(Tokens.spacing.sm + 2) * 2, 0, 5)
 	bar.BackgroundColor3 = Tokens.color.creamDeep
 	bar.BorderSizePixel = 0
 	bar.ZIndex = z + 2
