@@ -338,3 +338,12 @@ bundles including the 1,500 POPULAR bundle (`gemBundle1500` product id pending f
 `DialogueController` frames NPC lines (the Farmer). `ChapterShellService` adds the SELL sign and
 the Scout Chick crate display (`scoutChick` in `DisplayController` / `InspectController`). Level
 pips sort by level. Rainbow feathers glow locally (no lights). The record nameplate pill is lobby-only.
+
+**Fix pass (14 Sep 2026).** The mound is 48x48 x 0.6-stud cells with records every 0.15 studs
+(32-record cap per cell, ~59k records; snapshot / delta payload caps raised) so the silhouette
+changes slowly and the coat stays ten records deep; ambient strands around the mound are off.
+Tab binds `Menu` above the core scripts (player list core GUI disabled) with a raw-key fallback.
+`ToolController` resets every request gate on swap / phase / refusal and runs a 3 s watchdog.
+Tool displays hang on the barn's left wall. The Scout Chick waits (`Waiting` unit state, server
+`crateBusy`) while the crate is away and flies between `ChapterLayout.chapter1.chickPerches`.
+Hard difficulty's pile multiplier now shows mostly at the rim because crown cells sit at the cap.

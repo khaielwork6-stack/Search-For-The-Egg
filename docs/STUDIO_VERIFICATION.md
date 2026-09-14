@@ -1258,3 +1258,34 @@ console clean. Edit-mode probe captures for the screens, Play readouts for the w
 - **Rainbow feathers.** 165 rainbow records: 0 PointLights, 165 local halos (Neon + billboard glow
   + motes); the rest of the coat keeps its colour.
 - **Record pill.** Visible in the lobby (`true`), hidden once the round started (`false`).
+
+## Fix pass: deep mound, Tab, rake gate, scout perches, displays, strands (14 Sep 2026)
+
+One Play Solo session (map mode) after the changes; 298 headless tests; selene / stylua clean;
+console clean (the first run surfaced `RoundSnapshot: payload_too_large` for the 48x48 grid, fixed
+by raising the snapshot / delta caps before this session).
+
+- **Mound depth.** Server grid 48x48 cells of 0.6 studs (same 28.8-stud footprint), records every
+  0.15 studs of column height capped at the 32-record mask: `2304 cells, 59,463 records (min 1,
+  max 32 per cell)`. The client draws the top 10 records per cell: `20,800` feather parts,
+  `22,401` instances, `fluff 0`, `coatKind feathers`; that count did not move across three rake
+  sweeps and a 25-feather hand run (the coat stays ten deep until a cell's last records). Egg
+  reveal at `minimumRemovalFraction 0.45` = 26,758 feathers: ~17 min with a max-level vac (26/s),
+  ~11 min with a max-level rake held down, 20+ min of mixed play (hand-only is far longer).
+- **No loose feathers.** `SFE_Chapter1 actors=2 strands=0` (was 80 drifting strands).
+- **Tab.** `SFE_Menu` bound at priority `3100` (above the core scripts) with a raw-key fallback;
+  the core player list is off. Real virtual Tab presses: first opened the book (`bookOpen true`,
+  cursor free, `MouseBehavior Default`), second closed it (`bookOpen false`, `LockCenter`,
+  `LockFirstPerson`). Backtick and the book button share the same opener.
+- **Rake gate.** 10 s of rake attempts at 0.15 s (61 attempts, 1 accepted for 25, 57 `bag_full`
+  refusals) left `inFlight false, nextAllowedIn 0`; after selling, the rake swept 24 more, then
+  the hand collected 5 of 9 attempts (the rest were the crate cooldown on the bag), then the rake
+  20 more. The gate now resets on tool swap, phase change, refusal, and a 3 s watchdog; the request
+  itself is protected so a thrown error can never leave the gate set.
+- **Displays.** Pitchfork at `(-60.3, 58.2, 303.2)` and Dynamite at `(-60.4, 58.4, 310)` on the
+  left wall with their boards behind them; `SFE_Display` prompts and inspection unchanged.
+- **Scout Chick.** Feet on the ground (`footOffset` from the model's lowest point; pivot y 53.1 on
+  ground 52.1). Sold with the chick 7.5 s out: it arrived while the crate was away, flew to the
+  crate rim (`47, 56.7, 351.5`), sat, flew (`50.2, 58.4` mid-air) to the corner post
+  (`51.2, 56.5, 345.8`), then traded once the crate was back (`47, 53.1, 348.5`).
+- Not verified: the owner's clip (no video tooling on this machine); multiplayer.
