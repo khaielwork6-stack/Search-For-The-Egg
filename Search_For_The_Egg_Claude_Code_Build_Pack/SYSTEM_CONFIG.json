@@ -1408,7 +1408,7 @@
       "lagSpringHz": 6.0
     },
     "nestRake": {
-      "viewmodelScale": 0.3,
+      "viewmodelScale": 0.26,
       "thrustSeconds": 0.11,
       "thrustStuds": 1.7,
       "thrustDropStuds": 0.55,
@@ -1419,7 +1419,7 @@
       "swingSoundVolume": 0.4
     },
     "confettiCharge": {
-      "viewmodelScale": 0.42,
+      "viewmodelScale": 0.22,
       "lightSeconds": 0.28,
       "maxHoldSeconds": 1.1,
       "throwSpeedStudsPerSecond": 26,
@@ -1432,7 +1432,7 @@
       "craterTransparency": 0.35
     },
     "featherVac": {
-      "viewmodelScale": 0.4,
+      "viewmodelScale": 0.28,
       "pullSeconds": 0.24,
       "pullStaggerSeconds": 0.035,
       "aimUpdateHz": 6,
