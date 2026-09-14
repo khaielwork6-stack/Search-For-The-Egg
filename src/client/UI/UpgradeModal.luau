@@ -268,12 +268,39 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 				local z = container.ZIndex + 1
 				local frame = FrameKit.row(container, "Row_" .. preview.upgradeId, deps.minimumTapTarget + Tokens.spacing.lg, z)
 				local buttonWidth = math.max(deps.minimumTapTarget * 2, 128)
-				local textWidth = -(buttonWidth + Tokens.spacing.md)
+				-- Large item art on the left: the tool for tool rows, the hand or the bag otherwise.
+				local artRole = if preview.toolId
+					then "tool." .. preview.toolId .. ".normal"
+					elseif preview.kind == "bag" then "icon.feather"
+					else "tool.hand.normal"
+				local artSize = deps.minimumTapTarget + Tokens.spacing.xs
+				local artHolder = Instance.new("Frame")
+				artHolder.Name = "Art"
+				artHolder.AnchorPoint = Vector2.new(0, 0.5)
+				artHolder.Position = UDim2.new(0, -Tokens.spacing.xs, 0.5, 0)
+				artHolder.Size = UDim2.fromOffset(artSize, artSize)
+				artHolder.BackgroundColor3 = Tokens.color.creamPill
+				artHolder.ZIndex = z + 1
+				local artCorner = Instance.new("UICorner")
+				artCorner.CornerRadius = UDim.new(1, 0)
+				artCorner.Parent = artHolder
+				local artStroke = Instance.new("UIStroke")
+				artStroke.Thickness = Tokens.stroke.standard
+				artStroke.Color = Tokens.color.strawDeep
+				artStroke.Parent = artHolder
+				artHolder.Parent = frame
+				local art = Skin.icon(artHolder, artRole, artSize - Tokens.spacing.sm, z + 2)
+				if art then
+					art.AnchorPoint = Vector2.new(0.5, 0.5)
+					art.Position = UDim2.fromScale(0.5, 0.5)
+				end
+				local textLeft = artSize + Tokens.spacing.sm
+				local textWidth = -(buttonWidth + Tokens.spacing.md + textLeft)
 				local title = FrameKit.text(frame, "Title", "", "label", { zIndex = z + 1, color = Tokens.color.inkStrong })
-				title.Position = UDim2.new(0, 0, 0.5, -(Tokens.typography.label.size + Tokens.spacing.xs) + 2)
+				title.Position = UDim2.new(0, textLeft, 0.5, -(Tokens.typography.label.size + Tokens.spacing.xs) + 2)
 				title.Size = UDim2.new(1, textWidth, 0, Tokens.typography.label.size + Tokens.spacing.xs)
 				local detail = FrameKit.text(frame, "Detail", "", "caption", { zIndex = z + 1, color = Tokens.color.inkMuted })
-				detail.Position = UDim2.new(0, 0, 0.5, 2)
+				detail.Position = UDim2.new(0, textLeft, 0.5, 2)
 				detail.Size = UDim2.new(1, textWidth, 0, Tokens.typography.caption.size + Tokens.spacing.xs)
 				detail.RichText = true
 				-- Level pips sit after the title: one dot per level, filled up to the current one.
@@ -348,7 +375,12 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 			row.frame.LayoutOrder = order
 			row.title.Text = titleFor(preview)
 			-- Pips follow the title text so they never collide with it.
-			row.pips.Position = UDim2.new(0, math.ceil(row.title.TextBounds.X) + Tokens.spacing.md, 0.5, -(Tokens.spacing.xs + 4))
+			row.pips.Position = UDim2.new(
+				0,
+				row.title.Position.X.Offset + math.ceil(row.title.TextBounds.X) + Tokens.spacing.md,
+				0.5,
+				-(Tokens.spacing.xs + 4)
+			)
 			row.pips.Visible = #row.pipDots > 1
 			for index, dot in ipairs(row.pipDots) do
 				local lit = index <= (preview.level or 0)

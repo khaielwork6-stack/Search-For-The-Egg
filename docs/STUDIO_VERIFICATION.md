@@ -1057,3 +1057,46 @@ viewport (939x659) and the 812x375 phone override, touch mode:
   `StarterGui.ScreenGui` is disabled and its `LocalScript` is now disabled too: it installs a
   `UIBlur` in Lighting and hides every other ScreenGui when one of its frames opens.
 - 295 headless tests pass; selene / stylua clean.
+
+## Lobby vendors, barn displays, Perk Shop and Class Cards (14 Sep 2026)
+
+Owner brief: bring the lobby and its two shops up to the reference screenshots without copying
+their branding, keep every price and server rule. Verified in Play Solo (map mode, mock Marketplace)
+and through the edit-mode UI probe at the Studio viewport and the 812x375 phone override.
+
+- **Lobby.** Drifting feather strands off in the lobby (`SFE_LobbyShell actors=9 strands=0`; the
+  arena keeps its 80). The bottom station rail is gone; the only permanent menu is a right-hand
+  stack of Stats, Inventory and Codes tiles with names beneath. Party, Daily, Chest open from the
+  world as before.
+- **Vendors.** The owner's `Cow Boy` (Classes stall) and `Cow Boy Brother` (Upgrades stall) rigs
+  host the `SFE_Station_classes` / `SFE_Station_shop` prompts ("Class Master / Roll a class",
+  "Perk Seller / Browse permanent perks"), wear a nameplate with a role pill, breathe, turn to face
+  the player within 22 studs, greet with a speech bubble while the prompt shows ("Perks bought here
+  stay with you on every search, friend!") and say "Take a good look!" on interact. The stall
+  signs are retitled at boot: PERMANENT PERKS / UPGRADES THAT STAY WITH YOU and CLASSES / ROLL YOUR
+  STYLE. Interact opened "Perk Shop" with `MouseBehavior = Default` and the cursor visible.
+- **Barn displays.** `FeatherBag` and `InfiniteBag` sit on the FEATHER SUPPLIES counter,
+  `Pitchfork` and `Dynamite` on the two rear-wall display boards, each with a price card (name,
+  price or OWNED / MAX, caption) and a `SFE_Display_<key>` Buy prompt (8 studs). Cards read the round
+  previews: `$1.00 | Lv 2 - holds 50` -> bought through the display -> `$2.00 | Lv 3 - holds 100`
+  with the "Upgrade Bag improved" toast; the Infinite Bag showed `R$ 99` then, after the
+  `PurchasePromptRequest` and the mock pass completion, `OWNED | Your bag never fills`. The controller
+  rebuilds cards as the barn streams in (StreamingEnabled place).
+- **Commerce.** `CommerceService` is now constructed; `PurchasePromptRequest` and
+  `ProductCatalogRequest` are served; grants push a projection. In Studio with missing deployment
+  ids the server uses `ProductMap.studioMockDeployment` + the mock Marketplace, and prompts complete
+  themselves after 1.2 s so the pipeline can be exercised.
+- **Perk Shop.** Header "Perk Shop", subtitle "Permanent Player Perks", gem balance chip with "+",
+  2 x 2 illustrated perk tiles (tinted face, art on a sunburst, level pips, `Lv 2 · +20% -> +30%`,
+  gem-purple price button, MAXED badge), a Robux column (100 / 400 Gems with a POPULAR ribbon, 2x
+  Gems, Infinite Bag; OWNED badge when entitled) and a red Close. Purchases pop the tile, light the
+  new pip and shower confetti.
+- **Class Cards.** Deck of eight rarity-tinted rows (art, name, odds bar, lock / check), spotlight
+  with arrows, rarity badge, sunburst emblem, `Spin - 40 Gems`, `Auto: Off`, 2x Luck / Fast Rolls
+  pass buttons, and a side panel with stacked slot chips (`Slot 1 - Newcomer`, `+1 Slot R$ 119`),
+  story, bonus line, odds and Equip. A spin sweeps the deck and flickers the spotlight, decelerates,
+  and lands with a pop, confetti and the result pill ("New class: Gem Seeker!"). Phone: two columns
+  with the side panel below.
+- **Workbench.** Rows carry large item art on the left; purchases flash the row, hop the button and
+  burst confetti.
+- 295 headless tests pass; selene / stylua clean. Console clean apart from the music asset permission.

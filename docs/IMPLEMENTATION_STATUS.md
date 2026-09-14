@@ -293,3 +293,12 @@ cream panel with a studs weave, gold header bands (`FrameKit.headerBand`) with o
 lipped buttons (`Button.luau`, face drops on press) and chips (`FrameKit.chip`). Pack icons, station
 tiles, glyphs and the rays / studs textures are still used. The owner's dropped pack ScreenGui and
 its LocalScript are disabled in the place, not deleted.
+
+**Lobby vendors and shops (14 Sep 2026).** The permanent menu is a right-hand stack (Stats,
+Inventory, Codes); Classes and the Perk Shop open only through the owner's Cow Boy vendors
+(`ChapterLayout.lobby.npcs`, prompts hosted by `WorldShellService.buildFromMap`, presentation in
+`LobbyShellController._presentVendor` + `UI/NpcPlate.luau`). The supplies barn shows the owner's
+item models as displays (`ChapterShellService.placeDisplays`, client `DisplayController`) that buy
+through `UpgradePurchase` / `PurchasePromptRequest` via `UI/UpgradeActions.luau`. `CommerceService`
+is wired in `init.server` (mock Marketplace + synthetic ids in Studio). `ShopModal` (perk tiles +
+Robux column) and `ClassesModal` (deck / spotlight / slots) were rebuilt to the owner's reference.
