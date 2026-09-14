@@ -314,8 +314,8 @@ if RunService:IsStudio() then
 			local result = interaction:handle(tostring(name))
 			return { result = result, top = modals:topId() }
 		end,
-		partyCreate = function(chapter, difficulty)
-			return party:create(chapter or "chapter1", difficulty or "normal")
+		partyCreate = function(chapter, difficulty, size)
+			return party:create(chapter or "chapter1", difficulty or "normal", size)
 		end,
 		partyJoin = function(partyId)
 			return party:join(partyId)
