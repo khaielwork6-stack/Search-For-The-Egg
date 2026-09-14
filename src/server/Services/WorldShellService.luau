@@ -96,6 +96,7 @@ local function prompt(parent: BasePart, name: string, actionText: string, object
 	p.HoldDuration = 0
 	p.MaxActivationDistance = maxDistance
 	p.RequiresLineOfSight = false
+	p.Style = Enum.ProximityPromptStyle.Custom -- drawn by the client PromptController in the UI language
 	p.KeyboardKeyCode = Enum.KeyCode.E
 	p.GamepadKeyCode = Enum.KeyCode.ButtonX
 	p.Parent = parent

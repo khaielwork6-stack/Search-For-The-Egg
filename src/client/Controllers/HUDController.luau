@@ -179,9 +179,9 @@ function HUDController.new(deps: any): HUDController
 	detail.Position = UDim2.fromScale(0.5, 1)
 	detail.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 2)
 	detail.BackgroundTransparency = 1
-	detail.Font = Tokens.typography.caption.font
+	detail.Font = Tokens.typography.body.font
 	detail.TextSize = Tokens.typography.caption.size
-	detail.TextColor3 = Tokens.color.inkMuted
+	detail.TextColor3 = Tokens.color.ink
 	detail.Text = ""
 	detail.ZIndex = banner.ZIndex + 3
 	detail.Parent = bannerContent
@@ -489,6 +489,27 @@ function HUDController.new(deps: any): HUDController
 	self._trove:add(deps.modals.changed:Connect(function()
 		self.carriedStack:setHiddenByUi(deps.modals:isBlocking())
 	end))
+	-- Bottom band: the strip and hotbar shrink together on narrow viewports so they never run off
+	-- the edges or under the prompt chip / carried bundle.
+	local bandScales = {}
+	for _, root in ipairs({ self.round.root, self.hotbar.root }) do
+		local bandScale = Instance.new("UIScale")
+		bandScale.Name = "BandScale"
+		bandScale.Parent = root
+		table.insert(bandScales, bandScale)
+	end
+	local function fitBand()
+		local width = stage.AbsoluteSize.X / SafeArea.scaleOf(stage)
+		local reserved = (Tokens.layout.safeAreaPaddingPx + 200) * 2
+		local natural = 500
+		local factor = math.clamp((width - reserved) / natural, 0.6, 1)
+		for _, bandScale in ipairs(bandScales) do
+			bandScale.Scale = factor
+		end
+	end
+	fitBand()
+	self._trove:add(stage:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitBand))
+	self._trove:add(SafeArea.overrideChanged:Connect(fitBand))
 	self._trove:add(deps.input.modeChanged:Connect(function(mode)
 		self.hotbar:setMode(mode)
 	end))

@@ -169,7 +169,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 				local result = deps.net:request("PerkPurchase", { perkId = perkId, expectedLevel = level })
 				buy.setPending(false)
 				if result.ok then
-					deps.audio:play(Tokens.sound.upgradeChord)
+					deps.audio:play(Tokens.sound.purchase)
 					deps.haptics:pulse(0.5, 0.1)
 					scale.Scale = 1.04
 					Tween.scale(scale, "release", motion, 1)

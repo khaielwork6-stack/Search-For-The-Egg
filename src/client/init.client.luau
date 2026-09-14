@@ -31,6 +31,7 @@ local CrateController = require(Controllers.CrateController)
 local ToolController = require(Controllers.ToolController)
 local ToolVisualController = require(Controllers.ToolVisualController)
 local InteractionController = require(Controllers.InteractionController)
+local PromptController = require(Controllers.PromptController)
 local ObjectiveController = require(Controllers.ObjectiveController)
 local VictoryController = require(Controllers.VictoryController)
 local PartyController = require(Controllers.PartyController)
@@ -109,6 +110,8 @@ local interaction = trove:add(
 	InteractionController.new({ net = net, round = round, party = party, audio = audio, haptics = haptics, hud = hud, config = config })
 )
 local objectives = trove:add(ObjectiveController.new({ net = net, hud = hud, round = round }))
+local prompts = trove:add(PromptController.new({ input = input, audio = audio, accessibility = accessibility }))
+local _ = prompts
 local victory = trove:add(VictoryController.new({
 	net = net,
 	round = round,
