@@ -182,20 +182,39 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 		namePadding.PaddingRight = UDim.new(0, Tokens.spacing.sm)
 	end
 
-	-- Status caption + bar inside the tile's lower edge.
+	-- Status caption on a cream band above the bar, so it never fights the tool art.
+	local band = Instance.new("Frame")
+	band.Name = "StatusBand"
+	band.AnchorPoint = Vector2.new(0.5, 1)
+	band.Position = UDim2.new(0.5, 0, 1, -(LIP + Tokens.spacing.sm + 6))
+	band.Size = UDim2.new(1, -Tokens.spacing.sm, 0, Tokens.typography.caption.size + 4)
+	band.BackgroundColor3 = Tokens.color.creamPill
+	band.BackgroundTransparency = 0.12
+	band.BorderSizePixel = 0
+	band.ZIndex = z + 3
+	band.Visible = false
+	local bandCorner = Instance.new("UICorner")
+	bandCorner.CornerRadius = UDim.new(0, Tokens.radius.sm)
+	bandCorner.Parent = band
+	local bandStroke = Instance.new("UIStroke")
+	bandStroke.Thickness = 1.2
+	bandStroke.Color = Tokens.color.outline
+	bandStroke.Transparency = 0.5
+	bandStroke.Parent = band
+	band.Parent = tile
 	local status = Instance.new("TextLabel")
 	status.Name = "Status"
-	status.AnchorPoint = Vector2.new(0.5, 1)
-	status.Position = UDim2.new(0.5, 0, 1, -(LIP + Tokens.spacing.sm + 6))
-	status.Size = UDim2.new(1, -Tokens.spacing.sm, 0, Tokens.typography.caption.size)
+	status.Size = UDim2.fromScale(1, 1)
 	status.BackgroundTransparency = 1
 	status.Font = Tokens.typography.heading.font
 	status.TextSize = Tokens.typography.caption.size - 2
 	status.TextColor3 = Tokens.color.inkStrong
 	status.Text = ""
-	status.ZIndex = z + 3
-	status.Parent = tile
-	FrameKit.outline(status, 1.2, Tokens.color.featherWhite)
+	status.ZIndex = z + 4
+	status.Parent = band
+	status:GetPropertyChangedSignal("Text"):Connect(function()
+		band.Visible = status.Text ~= ""
+	end)
 	local bar = Instance.new("Frame")
 	bar.Name = "Bar"
 	bar.AnchorPoint = Vector2.new(0.5, 1)

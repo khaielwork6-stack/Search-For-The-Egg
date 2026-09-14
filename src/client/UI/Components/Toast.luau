@@ -182,6 +182,14 @@ function Toast._drain(self: Toast)
 			end)
 		end
 		card.Parent = self._container
+		-- The card hugs its text (plus the amount column on rewards) instead of spanning the container.
+		local function fit()
+			local extra = if item.amount then 120 + Tokens.spacing.lg else Tokens.spacing.lg
+			local wanted = textLeft + math.ceil(label.TextBounds.X) + extra + Tokens.spacing.sm
+			card.Size = UDim2.new(0, math.clamp(wanted, 240, 440), 0, Tokens.layout.minimumTapTargetPx + Tokens.spacing.xs)
+		end
+		label:GetPropertyChangedSignal("TextBounds"):Connect(fit)
+		fit()
 		local shrink = Tween.notify(card, scale, self._motion())
 		if self._onShow then
 			self._onShow(item.tone)
