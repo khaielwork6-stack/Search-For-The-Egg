@@ -38,8 +38,13 @@ function Skin.label(parent: GuiObject, role: string, options: { zIndex: number?,
 	label.Name = opts.name or "Skin"
 	label.BackgroundTransparency = 1
 	local inset = opts.inset or 0
-	label.Position = UDim2.fromOffset(-inset, -inset)
-	label.Size = UDim2.new(1, inset * 2, 1, inset * 2)
+	local padding = parent:FindFirstChildOfClass("UIPadding")
+	local left = if padding then padding.PaddingLeft.Offset else 0
+	local right = if padding then padding.PaddingRight.Offset else 0
+	local top = if padding then padding.PaddingTop.Offset else 0
+	local bottom = if padding then padding.PaddingBottom.Offset else 0
+	label.Position = UDim2.fromOffset(-inset - left, -inset - top)
+	label.Size = UDim2.new(1, inset * 2 + left + right, 1, inset * 2 + top + bottom)
 	label.ZIndex = opts.zIndex or parent.ZIndex
 	Skin.apply(label, role)
 	label.Parent = parent

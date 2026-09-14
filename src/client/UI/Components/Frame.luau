@@ -22,8 +22,15 @@ local function skinLabel(parent: GuiObject, role: string, zIndex: number, inset:
 	label.Name = "ArtFrame"
 	label.BackgroundTransparency = 1
 	local pad = inset or 0
-	label.Position = UDim2.fromOffset(-pad, -pad)
-	label.Size = UDim2.new(1, pad * 2, 1, pad * 2)
+	-- A UIPadding on the parent would shrink the art with the content; undo it so the frame art
+	-- always spans the parent's full box.
+	local padding = parent:FindFirstChildOfClass("UIPadding")
+	local left = if padding then padding.PaddingLeft.Offset else 0
+	local right = if padding then padding.PaddingRight.Offset else 0
+	local top = if padding then padding.PaddingTop.Offset else 0
+	local bottom = if padding then padding.PaddingBottom.Offset else 0
+	label.Position = UDim2.fromOffset(-pad - left, -pad - top)
+	label.Size = UDim2.new(1, pad * 2 + left + right, 1, pad * 2 + top + bottom)
 	label.Image = id
 	if rect then
 		label.ScaleType = Enum.ScaleType.Slice
@@ -192,11 +199,16 @@ function Frame.pill(
 	padding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
 	padding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
 	padding.Parent = label
-	if opts.art ~= false and skinLabel(label, "modal.title", label.ZIndex + 1, 2) then
-		stroke.Enabled = false
+	if opts.art ~= false then
 		-- The art's rounded ends are wider than the drawn stroke: keep the text clear of them.
-		padding.PaddingLeft = UDim.new(0, Tokens.spacing.xxl + Tokens.spacing.xs)
-		padding.PaddingRight = UDim.new(0, Tokens.spacing.xxl + Tokens.spacing.xs)
+		padding.PaddingLeft = UDim.new(0, Tokens.spacing.xl + Tokens.spacing.xs)
+		padding.PaddingRight = UDim.new(0, Tokens.spacing.xl + Tokens.spacing.xs)
+		if skinLabel(label, "modal.title", label.ZIndex + 1, 2) then
+			stroke.Enabled = false
+		else
+			padding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
+			padding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
+		end
 	end
 	if opts.fitText then
 		-- Width follows the text plus padding (AutomaticSize would feed back on the art child).

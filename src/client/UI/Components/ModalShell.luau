@@ -238,12 +238,13 @@ function ModalShell.create(
 		local stageHeight = (gui :: GuiBase2d).AbsoluteSize.Y / SafeArea.scaleOf(gui)
 		local maxHeight = stageHeight * Tokens.layout.cardMaxHeightFraction
 		local chrome = tap + Tokens.spacing.md + footerHeight + (Tokens.spacing.md + Tokens.spacing.sm) * 2 + Tokens.spacing.lg
-		local wanted = math.clamp(content.AbsoluteCanvasSize.Y / SafeArea.scaleOf(gui) + chrome, 220, maxHeight)
+		local inner = contentLayout.AbsoluteContentSize.Y / SafeArea.scaleOf(gui) + Tokens.spacing.xs * 2
+		local wanted = math.clamp(inner + chrome, 220, maxHeight)
 		card.Size = UDim2.new(card.Size.X.Scale, 0, 0, math.floor(wanted))
 	end
 	footer:GetPropertyChangedSignal("Visible"):Connect(relayout)
 	footer:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
-	content:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(relayout)
+	contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(relayout)
 	local host = gui :: GuiBase2d
 	host:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
 
