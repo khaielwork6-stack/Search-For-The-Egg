@@ -34,6 +34,7 @@ local InteractionController = require(Controllers.InteractionController)
 local DisplayController = require(Controllers.DisplayController)
 local NameplateController = require(Controllers.NameplateController)
 local InspectController = require(Controllers.InspectController)
+local UpgradeBookController = require(Controllers.UpgradeBookController)
 local PromptController = require(Controllers.PromptController)
 local ObjectiveController = require(Controllers.ObjectiveController)
 local VictoryController = require(Controllers.VictoryController)
@@ -133,6 +134,22 @@ local victory = trove:add(VictoryController.new({
 hud:bindRound(round, interaction)
 -- Player nameplates: display name and record time over every character.
 local nameplates = trove:add(NameplateController.new())
+-- The upgrade book: Tab, the book button, or the supplies counter opens it during a search.
+local book = trove:add(UpgradeBookController.new({
+	net = net,
+	round = round,
+	profile = profile,
+	modals = modals,
+	input = input,
+	audio = audio,
+	haptics = haptics,
+	hud = hud,
+	config = config,
+	accessibility = accessibility,
+}))
+hud:setBookOpener(function()
+	book:toggle()
+end)
 -- Barn item inspection: camera focus, cinematic bars, options and skins for a display.
 local inspect = trove:add(InspectController.new({
 	net = net,
@@ -284,6 +301,7 @@ if RunService:IsStudio() then
 			snap.displays = displays:cardCount()
 			snap.nameplates = nameplates:count()
 			snap.inspecting = inspect:isOpen()
+			snap.bookOpen = book:isOpen()
 			snap.audioState = audio:state()
 			snap.vfxInstances = vfx:instanceCount()
 			snap.vfxStats = vfx.stats
@@ -794,7 +812,12 @@ if RunService:IsStudio() then
 			return interaction:handle("SFE_Sell")
 		end,
 		openUpgrades = function()
-			return hud:openUpgrades(round)
+			book:open()
+			return { open = book:isOpen() }
+		end,
+		closeBook = function()
+			book:close()
+			return { open = book:isOpen() }
 		end,
 		buy = function(upgradeId)
 			local token = round:sessionToken()

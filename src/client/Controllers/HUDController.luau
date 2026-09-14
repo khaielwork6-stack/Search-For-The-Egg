@@ -42,6 +42,7 @@ export type HUDController = typeof(setmetatable(
 		_displayed: { [string]: number },
 		_chipScales: { [string]: UIScale },
 		_promptWanted: boolean,
+		_bookOpener: (() -> ())?,
 		_infiniteBag: boolean?,
 		_timerConnection: RBXScriptConnection?,
 		_bannerScale: UIScale?,
@@ -77,6 +78,7 @@ function HUDController.new(deps: any): HUDController
 		_displayed = {},
 		_chipScales = {},
 		_promptWanted = false,
+		_bookOpener = nil,
 		_timerConnection = nil,
 		_bannerScale = nil,
 		_reticleArt = nil,
@@ -247,9 +249,50 @@ function HUDController.new(deps: any): HUDController
 		local prompts = Tokens.prompts[mode]
 		promptItem(1, prompts.primary, "Gather")
 		promptItem(3, prompts.interact, "Interact")
+		promptItem(5, prompts.menu, "Upgrades")
 		-- Only shown while gathering: the lobby explains itself through its world prompts.
 		prompt.Visible = mode ~= "touch" and self._promptWanted == true
 	end
+
+	-- Upgrade book button (round only): sits under the gear, shows the Tab keycap on keyboard.
+	local bookHandle = Button.build(stage, {
+		text = "",
+		variant = "secondary",
+		art = false,
+		round = true,
+		minimumTapTarget = SafeArea.minimumTapTarget(gui, deps.config),
+		motion = deps.accessibility:motionSettings(),
+		size = UDim2.fromOffset(SafeArea.minimumTapTarget(gui, deps.config), SafeArea.minimumTapTarget(gui, deps.config)),
+		zIndex = Tokens.zIndex.hud,
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTap)
+		end,
+		hoverSound = function()
+			deps.audio:play(Tokens.sound.uiHover)
+		end,
+		onActivated = function()
+			if self._bookOpener then
+				self._bookOpener()
+			end
+		end,
+	})
+	bookHandle.button.Name = "BookButton"
+	bookHandle.button.AnchorPoint = Vector2.new(1, 0)
+	bookHandle.button.Position = UDim2.new(
+		1,
+		-Tokens.layout.safeAreaPaddingPx,
+		0,
+		Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx + Tokens.spacing.md
+	)
+	bookHandle.button.Visible = false
+	local bookArt =
+		Skin.icon(bookHandle.button:FindFirstChild("Face") :: Frame, "station.stats.normal", Tokens.icon.lg + 4, Tokens.zIndex.hud + 3)
+	if bookArt then
+		bookArt.AnchorPoint = Vector2.new(0.5, 0.5)
+		bookArt.Position = UDim2.fromScale(0.5, 0.5)
+	end
+	self._labels.bookButton = bookHandle.button
+	self._trove:add(bookHandle.destroy)
 
 	-- Settings: round gear button, top-right.
 	local minimumTap = SafeArea.minimumTapTarget(gui, deps.config)
@@ -572,6 +615,9 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 		self.carriedStack:setVisible(phase == "Searching" or phase == "EggRevealed")
 		self._promptWanted = phase == "Searching" or phase == "EggRevealed"
 		self._labels.prompt.Visible = self._promptWanted and deps.input:mode() ~= "touch"
+		if self._labels.bookButton then
+			self._labels.bookButton.Visible = phase == "Searching"
+		end
 		if inRound and not self._timerConnection then
 			self._timerConnection = RunService.RenderStepped:Connect(function()
 				self.round:setTimer(round:elapsedMs())
@@ -630,7 +676,11 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 		end
 	end))
 	self._trove:add(interaction.openUpgrades:Connect(function()
-		self:openUpgrades(round)
+		if self._bookOpener then
+			self._bookOpener()
+		else
+			self:openUpgrades(round)
+		end
 	end))
 end
 
@@ -774,6 +824,11 @@ function HUDController.setHold(self: HUDController, active: boolean, fraction: n
 			ring.ImageTransparency = 0.6 - f * 0.5
 		end
 	end
+end
+
+-- The upgrade book (UpgradeBookController) registers itself here; without it the workbench modal opens.
+function HUDController.setBookOpener(self: HUDController, opener: (() -> ())?)
+	self._bookOpener = opener
 end
 
 function HUDController.openUpgrades(self: HUDController, round: any)
