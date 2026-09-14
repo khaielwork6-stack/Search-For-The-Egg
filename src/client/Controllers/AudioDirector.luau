@@ -203,9 +203,14 @@ function AudioDirector.setState(self: AudioDirector, state: MusicState)
 		return
 	end
 	local fade = TweenInfo.new(Tokens.motion.slow * 3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+	local previous = self._music[self._state]
 	for name, sound in pairs(self._music) do
 		local target = if name == state then 0.45 else 0
-		if target == 1 and not sound.IsPlaying and sound.SoundId ~= "" then
+		if target > 0 and not sound.IsPlaying and sound.SoundId ~= "" then
+			-- The same loop carries across states: pick it up where the last stem left off.
+			if previous and previous ~= sound and previous.IsPlaying and previous.SoundId == sound.SoundId then
+				sound.TimePosition = previous.TimePosition
+			end
 			sound:Play()
 		end
 		local tween = TweenService:Create(sound, fade, { Volume = target })
