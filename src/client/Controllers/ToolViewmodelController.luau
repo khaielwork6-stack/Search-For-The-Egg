@@ -38,8 +38,8 @@ local POSES: { [string]: Pose } = {
 	},
 	featherVac = {
 		model = "Vacuum",
-		offset = CFrame.new(0.42, -0.5, -1.15),
-		rotation = CFrame.Angles(math.rad(-4), math.rad(-90), 0),
+		offset = CFrame.new(0.5, -0.55, -1.1),
+		rotation = CFrame.Angles(math.rad(-8), math.rad(-80), 0),
 		nozzle = "WideIntake",
 	},
 }
