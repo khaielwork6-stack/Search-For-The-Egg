@@ -275,8 +275,12 @@
   "eggSpawn": {
     "spawnNodeCountTarget": 24,
     "selection": "weighted_without_immediate_repeat",
-    "minimumRemovalFraction": 0.2,
+    "minimumRemovalFraction": 0.45,
     "maximumRemovalFraction": 0.65,
+    "luckyRoundChance": 0.09,
+    "luckyMinimumRemovalFraction": 0.1,
+    "coreNodeWeight": 3.0,
+    "edgeNodeWeight": 1.0,
     "revealRadiusStuds": 5,
     "claimRadiusStuds": 8,
     "claimHoldSeconds": 0.65,

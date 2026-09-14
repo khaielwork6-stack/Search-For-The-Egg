@@ -83,6 +83,21 @@ return function(describe, it, expect)
 			expect(depth).toBeLessThanOrEqual(cfg.eggSpawn.maximumRemovalFraction)
 			local hardDepth = EggNodes.rollDepth(cfg.eggSpawn, cfg.difficulty.hard, 0)
 			expect(hardDepth).toBe(cfg.difficulty.hard.eggDepthMinimum)
+			-- Lucky rounds open a shallow floor; ordinary rounds keep the deep one.
+			local lucky = EggNodes.rollDepth(cfg.eggSpawn, cfg.difficulty.normal, 0, true)
+			expect(lucky).toBe(cfg.eggSpawn.luckyMinimumRemovalFraction)
+			expect(EggNodes.rollDepth(cfg.eggSpawn, cfg.difficulty.normal, 0, false)).toBe(cfg.eggSpawn.minimumRemovalFraction)
+			expect(EggNodes.rollLucky(cfg.eggSpawn, cfg.eggSpawn.luckyRoundChance - 0.001)).toBe(true)
+			expect(EggNodes.rollLucky(cfg.eggSpawn, cfg.eggSpawn.luckyRoundChance)).toBe(false)
+			-- Core nodes outweigh edge nodes.
+			local heaviest, lightest = -math.huge, math.huge
+			for _, node in ipairs(nodes) do
+				heaviest = math.max(heaviest, node.weight)
+				lightest = math.min(lightest, node.weight)
+			end
+			expect(heaviest).toBeGreaterThan(lightest)
+			expect(heaviest).toBeLessThanOrEqual(cfg.eggSpawn.coreNodeWeight)
+			expect(lightest).toBeGreaterThanOrEqual(cfg.eggSpawn.edgeNodeWeight)
 		end)
 	end)
 
@@ -275,7 +290,8 @@ return function(describe, it, expect)
 			h.join(1)
 			local roundId, runtime = h.startRound({ 1 })
 			expect(EggNodes.byId(runtime.nodes, runtime.eggNode.id)).toBeTruthy()
-			expect(runtime.eggDepthFraction).toBeGreaterThanOrEqual(cfg.eggSpawn.minimumRemovalFraction)
+			local floor = if runtime.eggLucky then cfg.eggSpawn.luckyMinimumRemovalFraction else cfg.eggSpawn.minimumRemovalFraction
+			expect(runtime.eggDepthFraction).toBeGreaterThanOrEqual(floor)
 			expect(runtime.eggDepthFraction).toBeLessThanOrEqual(cfg.eggSpawn.maximumRemovalFraction)
 			expect(h.rounds:project(roundId, true).eggNodeId).toBeNil()
 			local eggCell = runtime.grid.cells[PileGrid.index(runtime.grid.width, runtime.eggNode.x, runtime.eggNode.z)]

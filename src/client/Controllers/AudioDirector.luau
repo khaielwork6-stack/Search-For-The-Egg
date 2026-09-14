@@ -59,7 +59,7 @@ local OWNER = {
 	openClose = "rbxassetid://127877437691780",
 	notification = "rbxassetid://131661992591924",
 	queue = "rbxassetid://72264591133889",
-	musicLoop = "rbxassetid://132601187837139",
+	musicLoop = "rbxassetid://130291967851605",
 }
 local MANIFEST: { [string]: string } = {
 	[Tokens.sound.uiTap] = OWNER.click,
@@ -98,8 +98,8 @@ local MANIFEST: { [string]: string } = {
 	["music.lobby"] = OWNER.musicLoop,
 	["music.search"] = OWNER.musicLoop,
 	["music.discovery"] = OWNER.musicLoop,
-	["music.victory"] = "",
-	["music.results"] = "",
+	["music.victory"] = OWNER.musicLoop,
+	["music.results"] = OWNER.musicLoop,
 	["ambience.henhouse"] = "",
 }
 

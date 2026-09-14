@@ -865,6 +865,19 @@ function Validator.validate(raw: any): Report
 			"eggSpawn radii invalid"
 		)
 		check(egg.oneWinnerPerRound == true, "eggSpawn.oneWinnerPerRound must be true")
+		if egg.luckyRoundChance ~= nil then
+			check(
+				isNonNegativeNumber(egg.luckyRoundChance) and egg.luckyRoundChance <= 1,
+				"eggSpawn.luckyRoundChance must be within [0, 1]"
+			)
+			check(
+				isNonNegativeNumber(egg.luckyMinimumRemovalFraction) and egg.luckyMinimumRemovalFraction < egg.maximumRemovalFraction,
+				"eggSpawn.luckyMinimumRemovalFraction invalid"
+			)
+		end
+		if egg.coreNodeWeight ~= nil or egg.edgeNodeWeight ~= nil then
+			check(isPositiveNumber(egg.coreNodeWeight) and isPositiveNumber(egg.edgeNodeWeight), "eggSpawn node weights must be > 0")
+		end
 	end
 
 	-- Victory

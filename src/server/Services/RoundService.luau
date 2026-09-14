@@ -193,7 +193,8 @@ function RoundService.createForParty(
 	end)
 	-- The Egg sits inside its column: `eggSlot` is the lowest record that must be gone before it
 	-- shows, chosen so a deep fraction of the column covers it.
-	local eggDepthFraction = EggNodes.rollDepth(self._config.eggSpawn, difficulty, self._rng:next())
+	local eggLucky = EggNodes.rollLucky(self._config.eggSpawn, self._rng:next())
+	local eggDepthFraction = EggNodes.rollDepth(self._config.eggSpawn, difficulty, self._rng:next(), eggLucky)
 	local eggCell = grid.cells[PileGrid.index(grid.width, eggNode.x, eggNode.z)]
 	local eggSlot = math.clamp(eggCell.base - math.floor(eggCell.base * eggDepthFraction + 0.5) + 1, 2, math.max(2, eggCell.base))
 	local runtime: Runtime = {
@@ -204,6 +205,7 @@ function RoundService.createForParty(
 		nodes = self:candidateNodes(party.chapter),
 		eggNode = eggNode,
 		eggDepthFraction = eggDepthFraction,
+		eggLucky = eggLucky,
 		eggSlot = eggSlot,
 		eggCoverCleared = false,
 		players = {},

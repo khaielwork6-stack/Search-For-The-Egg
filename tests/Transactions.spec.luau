@@ -205,10 +205,16 @@ return function(describe, it, expect)
 			expect(map:placeId("chapter1")).toBeNil()
 		end)
 
-		it("loads the shipped deployment file without inventing ids", function()
+		it("loads the shipped deployment file: every pass and product has an id, only place ids are missing", function()
 			local ProductIds = require(Server.Deployment.ProductIds)
 			local map = ProductMap.new(cfg, ProductIds)
-			expect(#map:missingKeys()).toBe(map:count())
+			for _, key in ipairs(map:missingKeys()) do
+				local entry = map:resolve(key)
+				expect(entry and entry.kind).toBe("place")
+			end
+			expect(map:isConfigured("infiniteBag")).toBe(true)
+			expect(map:isConfigured("gemBundle100")).toBe(true)
+			expect(map:lookupGamePass(1976757816).key).toBe("confettiChargePermanent")
 		end)
 
 		it("accepts valid ids and refuses unknown keys, duplicates, and bad ids", function()

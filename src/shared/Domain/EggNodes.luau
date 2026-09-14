@@ -41,18 +41,41 @@ function EggNodes.build(chapter: string, pileConfig: { [string]: any }, eggConfi
 					table.insert(cover, PileGrid.index(width, x + dx, z + dz))
 				end
 			end
-			table.insert(nodes, { id = string.format("%s:node_%d", chapter, #nodes + 1), x = x, z = z, coverIndexes = cover, weight = 1 })
+			-- Deep-core nodes weigh more than edge nodes: most rounds run long, a few land near the rim.
+			local dx = (x + 0.5) / width - 0.5
+			local dz = (z + 0.5) / depth - 0.5
+			local centred = 1 - math.clamp(math.sqrt(dx * dx + dz * dz) / 0.5, 0, 1)
+			local edgeWeight = eggConfig.edgeNodeWeight or 1
+			local coreWeight = eggConfig.coreNodeWeight or 1
+			local weight = edgeWeight + (coreWeight - edgeWeight) * centred
+			table.insert(nodes, {
+				id = string.format("%s:node_%d", chapter, #nodes + 1),
+				x = x,
+				z = z,
+				coverIndexes = cover,
+				weight = math.max(0.01, weight),
+			})
 		end
 	end
 	return nodes
 end
 
 -- Depth fraction for a node: uniform within [minimumRemovalFraction, maximumRemovalFraction] (Normal)
--- or the difficulty's own window when it defines one (Hard: eggDepthMinimum/Maximum).
-function EggNodes.rollDepth(eggConfig: { [string]: any }, difficultyEntry: { [string]: any }, roll: number): number
+-- or the difficulty's own window when it defines one (Hard: eggDepthMinimum/Maximum). A lucky
+-- round drops the floor to `luckyMinimumRemovalFraction` so the Egg can sit near the surface.
+function EggNodes.rollDepth(eggConfig: { [string]: any }, difficultyEntry: { [string]: any }, roll: number, lucky: boolean?): number
 	local minimum = difficultyEntry.eggDepthMinimum or eggConfig.minimumRemovalFraction
 	local maximum = difficultyEntry.eggDepthMaximum or eggConfig.maximumRemovalFraction
+	if lucky and eggConfig.luckyMinimumRemovalFraction then
+		minimum = math.min(minimum, eggConfig.luckyMinimumRemovalFraction)
+	end
 	return minimum + (maximum - minimum) * roll
+end
+
+-- Whether a round is a lucky one (shallow Egg), from one rng roll and `luckyRoundChance`.
+function EggNodes.rollLucky(eggConfig: { [string]: any }, roll: number): boolean
+	local chance = eggConfig.luckyRoundChance or 0
+	return chance > 0 and roll < chance
 end
 
 function EggNodes.byId(nodes: { Node }, id: string): Node?
