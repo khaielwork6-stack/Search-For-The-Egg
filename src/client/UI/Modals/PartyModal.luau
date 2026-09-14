@@ -333,7 +333,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			motion = motion,
 			size = UDim2.fromOffset(tap, if compact then tap else tap + Tokens.spacing.xs),
 			zIndex = z + 3,
-			textSize = Tokens.typography.display.size,
+			textSize = if compact then Tokens.typography.title.size else Tokens.typography.display.size,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTab)
 			end,
@@ -571,11 +571,11 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		local lockNote = FrameKit.text(face, "LockNote", "Coming soon", "caption", {
 			zIndex = z + 6,
 			color = Tokens.color.featherWhite,
-			align = Enum.TextXAlignment.Center,
+			align = Enum.TextXAlignment.Left,
 		})
-		lockNote.AnchorPoint = Vector2.new(0.5, 0)
-		lockNote.Position = UDim2.new(0.5, 0, 0.4, badgePx / 2 + Tokens.spacing.xs + Tokens.typography.display.size + 2)
-		lockNote.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 4)
+		lockNote.AnchorPoint = Vector2.new(0, 1)
+		lockNote.Position = UDim2.new(0, Tokens.spacing.md, 1, -Tokens.spacing.sm)
+		lockNote.Size = UDim2.new(0.5, 0, 0, Tokens.typography.caption.size + 4)
 		FrameKit.outline(lockNote, 2)
 		local hit = Instance.new("TextButton")
 		hit.Name = "Hit"
