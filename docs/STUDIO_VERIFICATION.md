@@ -1019,3 +1019,16 @@ this laptop) at desktop (Studio viewport), phone (812x375 override, touch mode) 
   needs `ApplyStrokeMode.Border`; a fitted nameplate must not truncate.
 - **Checks.** 295 headless tests pass; selene / stylua clean. Emulation captures showed no overlap or
   cropping on phone (strip + hotbar in the centre band, bundle above the jump button) or tablet.
+
+- **Follow-ups (same day).** Custom proximity prompts (server prompts are `Style = Custom`, the
+  client PromptController draws a cream billboard with keycap / object / action / hold fill; verified
+  at the Perk Bench: billboard with art, key `E`, "Perk Bench" / "Open the shop", gone after leaving).
+  Round strip and hotbar scale down together on narrow viewports (`emulate(600, 800)` gave band scale
+  0.6, strip 271 px). Owner sound ids wired: click, hover, denied, pickup, purchase, upgrade, sell,
+  queue all preload; the music loop `132601187837139` is not shared with the experience yet ("Click
+  to share access" in the Studio output), so it stays silent until the owner grants access.
+  Camera: first person only in Countdown / Searching / EggRevealed; the lobby is Classic (zoom
+  0.5..28) with the cursor visible; menus free the cursor in both modes (verified per phase).
+  Note: after the edit-mode probe renamed `ReplicatedStorage.Shared`, Rojo stopped delivering that
+  subtree to Studio; `Tokens` was patched in place and the Rojo plugin should be reconnected before
+  the next `Shared` change.
