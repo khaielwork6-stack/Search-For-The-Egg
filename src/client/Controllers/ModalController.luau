@@ -118,6 +118,10 @@ end
 function ModalController._applyMouseLock(self: ModalController)
 	local player = Players.LocalPlayer
 	local blocking = ModalReducer.isBlocking(self._state) or self._externalUnlock == true
+	self.mouseUnlocked = blocking
+	if not player then
+		return -- edit-mode probes and very early boot: no character camera to lock
+	end
 	if blocking then
 		player.CameraMinZoomDistance = 0.5
 		player.CameraMaxZoomDistance = 0.5
