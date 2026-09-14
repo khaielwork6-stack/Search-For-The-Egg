@@ -329,3 +329,12 @@ Scout Chick is the owner's DodoBird (bones animated procedurally: hop, head turn
 its trade toast reads the `chick_deposit` count. All timings live in `SYSTEM_CONFIG.toolFeel`
 (ASSUMED: the owner's clips were not attached). Sound roles `tool.*` use bundled placeholders; the
 fuse hiss is a silent stub until the owner supplies ids.
+
+**Polish pass (14 Sep 2026).** Vendor prompts say Talk at chest height with an outline in reach
+(`WorldShellService`, `LobbyShellController._presentVendor`, `NpcPlate` on top). `ClassesModal`
+lists exact bonuses per class (Master Forager expands every passive), with a mythic tier for the
+0.1 % card (rainbow border, aura, reveal). `GemShopModal` (HUD `+`, Perk Shop `+`) sells the gem
+bundles including the 1,500 POPULAR bundle (`gemBundle1500` product id pending from the owner).
+`DialogueController` frames NPC lines (the Farmer). `ChapterShellService` adds the SELL sign and
+the Scout Chick crate display (`scoutChick` in `DisplayController` / `InspectController`). Level
+pips sort by level. Rainbow feathers glow locally (no lights). The record nameplate pill is lobby-only.

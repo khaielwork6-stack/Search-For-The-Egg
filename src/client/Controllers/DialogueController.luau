@@ -7,6 +7,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Trove = require(Shared.Util.Trove)
@@ -32,7 +33,22 @@ function DialogueController.new(deps: {
 }): DialogueController
 	local self = setmetatable({ _deps = deps, _trove = Trove.new(), _session = nil, stats = { opens = 0, closes = 0 } }, DialogueController)
 	self._trove:add(deps.input.actionBegan:Connect(function(action)
-		if self._session and (action == "Cancel" or action == "Back" or action == "Interact" or action == "Primary") then
+		if self._session and (action == "Cancel" or action == "Back") then
+			self:close()
+		end
+	end))
+	-- Gameplay actions are suspended while the box is up, so E / A / a click are read here directly.
+	self._trove:add(UserInputService.InputBegan:Connect(function(input, processed)
+		if not self._session or processed then
+			return
+		end
+		if
+			input.KeyCode == Enum.KeyCode.E
+			or input.KeyCode == Enum.KeyCode.ButtonA
+			or input.KeyCode == Enum.KeyCode.Space
+			or input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
 			self:close()
 		end
 	end))

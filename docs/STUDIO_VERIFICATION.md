@@ -1221,3 +1221,40 @@ state readout through the debug bridges.
 - Not verified here: a second player in the round (Play Solo only; the blast, vac pull and chick
   events are broadcast to every member and animate from their character when no viewmodel is
   local); Tab itself; the owner's clips (not attached).
+
+## Polish pass: vendors, classes, Gem Shop, Farmer dialogue, SELL sign, scout crate (14 Sep 2026)
+
+Build label `phase5-live-shops`. Play Solo (map mode); 298 headless tests; selene / stylua clean;
+console clean. Edit-mode probe captures for the screens, Play readouts for the world.
+
+- **Vendors.** Both stall prompts read `E - Talk` (`HoldDuration 0`, `UIOffset 0,-70` so the chip
+  sits at chest height); nameplates draw on top (`AlwaysOnTop`) 5.1 / 5.8 studs over the rig, clear
+  of the stall signs; a gold `Highlight` switches on with the prompt (`nearOutline true` at 6 studs).
+- **Classes.** Every card lists its exact numbers (`+50% bag capacity`, `Feathers sell for +20%`,
+  `10% chance a blast spawns 3 mini-charges`, ...); Master Forager expands "every passive bonus"
+  into the passive lines of every other class plus its `3% chance each minute of a 15s Golden
+  Rush`. Tiers: common plain, rare / epic / legendary sheen, legendary pulsing gold outline, the
+  0.1 % card a rotating rainbow border, `MYTHIC` badge, rainbow emblem ring and breathing aura;
+  a mythic landing flashes and double-showers. 2x Luck is green with a rainbow border, Fast Rolls
+  teal, +1 Slot gold (no purple).
+- **Gem Shop.** `+` beside the HUD Gems chip (and the Perk Shop `+`) opens `Gem Shop`: 100 / 400 /
+  `1,500 Gems` POPULAR (chest art, rotating rainbow border, sheen, sparkles, `R$ 199`) / 2x Gems.
+  `gemBundle1500` is in the config and `ProductIds` as `nil`: the owner must create that developer
+  product; until then Studio uses the mock Marketplace for it (deployment test updated).
+- **Level pips.** The missing second dot was a sort bug: `UIListLayout` sorted by name, so `Pip10`
+  sat between `Pip1` and `Pip2`. Every pip row now sorts by `LayoutOrder` (Perk Shop, workbench,
+  book).
+- **Farmer dialogue.** `SFE_EggDeliver` before the egg: `SFE_Dialogue` box (dark, translucent,
+  typewriter) read "Find me the egg buddy!", camera `Scriptable` close-up, white outline on the
+  Farmer, HUD hidden, cursor free; 2.2 s later it closed itself with camera `Custom`, HUD back,
+  outline gone. E / A / Space / click / tap also close it.
+- **SELL sign.** `SFE_Sign_SELL` (red FredokaOne, cream outline, world-scaled) over the crate
+  anchor; the prompt reads `Sell feathers`.
+- **Scout crate.** The owner's Bird sits on a rope-tied crate at `(-31.9, 58.0, 302.9)` beside the
+  counter, `SFE_Display scoutChick`, `Inspect` prompt, gem price card (`40 Gems`); inspection
+  offers ONE ROUND R$ 19 / GEMS 40 / PERMANENT R$ 129 (5 displays placed).
+- **Book button.** `Tab` keycap over the book, `Upgrades` caption under it (Y on gamepad, Tap on
+  touch); Tab / backtick / click open the book.
+- **Rainbow feathers.** 165 rainbow records: 0 PointLights, 165 local halos (Neon + billboard glow
+  + motes); the rest of the coat keeps its colour.
+- **Record pill.** Visible in the lobby (`true`), hidden once the round started (`false`).
