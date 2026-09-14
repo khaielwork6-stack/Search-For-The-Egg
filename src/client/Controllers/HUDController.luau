@@ -338,8 +338,8 @@ function HUDController.new(deps: any): HUDController
 		fitText = true,
 		outline = true,
 	})
-	bookLabel.AnchorPoint = Vector2.new(0.5, 0)
-	bookLabel.Position = UDim2.new(0.5, 0, 1, Tokens.spacing.xs)
+	bookLabel.AnchorPoint = Vector2.new(1, 0)
+	bookLabel.Position = UDim2.new(1, 0, 1, Tokens.spacing.xs)
 	local function refreshBookCap(mode: string)
 		if bookCapText then
 			bookCapText.Text = if mode == "gamepad" then "Y" elseif mode == "touch" then "Tap" else "Tab"
