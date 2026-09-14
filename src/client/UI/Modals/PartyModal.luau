@@ -302,7 +302,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		color = Tokens.color.inkStrong,
 		align = Enum.TextXAlignment.Right,
 	})
-	sizeCaption.Size = UDim2.new(0, 0, 1, 0)
+	sizeCaption.Size = UDim2.fromScale(0, 1)
 	sizeCaption.AutomaticSize = Enum.AutomaticSize.X
 	sizeCaption.TextYAlignment = Enum.TextYAlignment.Center
 	sizeCaption.LayoutOrder = 1
