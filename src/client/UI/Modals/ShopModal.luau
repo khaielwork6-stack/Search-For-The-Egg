@@ -381,7 +381,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	-- Robux offers ---------------------------------------------------------------------------------
 	type OfferCard = { offer: Offer, tile: Frame, buy: any, owned: TextLabel, scale: UIScale }
 	local offerCards: { OfferCard } = {}
-	local offerHeight = tap * 2 + Tokens.spacing.xs
+	local offerHeight = tap * 3 - Tokens.spacing.xs
 	for index, offer in ipairs(offers(cfg)) do
 		local fill = if offer.pass then Tokens.color.gem else Tokens.color.sky
 		local deep = if offer.pass then Tokens.color.gemDeep else Tokens.color.skyDeep
@@ -395,32 +395,41 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		tile.LayoutOrder = index
 		local scale = Instance.new("UIScale")
 		scale.Parent = tile
+		-- Name on top, art in the middle, price across the bottom (the column is narrow).
+		local name = FrameKit.text(face, "Name", offer.name, "label", {
+			zIndex = z + 3,
+			color = Tokens.color.featherWhite,
+			align = Enum.TextXAlignment.Center,
+		})
+		name.Position = UDim2.fromOffset(0, Tokens.spacing.xs)
+		name.Size = UDim2.new(1, 0, 0, Tokens.typography.label.size + 4)
+		FrameKit.outline(name, 2)
 		local artHolder = Instance.new("Frame")
 		artHolder.Name = "Art"
-		artHolder.AnchorPoint = Vector2.new(0, 0.5)
-		artHolder.Position = UDim2.new(0, Tokens.spacing.sm, 0.5, -2)
-		artHolder.Size = UDim2.fromOffset(tap + Tokens.spacing.md, tap + Tokens.spacing.md)
+		artHolder.AnchorPoint = Vector2.new(0.5, 0)
+		artHolder.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.sm)
+		artHolder.Size = UDim2.fromOffset(tap + Tokens.spacing.sm, tap + Tokens.spacing.sm)
 		artHolder.BackgroundTransparency = 1
 		artHolder.ZIndex = z + 2
 		artHolder.Parent = face
 		Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 2, transparency = 0.7, color = Tokens.color.featherWhite })
-		centredArt(artHolder, offer.art, offer.icon, tap, z + 4)
-		local left = tap + Tokens.spacing.md + Tokens.spacing.md
-		local priceWidth = tap * 2 - Tokens.spacing.xs
-		local name = FrameKit.text(face, "Name", offer.name, "label", { zIndex = z + 3, color = Tokens.color.featherWhite })
-		name.Position = UDim2.new(0, left, 0.5, -(Tokens.typography.label.size + 2))
-		name.Size = UDim2.new(1, -(left + priceWidth + Tokens.spacing.sm), 0, Tokens.typography.label.size + 4)
-		FrameKit.outline(name, 2)
-		local caption = FrameKit.text(face, "Caption", offer.caption, "caption", { zIndex = z + 3, color = Tokens.color.featherWhite })
-		caption.Position = UDim2.new(0, left, 0.5, 2)
-		caption.Size = UDim2.new(1, -(left + priceWidth + Tokens.spacing.sm), 0, Tokens.typography.caption.size + 2)
-		FrameKit.outline(caption, 1.4)
+		centredArt(artHolder, offer.art, offer.icon, tap - Tokens.spacing.xs, z + 4)
+		local caption = FrameKit.badge(
+			face,
+			"Caption",
+			string.upper(offer.caption),
+			if offer.pass then Tokens.color.gemDeep else Tokens.color.skyDeep,
+			z + 4
+		)
+		caption.AnchorPoint = Vector2.new(0.5, 0)
+		caption.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.sm + tap + Tokens.spacing.sm - 6)
+		caption.TextSize = Tokens.typography.caption.size - 2
 		local buy = Button.build(face, {
 			text = if offer.robux then string.format("R$ %d", offer.robux) else "R$",
 			variant = "primary",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromOffset(priceWidth, tap - Tokens.spacing.sm),
+			size = UDim2.new(1, -Tokens.spacing.md, 0, tap - Tokens.spacing.sm),
 			zIndex = z + 3,
 			textSize = Tokens.typography.body.size + 1,
 			sound = function()
@@ -438,12 +447,12 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 				end
 			end,
 		})
-		buy.button.AnchorPoint = Vector2.new(1, 0.5)
-		buy.button.Position = UDim2.new(1, -Tokens.spacing.sm, 0.5, -2)
+		buy.button.AnchorPoint = Vector2.new(0.5, 1)
+		buy.button.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.sm)
 		table.insert(cleanups, buy.destroy)
 		local owned = FrameKit.badge(face, "Owned", "OWNED", Tokens.color.success, z + 4)
-		owned.AnchorPoint = Vector2.new(1, 0.5)
-		owned.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, -2)
+		owned.AnchorPoint = Vector2.new(0.5, 1)
+		owned.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.md)
 		owned.Visible = false
 		if offer.popular then
 			local ribbon = FrameKit.badge(tile, "Popular", "POPULAR", Tokens.color.ember, z + 5)
