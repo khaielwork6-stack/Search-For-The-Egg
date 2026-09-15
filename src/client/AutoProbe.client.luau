@@ -366,6 +366,21 @@ local function run(command: string): string
 		end
 		-- The bridge already returns JSON; anything else gets encoded so the report is one line.
 		table.insert(lines, if type(result) == "string" then result else HttpService:JSONEncode(result))
+	elseif verb == "carried" then
+		-- Drives the carried bundle directly with a bag composition, so the rainbow rendering can be
+		-- checked without waiting on a 0.35% drop. Studio-only, like the rest of this script.
+		-- selene: allow(global_usage)
+		local client = (shared :: any).SFE_Client
+		local stack = client and client.hud and client.hud.carriedStack
+		if not stack then
+			return "no carried stack"
+		end
+		local standard = tonumber(words[2]) or 0
+		local rainbow = tonumber(words[3]) or 0
+		local capacity = tonumber(words[4]) or 25
+		stack:setBag(standard, rainbow, capacity, words[5] == "true", true)
+		task.wait(0.5)
+		table.insert(lines, string.format("setBag standard=%d rainbow=%d capacity=%d", standard, rainbow, capacity))
 	elseif verb == "probe" then
 		probe(lines)
 	elseif verb == "config" then
