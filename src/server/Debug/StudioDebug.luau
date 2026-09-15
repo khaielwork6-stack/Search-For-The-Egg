@@ -767,6 +767,15 @@ function StudioDebug.install(container: any): any?
 		snapshot.pending = container.leaderboards:pendingCount()
 		return snapshot
 	end
+	-- Puts a score on a board without playing a round, so the world boards can be checked with rows on
+	-- them. The Studio adapter is in-memory and starts empty, which makes every board read "-" and
+	-- proves nothing about how a populated row renders.
+	function hooks.leaderboardSubmit(userId: number, boardId: string, value: number)
+		local written = container.leaderboards:submit(userId, { [boardId] = value }, true)
+		container.leaderboards:refresh()
+		return { written = written, snapshot = container.leaderboards:snapshot() }
+	end
+
 	function hooks.partyList()
 		return container.parties:openParties()
 	end
