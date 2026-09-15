@@ -43,8 +43,15 @@ return function(describe, it, expect)
 			expect(box.Transparency).toBe(1)
 			local cx = field.minX + (mid + 0.5) * field.cellSize
 			local cz = field.minZ + (mid + 0.5) * field.cellSize
-			-- You stand where the feathers are: the top face is the record surface, less the inset.
-			local expectedTop = field.baseY + PileSurface.heightAt(field, cx, cz) - cfg.pile.collision.surfaceInsetStuds
+			-- You stand where the feathers are: the top face is the column's topmost remaining record,
+			-- which is what the renderer draws - not the 3x3-smoothed surface, which on a dug column
+			-- stands above the highest feather left and on its neighbours sits below feathers that
+			-- never moved.
+			local visual = cfg.pile.visual
+			local full = PileSurface.columnFullHeight(cfg, grid.width, grid.depth, grid.cellSize, mid, mid)
+			local records = math.clamp(math.floor(math.max(cfg.pile.minRecordsPerColumn or 1, full / cfg.pile.recordSpacingStuds)), 1, 32)
+			local step = math.max(full / records, visual.minSeatStepStuds or 0)
+			local expectedTop = field.baseY + PileSurface.columnTop(field, mid, mid, step) - cfg.pile.collision.surfaceInsetStuds
 			local top = (box.CFrame * CFrame.new(0, box.Size.Y / 2, 0)).Position
 			expect(math.abs(top.Y - expectedTop)).toBeLessThan(0.05)
 			expect(math.abs(box.Size.X - field.cellSize * cfg.pile.collision.shellOverlap)).toBeLessThan(0.01)

@@ -26,6 +26,16 @@ export type Field = {
 	heights: { number }, -- per cell index (1-based, x + z * width + 1)
 	fractions: { number }, -- smoothed remaining/base per cell
 	depths: { number }, -- smoothed removed-record depth (studs) per cell
+	-- Where a column's topmost remaining record actually sits.
+	--
+	-- `heights` is smoothed over a 3x3, which is what makes the mound read as a dome rather than as
+	-- 2,916 steps - but the renderer does not seat records on it. It seats them on the mound as first
+	-- built and then walks down one `step` per record taken, so a column dug hard drops by everything
+	-- it lost while its smoothed height barely moves, and the neighbours drop although they lost
+	-- nothing. Anything that has to line up with the drawn feathers - the body you stand on, above all
+	-- - has to use these two instead.
+	seatHeights: { number }, -- the mound as first built, before anything was dug
+	removed: { number }, -- records taken from each cell
 }
 
 PileSurface.RIM_STRETCH = 1.0 -- the mound reaches the floor at the edge of the grid
@@ -82,6 +92,7 @@ function PileSurface.buildField(cfg: { [string]: any }, grid: { [string]: any },
 	local apex = cfg.pile.maxVisualHeightStuds
 	local radius = math.min(halfW, halfD)
 	local heights, fractions, depths = table.create(width * depth, 0), table.create(width * depth, 0), table.create(width * depth, 0)
+	local seatHeights, removed = table.create(width * depth, 0), table.create(width * depth, 0)
 	for z = 0, depth - 1 do
 		for x = 0, width - 1 do
 			local index = z * width + x + 1
@@ -93,6 +104,12 @@ function PileSurface.buildField(cfg: { [string]: any }, grid: { [string]: any },
 			local full = apex * PileSurface.domeProfile(rNorm)
 			depths[index] = full * (1 - fraction)
 			heights[index] = full * fraction
+			-- The seat baseline is the mound with every column full - which is what `heights` is at
+			-- round start, since the smoothed fraction of an all-full neighbourhood is 1 - so it is
+			-- simply the dome. This is the surface the renderer placed the stacks on and never revises.
+			seatHeights[index] = full
+			local cellBase = math.max(1, grid.base[index] or 1)
+			removed[index] = math.max(0, cellBase - (grid.remaining[index] or cellBase))
 		end
 	end
 	return {
@@ -110,7 +127,18 @@ function PileSurface.buildField(cfg: { [string]: any }, grid: { [string]: any },
 		heights = heights,
 		fractions = fractions,
 		depths = depths,
+		seatHeights = seatHeights,
+		removed = removed,
 	}
+end
+
+-- The Y offset (above baseY) of a column's topmost remaining record: where the renderer drew it.
+function PileSurface.columnTop(field: Field, x: number, z: number, step: number): number
+	if x < 0 or z < 0 or x >= field.width or z >= field.depth then
+		return 0
+	end
+	local index = z * field.width + x + 1
+	return math.max(0, (field.seatHeights[index] or 0) - (field.removed[index] or 0) * step)
 end
 
 -- Recomputes one window of the field in place, instead of rebuilding all 2,916 columns.
@@ -143,6 +171,10 @@ function PileSurface.refreshWindow(field: Field, cells: { any }, minCellX: numbe
 			field.fractions[index] = fraction
 			field.depths[index] = full * (1 - fraction)
 			field.heights[index] = full * fraction
+			local cell = cells[index]
+			if cell then
+				field.removed[index] = math.max(0, cell.base - cell.remaining)
+			end
 		end
 	end
 end

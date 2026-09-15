@@ -366,8 +366,15 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 		local cx = field.minX + (x + 0.5) * field.cellSize
 		local cz = field.minZ + (z + 0.5) * field.cellSize
 		local ground = field.groundY or field.baseY
-		local surface = PileSurface.heightAt(field, cx, cz)
-		local top = field.baseY + math.max(0, surface - collision.surfaceInsetStuds)
+		-- The top of the column's topmost remaining record, which is the feather the player's feet
+		-- should meet. Not `heightAt`: that is smoothed over a 3x3, and the renderer does not seat on
+		-- it, so on a freshly dug column the smoothed surface stands well above the highest feather
+		-- left and on its neighbours it sits below feathers that never moved.
+		local visual = config.pile.visual
+		local full = PileSurface.columnFullHeight(config, field.width, field.depth, field.cellSize, x, z)
+		local records = math.clamp(math.floor(math.max(config.pile.minRecordsPerColumn or 1, full / config.pile.recordSpacingStuds)), 1, 32)
+		local step = math.max(full / records, visual.minSeatStepStuds or 0)
+		local top = field.baseY + math.max(0, PileSurface.columnTop(field, x, z, step) - collision.surfaceInsetStuds)
 		-- No floor under `top`. A lip forced above the sand here used to stop a low sight line slipping
 		-- under the mound's cut-off edge, but the dome reaches the sand on its own now, so all the lip
 		-- did was stand the outermost ring of boxes on the ground as bare bricks beyond the coat.
