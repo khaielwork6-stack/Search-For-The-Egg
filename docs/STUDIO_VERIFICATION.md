@@ -1487,3 +1487,81 @@ Collection at the front face: 14 sent, 14 accepted, 0 rejected.
 The auto-play harness still stalls on a cell it has walked past and can no longer see; it retries the
 same nearest cell instead of skipping it. That is a harness limitation, not a game one, and the direct
 `hit` measurement above is the check to trust.
+
+## Audio, carried stack, Daily Nest, Dynamite (15 Sep 2026)
+
+Driven through the two probe channels: `workspace.SFE_ProbeCommand` for the client (its `call` verb
+reaches any client debug action) and `workspace.SFE_ServerProbeCommand` for the server hooks, which
+is how entitlements were granted before a round so the tools could be equipped.
+
+### Audio
+
+Each role was played and the resulting `Sound` read off its bus.
+
+| Role | Asset | Measured |
+| --- | --- | --- |
+| tool.rakeImpact | 81267530921314 | vol 0.60, bus SFX |
+| tool.vacMotor | 91395529514868 | looped, vol 0.50, bus Ambience |
+| tool.blast | 124256466623788 | vol 0.85, bus SFX |
+| class.land | 90853027572825 | vol 0.75, bus SFX |
+| ui.pageFlip | 114448027739800 | vol 0.55, bus UI |
+| music.search / discovery / victory / results | 130867147321580 | on the Music bus |
+| music.lobby | silent | no music in the lobby |
+
+`class.spin` (the spinner's own sound), `tool.rakeSwing` and `tool.vacSuck` produce no sound at all,
+so a reroll only sounds when it lands and each tool has one voice.
+
+**One denial, one sound.** Three isolated bag-full refusals, each after the throttle window: one
+denial sound, then none, then none, the last two suppressed by the existing bag-full toast cooldown.
+Never two sounds for one refusal.
+
+**Vac loop.** Held for six seconds with sampling every 100 ms: peak concurrent loops 1, and 0 after
+release. Three rapid start/stop cycles leave 0 behind.
+
+**Page flip.** Three forward presses moved the spread twice and made two flip sounds. Eight further
+presses at the last spread moved nothing and made none.
+
+### Carried stack
+
+| Bag | Feathers shown | Rainbow |
+| --- | --- | --- |
+| 1 | 1 | 0 |
+| 6 | 5 | 0 |
+| 12 | 9 | 0 |
+| 24 + 1 rainbow | 18 | 1 |
+| 5 + 5 rainbow | 8 | 4 |
+
+Rainbow feathers carry one mote emitter each and **zero** light instances, and their hue changes over
+time. No part named hand or arm exists under the camera.
+
+Never cropped, at every size tested: 1920x1080, 1280x720, 1024x768, 768x1024, 896x414, 414x896. The
+bundle sits 15-18 px from the right edge and 92 px above the bottom on desktop, 128-141 px on mobile.
+
+### Daily Nest
+
+Opened itself once on join, after the profile arrived: header "Day 1 of 8 is ready", eight day states
+(`Ready now` then seven `Locked`), the finale card showing 500 Gems. After claiming: Day 1 `Claimed`,
+Day 2 `Today`, claim disabled, countdown running.
+
+**Duplicate-proof.** Two `DailyClaim` requests back to back both returned ok and `gemsBalance` 10, and
+the streak advanced once. The second paid nothing.
+
+**Does not reopen.** After closing, across two rounds and other menus, the modal stack reports 0 open.
+
+### Dynamite
+
+| Throw | Landing | Result |
+| --- | --- | --- |
+| At the mound from the front edge | (0, 56.4, 383.8) on the mound surface | +115 feathers |
+| At bare sand 65 studs clear of the mound | (0, 52.1, 452.0) | crater and effects, **0 awarded**, grid unchanged |
+| Aimed 100 studs away | 16.0 studs from the player | clamped to the configured range |
+| Aimed through the supply shop's rear wall | 11.8 studs short of the wall plane | stopped at the near face |
+
+A throw 17 studs from the mound with a 20-stud blast radius *did* award, correctly: the blast
+genuinely overlapped the pile.
+
+### No regression
+
+Pile after the whole session: 636 rays on the mound, 100% feathers, 0% bare body, 0% see-through.
+Hand +5 over five picks, Nest Rake +54 over four sweeps, Feather Vac +54 over one hold. All 310 tests
+and `lune run lune/check` pass.
