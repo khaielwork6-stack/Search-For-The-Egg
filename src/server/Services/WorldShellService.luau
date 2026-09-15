@@ -919,6 +919,18 @@ local function formatValue(value: number, unit: string?): string
 	return (grouped:gsub("^,", ""))
 end
 
+-- The trailing number in a row's name ("Row3", "Entry 07"), or nil when it has none.
+local function trailingNumber(name: string): number?
+	local digits = string.match(name, "(%d+)%s*$")
+	return if digits then tonumber(digits) else nil
+end
+
+-- The board's rows, top of the podium first.
+--
+-- Ordering has to come from whatever actually positions the rows. The authored boards stack theirs
+-- with a UIListLayout, which leaves every row at the same `Position` - so sorting on Position, as
+-- this used to, compared equal values and handed back an arbitrary order. Ask the layout how it
+-- sorts instead, and only fall back to Position when there is no layout doing the work.
 local function rowsOf(board: Instance): { Instance }
 	local scroller: Instance? = nil
 	for _, descendant in ipairs(board:GetDescendants()) do
@@ -930,15 +942,40 @@ local function rowsOf(board: Instance): { Instance }
 	if not scroller then
 		return {}
 	end
-	local rows: { GuiObject } = {}
-	for _, child in ipairs((scroller :: Instance):GetChildren()) do
+	local layout = (scroller :: Instance):FindFirstChildWhichIsA("UIListLayout")
+	type Entry = { row: GuiObject, index: number }
+	local entries: { Entry } = {}
+	for index, child in ipairs((scroller :: Instance):GetChildren()) do
 		if child:IsA("GuiObject") and child:FindFirstChild("PlayerName") then
-			table.insert(rows, child)
+			table.insert(entries, { row = child :: GuiObject, index = index })
 		end
 	end
-	table.sort(rows, function(a, b)
-		return a.Position.Y.Scale + a.Position.Y.Offset / 1000 < b.Position.Y.Scale + b.Position.Y.Offset / 1000
+	-- Child order is the last tiebreak, so equal keys stay in the order the board author wrote them
+	-- rather than shuffling between refreshes.
+	table.sort(entries, function(a, b)
+		if layout == nil then
+			local ay = a.row.Position.Y.Scale + a.row.Position.Y.Offset / 1000
+			local by = b.row.Position.Y.Scale + b.row.Position.Y.Offset / 1000
+			if ay ~= by then
+				return ay < by
+			end
+		elseif (layout :: UIListLayout).SortOrder == Enum.SortOrder.Name then
+			local an, bn = trailingNumber(a.row.Name), trailingNumber(b.row.Name)
+			if an and bn and an ~= bn then
+				return an < bn
+			end
+			if a.row.Name ~= b.row.Name then
+				return a.row.Name < b.row.Name
+			end
+		elseif a.row.LayoutOrder ~= b.row.LayoutOrder then
+			return a.row.LayoutOrder < b.row.LayoutOrder
+		end
+		return a.index < b.index
 	end)
+	local rows: { Instance } = {}
+	for _, entry in ipairs(entries) do
+		table.insert(rows, entry.row)
+	end
 	return rows
 end
 
@@ -992,38 +1029,6 @@ function WorldShellService.applyLeaderboards(workspaceService: Workspace, snapsh
 						plate.ZIndex = 10
 						plate.Parent = descendant
 						break
-					end
-				end
-			end
-		end
-	end
-end
-
-function WorldShellService.applyLeaderboards(workspaceService: Workspace, snapshot: { [string]: any })
-	local mapModel = workspaceService:FindFirstChild(ChapterLayout.LOBBY_MAP_NAME)
-	local boards = mapModel and mapModel:FindFirstChild("Leaderboards")
-	if not boards then
-		return
-	end
-	local byId: { [string]: any } = {}
-	for _, board in ipairs(snapshot.boards or {}) do
-		byId[board.id] = board
-	end
-	for boardName, boardId in pairs(ChapterLayout.lobby.boards) do
-		local model = boards:FindFirstChild(boardName)
-		local data = byId[boardId]
-		if model and data then
-			for row = 1, 5 do
-				local rowPart = model:FindFirstChild("Row" .. row)
-				local display = rowPart and rowPart:FindFirstChild("Display")
-				local label = display and display:FindFirstChild("Text")
-				if label and label:IsA("TextLabel") then
-					local entry = data.rows[row]
-					local text = if entry
-						then string.format("%02d  %s   %s", row, tostring(entry.name), tostring(entry.value))
-						else string.format("%02d    \u{2014}", row)
-					if label.Text ~= text then
-						label.Text = text
 					end
 				end
 			end

@@ -226,6 +226,35 @@ if literalHits == 0 then
 	pass(string.format("no hard-coded product ids or Robux prices in %d source files", #files))
 end
 
+-- 3b. Shadowed definitions -----------------------------------------------------------------------
+-- A module that defines `Module.thing` twice compiles clean, lints clean and typechecks clean: the
+-- second definition simply wins and the first becomes dead code. That is exactly how a rewritten
+-- `WorldShellService.applyLeaderboards` sat unused behind a stale copy while the leaderboards stayed
+-- blank. Nothing else in the toolchain sees it, so it is checked here.
+print("[check] shadowed definitions")
+local shadowHits = 0
+for _, path in ipairs(files) do
+	local text = fs.readFile(path)
+	local seen = {}
+	local n = 0
+	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		n += 1
+		local owner, name = string.match(line, "^function%s+([%w_]+)[%.:]([%w_]+)%s*%(")
+		if owner and name then
+			local key = owner .. "." .. name
+			if seen[key] then
+				shadowHits += 1
+				fail(string.format("%s:%d redefines %s (first at line %d); the earlier one is dead", path, n, key, seen[key]))
+			else
+				seen[key] = n
+			end
+		end
+	end
+end
+if shadowHits == 0 then
+	pass(string.format("no function is defined twice in %d source files", #files))
+end
+
 -- 4. Format and lint ------------------------------------------------------------------------------
 print("[check] stylua --check")
 local stylua = process.exec("stylua", { "--check", "src", "tests", "lune" })
