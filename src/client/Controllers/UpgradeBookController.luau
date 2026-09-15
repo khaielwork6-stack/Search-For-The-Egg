@@ -809,22 +809,7 @@ function UpgradeBookController.open(self: UpgradeBookController)
 		padding.PaddingBottom = UDim.new(0, Tokens.spacing.md)
 		padding.Parent = page
 		Skin.texture(page, "texture.studs", { zIndex = 3, transparency = 0.96, tile = 28 })
-		-- The stack of sheets under the top one, along the outer edge. Two thin slivers stepped out
-		-- and down is all it takes for the page to stop being a rectangle and become paper.
-		for sheet = 1, 2 do
-			local edge = Instance.new("Frame")
-			edge.Name = "Sheet" .. sheet
-			edge.AnchorPoint = Vector2.new(anchorX, 0)
-			edge.Position = UDim2.new(anchorX, (if anchorX == 0 then -1 else 1) * sheet * 3, 0, sheet * 3)
-			edge.Size = UDim2.new(1, 0, 1, -sheet * 2)
-			edge.BackgroundColor3 = if sheet == 1 then PAGE_EDGE else GUTTER
-			edge.BorderSizePixel = 0
-			edge.ZIndex = page.ZIndex - sheet
-			local edgeCorner = Instance.new("UICorner")
-			edgeCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
-			edgeCorner.Parent = edge
-			edge.Parent = page.Parent
-		end
+
 		-- Parchment rather than paper: a warm gradient down the sheet, a darker edge where it meets
 		-- the spine so the two halves read as one bound object, and stitched corners.
 		local age = Instance.new("UIGradient")
@@ -870,6 +855,23 @@ function UpgradeBookController.open(self: UpgradeBookController)
 			stitchCorner.Parent = stitch
 		end
 		page.Parent = cover
+		-- The stack of sheets under the top one, along the outer edge. Two thin slivers stepped out and
+		-- down is all it takes for a page to stop being a rectangle and become paper. Built after the
+		-- page is parented, and as its siblings under the board, so they sit behind it.
+		for sheet = 2, 1, -1 do
+			local edge = Instance.new("Frame")
+			edge.Name = "Sheet" .. sheet
+			edge.AnchorPoint = page.AnchorPoint
+			edge.Position = page.Position + UDim2.fromOffset((if anchorX == 0 then -1 else 1) * sheet * 3, sheet * 3)
+			edge.Size = page.Size - UDim2.fromOffset(0, sheet * 3)
+			edge.BackgroundColor3 = if sheet == 1 then PAGE_EDGE else GUTTER
+			edge.BorderSizePixel = 0
+			edge.ZIndex = page.ZIndex - sheet
+			local edgeCorner = Instance.new("UICorner")
+			edgeCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
+			edgeCorner.Parent = edge
+			edge.Parent = cover
+		end
 		return page
 	end
 	session.left = pageFrame("LeftPage", 0)
