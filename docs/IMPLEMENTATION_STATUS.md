@@ -347,3 +347,9 @@ Tab binds `Menu` above the core scripts (player list core GUI disabled) with a r
 Tool displays hang on the barn's left wall. The Scout Chick waits (`Waiting` unit state, server
 `crateBusy`) while the crate is away and flies between `ChapterLayout.chapter1.chickPerches`.
 Hard difficulty's pile multiplier now shows mostly at the rim because crown cells sit at the cap.
+
+**Fix pass 2 (14 Sep 2026).** Tool removal shapes: `PileGrid.removeFocused` / `focusWeights`
+(rake sweep disc with re-centring on bare ground, vac suction disc) and `PileGrid.removeBowl`
+(blast crater), all sized in studs from `tools.*` config. Vac ticks and blasts send a targeted
+`tool_award` ToolEvent so the HUD floats `+N`; blast records animate out of the crater. A fixed
+front skirt of strands (`pile.visual.frontSkirt*`, owner request) covers the mound's front foot.

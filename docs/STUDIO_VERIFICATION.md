@@ -1289,3 +1289,35 @@ by raising the snapshot / delta caps before this session).
   crate rim (`47, 56.7, 351.5`), sat, flew (`50.2, 58.4` mid-air) to the corner post
   (`51.2, 56.5, 345.8`), then traded once the crate was back (`47, 53.1, 348.5`).
 - Not verified: the owner's clip (no video tooling on this machine); multiplayer.
+
+## Fix pass 2: tools dig where they strike, front skirt, rake reach, +N for every tool (14 Sep 2026)
+
+Two Play Solo sessions (map mode) after the changes; 300 headless tests; selene / stylua clean;
+console clean. Infinite bag entitlement set for the long runs so the bag never gated the checks.
+
+- **Rake stuck state: found.** Since the mound became 48x48 cells of 0.6 studs, a rake sweep only
+  looked at the 3x3 cells under the reticle (1.8 studs); once a player dug that patch out, every
+  sweep at the hole answered `no_feathers` and the rake looked dead. The sweep is now a disc of
+  `tools.nestRake.sweepRadiusStuds` around the strike and re-centres on the nearest feathers within
+  `reachStuds` when the strike lands on bare ground. Ten sweeps at the very same point: 10 accepted,
+  270 records animated, `inFlight false`, no refusals; the hand then collected 3 of 3 attempts.
+  (The gate hardening from the previous pass stays: reset on swap / phase / refusal, 3 s watchdog.)
+- **Dig shape.** Removal is centre-heavy (`PileGrid.removeFocused` with distance weights; the
+  struck cell takes `focusWeight` of the sweep). Server readout after the ten sweeps: the struck
+  cells at `0/32`, neighbours `20-29/32`, the ring beyond untouched, 134 of the 270 records inside
+  a 9x9 window - a hole where the rake hit, nothing else moved.
+- **Blast crater.** `PileGrid.removeBowl`: the landing cell gives up to `craterDepthRecords` (14),
+  tapering outward. A max-power blast (115 records, 97 + 18 rainbow) touched 23 cells: centre 13,
+  then 12 / 11 / 10 / 9 / 8 ... 1 outward. All 115 records animated out of the crater
+  (`pileStats.streamed +115`), one `+115` float, `craters 1`.
+- **Vacuum.** Server-authoritative hold-to-suck was already in; verified again: 2.2 s hold pulled 59
+  (26 / s at max level) with 59 records animated into the nozzle, six streaks, meter `PULLING`,
+  heat rising, stop on release; a later 1.5 s hold pulled 41 with 14 `+N` floats (one per server
+  tick, from the new targeted `tool_award` event, plus a pickup tick and haptic per tick).
+  Suction is a `suctionRadiusStuds` disc around the reticle hit with a small `reachStuds` nudge.
+- **Front skirt.** `pile.visual.frontSkirt*`: 460 fixed overlapping strands (150 on mobile) over the
+  front rim on the spawn side, two bands deep, `CanQuery false`, never picked; the record coat
+  above is untouched (`feathers 20,775 / fluff 460` in Play). Edit-mode captures from the spawn
+  show the foot covered.
+- **Nothing settles.** Records keep their as-built seats; a removal only reveals the next record in
+  that cell. The client feather count stayed at ~20.8k through every test (the top-10 window).
