@@ -359,3 +359,9 @@ sweep / tick), the rake sweeps a narrow fan, batches stream one record at a time
 climbing bag counter, the hand target lifts client-first, revealed records fade in beneath, held
 input is a render-step gate, the rake viewmodel has anticipation and recovery, and the coat lies
 tangent with a softer palette. See docs/STUDIO_VERIFICATION.md "Farming feel rebuild".
+
+**Pile rebuild (14 Sep 2026).** Feathers are a third of their old size, the coat shades by record
+depth, the rim tapers and curls under, the surface rides a deterministic undulation, rim columns
+hold a real bed, rainbow records are 0.35 % with no halo (and no longer leak their dressing back
+into the part pool), the front skirt stays inside the footprint, the rake pose is solved in camera
+space, and `+N` is sized by the haul. See docs/STUDIO_VERIFICATION.md "Clip review and pile rebuild".

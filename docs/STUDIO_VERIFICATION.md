@@ -1368,3 +1368,56 @@ roll +-20 deg, ivory-to-grey palette; recount once per frame.
    hitches; the absolute rate is Studio's baseline here, not the game's.
 - Not done: no video recording is possible from this machine, and the owner's clips could not be
   played here; the comparison against Clip 2 at 1:31 / 2:41 is by description only.
+
+## Clip review and pile rebuild (14 Sep 2026)
+
+The owner's Studio clip was finally watched frame by frame: no video tooling existed on this
+machine, so a static `ffmpeg` was fetched through the `imageio-ffmpeg` wheel and the 18.7 s clip
+was cut into 112 frames at 6 fps, cropped to the game viewport. Findings and fixes below. 300
+headless tests; selene / stylua clean.
+
+**Correcting an earlier claim.** The rake is not invisible. At `z=-0.45` the visible half-height is
+0.315 studs, so the grip sat just past the bottom-right corner, while the fork head (8.3 local
+studs up the shaft) landed at lower-centre with the shaft crossing the screen between them. It
+renders; it reads as a stray stick. The pose is now solved in camera space instead of Euler
+guesswork (`fromQuill` builds the orientation from an explicit shaft direction), scale 0.34, so the
+head sits about 40 % down and 17 % right with the grip just off the corner.
+
+**Root causes found in the frames**
+- Feathers were 2.4-3.4 studs, about half a character, so the mound read as pillows and a 4-stud
+  dig was bridged by neighbouring feathers. Now 1.15-1.65 studs.
+- The coat was flat ivory `SmoothPlastic` with no shading, so nothing separated one feather from
+  the next. Records now tint down a seven-step palette with their depth in the column
+  (`depthTintWeight 0.55` over 16 slots): bright tops, dark crevices.
+- The dome is a perfect mathematical profile until it is dug, so it read as a blob. Rendered
+  feathers now ride a smooth deterministic undulation (`seatLumpStuds 0.55`). The logical surface,
+  aim and collision are untouched.
+- Rim columns held one record, so an edge sweep paid +1 while the same swing on the slope paid
+  +27. Every column now holds at least `minRecordsPerColumn` (7); height is remaining/base so the
+  silhouette is unchanged.
+- Rim feathers radiated outward as blades. They now taper to `rimMinScale` 0.6 and pitch down by
+  `rimCurlDegrees` 26 so the edge curls under.
+- At 1.5 % rainbow, 5-8 glowing records were in view at all times and their 2.4-stud halo sprites
+  smeared across neighbours. Now 0.35 %, no halo. A real pool bug was also found: a collected
+  rainbow feather returned to the pool still Neon with its mote emitter, so glowing ordinary
+  feathers accumulated across a round; `releasePart` now strips the dressing.
+- The front skirt was seeded out to 17.8 studs while the mound's surface ends at 14.4, so a third
+  of it lay on bare sand as litter. It now hugs the real foot.
+- `+27` was ~22 px cream text with a thin outline over the brightest thing on screen. Now 32-52 px
+  FredokaOne with a gradient and a 4.5 px cocoa outline, sized by the haul.
+- The rake's contact fan was 1.8 studs across, too small to read. Now 2.5 studs wide by 2.1 deep
+  with a per-cell cap of 10, which is exactly the rendered stack, so a sweep empties what you see.
+- The collision shell sat 0.3 studs below the surface, putting the player ankle-deep in the coat;
+  its inset is now 0.
+
+**Not verified in Studio this session.** The Studio instance was reopened part way through and the
+new build sandboxes the assistant's command thread: it can no longer `require` game modules
+("cannot require 'Signal' since 'Signal' has additional values for the Capabilities property"), so
+the edit-mode pile probe and the debug bridge are both blocked, and Play-mode captures come back
+blank on this machine as they always have. Edit-mode captures taken before the reconnect confirmed
+the density, the skirt fix and the material choice; the final tuning pass (depth weight 0.55, rim
+0.6, skirt 820) is unconfirmed by eye. The owner should look, or send another short clip.
+
+**Also note.** The `infiniteBag` entitlement in the clip was a debug hook left on from earlier
+testing, which is why the bag read "Infinite" and the sell banner never cleared. Studio profiles
+are in-memory, so a fresh session starts without it.
