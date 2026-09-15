@@ -167,7 +167,9 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		-- Bands, measured off the cell height, so the header, amount, artwork and footer occupy four
 		-- strips that cannot intersect whatever the viewport scale does.
 		local headerHeight = Tokens.typography.label.size + Tokens.spacing.sm
-		local amountHeight = Tokens.typography.heading.size + 2
+		-- The number is the reward, so it gets display type rather than heading type. It could not be
+		-- this big while it was carrying "+50 Gems"; a bare "+50" has the room.
+		local amountHeight = Tokens.typography.display.size + 2
 		-- Tall enough to read as a button rather than a printed strip. The card itself carries the tap
 		-- target (see the hit layer below), so this is about weight, not reach.
 		local footerHeight = Tokens.typography.label.size + Tokens.spacing.md
@@ -191,7 +193,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		})
 		title.Size = UDim2.fromScale(1, 1)
 
-		local amount = FrameKit.text(face, "Amount", "", "heading", {
+		local amount = FrameKit.text(face, "Amount", "", "display", {
 			align = Enum.TextXAlignment.Center,
 			zIndex = z + 3,
 			color = Tokens.color.goldDeep,
@@ -228,7 +230,10 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			biggest = math.max(biggest, reward.gems or 0)
 		end
 		local share = if biggest > 0 then (entry.gems or 0) / biggest else 0
-		local cluster = if grand then 6 elseif share >= 0.45 then 3 elseif share >= 0.18 then 2 else 1
+		-- Tuned against the real ladder (10 / 120 / 50 / 500): a token day gets one stone, an ordinary
+		-- day two, the big mid-week day three, and the finale a heap. At the old thresholds five of the
+		-- eight days drew the same single gem, which is the monotony this was meant to break.
+		local cluster = if grand then 6 elseif share >= 0.2 then 3 elseif share >= 0.06 then 2 else 1
 		local px = math.floor(math.clamp(artHeight * (if cluster > 3 then 0.52 else 0.82), 18, 54))
 		for index = 1, cluster do
 			local gem = Skin.icon(art, "hud.gem", px, z + 4) or Icons.gem(art, px, { zIndex = z + 4 })
@@ -405,7 +410,9 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		for index, cell in ipairs(cells) do
 			local info = calendar[index]
 			local grand = index == finalDay
-			cell.amount.Text = string.format("+%d Gems", info.gems)
+			-- Just the number. The gem sitting directly underneath says what it is, and "Gems" written
+			-- eight times down a grid is the wall of text the picture was supposed to replace.
+			cell.amount.Text = "+" .. info.gems
 			cell.title.Text = "DAY " .. info.day
 			cell.check.Visible = info.claimed
 			-- The grand prize says GRAND PRIZE. A padlock pinned over its header as well read as a
