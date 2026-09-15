@@ -682,10 +682,17 @@ function PileVisualController._exposeWalls(self: PileVisualController, dug: Colu
 		local edgeX = minCorner.X + (nx + 0.5) * field.cellSize - offset[1] * field.cellSize * 0.42
 		local edgeZ = minCorner.Z + (nz + 0.5) * field.cellSize - offset[2] * field.cellSize * 0.42
 		local topY = field.baseY + self:_columnTop(neighbour)
-		-- The neighbour's own rendered records cover its side down to the bottom of its window;
-		-- wall filler starts below that.
-		local neighbourWindow = math.min(neighbour.base, neighbour.base - neighbour.remaining + self:_slotsFor(neighbour)) * neighbour.step
-		local depthFrom = math.max(neighbour.wallDepth, neighbourWindow - visual.wallLevelSpacingStuds)
+		-- Filler lines the whole exposed face, not just the part below the record window.
+		--
+		-- It used to start below that window, on the reasoning that the neighbour's own records already
+		-- covered its side. They do not. Records are seated across the column's footprint and stacked
+		-- vertically, so down an exposed face they read as a picket fence - measured on the rim of a
+		-- shaft dug to the floor, the column beside it drew 24 records over 11 studs of a face half a
+		-- stud wide, and a sight line goes straight between them, over the next column (whose coat stops
+		-- eleven studs up) and out to the sand. Worse, once the window cap was raised so a wall column
+		-- draws every record it has, that window reached the bottom of the face and this filler stopped
+		-- running at all.
+		local depthFrom = neighbour.wallDepth
 		local levelsAdded = 0
 		local depthNow = depthFrom + visual.wallLevelSpacingStuds
 		while depthNow <= exposure and levelsAdded < 40 do
