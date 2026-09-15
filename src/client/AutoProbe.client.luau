@@ -269,6 +269,33 @@ local function run(command: string): string
 		end
 		task.wait(0.3)
 		probe(lines)
+	elseif verb == "dig" then
+		-- Excavate for real before measuring: a mound that is closed at spawn and opens up once cells
+		-- drop is the failure the owner kept hitting, so the probe has to see a dug pile.
+		local seconds = tonumber(words[2]) or 25
+		if not debugBridge then
+			return "no SFE_ClientDebug bridge"
+		end
+		debugBridge:Invoke("autoPlay", seconds, true)
+		task.wait(seconds + 1)
+		debugBridge:Invoke("autoStop")
+		task.wait(0.5)
+		local ok, report = pcall(function()
+			return debugBridge:Invoke("pileReport")
+		end)
+		if ok and type(report) == "table" then
+			table.insert(lines, string.format("dug: remaining %s of %s", tostring(report.remaining), tostring(report.base)))
+		end
+		if words[3] then
+			local _, root = character()
+			if root then
+				root.CFrame = CFrame.new(tonumber(words[3]) or 0, tonumber(words[4]) or 56, tonumber(words[5]) or 391)
+				task.wait(0.4)
+			end
+			debugBridge:Invoke("lookAt", tonumber(words[6]) or 0, tonumber(words[7]) or 53, tonumber(words[8]) or 380)
+			task.wait(0.3)
+		end
+		probe(lines)
 	elseif verb == "probe" then
 		probe(lines)
 	elseif verb == "config" then
@@ -306,7 +333,7 @@ local function run(command: string): string
 			table.insert(lines, "config unreadable: " .. tostring(cfg))
 		end
 	else
-		table.insert(lines, "commands: round | stand x y z lx ly lz | probe | config")
+		table.insert(lines, "commands: round | stand x y z lx ly lz | dig seconds [x y z lx ly lz] | probe | config")
 	end
 	return table.concat(lines, "\n")
 end
