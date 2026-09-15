@@ -27,6 +27,7 @@ export type RoundState = {
 	members: { number },
 	present: { [number]: boolean },
 	skipVotes: { [number]: boolean },
+	introReady: { [number]: boolean },
 	countdownDeadline: number?,
 	searchingStartedAtMs: number?,
 	victory: { finderUserId: number, elapsedMs: number }?,
@@ -66,6 +67,7 @@ function RoundReducer.create(roundId: string, chapter: string, difficulty: strin
 		members = table.clone(members),
 		present = present,
 		skipVotes = {},
+		introReady = {},
 		countdownDeadline = nil,
 		searchingStartedAtMs = nil,
 		victory = nil,
@@ -104,6 +106,53 @@ function RoundReducer.allPresentVotedSkip(state: RoundState): boolean
 		end
 	end
 	return true
+end
+
+-- A member reports that the intro has finished playing for them (watched through, or skipped, or
+-- failed and fell back). Idempotent by construction: the same report twice writes the same flag, so
+-- spamming it cannot start the round twice. Only meaningful during the intro.
+function RoundReducer.introReady(state: RoundState, userId: number): (RoundState?, string?)
+	if state.phase ~= "Cutscene" then
+		return nil, RoundReducer.Errors.INVALID_PHASE
+	end
+	if not table.find(state.members, userId) then
+		return nil, RoundReducer.Errors.NOT_MEMBER
+	end
+	if state.introReady[userId] then
+		return state, nil -- already ready: no version bump, nothing to broadcast
+	end
+	local ready = table.clone(state.introReady)
+	ready[userId] = true
+	return bump(state, { introReady = ready }), nil
+end
+
+-- Everyone still in the round has finished the intro. A member who disconnected is not present, so
+-- the rest of the party is never held waiting for someone who left.
+function RoundReducer.allPresentIntroReady(state: RoundState): boolean
+	local anyPresent = false
+	for _, userId in ipairs(state.members) do
+		if state.present[userId] then
+			anyPresent = true
+			if not state.introReady[userId] and not state.skipVotes[userId] then
+				return false
+			end
+		end
+	end
+	return anyPresent
+end
+
+-- How many of the present members are waiting, for the "Waiting for party..." line.
+function RoundReducer.introReadyCounts(state: RoundState): (number, number)
+	local ready, present = 0, 0
+	for _, userId in ipairs(state.members) do
+		if state.present[userId] then
+			present += 1
+			if state.introReady[userId] or state.skipVotes[userId] then
+				ready += 1
+			end
+		end
+	end
+	return ready, present
 end
 
 function RoundReducer.cutsceneFinished(state: RoundState, countdownDeadline: number): (RoundState?, string?)

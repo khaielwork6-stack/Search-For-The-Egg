@@ -270,6 +270,24 @@ function RoundService.voteSkip(self: RoundService, roundId: string, userId: numb
 	return next, nil
 end
 
+-- A client reports that the round intro has finished for it: watched through, skipped, or failed and
+-- fell back. Idempotent and validated - the reducer refuses a non-member and a wrong phase, and a
+-- repeat report changes nothing, so spamming the remote cannot start the round twice.
+function RoundService.markIntroReady(self: RoundService, roundId: string, userId: number): (RoundReducer.RoundState?, string?)
+	local runtime = self._rounds[roundId]
+	if not runtime then
+		return nil, "not_found"
+	end
+	local next, err = RoundReducer.introReady(runtime.state, userId)
+	if not next then
+		return nil, err
+	end
+	if next ~= runtime.state then
+		next = commit(self, runtime, next)
+	end
+	return next, nil
+end
+
 -- Queues a pile cell change for the next replication flush.
 function RoundService.queueDelta(self: RoundService, roundId: string, cellIndex: number, remaining: number, mask: number?)
 	local runtime = self._rounds[roundId]
@@ -309,7 +327,13 @@ function RoundService.tick(self: RoundService): number
 	local changed = 0
 	for roundId, runtime in pairs(table.clone(self._rounds)) do
 		local state = runtime.state
-		if state.phase == "Cutscene" and runtime.cutsceneDeadline and now >= runtime.cutsceneDeadline then
+		-- The intro ends when every present member has reported ready, or when the maximum wait
+		-- elapses. Waiting on readiness rather than the clock is what keeps a fast machine from
+		-- collecting while a slow one is still loading; the deadline is the backstop so one stuck
+		-- client can never hold a server.
+		local introDone = state.phase == "Cutscene"
+			and (RoundReducer.allPresentIntroReady(state) or (runtime.cutsceneDeadline ~= nil and now >= runtime.cutsceneDeadline))
+		if introDone then
 			local next = RoundReducer.cutsceneFinished(state, now + self._config.round.countdownSeconds)
 			if next then
 				commit(self, runtime, next)
@@ -507,6 +531,19 @@ function RoundService.project(self: RoundService, roundId: string, includePile: 
 	projection.searchingStartedAtMs = runtime.state.searchingStartedAtMs
 	projection.cutsceneSeconds = self._config.round.cutsceneSeconds
 	projection.countdownSeconds = self._config.round.countdownSeconds
+	-- One authoritative countdown deadline, in the same server clock as `serverNowMs`, so every
+	-- client counts to the same instant instead of restarting from the config constant whenever a
+	-- snapshot happens to arrive.
+	if runtime.state.countdownDeadline then
+		local remaining = math.max(0, runtime.state.countdownDeadline - self._clock:monotonic())
+		projection.countdownEndsInMs = math.floor(remaining * 1000 + 0.5)
+	end
+	local ready, present = RoundReducer.introReadyCounts(runtime.state)
+	projection.introReady = ready
+	projection.introPresent = present
+	if runtime.state.phase == "Cutscene" and runtime.cutsceneDeadline then
+		projection.introEndsInMs = math.floor(math.max(0, runtime.cutsceneDeadline - self._clock:monotonic()) * 1000 + 0.5)
+	end
 	projection.removedFraction = PileGrid.removedFraction(runtime.grid)
 	if includePile then
 		projection.pile = PileGrid.snapshot(runtime.grid)

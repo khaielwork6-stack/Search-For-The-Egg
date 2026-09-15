@@ -1058,6 +1058,22 @@ registry:onRequest("RoundSkipVote", function(player, payload)
 	local state, err = rounds:voteSkip(runtime.state.roundId, player.UserId)
 	return if state then Envelope.ok({ votes = state.skipVotes }) else fail(err)
 end)
+registry:onRequest("RoundIntroReady", function(player, payload)
+	local okToken, tokenErr = sessions:validate(player.UserId, payload.sessionToken, "Round")
+	if not okToken then
+		return Envelope.fail(Envelope.Codes.STALE_TOKEN, tokenErr)
+	end
+	local runtime = rounds:roundOf(player.UserId)
+	if not runtime then
+		return fail("no_round")
+	end
+	local state, err = rounds:markIntroReady(runtime.state.roundId, player.UserId)
+	if not state then
+		return fail(err)
+	end
+	local ready, present = RoundReducer.introReadyCounts(state)
+	return Envelope.ok({ ready = ready, present = present, phase = state.phase })
+end)
 registry:onRequest("CollectAction", function(player, payload)
 	return collection:collect(player.UserId, payload)
 end)

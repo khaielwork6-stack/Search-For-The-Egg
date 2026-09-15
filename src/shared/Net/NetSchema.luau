@@ -102,6 +102,9 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		-- Tutorial / round actions (handlers land in Phase 2+; schemas exist now) --------------
 		request("TutorialAction", Schema.object({ step = Schema.id(), action = Schema.enum({ "complete", "skip" }) }), uiRate, 2),
 		request("RoundSkipVote", Schema.object({ sessionToken = TOKEN }), uiRate, 2),
+		-- Reported once per client when the intro finishes, is skipped, or falls back after an error.
+		-- Idempotent server-side, so retries and spam cannot start the round more than once.
+		request("RoundIntroReady", Schema.object({ sessionToken = TOKEN }), uiRate, 2),
 		request("BundleGather", Schema.object({ sessionToken = TOKEN, bundleId = Schema.id() }), collectRate, 3, 256),
 		request(
 			"CollectAction",

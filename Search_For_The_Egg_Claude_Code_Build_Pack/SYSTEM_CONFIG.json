@@ -51,7 +51,179 @@
       "rewardRevealSeconds": 3.0,
       "confettiSeconds": 4.0
     },
-    "assumption": "ASSUMED except count-up timer and skippable cutscene"
+    "assumption": "ASSUMED except count-up timer and skippable cutscene",
+    "intro": {
+      "playEveryRound": true,
+      "allowSkip": true,
+      "durationSeconds": 14.0,
+      "maxWaitSeconds": 26.0,
+      "loadGraceSeconds": 6.0,
+      "fadeInSeconds": 0.9,
+      "fadeOutSeconds": 0.7,
+      "letterboxFraction": 0.11,
+      "letterboxSeconds": 0.5,
+      "subtitleCharactersPerSecond": 26.0,
+      "subtitleHoldSeconds": 1.2,
+      "waitingLabel": "Waiting for party...",
+      "objectiveLabel": "FIND THE EGG",
+      "objectiveSeconds": 2.6,
+      "poster": {
+        "title": "FIND THE EGG",
+        "subtitle": "HIDDEN IN THE FEATHER PILE",
+        "rewardPrefix": "REWARD: ",
+        "footer": "SUNLIT HENHOUSE"
+      },
+      "beats": [
+        {
+          "at": 0.9,
+          "text": "An Egg hidden inside a mountain of feathers..."
+        },
+        {
+          "at": 5.4,
+          "text": "And there's a reward?"
+        },
+        {
+          "at": 11.0,
+          "text": "I have to find it."
+        }
+      ],
+      "shots": [
+        {
+          "marker": "IntroPosterClose",
+          "at": 0.0,
+          "seconds": 4.8,
+          "push": 0.55
+        },
+        {
+          "marker": "IntroPlayerApproach",
+          "at": 4.8,
+          "seconds": 4.0,
+          "push": 0.0
+        },
+        {
+          "marker": "IntroPlayerReading",
+          "at": 8.8,
+          "seconds": 2.6,
+          "push": 0.2
+        },
+        {
+          "marker": "IntroFarmReveal",
+          "at": 11.4,
+          "seconds": 2.6,
+          "push": 0.8
+        }
+      ],
+      "markers": {
+        "IntroPosterClose": {
+          "position": [
+            6.0,
+            55.6,
+            400.4
+          ],
+          "lookAt": [
+            6.0,
+            55.4,
+            397.3
+          ],
+          "fieldOfView": 40.0
+        },
+        "IntroPlayerApproach": {
+          "position": [
+            11.6,
+            55.2,
+            401.2
+          ],
+          "lookAt": [
+            6.6,
+            54.6,
+            398.2
+          ],
+          "fieldOfView": 52.0
+        },
+        "IntroPlayerReading": {
+          "position": [
+            9.6,
+            55.0,
+            400.2
+          ],
+          "lookAt": [
+            6.4,
+            54.4,
+            398.6
+          ],
+          "fieldOfView": 46.0
+        },
+        "IntroFarmReveal": {
+          "position": [
+            6.0,
+            59.5,
+            395.0
+          ],
+          "lookAt": [
+            -10.0,
+            57.0,
+            356.0
+          ],
+          "fieldOfView": 62.0
+        },
+        "RoundSpawnCamera": {
+          "position": [
+            0.0,
+            54.9,
+            405.5
+          ],
+          "lookAt": [
+            0.0,
+            56.5,
+            372.0
+          ],
+          "fieldOfView": 70.0
+        }
+      },
+      "sign": {
+        "position": [
+          6.0,
+          52.1,
+          397.0
+        ],
+        "facing": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "postHeightStuds": 6.0,
+        "boardSizeStuds": [
+          5.2,
+          5.0,
+          0.45
+        ],
+        "parchmentInsetStuds": 0.55,
+        "pixelsPerStud": 96
+      },
+      "actor": {
+        "startPosition": [
+          1.5,
+          52.18,
+          404.6
+        ],
+        "standPosition": [
+          6.2,
+          52.18,
+          399.7
+        ],
+        "walkAt": 4.5,
+        "walkSeconds": 2.7,
+        "reachAt": 7.5,
+        "takeAt": 8.2,
+        "readAt": 8.9,
+        "turnAt": 10.9,
+        "turnSeconds": 0.8,
+        "walkSpeedStudsPerSecond": 7.0,
+        "stepsPerSecond": 2.2
+      },
+      "assumption": "ASSUMED",
+      "evidence": "OWNER 15 Sep 2026 (reference clip): a 12-16 second round intro - poster reveal, the player's own avatar walking in and taking the flyer, then a farmhouse reveal. Camera markers are named so framing is tuned by moving the marker parts or editing these numbers, never by rewriting code. maxWaitSeconds is the multiplayer backstop: the round leaves the intro as soon as every present member reports ready, and at the latest when this elapses. The poster's reward is computed from the chapter and difficulty actually being played, never written here."
+    }
   },
   "interaction": {
     "defaultRangeStuds": 12,

@@ -1061,6 +1061,118 @@ function Validator.validate(raw: any): Report
 
 	-- Audio: every id, mix value, loop flag and cooldown the client plays lives here, so this is the
 	-- only place a wrong role name or an out-of-range volume can be caught before it ships.
+	-- Round intro cinematic: the shot list, the subtitle beats and the named camera markers. The
+	-- markers are also built as world parts, so these are the authored defaults, not the only source.
+	local intro = type(raw.round) == "table" and raw.round.intro or nil
+	check(type(intro) == "table", "round.intro missing")
+	if type(intro) == "table" then
+		check(type(intro.playEveryRound) == "boolean", "round.intro.playEveryRound must be boolean")
+		check(type(intro.allowSkip) == "boolean", "round.intro.allowSkip must be boolean")
+		for _, key in ipairs({
+			"durationSeconds",
+			"maxWaitSeconds",
+			"loadGraceSeconds",
+			"fadeInSeconds",
+			"fadeOutSeconds",
+			"letterboxSeconds",
+			"subtitleCharactersPerSecond",
+			"objectiveSeconds",
+		}) do
+			check(isPositiveNumber(intro[key]), "round.intro." .. key .. " must be > 0")
+		end
+		check(
+			isNonNegativeNumber(intro.letterboxFraction) and intro.letterboxFraction <= 0.3,
+			"round.intro.letterboxFraction must be within [0, 0.3]"
+		)
+		-- The intro has to be allowed to finish before the backstop fires, or nobody ever sees it.
+		check(
+			not isPositiveNumber(intro.maxWaitSeconds)
+				or not isPositiveNumber(intro.durationSeconds)
+				or intro.maxWaitSeconds > intro.durationSeconds,
+			"round.intro.maxWaitSeconds must exceed durationSeconds"
+		)
+		check(type(intro.waitingLabel) == "string" and #intro.waitingLabel > 0, "round.intro.waitingLabel must be text")
+		check(type(intro.objectiveLabel) == "string" and #intro.objectiveLabel > 0, "round.intro.objectiveLabel must be text")
+		local poster = intro.poster
+		check(type(poster) == "table", "round.intro.poster missing")
+		if type(poster) == "table" then
+			for _, key in ipairs({ "title", "subtitle", "rewardPrefix", "footer" }) do
+				check(type(poster[key]) == "string", "round.intro.poster." .. key .. " must be text")
+			end
+			-- The flyer's reward is computed from the round being played; a literal here would be a
+			-- promise the round might not keep.
+			check(
+				type(poster.rewardPrefix) ~= "string" or string.match(poster.rewardPrefix, "%d") == nil,
+				"round.intro.poster.rewardPrefix must not contain a hard-coded amount"
+			)
+		end
+		check(type(intro.beats) == "table" and #intro.beats > 0, "round.intro.beats must be a non-empty list")
+		if type(intro.beats) == "table" then
+			local previous = -1
+			for index, beat in ipairs(intro.beats) do
+				local where = "round.intro.beats[" .. index .. "]"
+				check(type(beat) == "table" and isNonNegativeNumber(beat.at), where .. ".at must be >= 0")
+				check(type(beat) == "table" and type(beat.text) == "string" and #beat.text > 0, where .. ".text must be text")
+				check(type(beat) ~= "table" or not isNonNegativeNumber(beat.at) or beat.at > previous, where .. ".at must increase")
+				previous = if type(beat) == "table" and isNonNegativeNumber(beat.at) then beat.at else previous
+			end
+		end
+		check(type(intro.shots) == "table" and #intro.shots > 0, "round.intro.shots must be a non-empty list")
+		local markers = intro.markers
+		check(type(markers) == "table", "round.intro.markers missing")
+		if type(markers) == "table" then
+			for _, name in ipairs({
+				"IntroPosterClose",
+				"IntroPlayerApproach",
+				"IntroPlayerReading",
+				"IntroFarmReveal",
+				"RoundSpawnCamera",
+			}) do
+				local entry = markers[name]
+				check(type(entry) == "table", "round.intro.markers." .. name .. " missing")
+				if type(entry) == "table" then
+					check(
+						type(entry.position) == "table" and #entry.position == 3,
+						"round.intro.markers." .. name .. ".position must be a 3-vector"
+					)
+					check(
+						type(entry.lookAt) == "table" and #entry.lookAt == 3,
+						"round.intro.markers." .. name .. ".lookAt must be a 3-vector"
+					)
+					check(
+						isPositiveNumber(entry.fieldOfView) and entry.fieldOfView <= 120,
+						"round.intro.markers." .. name .. ".fieldOfView must be within (0, 120]"
+					)
+				end
+			end
+		end
+		if type(intro.shots) == "table" and type(markers) == "table" then
+			for index, shot in ipairs(intro.shots) do
+				local where = "round.intro.shots[" .. index .. "]"
+				check(type(shot) == "table" and markers[shot.marker] ~= nil, where .. ".marker must name a marker")
+				check(type(shot) == "table" and isNonNegativeNumber(shot.at), where .. ".at must be >= 0")
+				check(type(shot) == "table" and isPositiveNumber(shot.seconds), where .. ".seconds must be > 0")
+			end
+		end
+		local actor = intro.actor
+		check(type(actor) == "table", "round.intro.actor missing")
+		if type(actor) == "table" then
+			check(type(actor.startPosition) == "table" and #actor.startPosition == 3, "round.intro.actor.startPosition must be a 3-vector")
+			check(type(actor.standPosition) == "table" and #actor.standPosition == 3, "round.intro.actor.standPosition must be a 3-vector")
+			for _, key in ipairs({ "walkSeconds", "turnSeconds", "walkSpeedStudsPerSecond", "stepsPerSecond" }) do
+				check(isPositiveNumber(actor[key]), "round.intro.actor." .. key .. " must be > 0")
+			end
+		end
+		local sign = intro.sign
+		check(type(sign) == "table", "round.intro.sign missing")
+		if type(sign) == "table" then
+			check(type(sign.position) == "table" and #sign.position == 3, "round.intro.sign.position must be a 3-vector")
+			check(type(sign.facing) == "table" and #sign.facing == 3, "round.intro.sign.facing must be a 3-vector")
+			check(isPositiveNumber(sign.postHeightStuds), "round.intro.sign.postHeightStuds must be > 0")
+			check(isPositiveNumber(sign.pixelsPerStud), "round.intro.sign.pixelsPerStud must be > 0")
+		end
+	end
+
 	check(type(raw.audio) == "table", "audio missing")
 	if type(raw.audio) == "table" then
 		local audio = raw.audio
