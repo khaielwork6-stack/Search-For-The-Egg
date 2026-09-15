@@ -530,7 +530,9 @@ local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, sc
 		{
 			key = "featherVac",
 			model = "Vacuum",
-			cframe = CFrame.new(-29.8, 59.0, 313.0) * CFrame.Angles(0, math.rad(-90), 0),
+			-- x = -30.1 seats the tool flush: it is 1.84 deep, so its back face lands at -29.18, just clear
+			-- of the board face at -29.17. At -29.8 a third of a stud of it was sunk behind the board.
+			cframe = CFrame.new(-30.1, 59.0, 313.0) * CFrame.Angles(0, math.rad(-90), 0),
 			board = CFrame.new(-29.8, 59.0, 313.0) * CFrame.Angles(0, math.rad(180), 0),
 			name = "Feather Vac",
 			scale = 0.9,
