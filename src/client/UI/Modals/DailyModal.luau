@@ -80,21 +80,31 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		deep = Tokens.color.outline,
 		zIndex = z,
 		radius = Tokens.radius.lg,
-		size = UDim2.new(1, 0, 0, tap + Tokens.spacing.md),
+		size = UDim2.new(1, 0, 0, math.floor(tap * 0.82)),
 	})
 	header.LayoutOrder = 1
 	local headerPad = Instance.new("UIPadding")
 	headerPad.PaddingLeft = UDim.new(0, Tokens.spacing.md)
 	headerPad.PaddingRight = UDim.new(0, Tokens.spacing.md)
 	headerPad.Parent = headerFace
+	-- One line, not two.
+	--
+	-- This said "Day 1 of 8 is ready" over "10 Gems waiting in the nest" while the card directly
+	-- beneath it showed DAY 1, +10, and a pulsing CLAIM. Two lines of banner to repeat what the
+	-- artwork already says is the writing that pushes the bottom half of the calendar off screen.
+	-- The streak sits left, the countdown right, and when a nest is open the card is the one that
+	-- says so.
 	local status = FrameKit.text(headerFace, "Status", "", "heading", { zIndex = z + 2, color = Tokens.color.featherWhite })
-	status.AnchorPoint = Vector2.new(0, 0)
-	status.Position = UDim2.fromOffset(0, Tokens.spacing.sm)
-	status.Size = UDim2.new(1, 0, 0, Tokens.typography.heading.size + 2)
+	status.AnchorPoint = Vector2.new(0, 0.5)
+	status.Position = UDim2.fromScale(0, 0.5)
+	status.Size = UDim2.fromScale(0.5, 1)
+	status.TextYAlignment = Enum.TextYAlignment.Center
 	local timer = FrameKit.text(headerFace, "Timer", "", "caption", { zIndex = z + 2, color = Tokens.color.straw })
-	timer.AnchorPoint = Vector2.new(0, 1)
-	timer.Position = UDim2.new(0, 0, 1, -Tokens.spacing.sm)
-	timer.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 2)
+	timer.AnchorPoint = Vector2.new(1, 0.5)
+	timer.Position = UDim2.fromScale(1, 0.5)
+	timer.Size = UDim2.fromScale(0.5, 1)
+	timer.TextXAlignment = Enum.TextXAlignment.Right
+	timer.TextYAlignment = Enum.TextYAlignment.Center
 
 	-- Progress rail: claimed days filled, today's notch bright, the rest dark.
 	local rail = Instance.new("Frame")
@@ -518,7 +528,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			status.Text = if daily.status == "reset"
 				then "Streak rested - restarting on Day 1"
 				else string.format("Day %d of %d is ready", daily.dayIndex, finalDay)
-			timer.Text = string.format("%d Gems waiting in the nest", daily.gems)
+			timer.Text = "Nest open"
 			claim.setEnabled(true)
 			claim.setText(string.format("Claim %d Gems", daily.gems))
 		else
