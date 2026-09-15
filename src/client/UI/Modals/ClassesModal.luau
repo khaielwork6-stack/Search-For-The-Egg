@@ -222,7 +222,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	end
 
 	-- Panels ---------------------------------------------------------------------------------------
-	local rowHeight = tap - 2
+	-- A class row is a button, so it gets the whole tap target rather than two pixels under it.
+	local rowHeight = tap
 	local deckHeight = #weights * rowHeight + (#weights - 1) * Tokens.spacing.xs + Tokens.spacing.md * 2
 	local layoutHeight = if compact then deckHeight + tap * 6 + Tokens.spacing.md * 3 else deckHeight
 	local layout = Instance.new("Frame")

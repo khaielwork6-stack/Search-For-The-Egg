@@ -514,7 +514,7 @@ function HUDController.new(deps: any): HUDController
 	heatLabel.AnchorPoint = Vector2.new(0.5, 1)
 	heatLabel.Position = UDim2.fromScale(0.5, 1)
 	heatLabel.Size = UDim2.new(2.4, 0, 0, Tokens.typography.caption.size + 4)
-	heatLabel.TextSize = Tokens.typography.caption.size - 1
+	heatLabel.TextSize = FrameKit.textSize(Tokens.typography.caption.size)
 	FrameKit.outline(heatLabel, 1.6)
 	self._labels.heat = heat
 	self._heatFill = heatFill

@@ -418,7 +418,8 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 			tag.AnchorPoint = Vector2.new(1, 0)
 			tag.Position = UDim2.new(1, Tokens.spacing.xs, 0, -Tokens.spacing.sm)
 			tag.Rotation = 8
-			tag.TextSize = Tokens.typography.caption.size - 2
+			-- No smaller than a caption: this is the word that says a purchase is forever.
+			tag.TextSize = FrameKit.textSize(Tokens.typography.caption.size)
 		end
 		local buy = Button.build(face, {
 			text = if offer.robux then string.format("R$ %d", offer.robux) else "R$",
