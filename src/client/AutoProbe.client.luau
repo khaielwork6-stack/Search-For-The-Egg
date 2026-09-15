@@ -39,6 +39,13 @@ local function character(): (Model?, BasePart?)
 end
 
 -- Rays through a grid over the lower part of the view: the picture the outside cannot screenshot.
+--
+-- Two refinements over a naive raycast map, both learned the hard way:
+--   * invisible parts (the nest aim plane, triggers) stop a ray but not the eye, so the ray is
+--     re-cast past anything at or near full transparency;
+--   * a ray that misses the mound and lands on the sand in front of it is not a hole. A hole is a
+--     ray that crosses the dome's own volume and still comes out the other side. The probe marches
+--     each non-pile ray against the analytic dome and only calls it a tunnel if it went through.
 local function probe(lines: { string })
 	local camera = workspace.CurrentCamera
 	local folder = workspace:FindFirstChild("SFE_PileVisual")
@@ -65,9 +72,41 @@ local function probe(lines: { string })
 	end
 	table.insert(lines, string.format("coat %d feathers %d filler  y %.2f..%.2f", feathers, filler, minY, maxY))
 
+	-- The analytic dome, so a ray can be tested against the mound's real volume.
+	local inside: ((Vector3) -> boolean)? = nil
+	local okDome = pcall(function()
+		local Shared = game.ReplicatedStorage.Shared
+		local PileSurface = require(Shared.Domain.PileSurface)
+		local layout = require(Shared.Domain.ChapterLayout).chapter1
+		local body = workspace:FindFirstChild("SFE_PileCollision")
+		local cx, cz, baseY, radius = 0, 0, layout.nestBaseY, 0
+		if body then
+			local min, max = Vector3.new(math.huge, 0, math.huge), Vector3.new(-math.huge, 0, -math.huge)
+			for _, part in ipairs(body:GetChildren()) do
+				if part:IsA("BasePart") then
+					min = Vector3.new(math.min(min.X, part.Position.X), 0, math.min(min.Z, part.Position.Z))
+					max = Vector3.new(math.max(max.X, part.Position.X), 0, math.max(max.Z, part.Position.Z))
+				end
+			end
+			cx, cz = (min.X + max.X) / 2, (min.Z + max.Z) / 2
+			radius = math.min(max.X - min.X, max.Z - min.Z) / 2
+		end
+		local apex = require(Shared.Config).get().pile.maxVisualHeightStuds
+		inside = function(point: Vector3): boolean
+			local dx, dz = point.X - cx, point.Z - cz
+			local r = math.sqrt(dx * dx + dz * dz)
+			if radius <= 0 or r > radius * PileSurface.RIM_STRETCH then
+				return false
+			end
+			return point.Y >= baseY - 0.5 and point.Y <= baseY + apex * PileSurface.domeProfile(r / radius)
+		end
+	end)
+	if not okDome then
+		table.insert(lines, "(dome unavailable: every non-pile hit is reported as a hole)")
+	end
+
 	-- The mound body is drawn but excluded from spatial queries, so a ray would pass through it and
-	-- report whatever lies behind. Make it queryable for the length of the probe so the report
-	-- matches what is actually on screen, then put it back exactly as it was.
+	-- report whatever lies behind. Make it queryable for the length of the probe, then put it back.
 	local body = workspace:FindFirstChild("SFE_PileCollision")
 	local restore: { BasePart } = {}
 	if body then
@@ -90,35 +129,78 @@ local function probe(lines: { string })
 	params.FilterDescendantsInstances = exclude
 	params.IgnoreWater = true
 
+	-- First hit the eye can actually see: anything at or near full transparency is stepped past.
+	local function visibleHit(origin: Vector3, direction: Vector3): RaycastResult?
+		local from, left = origin, direction
+		for _ = 1, 8 do
+			local hit = workspace:Raycast(from, left, params)
+			if not hit then
+				return nil
+			end
+			local part = hit.Instance
+			if not part:IsA("BasePart") or part.Transparency < 0.95 then
+				return hit
+			end
+			local travelled = (hit.Position - from).Magnitude + 0.05
+			left = left.Unit * math.max(left.Magnitude - travelled, 0)
+			if left.Magnitude <= 0 then
+				return nil
+			end
+			from = hit.Position + left.Unit * 0.05
+		end
+		return nil
+	end
+
 	local columns, rows = 40, 16
 	local holes: { [string]: number } = {}
 	local sample: { string } = {}
+	local counts = { feather = 0, filler = 0, body = 0, tunnel = 0, ground = 0, sky = 0 }
 	for row = 0, rows - 1 do
 		local line = {}
 		for column = 0, columns - 1 do
 			local sx = (column + 0.5) / columns * viewport.X
 			local sy = (0.25 + (row + 0.5) / rows * 0.75) * viewport.Y
 			local ray = camera:ViewportPointToRay(sx, sy)
-			local hit = workspace:Raycast(ray.Origin, ray.Direction * 400, params)
+			local hit = visibleHit(ray.Origin, ray.Direction * 400)
 			local glyph = " "
-			if hit then
+			if not hit then
+				counts.sky += 1
+			else
 				local inPile = hit.Instance:IsDescendantOf(folder)
 				local inBody = body ~= nil and hit.Instance:IsDescendantOf(body)
 				if inPile and hit.Instance.Name == "Feather" then
-					glyph = "#"
+					glyph, counts.feather = "#", counts.feather + 1
 				elseif inPile then
-					glyph = "+"
+					glyph, counts.filler = "+", counts.filler + 1
 				elseif inBody then
-					glyph = "o"
+					glyph, counts.body = "o", counts.body + 1
 				else
-					glyph = "."
-					local key = hit.Instance:GetFullName()
-					holes[key] = (holes[key] or 0) + 1
-					if #sample < 8 then
-						table.insert(
-							sample,
-							string.format("   %s  y=%.2f  dist=%.1f", key, hit.Position.Y, (hit.Position - ray.Origin).Magnitude)
-						)
+					-- Did this ray cross the mound's volume on its way to whatever it hit?
+					local tunnelled = false
+					if inside then
+						local span = (hit.Position - ray.Origin).Magnitude
+						local steps = math.clamp(math.floor(span / 0.35), 1, 400)
+						for step = 1, steps do
+							if (inside :: any)(ray.Origin + ray.Direction.Unit * (span * step / steps)) then
+								tunnelled = true
+								break
+							end
+						end
+					else
+						tunnelled = true
+					end
+					if tunnelled then
+						glyph, counts.tunnel = "X", counts.tunnel + 1
+						local key = hit.Instance:GetFullName()
+						holes[key] = (holes[key] or 0) + 1
+						if #sample < 8 then
+							table.insert(
+								sample,
+								string.format("   %s  y=%.2f  dist=%.1f", key, hit.Position.Y, (hit.Position - ray.Origin).Magnitude)
+							)
+						end
+					else
+						glyph, counts.ground = ".", counts.ground + 1
 					end
 				end
 			end
@@ -129,11 +211,26 @@ local function probe(lines: { string })
 	for _, part in ipairs(restore) do
 		part.CanQuery = false
 	end
-	table.insert(lines, "# feather  + filler  o mound body  . SEE-THROUGH  blank sky")
+	local onMound = counts.feather + counts.filler + counts.body + counts.tunnel
+	table.insert(lines, "# feather  + filler  o BARE BODY  X SEE-THROUGH  . ground/scenery  blank sky")
+	table.insert(
+		lines,
+		string.format(
+			"on mound %d: feathers %d (%.0f%%)  filler %d  bare body %d (%.0f%%)  see-through %d (%.0f%%)",
+			onMound,
+			counts.feather,
+			100 * counts.feather / math.max(1, onMound),
+			counts.filler,
+			counts.body,
+			100 * counts.body / math.max(1, onMound),
+			counts.tunnel,
+			100 * counts.tunnel / math.max(1, onMound)
+		)
+	)
 	if next(holes) == nil then
-		table.insert(lines, "no holes: every ray inside the silhouette met the coat")
+		table.insert(lines, "no see-through: every ray that crossed the mound met the coat or the body")
 	else
-		table.insert(lines, "holes hit:")
+		table.insert(lines, "see-through hit:")
 		for key, count in pairs(holes) do
 			table.insert(lines, string.format("   %dx %s", count, key))
 		end
