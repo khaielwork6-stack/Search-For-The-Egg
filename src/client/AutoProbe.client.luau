@@ -276,15 +276,30 @@ local function run(command: string): string
 		if not debugBridge then
 			return "no SFE_ClientDebug bridge"
 		end
-		debugBridge:Invoke("autoPlay", seconds, true)
-		task.wait(seconds + 1)
 		debugBridge:Invoke("autoStop")
-		task.wait(0.5)
-		local ok, report = pcall(function()
+		task.wait(0.3)
+		debugBridge:Invoke("autoPlay", seconds, false)
+		local deadline = os.clock() + seconds + 2
+		while os.clock() < deadline do
+			task.wait(1)
+		end
+		debugBridge:Invoke("autoStop")
+		task.wait(0.4)
+		local okStatus, status = pcall(function()
+			return debugBridge:Invoke("autoStatus")
+		end)
+		if okStatus and type(status) == "table" then
+			local log = status.log
+			local tail = if type(log) == "table" and #log > 0 then tostring(log[#log]) else "no log"
+			table.insert(lines, string.format("auto: state=%s hits=%s last=%s", tostring(status.state), tostring(status.hits), tail))
+		else
+			table.insert(lines, "auto: status unavailable " .. tostring(status))
+		end
+		local okReport, report = pcall(function()
 			return debugBridge:Invoke("pileReport")
 		end)
-		if ok and type(report) == "table" then
-			table.insert(lines, string.format("dug: remaining %s of %s", tostring(report.remaining), tostring(report.base)))
+		if okReport and type(report) == "table" then
+			table.insert(lines, string.format("pile: remaining %s base %s", tostring(report.remaining), tostring(report.base)))
 		end
 		if words[3] then
 			local _, root = character()
