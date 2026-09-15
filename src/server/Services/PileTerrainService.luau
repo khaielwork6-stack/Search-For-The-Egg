@@ -338,37 +338,20 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 		boxes = {}
 		return created
 	end
-	-- How deep the client's rendered coat reaches below the surface of a column. The coat only draws
-	-- the top `visibleSlotsPerCell` records, so away from the crown it is a thin shell sitting well
-	-- above the ground; the mound body has to start just under it or a low angle sees straight
-	-- underneath the rim and out the other side.
-	local function coatSpan(config, field, x: number, z: number): number
-		local visual = config.pile.visual
-		local full = PileSurface.columnFullHeight(config, field.width, field.depth, field.cellSize, x, z)
-		local records = math.clamp(math.floor(math.max(config.pile.minRecordsPerColumn or 1, full / config.pile.recordSpacingStuds)), 1, 32)
-		local step = math.max(full / records, visual.minSeatStepStuds or 0)
-		-- The window is per column: a steep rim column renders deeper, so the body has to sit deeper
-		-- under it too or the coat's own lower records would be buried inside the body.
-		-- Both windows, same as the pick test: the body has to clear whichever coat is deeper, or a pit
-		-- wall's extra records would be seated inside it.
-		local slots = math.max(
-			PileSurface.coatSlots(config, field.width, field.depth, field.cellSize, x, z, records, visual.visibleSlotsPerCell),
-			PileSurface.coatSlotsAt(
-				config,
-				field.width,
-				field.depth,
-				field.cellSize,
-				PileSurface.fieldHeights(field),
-				x,
-				z,
-				records,
-				visual.visibleSlotsPerCell
-			)
-		)
-		return (slots - 1) * step + (visual.coatSpanMarginStuds or 0.35)
-	end
-
-	-- One solid, axis-aligned, ground-anchored column per cell.
+	-- One solid, axis-aligned, ground-anchored column per cell, invisible, topped at the surface.
+	--
+	-- It used to be visible and seated a whole coat-depth below the surface, and those two facts were
+	-- locked together: an opaque body standing among the coat would bury the records under its own top,
+	-- so it had to start beneath the deepest one. That was tolerable while the coat was a 1-stud skin.
+	-- Once the coat deepened to cover the wall of a dug pit, the same rule put the body eleven studs
+	-- under the feathers on those columns, and eleven studs is a player falling through a wall they can
+	-- see. Visible and shallow was not an option either: that is the pale block showing through the
+	-- side of every hole.
+	--
+	-- Invisible unties the knot. Nothing it overlaps is hidden, so it can top out just under the surface
+	-- - you stand where the feathers are - while the coat's lower records stay visible and go on
+	-- covering the drop to the neighbour. What stops a sight line going under the mound is the coat
+	-- being deep enough, which is now measured per column against the mound as it actually is.
 	--
 	-- This used to be a thin slab tilted to the local surface normal. Wherever the dome is steep the
 	-- neighbouring slabs rotate away from each other, the overlap opens, and the slab's lower edge
@@ -384,7 +367,7 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 		local cz = field.minZ + (z + 0.5) * field.cellSize
 		local ground = field.groundY or field.baseY
 		local surface = PileSurface.heightAt(field, cx, cz)
-		local top = field.baseY + math.max(0, surface - collision.surfaceInsetStuds - coatSpan(config, field, x, z))
+		local top = field.baseY + math.max(0, surface - collision.surfaceInsetStuds)
 		-- No floor under `top`. A lip forced above the sand here used to stop a low sight line slipping
 		-- under the mound's cut-off edge, but the dome reaches the sand on its own now, so all the lip
 		-- did was stand the outermost ring of boxes on the ground as bare bricks beyond the coat.
