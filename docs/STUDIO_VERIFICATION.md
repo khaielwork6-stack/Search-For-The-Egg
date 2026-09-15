@@ -1421,3 +1421,69 @@ the density, the skirt fix and the material choice; the final tuning pass (depth
 **Also note.** The `infiniteBag` entitlement in the clip was a debug hook left on from earlier
 testing, which is why the bag read "Infinite" and the sell banner never cleared. Studio profiles
 are in-memory, so a fresh session starts without it.
+
+## Pile foot: measuring instead of guessing (15 Sep 2026)
+
+Studio's newer assistant sandbox runs external command threads without the capability to require game
+modules or invoke the debug bindables, and play-mode `screen_capture` returns blank on this machine,
+so the pile could not be inspected from outside at all. `src/client/AutoProbe.client.luau` is a
+Studio-only LocalScript that closes that gap: it runs with normal game capabilities and exposes a text
+channel that needs none.
+
+```
+workspace:SetAttribute("SFE_ProbeCommand", "round")                 -- start a round and probe
+workspace:SetAttribute("SFE_ProbeCommand", "stand x y z lx ly lz")  -- stand, look, probe
+workspace:SetAttribute("SFE_ProbeCommand", "dig 60 x y z lx ly lz") -- auto-play, then probe
+workspace:SetAttribute("SFE_ProbeCommand", "hit 14 x y z lx ly lz") -- collect, report reject codes
+workspace.SFE_ProbeOut.Value                                        -- read the report
+```
+
+The probe casts a 40x16 ray grid over the lower three quarters of the view and prints an ASCII map:
+`#` a feather record, `+` filler, `o` bare mound body, `X` see-through, `.` ground or scenery, blank
+sky. Two details matter. Invisible parts (the nest aim plane) stop a ray but not the eye, so the probe
+re-casts past anything at or near full transparency. And a ray that lands on the sand in front of the
+mound is not a hole, so each non-pile ray is marched against the analytic dome and only counted as
+see-through if it actually crossed the mound's volume. The collision body is excluded from spatial
+queries, so the probe flips `CanQuery` on for its own duration and restores it.
+
+### What it found
+
+The gap at the foot of the pile had three causes stacked on each other, and only the third was the
+real one.
+
+1. The body under the coat was a three stud slab tilted to the surface normal. On the steep rim
+   neighbouring slabs rotate apart, the overlap opens and their lower edges hang above the sand.
+2. With a fixed seven records per column the coat is about 0.9 studs deep, while the dome drops close
+   to a stud per cell on the rim, so each ring's coat ended above the next ring's coat.
+3. The dome profile reached zero at 1.15x the grid radius while the grid stopped at 1.0x. The mound
+   was a truncated dome ending in a vertical cliff around its whole foot. Measured on the live round:
+   at the front centre line the outermost body box topped out at 53.67 with the sand at 52.10, and the
+   lowest coat feather sat at 54.02.
+
+### Fixes and measurements
+
+| Change | Evidence |
+| --- | --- |
+| Body is one solid axis-aligned column per cell, buried `bodyBuryStuds` below the floor | no sight line can pass under it at any angle |
+| `PileSurface.coatSlots` deepens the coat where the dome drops fastest | 22,104 coat parts against a 26,000 budget |
+| `RIM_STRETCH` 1.0 on a 54x54 grid at 0.54 studs | footprint 14.6 studs, 59,864 records against 59,936, so pacing holds |
+| A column outside the dome holds no records | the auto-play harness had logged forty rejected hits at one such cell |
+| Egg nodes filtered to columns inside the dome, lattice oversampled 4/pi | a corner node had no cover records, so the Egg revealed on the first collection |
+
+Probe results after the fixes, at standing eye height around the foot of the mound:
+
+| Camera | feathers | bare body | see-through |
+| --- | --- | --- | --- |
+| front, 11 studs out | 97% | 3% | 0% |
+| front, 19 studs out | 96% | 4% | 0% |
+| back | 98% | 2% | 0% |
+| east | 99% | 1% | 0% |
+| west | 100% | 0% | 0% |
+| diagonal at the foot | 99% | 1% | 0% |
+| nose to the foot, grazing | 96% | 4% | 0% |
+
+Collection at the front face: 14 sent, 14 accepted, 0 rejected.
+
+The auto-play harness still stalls on a cell it has walked past and can no longer see; it retries the
+same nearest cell instead of skipping it. That is a harness limitation, not a game one, and the direct
+`hit` measurement above is the check to trust.
