@@ -649,6 +649,28 @@ if RunService:IsStudio() then
 				instances = pile:instanceCount(),
 			}
 		end,
+		-- What the pile's interior filling is actually doing, which is invisible from outside: the two
+		-- counts the config drives, and how many wall and floor strands exist right now.
+		pileInterior = function()
+			local visual = config.pile.visual
+			local walls, floors, columns = 0, 0, 0
+			for _, column in pairs((pile :: any)._columns or {}) do
+				columns += 1
+				walls += #column.walls
+				floors += #column.fluff
+			end
+			return {
+				wallStrandsPerLevel = visual.wallStrandsPerLevel,
+				floorStrandsPerLevel = visual.floorStrandsPerLevel,
+				wallLevelSpacingStuds = visual.wallLevelSpacingStuds,
+				maxVisibleSlotsPerCell = visual.maxVisibleSlotsPerCell,
+				columns = columns,
+				wallStrands = walls,
+				floorStrands = floors,
+				feathers = pile:featherCount(),
+				fluff = pile:fluffCount(),
+			}
+		end,
 		crateReport = function()
 			local crate = crateRun:crateModel()
 			return {
