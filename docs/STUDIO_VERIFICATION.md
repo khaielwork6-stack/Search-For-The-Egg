@@ -1631,3 +1631,53 @@ overlay and the actor clone.
 placeholders in `audio.roles`: no ids were supplied, so nothing was guessed. `intro.type` uses a
 bundled Roblox click so the subtitle reveal is not silent. Filling those five ids in needs no code
 change.
+
+## UI polish pass, first slice (15 Sep 2026)
+
+Safety tag `pre-ui-polish-pass` marks the state before this pass.
+
+### Trailer bars and fades
+
+Root cause: every overlay tween ran through `Motion.clampSeconds`, which caps at the 0.45 s UI
+snappiness budget. A 0.9 s cinematic fade was therefore played in 0.45 s, which is what read as a cut.
+The intro's fades and bars now honour reduced motion but are not held to that cap, the bars ride in on
+an eased curve as the picture arrives rather than being at full height on the first frame, and they
+are taken away instantly behind the black at the end rather than retracting over a lifting fade.
+
+Measured over the opening, sampling every 0.14 s:
+
+```
+fade  0.000 → 0.277 → 0.539 → 0.714 → 0.860 → 0.957 → 0.998 → 1.000
+bars  0.0000 → 0.0219 → 0.0801 → 0.1032 → 0.1092 → 0.1100
+```
+
+### UI audio
+
+| Check | Result |
+| --- | --- |
+| `ui.tap` | one sound, `rbxassetid://15675059323` |
+| `ui.close` | same id, playing |
+| `ui.open` | nothing at all |
+
+Every click-shaped role shares one `uiClick` throttle group, so a press that trips two callers still
+makes one sound. The page flip keeps its own role and group.
+
+### 2x Gems lobby offer
+
+The owner's `ui/Search_For_The_Egg_2x_Gems_99R.png` was uploaded and is used as the whole button:
+`rbxassetid://115630060865362`. Measured live: present at 168x168 with that image, visible in the
+lobby, glint and glow present, **zero light instances**, and the idle float moving (y 221.0 → 219.0
+over 1.1 s). Clicking goes through the existing `PurchasePromptRequest`, which checks pass ownership
+server-side before prompting; an owner is additionally refused client-side and the button reads OWNED.
+
+### Marketplace configuration found wanting
+
+| Item | Status |
+| --- | --- |
+| `gamePasses.doubleGems` | id 1979703354 present, but `monetization.passes.doubleGems.robux` is **79**, while the artwork says 99 |
+| `developerProducts.gemBundle1500` | **no id**; the 1,500 Gems / 199 R$ button cannot prompt |
+| `placeIds.lobby/chapter1/chapter2` | all nil; parties stay on the local teleport adapter |
+| `social.groupId` | nil; the group reward is unavailable |
+
+Roblox pricing cannot be set from code. The 79 vs 99 difference has to be reconciled on the Creator
+Dashboard, which is not reachable from here.
