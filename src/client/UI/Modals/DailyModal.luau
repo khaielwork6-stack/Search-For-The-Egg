@@ -377,19 +377,30 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 
 	table.insert(cleanups, claim.button.Activated:Connect(doClaim))
 	if api.registerDebug then
-		api.registerDebug("claim", doClaim)
-		api.registerDebug("report", function()
-			local daily = evaluation()
-			return {
-				status = daily and daily.status or "none",
-				dayIndex = daily and daily.dayIndex or 0,
-				claimEnabled = claim.button.Active,
-				claimText = claim.button.Text,
-				headline = status.Text,
-				timer = timer.Text,
-				days = #cells,
-			}
-		end)
+		api.registerDebug({
+			claim = doClaim,
+			report = function()
+				local daily = evaluation()
+				local states = {}
+				for _, cell in ipairs(cells) do
+					table.insert(states, cell.state.Text)
+				end
+				return {
+					status = daily and daily.status or "none",
+					dayIndex = daily and daily.dayIndex or 0,
+					claimEnabled = claim.button.Active,
+					claimText = (function()
+						local label = claim.button:FindFirstChild("Label")
+						return if label and label:IsA("TextLabel") then label.Text else claim.button.Text
+					end)(),
+					headline = status.Text,
+					timer = timer.Text,
+					days = #cells,
+					cellStates = states,
+					finaleGems = cells[finalDay] and cells[finalDay].amount.Text or "",
+				}
+			end,
+		})
 	end
 
 	render()
