@@ -19,7 +19,7 @@ local Real = {}
 Real.__index = Real
 
 function OrderedStoreAdapter.real(storeName: string): Adapter
-	local self = setmetatable({ kind = "real", _storeName = storeName, _stores = {} }, Real)
+	local self = setmetatable({ kind = "real", _storeName = storeName, _stores = {}, _ascending = {} }, Real)
 	return (self :: any) :: Adapter
 end
 
@@ -34,15 +34,57 @@ local function store(self: any, board: string): any
 	return ordered
 end
 
+-- Data store calls fail for reasons that pass: a throttle, a brief outage, a request-budget dip. One
+-- pcall and a shrug lost the write silently. These retry a small number of times with a widening
+-- pause, which is the shape Roblox's own guidance asks for, and give up rather than blocking a tick.
+local MAX_ATTEMPTS = 3
+local BASE_BACKOFF_SECONDS = 0.6
+
+local function withRetry<T>(work: () -> T): (boolean, T?)
+	local lastError: any = nil
+	for attempt = 1, MAX_ATTEMPTS do
+		local ok, result = pcall(work)
+		if ok then
+			return true, result
+		end
+		lastError = result
+		if attempt < MAX_ATTEMPTS then
+			-- 0.6 s, then 1.2 s: long enough to clear a throttle, short enough that the caller's own
+			-- tick is never held up for a noticeable time.
+			task.wait(BASE_BACKOFF_SECONDS * attempt)
+		end
+	end
+	warn("[SFE][Leaderboard] data store call failed after " .. MAX_ATTEMPTS .. " attempts: " .. tostring(lastError))
+	return false, nil
+end
+
 function Real.setAsync(self, board: string, key: string, value: number): boolean
-	local ok = pcall(function()
-		store(self, board):SetAsync(key, math.floor(value))
+	-- UpdateAsync rather than SetAsync: two servers finishing a round at the same moment would
+	-- otherwise race, and the loser's score could overwrite a better one. The transform keeps
+	-- whichever value is better for this board's direction.
+	local ascending = self._ascending[board] == true
+	local ok = withRetry(function()
+		store(self, board):UpdateAsync(key, function(previous)
+			local incoming = math.floor(value)
+			if type(previous) ~= "number" then
+				return incoming
+			end
+			if ascending then
+				return math.min(previous, incoming)
+			end
+			return math.max(previous, incoming)
+		end)
 	end)
 	return ok
 end
 
+-- The caller tells the adapter which way a board sorts, so the merge above can keep the better value.
+function Real.setDirection(self, board: string, ascending: boolean)
+	self._ascending[board] = ascending
+end
+
 function Real.topAsync(self, board: string, ascending: boolean, count: number): (boolean, { Entry }?)
-	local ok, entries = pcall(function()
+	local ok, entries = withRetry(function()
 		local pages = store(self, board):GetSortedAsync(ascending, math.clamp(count, 1, 100))
 		local page = pages:GetCurrentPage()
 		local out = {}

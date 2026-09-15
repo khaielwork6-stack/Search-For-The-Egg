@@ -7,6 +7,7 @@
 -- (final art pass); the composition itself is the Phase 4 deliverable and no primary space is dead.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 local ChapterLayout = require(ReplicatedStorage.Shared.Domain.ChapterLayout)
 
 local WorldShellService = {}
@@ -870,7 +871,134 @@ function WorldShellService.setPadSign(workspaceService: Workspace, index: number
 	end
 end
 
--- Fills the map's three leaderboard boards from a LeaderboardService snapshot (map mode only).
+-- Fills the owner's three global boards from a LeaderboardService snapshot.
+--
+-- The boards are top-level Workspace models whose rows were authored as a stack of frames with
+-- duplicated names (`Top1`, `Top2`, `Empty`, `Top3`, then six more `Top4`s). Names are therefore
+-- useless for ordering, so rows are sorted by their Y position inside the scrolling frame and filled
+-- top to bottom. Each row carries `PlayerIcon`, `Place`, `PlayerName` and `Amount`, which is exactly
+-- the shape the reference boards use.
+
+local MEDALS = {
+	Color3.fromRGB(255, 205, 66), -- gold
+	Color3.fromRGB(214, 218, 226), -- silver
+	Color3.fromRGB(205, 140, 88), -- bronze
+}
+local PLAIN_RANK = Color3.fromRGB(252, 246, 234)
+local thumbnailCache: { [number]: string } = {}
+
+-- A player's headshot, cached for the life of the server. A failure returns an empty image rather
+-- than blocking the board, and is retried on the next refresh.
+local function thumbnailFor(userId: number): string
+	local cached = thumbnailCache[userId]
+	if cached then
+		return cached
+	end
+	local ok, image = pcall(function()
+		return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+	end)
+	if ok and type(image) == "string" and image ~= "" then
+		thumbnailCache[userId] = image
+		return image
+	end
+	return ""
+end
+
+-- Times are stored as integer milliseconds and shown as m:ss.cc; everything else is a plain count
+-- with thousands separators, so a seven-figure feather total stays readable at a distance.
+local function formatValue(value: number, unit: string?): string
+	if unit == "ms" then
+		local total = math.max(0, math.floor(value))
+		local minutes = math.floor(total / 60000)
+		local seconds = math.floor(total % 60000 / 1000)
+		local hundredths = math.floor(total % 1000 / 10)
+		return string.format("%d:%02d.%02d", minutes, seconds, hundredths)
+	end
+	local whole = tostring(math.floor(value))
+	local grouped = whole:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+	return (grouped:gsub("^,", ""))
+end
+
+local function rowsOf(board: Instance): { Instance }
+	local scroller: Instance? = nil
+	for _, descendant in ipairs(board:GetDescendants()) do
+		if descendant:IsA("ScrollingFrame") then
+			scroller = descendant
+			break
+		end
+	end
+	if not scroller then
+		return {}
+	end
+	local rows: { GuiObject } = {}
+	for _, child in ipairs((scroller :: Instance):GetChildren()) do
+		if child:IsA("GuiObject") and child:FindFirstChild("PlayerName") then
+			table.insert(rows, child)
+		end
+	end
+	table.sort(rows, function(a, b)
+		return a.Position.Y.Scale + a.Position.Y.Offset / 1000 < b.Position.Y.Scale + b.Position.Y.Offset / 1000
+	end)
+	return rows
+end
+
+function WorldShellService.applyLeaderboards(workspaceService: Workspace, snapshot: { [string]: any })
+	local byId: { [string]: any } = {}
+	for _, board in ipairs(snapshot.boards or {}) do
+		byId[board.id] = board
+	end
+	for boardName, boardId in pairs(ChapterLayout.lobby.boards) do
+		local model = workspaceService:FindFirstChild(boardName)
+		local data = byId[boardId]
+		if model and data then
+			local rows = rowsOf(model)
+			for index, row in ipairs(rows) do
+				local entry = data.rows[index]
+				local place = row:FindFirstChild("Place")
+				local name = row:FindFirstChild("PlayerName")
+				local amount = row:FindFirstChild("Amount")
+				local icon = row:FindFirstChild("PlayerIcon")
+				if place and place:IsA("TextLabel") then
+					place.Text = "#" .. index
+					-- Top three read as medals; the rest stay plain so the podium is obvious.
+					place.TextColor3 = MEDALS[index] or PLAIN_RANK
+				end
+				if name and name:IsA("TextLabel") then
+					name.Text = if entry then tostring(entry.name) else "—"
+				end
+				if amount and amount:IsA("TextLabel") then
+					amount.Text = if entry then formatValue(tonumber(entry.value) or 0, data.unit) else ""
+				end
+				if icon and icon:IsA("ImageLabel") then
+					icon.Image = if entry then thumbnailFor(tonumber(entry.userId) or 0) else ""
+				end
+				row.Visible = true
+			end
+			-- One GLOBAL / ALL TIME line per board, so nobody reads it as this server's scores.
+			local header = model:FindFirstChild("SFE_BoardScope", true)
+			if not header then
+				for _, descendant in ipairs(model:GetDescendants()) do
+					if descendant:IsA("SurfaceGui") then
+						local plate = Instance.new("TextLabel")
+						plate.Name = "SFE_BoardScope"
+						plate.AnchorPoint = Vector2.new(0.5, 1)
+						plate.Position = UDim2.fromScale(0.5, 1)
+						plate.Size = UDim2.fromScale(1, 0.07)
+						plate.BackgroundTransparency = 1
+						plate.Font = Enum.Font.FredokaOne
+						plate.TextScaled = true
+						plate.TextColor3 = Color3.fromRGB(255, 226, 140)
+						plate.Text = "GLOBAL  ·  ALL TIME"
+						plate.ZIndex = 10
+						plate.Parent = descendant
+						break
+					end
+				end
+			end
+		end
+	end
+end
+
 function WorldShellService.applyLeaderboards(workspaceService: Workspace, snapshot: { [string]: any })
 	local mapModel = workspaceService:FindFirstChild(ChapterLayout.LOBBY_MAP_NAME)
 	local boards = mapModel and mapModel:FindFirstChild("Leaderboards")

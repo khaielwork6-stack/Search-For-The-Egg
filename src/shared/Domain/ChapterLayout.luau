@@ -104,11 +104,15 @@ ChapterLayout.lobby = table.freeze({
 			signPost = Vector3.new(42.5, 4.6, -130.6),
 		}),
 	}),
-	-- Leaderboard boards behind spawn: map StatName -> our board id.
+	-- The owner's three global boards. These are top-level Workspace models, not children of the
+	-- lobby map, and their names are as authored (including the capital I in "Total WIns"), so the
+	-- lookup matches the place rather than a tidied-up version of it. The previous mapping pointed at
+	-- `SearchForTheEgg_Lobby.Leaderboards.Board1..3`, which does not exist, so nothing was ever
+	-- written to a board.
 	boards = table.freeze({
-		Board1 = "eggsFound",
-		Board2 = "totalWins",
-		Board3 = "feathersCollected",
+		["Time Record"] = "bestTimeChapter1Normal",
+		["Total WIns"] = "totalWins",
+		["Feathers Collected"] = "feathersCollected",
 	}),
 	-- Vendors the owner placed in the map: each one hosts its station's prompt and speaks for it.
 	npcs = table.freeze({

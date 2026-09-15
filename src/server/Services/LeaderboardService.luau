@@ -54,6 +54,13 @@ function LeaderboardService.new(options: {
 		assert(board, "LeaderboardService: unknown board id " .. tostring(id))
 		table.insert(boards, board)
 	end
+	-- Tell the store which way each board sorts, so a concurrent write from another server merges to
+	-- the better score instead of whichever call happened to land last.
+	if type(options.store) == "table" and type((options.store :: any).setDirection) == "function" then
+		for _, board in ipairs(boards) do
+			(options.store :: any):setDirection(board.id, board.ascending)
+		end
+	end
 	return setmetatable({
 		_config = options.config,
 		_clock = options.clock,
