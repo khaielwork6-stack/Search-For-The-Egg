@@ -82,7 +82,7 @@ local MANIFEST: { [string]: string } = {
 	[Tokens.sound.uiConfetti] = BUILTIN.flash,
 	[Tokens.sound.purchase] = OWNER.purchase,
 	[Tokens.sound.rewardTick] = BUILTIN.click,
-	[Tokens.sound.collectTug] = "",
+	[Tokens.sound.collectTug] = BUILTIN.click, -- soft per-feather tick under the pickup sound
 	[Tokens.sound.collectRelease] = OWNER.pickup,
 	[Tokens.sound.collectRainbow] = BUILTIN.ping,
 	[Tokens.sound.bagFull] = OWNER.denied,
@@ -139,6 +139,7 @@ local ROLE_TUNING: { [string]: { pitch: number?, variance: number?, volume: numb
 	[Tokens.sound.rewardLand] = { pitch = 1.0, variance = 0.02, volume = 0.65, minGap = 0.3 },
 	[Tokens.sound.purchase] = { pitch = 1.0, variance = 0.02, volume = 0.65, minGap = 0.3 },
 	[Tokens.sound.collectRelease] = { pitch = 1.0, variance = 0.08, volume = 0.55, minGap = 0.04 },
+	[Tokens.sound.collectTug] = { pitch = 1.6, variance = 0.2, volume = 0.18, minGap = 0.025 },
 	[Tokens.sound.sellTick] = { pitch = 1.5, variance = 0.12, volume = 0.3, minGap = 0.04 },
 	[Tokens.sound.sellArc] = { pitch = 1.1, variance = 0.05, volume = 0.45, minGap = 0.3 },
 	[Tokens.sound.sellBurst] = { pitch = 1.0, variance = 0.02, volume = 0.7, minGap = 0.5 },

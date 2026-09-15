@@ -419,6 +419,27 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 	if #cells == 0 then
 		return reject(self, Envelope.Codes.NOT_FOUND, "no_feathers")
 	end
+	-- The rake's contact is a narrow fan along the swing: the tines land at the strike and drag
+	-- back toward the player, so cells beside the line or well ahead of it stay untouched.
+	if spec.halfWidthStuds then
+		local flat = Vector3.new(payload.direction.X, 0, payload.direction.Z)
+		if flat.Magnitude > 0.01 then
+			local dir = flat.Unit
+			local fan = {}
+			for _, cell in ipairs(cells) do
+				local cx, cz = PileGrid.cellCenter(grid, cell)
+				local vx, vz = cx - localX, cz - localZ
+				local along = vx * dir.X + vz * dir.Z
+				local lateral = math.abs(vx * dir.Z - vz * dir.X)
+				if lateral <= spec.halfWidthStuds and along <= (spec.aheadStuds or 0.35) and along >= -radiusStuds then
+					table.insert(fan, cell)
+				end
+			end
+			if #fan > 0 then
+				cells = fan
+			end
+		end
+	end
 	-- Atomic removal + award (single-threaded server; no yields between these lines).
 	-- Hand: removes only what fits (nothing wasted). Rake: removes the full sweep; overflow bundles.
 	local amount = spec.amount

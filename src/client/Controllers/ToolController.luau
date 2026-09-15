@@ -33,7 +33,8 @@ export type ToolController = typeof(setmetatable(
 		_enabled: boolean,
 		_equipped: string,
 		_owned: { [string]: boolean },
-		_holdThread: thread?,
+		_holdActive: boolean,
+		_liftedId: number?,
 		_vacRunning: boolean,
 		_chickActive: boolean,
 		_chargeReadyAt: number,
@@ -100,7 +101,8 @@ function ToolController.new(deps: {
 		_enabled = false,
 		_equipped = "hand",
 		_owned = { hand = true },
-		_holdThread = nil,
+		_holdActive = false,
+		_liftedId = nil,
 		_vacRunning = false,
 		_chickActive = false,
 		_chargeReadyAt = 0,
@@ -383,6 +385,7 @@ end
 function ToolController._render(self: ToolController, dt: number)
 	self._swing = math.max(0, self._swing - dt * 4)
 	local now = os.clock()
+	self:_stepHold()
 	-- Watchdog: a reply that never lands (remote dropped, handler error) cannot hold the gate.
 	if self._inFlight and now - (self._inFlightSince or now) > 3 then
 		warn("[SFE][Tool] collect request never returned; releasing the gate")
@@ -524,6 +527,11 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 		local base = target.part.CFrame * CFrame.new(0, -target.part.Size.Y * 0.5, 0)
 		direction = (base.Position - origin).Unit
 	end
+	-- Cosmetic response starts now: the targeted feather loosens before the server answers.
+	if featherId and self._deps.pile.beginLift then
+		self._deps.pile:beginLift(featherId)
+		self._liftedId = featherId
+	end
 	-- Full bag: no request, no pile change, clear feedback (throttled). Capacity mirrors the HUD's
 	-- derivation (server projection first, config level as the fallback); the server re-checks anyway.
 	local player = self._deps.round.player
@@ -568,6 +576,12 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 		warn("[SFE][Tool] collect request failed: " .. tostring(result))
 		result = { ok = false, code = "unavailable", message = "request_failed" }
 	end
+	if self._liftedId and (not result.ok or not result.data or result.data.featherId ~= self._liftedId) then
+		if self._deps.pile.cancelLift then
+			self._deps.pile:cancelLift(self._liftedId)
+		end
+	end
+	self._liftedId = nil
 	if result.ok and result.data then
 		local data = result.data
 		local visual = self._deps.config.pile.visual
@@ -579,17 +593,32 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 			return self._deps.hud:carriedStackWorldPoint() or hitPosition
 		end
 		-- Visual feedback can never block the next request: the award is already authoritative.
+		local feel = (self._deps.config.tools.nestRake or {})
+		local stagger = feel.streamStaggerSeconds or 0.028
+		local streamed = 0
 		local okVisual, visualError = pcall(function()
 			if toolId == "hand" and data.featherId then
 				self._deps.pile:collectFeather(data.featherId, hitPosition, destination)
 			else
+				-- The accepted records leave one after another along the sweep: a readable stream,
+				-- not one deletion. Each one ticks and adds to the bag as it goes.
 				for _, removal in ipairs(data.cells or {}) do
 					for _, slot in ipairs(removal.slots or {}) do
-						self._deps.pile:collectFeather(FeatherLayout.featherId(removal.index, slot), hitPosition, destination)
+						local id = FeatherLayout.featherId(removal.index, slot)
+						local delay = streamed * stagger
+						streamed += 1
+						if delay <= 0 then
+							self._deps.pile:collectFeather(id, hitPosition, destination)
+						else
+							task.delay(delay, function()
+								self._deps.pile:collectFeather(id, hitPosition, destination)
+							end)
+						end
 					end
 				end
 			end
 		end)
+		data.streamSeconds = if streamed > 1 then streamed * stagger else 0
 		if not okVisual then
 			warn("[SFE][Tool] pick feedback failed: " .. tostring(visualError))
 		end
@@ -647,38 +676,41 @@ function ToolController._holdEnabled(self: ToolController): boolean
 	return false
 end
 
+-- Held input is a state, not a loop: the render step fires the next pick the moment the cooldown
+-- gate opens and the last reply is in, targeting from the live reticle each time.
 function ToolController._startHold(self: ToolController)
-	self:_stopHold()
-	self._holdThread = task.spawn(function()
-		while self._enabled and self._deps.input:isHeld("Primary") do
-			local remaining = math.max(0, self._nextAllowedAt - os.clock())
-			local cooldown = math.max(0.05, self._lastCooldownSeconds or 0.3)
-			if self._deps.hud and self._deps.hud.setHold then
-				self._deps.hud:setHold(true, 1 - math.clamp(remaining / cooldown, 0, 1))
-			end
-			local wait = math.max(0.03, math.min(0.05, remaining))
-			task.wait(wait)
-			if not self._deps.input:isHeld("Primary") then
-				break
-			end
-			if self:tryCollect() then
-				self.stats.holdRepeats += 1
-			else
-				task.wait(0.15)
-			end
-		end
-		self._holdThread = nil
-	end)
+	self._holdActive = true
 end
 
 function ToolController._stopHold(self: ToolController)
-	if self._holdThread then
-		task.cancel(self._holdThread)
-		self._holdThread = nil
-	end
+	self._holdActive = false
 	if self._deps.hud and self._deps.hud.setHold then
 		self._deps.hud:setHold(false)
 	end
+end
+
+function ToolController._stepHold(self: ToolController)
+	if not self._holdActive then
+		return
+	end
+	if not self._enabled or not self._deps.input:isHeld("Primary") or (self._equipped ~= "hand" and self._equipped ~= "nestRake") then
+		self:_stopHold()
+		return
+	end
+	local now = os.clock()
+	local remaining = math.max(0, self._nextAllowedAt - now)
+	local cooldown = math.max(0.05, self._lastCooldownSeconds or 0.3)
+	if self._deps.hud and self._deps.hud.setHold then
+		self._deps.hud:setHold(true, 1 - math.clamp(remaining / cooldown, 0, 1))
+	end
+	if self._inFlight or remaining > 0 or not self:_holdEnabled() then
+		return
+	end
+	task.spawn(function()
+		if self:tryCollect() then
+			self.stats.holdRepeats += 1
+		end
+	end)
 end
 
 function ToolController.onPrimaryBegin(self: ToolController)

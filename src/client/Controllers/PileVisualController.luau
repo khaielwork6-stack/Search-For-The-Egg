@@ -45,6 +45,7 @@ type Column = {
 	wallDepth: number, -- studs of interior wall already materialised
 	floorDepth: number, -- studs of interior floor layers already materialised
 	underlayerDone: boolean,
+	built: boolean?,
 }
 
 export type Target = { featherId: number, part: BasePart, position: Vector3, cell: number, slot: number }
@@ -79,6 +80,7 @@ export type PileVisualController = typeof(setmetatable(
 		_bound: boolean,
 		_lastPile: { [string]: any }?,
 		_lastChapter: string?,
+		_lifted: { [number]: { part: BasePart, seat: CFrame } },
 		_trove: Trove.Trove,
 		target: Target?,
 		stats: {
@@ -136,7 +138,18 @@ function PileVisualController.new(
 		_rainbowSeed = 0,
 		_rainbowLoop = nil,
 		target = nil,
-		stats = { dents = 0, streamed = 0, feathersPlaced = 0, fluffPlaced = 0, reseats = 0, domeKind = "terrain", coatKind = "none" },
+		stats = {
+			dents = 0,
+			streamed = 0,
+			feathersPlaced = 0,
+			fluffPlaced = 0,
+			reseats = 0,
+			reveals = 0,
+			lifts = 0,
+			domeKind = "terrain",
+			coatKind = "none",
+		},
+		_lifted = {},
 	}, PileVisualController)
 	self._trove:add(deps.round.snapshot:Connect(function(payload)
 		if payload.pile then
@@ -362,10 +375,19 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 				placement.length * scale,
 				placement.width * scale
 			)
+			if column.built and not self._culled then
+				-- Newly exposed record: it was always there beneath; fade it in rather than pop.
+				local seconds = Motion.clampSeconds(visual.revealFadeSeconds or 0.32, self._accessibility:motionSettings())
+				part.Transparency = 1
+				TweenService:Create(part, TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = 0 })
+					:Play()
+				self.stats.reveals += 1
+			end
 			part.Parent = folder
 			self.stats.reseats += 1
 		end
 	end
+	column.built = true
 	local fluffWanted = if self._culled
 			or self:_rimScale(minCorner.X + (column.x + 0.5) * field.cellSize, minCorner.Z + (column.z + 0.5) * field.cellSize) <= 0
 		then 0
@@ -692,6 +714,7 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 			wallDepth = 0,
 			floorDepth = 0,
 			underlayerDone = false,
+			built = false,
 		}
 	end
 	self:_buildRimBed(folder)
@@ -1075,6 +1098,39 @@ end
 -- Server-confirmed pick of one record: that exact part lifts out (slightly enlarged), then arcs to
 -- the held bundle and vanishes - about a quarter of a second so rapid picks stay crisp. The column
 -- re-applies at once so the next record shows where this one was; nothing else moves.
+-- Client-first response: the targeted record loosens (lifts a hair along its normal, swells) the
+-- instant the pick is sent; the server's answer either finishes the pick or eases it back.
+function PileVisualController.beginLift(self: PileVisualController, featherId: number)
+	local cellIndex, slot = FeatherLayout.decode(featherId)
+	local column = cellIndex and self._columns[cellIndex] or nil
+	local part = column and slot and column.feathers[slot] or nil
+	if not part or self._lifted[featherId] then
+		return
+	end
+	local visual = self._config.pile.visual
+	local seat = part.CFrame
+	self._lifted[featherId] = { part = part, seat = seat }
+	self.stats.lifts += 1
+	local lift = Motion.amplitude(visual.liftPreviewStuds or 0.22, self._accessibility:motionSettings())
+	TweenService:Create(part, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		CFrame = seat * CFrame.new(0, 0, -lift) * CFrame.Angles(0, 0, 0.12),
+	}):Play()
+end
+
+function PileVisualController.cancelLift(self: PileVisualController, featherId: number)
+	local entry = self._lifted[featherId]
+	if not entry then
+		return
+	end
+	self._lifted[featherId] = nil
+	local cellIndex, slot = FeatherLayout.decode(featherId)
+	local column = cellIndex and self._columns[cellIndex] or nil
+	if column and slot and column.feathers[slot] == entry.part then
+		TweenService:Create(entry.part, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = entry.seat })
+			:Play()
+	end
+end
+
 function PileVisualController.collectFeather(
 	self: PileVisualController,
 	featherId: number,
@@ -1093,6 +1149,7 @@ function PileVisualController.collectFeather(
 	local column = cellIndex and self._columns[cellIndex] or nil
 	local part = column and slot and column.feathers[slot] or nil
 	local from = hitPosition
+	self._lifted[featherId] = nil
 	if part then
 		from = part.Position
 		column.feathers[slot] = nil -- detached: no longer part of the coat, never re-targetable
@@ -1162,12 +1219,12 @@ function PileVisualController.collectFeather(
 		flying.Size = baseSize
 		releasePart(self, flying)
 	end)
+	self._audio:play(Tokens.sound.collectTug, { pitchVariance = 0.18 })
 	if opts.quiet then
 		return
 	end
 	self:_chevrons(from)
 	self._vfx:burst("featherPuff", from, 0.15)
-	self._audio:play(Tokens.sound.collectTug, { pitchVariance = 0.1 })
 end
 
 -- Reveal spiral: loose feathers lift in a spiral around the Egg.

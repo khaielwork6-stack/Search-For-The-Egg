@@ -149,34 +149,34 @@
         3.4
       ],
       "tiltRangeDegrees": [
-        3,
-        14
+        2,
+        9
       ],
       "palette": [
         [
-          252,
           246,
-          232
-        ],
-        [
-          246,
-          236,
-          214
-        ],
-        [
           240,
-          226,
-          196
+          226
         ],
         [
-          232,
-          214,
-          176
+          238,
+          229,
+          208
         ],
         [
-          222,
-          198,
-          150
+          229,
+          217,
+          190
+        ],
+        [
+          219,
+          204,
+          170
+        ],
+        [
+          206,
+          188,
+          148
         ]
       ],
       "cullDistanceDesktopStuds": 220,
@@ -186,8 +186,8 @@
       "streakCount": 3,
       "chevronCount": 3,
       "chevronSeconds": 0.38,
-      "cameraImpulseHand": 0.08,
-      "cameraImpulseRake": 0.14,
+      "cameraImpulseHand": 0.04,
+      "cameraImpulseRake": 0.06,
       "rustleVolume": 0.55,
       "pickupVolume": 0.7,
       "bagFullToastCooldownSeconds": 1.5,
@@ -199,7 +199,7 @@
         1.9
       ],
       "featherSpreadFraction": 0.8,
-      "rollRangeDegrees": 110,
+      "rollRangeDegrees": 40,
       "layerStepStuds": 0.35,
       "surfaceLiftStuds": 0.12,
       "fluffLengthRange": [
@@ -211,8 +211,8 @@
         1.6
       ],
       "fluffTiltRangeDegrees": [
-        4,
-        34
+        3,
+        16
       ],
       "fluffPerCellDesktop": 0,
       "fluffPerCellMobile": 0,
@@ -274,7 +274,10 @@
       "frontSkirtStrandsMobile": 150,
       "frontSkirtArcDegrees": 140,
       "frontSkirtDepthStuds": 6.0,
-      "frontSkirtEvidence": "OWNER 14 Sep 2026: fixed overlapping strands cover the small gap at the mound's front rim (spawn side); not records, never picked"
+      "frontSkirtEvidence": "OWNER 14 Sep 2026: fixed overlapping strands cover the small gap at the mound's front rim (spawn side); not records, never picked",
+      "revealFadeSeconds": 0.32,
+      "liftPreviewStuds": 0.22,
+      "layEvidence": "OWNER 14 Sep 2026: surface feathers lie tangent with overlapping tips (tilt 2-9 deg, roll +-20 deg), ivory-to-grey palette for depth, newly exposed records fade in beneath the removed one instead of popping"
     },
     "assumption": "ASSUMED",
     "recordSpacingStuds": 0.15,
@@ -474,7 +477,10 @@
       "sweepRadiusStuds": 1.5,
       "reachStuds": 3.2,
       "focusWeight": 0.6,
-      "shapeEvidence": "ASSUMED 14 Sep 2026: sweep takes from cells within sweepRadiusStuds of the strike, centre-heavy (focusWeight of the yield from the struck cell), and re-centres on the nearest feathers within reachStuds when the strike lands on bare ground"
+      "shapeEvidence": "ASSUMED 14 Sep 2026: the sweep's contact area is a narrow fan - cells within sweepHalfWidthStuds either side of the swing line, from sweepAheadStuds past the strike back toward the player for sweepRadiusStuds - centre-heavy (focusWeight from the struck cell); a strike on bare ground re-centres within reachStuds. Accepted records animate one after another every streamStaggerSeconds.",
+      "sweepHalfWidthStuds": 0.9,
+      "sweepAheadStuds": 0.35,
+      "streamStaggerSeconds": 0.028
     },
     "confettiCharge": {
       "displayName": "Confetti Charge",

@@ -82,6 +82,8 @@ function ToolSpecs.nestRake(cfg: { [string]: any }, levels: Levels, modifiers: a
 		radiusStuds = tool.sweepRadiusStuds or cellSize,
 		reachStuds = tool.reachStuds or cellSize * 3,
 		focusWeight = tool.focusWeight or 0.6,
+		halfWidthStuds = tool.sweepHalfWidthStuds,
+		aheadStuds = tool.sweepAheadStuds,
 		cooldownSeconds = if hold.enabled and hold.intervalSeconds then hold.intervalSeconds else cooldown.seconds,
 		holdEnabled = hold.enabled == true,
 	}

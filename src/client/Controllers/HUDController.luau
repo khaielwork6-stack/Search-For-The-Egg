@@ -826,10 +826,28 @@ end
 -- Called by ToolController on each accepted award for the bag squash.
 function HUDController.onCollected(self: HUDController, data: { [string]: any })
 	self._infiniteBag = data.infinite == true
-	self.round:setBag(data.carried, data.capacity, data.infinite == true, true)
+	local awarded = (data.awarded or 0) + (data.rainbow or 0)
+	local seconds = data.streamSeconds or 0
+	if seconds > 0.05 and awarded > 1 and data.carried then
+		-- A streamed sweep: the counter climbs feather by feather with the animation.
+		local from = math.max(0, data.carried - awarded)
+		local started = os.clock()
+		local connection
+		connection = RunService.RenderStepped:Connect(function()
+			local t = math.clamp((os.clock() - started) / seconds, 0, 1)
+			local shown = math.floor(from + (data.carried - from) * t + 0.5)
+			self.round:setBag(shown, data.capacity, data.infinite == true, false)
+			if t >= 1 then
+				connection:Disconnect()
+				self.round:setBag(data.carried, data.capacity, data.infinite == true, true)
+			end
+		end)
+		self._trove:add(connection)
+	else
+		self.round:setBag(data.carried, data.capacity, data.infinite == true, true)
+	end
 	self.carriedStack:setBag(data.carried, data.capacity, data.infinite == true, true)
 	self.carriedStack:pulse()
-	local awarded = (data.awarded or 0) + (data.rainbow or 0)
 	if awarded > 0 and data.hitX and data.hitZ then
 		self:floatPickup(Vector3.new(data.hitX, data.hitY or 0, data.hitZ), awarded, (data.rainbow or 0) > 0)
 	end

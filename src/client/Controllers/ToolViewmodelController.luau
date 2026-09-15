@@ -135,7 +135,7 @@ function ToolViewmodelController.new(deps: {
 		end
 	end))
 	self._trove:add(tools.rejected:Connect(function()
-		if self._action.kind == "thrust" then
+		if self._action.kind == "thrust" or self._action.kind == "anticipate" then
 			self:_beginReturn()
 		end
 	end))
@@ -304,6 +304,12 @@ function ToolViewmodelController._actionOffset(self: ToolViewmodelController, no
 		end
 		local e = easeOutBack(t)
 		return CFrame.new(0, -0.9 * (1 - e) * motion, 0.2 * (1 - e)) * CFrame.Angles(math.rad(-30 * (1 - e)), 0, 0)
+	elseif action.kind == "anticipate" then
+		local e = easeOutQuad(t)
+		if t >= 1 then
+			self._action = { kind = "thrust", startedAt = now, from = nil, seconds = feel.thrustSeconds or 0.11 }
+		end
+		return CFrame.new(0, 0.12 * e, 0.22 * e) * CFrame.Angles(math.rad(14 * e), 0, math.rad(4 * e))
 	elseif action.kind == "thrust" then
 		-- Forward and down toward the reticle; holds at full reach until the server answers.
 		local e = easeOutQuad(t)
@@ -399,7 +405,8 @@ function ToolViewmodelController._thrust(self: ToolViewmodelController)
 		return
 	end
 	local feel = self:_feelFor("nestRake")
-	self._action = { kind = "thrust", startedAt = os.clock(), from = nil, seconds = feel.thrustSeconds or 0.11 }
+	-- Anticipation first: a short draw back and up, then the forward thrust into the strike.
+	self._action = { kind = "anticipate", startedAt = os.clock(), from = nil, seconds = feel.anticipateSeconds or 0.07 }
 	self.stats.thrusts += 1
 	self._deps.audio:play(Tokens.sound.rakeSwing, { pitchVariance = 0.08 })
 end
@@ -449,10 +456,15 @@ function ToolViewmodelController._impact(self: ToolViewmodelController, hit: Vec
 	end)
 	-- The return starts when the thrust reaches full extension, never before.
 	local action = self._action
-	local remaining = if action.kind == "thrust" then math.max(0, action.startedAt + action.seconds - os.clock()) else 0
+	local remaining = 0
+	if action.kind == "anticipate" then
+		remaining = math.max(0, action.startedAt + action.seconds - os.clock()) + (feel.thrustSeconds or 0.11)
+	elseif action.kind == "thrust" then
+		remaining = math.max(0, action.startedAt + action.seconds - os.clock())
+	end
 	if remaining > 0 then
 		task.delay(remaining, function()
-			if self._action.kind == "thrust" then
+			if self._action.kind == "thrust" or self._action.kind == "anticipate" then
 				self:_beginReturn()
 			end
 		end)
