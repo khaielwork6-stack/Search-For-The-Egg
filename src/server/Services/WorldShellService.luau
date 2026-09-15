@@ -997,8 +997,9 @@ function WorldShellService.applyLeaderboards(workspaceService: Workspace, snapsh
 				local icon = row:FindFirstChild("PlayerIcon")
 				if place and place:IsA("TextLabel") then
 					place.Text = "#" .. index
-					-- Top three read as medals; the rest stay plain so the podium is obvious.
-					place.TextColor3 = MEDALS[index] or PLAIN_RANK
+					-- Top three read as medals; the rest stay plain so the podium is obvious. An empty
+					-- slot never gets one: a bronze #3 above a dash claims a third place nobody holds.
+					place.TextColor3 = if entry then MEDALS[index] or PLAIN_RANK else PLAIN_RANK
 				end
 				if name and name:IsA("TextLabel") then
 					name.Text = if entry then tostring(entry.name) else "—"
