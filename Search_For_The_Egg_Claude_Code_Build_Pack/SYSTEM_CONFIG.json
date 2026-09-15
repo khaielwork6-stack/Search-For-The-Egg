@@ -1726,11 +1726,12 @@
     },
     "roles": {
       "ui.tap": {
-        "id": "rbxassetid://75757588904639",
-        "volume": 0.6,
+        "id": "rbxassetid://15675059323",
+        "volume": 0.55,
         "speed": 1.0,
         "variance": 0.04,
-        "minGap": 0.05
+        "minGap": 0.08,
+        "group": "uiClick"
       },
       "ui.hover": {
         "id": "rbxassetid://136108770017536",
@@ -1740,53 +1741,59 @@
         "minGap": 0.09
       },
       "ui.tab": {
-        "id": "rbxassetid://75757588904639",
-        "volume": 0.5,
-        "speed": 1.08,
+        "id": "rbxassetid://15675059323",
+        "volume": 0.55,
+        "speed": 1.04,
         "variance": 0.03,
-        "minGap": 0.08
+        "minGap": 0.08,
+        "group": "uiClick"
       },
       "ui.switch": {
-        "id": "rbxasset://sounds/snap.mp3",
-        "volume": 0.5,
-        "speed": 1.2,
+        "id": "rbxassetid://15675059323",
+        "volume": 0.55,
+        "speed": 1.12,
         "variance": 0.05,
-        "minGap": 0.08
+        "minGap": 0.08,
+        "group": "uiClick"
       },
       "ui.select": {
-        "id": "rbxassetid://75757588904639",
-        "volume": 0.5,
+        "id": "rbxassetid://15675059323",
+        "volume": 0.55,
         "speed": 1.0,
         "variance": 0.03,
-        "minGap": 0.08
+        "minGap": 0.08,
+        "group": "uiClick"
       },
       "ui.confirm": {
-        "id": "rbxasset://sounds/electronicpingshort.wav",
-        "volume": 0.5,
-        "speed": 1.25,
+        "id": "rbxassetid://15675059323",
+        "volume": 0.55,
+        "speed": 1.08,
         "variance": 0.03,
-        "minGap": 0.12
+        "minGap": 0.08,
+        "group": "uiClick"
       },
       "ui.cancel": {
-        "id": "rbxasset://sounds/button.wav",
-        "volume": 0.45,
-        "speed": 0.85,
+        "id": "rbxassetid://15675059323",
+        "volume": 0.55,
+        "speed": 0.92,
         "variance": 0.03,
-        "minGap": 0.12
+        "minGap": 0.08,
+        "group": "uiClick"
       },
       "ui.open": {
-        "id": "rbxassetid://127877437691780",
+        "id": "",
         "volume": 0.55,
         "speed": 1.0,
         "variance": 0.02,
         "minGap": 0.2
       },
       "ui.close": {
-        "id": "rbxassetid://75757588904639",
-        "volume": 0.5,
-        "speed": 0.92,
+        "id": "rbxassetid://15675059323",
+        "volume": 0.55,
+        "speed": 0.96,
         "variance": 0.02,
-        "minGap": 0.2
+        "minGap": 0.08,
+        "group": "uiClick"
       },
       "ui.toast": {
         "id": "rbxassetid://131661992591924",
@@ -1822,7 +1829,8 @@
         "volume": 0.55,
         "speed": 1.0,
         "variance": 0.03,
-        "minGap": 0.12
+        "minGap": 0.12,
+        "group": "pageFlip"
       },
       "shop.purchase": {
         "id": "rbxassetid://134116566819117",
@@ -2134,6 +2142,7 @@
     },
     "assumption": "ASSUMED",
     "evidence": "OWNER 15 Sep 2026 supplied six ids: nest rake/shovel 81267530921314 at the contact moment, feather vac 91395529514868 as a managed loop while sucking, dynamite 124256466623788 at the explosion, class result 90853027572825 once the spinner lands, in-round music 130867147321580 (lobby silent), and the upgrade book page flip 114448027739800 once per real page change. The spinner's slap (class.spin) is silenced, tool.rakeSwing and tool.vacSuck are silenced so each tool makes exactly one sound, and ui.error shares a denial throttle group with collect.bagFull so one refusal is one sound whatever fires it. Every id, volume, speed, variance, loop flag and cooldown lives here rather than in code.",
-    "introEvidence": "PLACEHOLDER 15 Sep 2026: the owner supplied no ids for the round intro's farm ambience, wind, footsteps, paper rustle or decision sting, so intro.ambience/wind/footstep/paper/sting are silent here rather than guessed. intro.type uses a bundled Roblox click so the subtitle reveal is not silent. Fill these five ids in and the intro picks them up with no code change."
+    "introEvidence": "PLACEHOLDER 15 Sep 2026: the owner supplied no ids for the round intro's farm ambience, wind, footsteps, paper rustle or decision sting, so intro.ambience/wind/footstep/paper/sting are silent here rather than guessed. intro.type uses a bundled Roblox click so the subtitle reveal is not silent. Fill these five ids in and the intro picks them up with no code change.",
+    "clickEvidence": "OWNER 15 Sep 2026: one ordinary UI click sound (15675059323) on every click-shaped role, all sharing the uiClick throttle group so two callers for a single press still make exactly one sound. Opening a UI is silent: ui.open has no id. The page flip keeps its own role and its own group so a page turn is never stacked with a click."
   }
 }

@@ -54,6 +54,27 @@ return function(describe, it, expect)
 		end)
 	end)
 
+	describe("One click, one sound", function()
+		it("gives every ordinary click the same sound, on one shared throttle", function()
+			local click = "rbxassetid://15675059323"
+			for _, role in ipairs({ "ui.tap", "ui.select", "ui.tab", "ui.close", "ui.confirm", "ui.cancel", "ui.switch" }) do
+				expect(roles[role].id).toBe(click)
+				-- Sharing a group is what makes a press that trips two callers still one sound.
+				expect(roles[role].group).toBe("uiClick")
+				expect(roles[role].minGap).toBeGreaterThan(0)
+			end
+		end)
+
+		it("opens a UI in silence", function()
+			expect(roles["ui.open"].id).toBe("")
+		end)
+
+		it("keeps the page turn off the click channel so the two never stack", function()
+			expect(roles["ui.pageFlip"].group).never.toBe("uiClick")
+			expect(roles["ui.pageFlip"].id).never.toBe("rbxassetid://15675059323")
+		end)
+	end)
+
 	describe("One denial, one sound", function()
 		it("throttles the refusal roles together", function()
 			-- Both roles are the same refusal asset played by different callers. Sharing a group means
