@@ -939,7 +939,7 @@ end
 -- to cover the wall it just became - otherwise the packed body shows through the side of the pit as a
 -- flat pale block, which is exactly what a vacuum used to carve out.
 function PileVisualController._coatWindow(self: PileVisualController, column: any, minSlots: number, maxSlots: number): number
-	local pile = self._pile
+	local pile = self._grid :: { [string]: any }
 	local heights = if self._field then PileSurface.fieldHeights(self._field) else nil
 	local dome =
 		PileSurface.coatSlots(self._config, pile.width, pile.depth, pile.cellSize, column.x, column.z, column.base, minSlots, maxSlots)
@@ -997,7 +997,7 @@ function PileVisualController.applyDelta(self: PileVisualController, payload: { 
 	-- before any column is re-seated.
 	self._field = PileSurface.buildField(self._config, grid, self._layout)
 	-- A dug column changes how deep its four neighbours have to draw, so they are re-seated with it.
-	local pile = self._pile
+	local pile = self._grid :: { [string]: any }
 	local minSlots, maxSlots = self:_visibleSlots(), self:_maxSlots()
 	local dirty: { [number]: boolean } = {}
 	for index in pairs(touched) do

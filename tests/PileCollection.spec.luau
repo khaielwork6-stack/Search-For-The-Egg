@@ -359,6 +359,54 @@ return function(describe, it, expect)
 		end)
 	end)
 
+	describe("Coat window", function()
+		it("deepens beside a dug neighbour so a pit wall is feathers, not body", function()
+			-- The wall of a fresh hole is the case the static window misses: the dome says the drop to the
+			-- next cell is a fraction of a stud, while the vacuum has just taken several studs out of it.
+			local PileSurface = require(Shared.Domain.PileSurface)
+			local width, depth, cellSize = cfg.pile.gridWidth, cfg.pile.gridDepth, cfg.pile.cellSizeStuds
+			local x, z = width // 2, depth // 2
+			local base = math.floor(PileSurface.columnRecords(cfg, width, depth, cellSize, x, z))
+			local minSlots = cfg.pile.visual.visibleSlotsPerCell
+			local full = PileSurface.columnFullHeight(cfg, width, depth, cellSize, x, z)
+			-- Every column full: the two windows agree, because then the neighbour drop is the dome drop.
+			local intact = PileSurface.coatSlotsAt(cfg, width, depth, cellSize, function()
+				return full
+			end, x, z, base, minSlots)
+			expect(intact).toBe(PileSurface.coatSlots(cfg, width, depth, cellSize, x, z, base, minSlots))
+			-- Now sink the neighbour to the floor, as a vacuum would.
+			local dug = PileSurface.coatSlotsAt(cfg, width, depth, cellSize, function(cx, cz)
+				if cx == x + 1 and cz == z then
+					return 0
+				end
+				return full
+			end, x, z, base, minSlots)
+			expect(dug).toBeGreaterThan(intact)
+			-- It spans the drop, or it is at the cap - the cap is the part budget, and past it the coat
+			-- cannot get any deeper however far down the hole goes.
+			local step = math.max(full / base, cfg.pile.visual.minSeatStepStuds)
+			local cap = math.min(cfg.pile.visual.maxVisibleSlotsPerCell, base)
+			local wanted = full * cfg.pile.visual.coatDropCoverage + cfg.pile.visual.coatDropMarginStuds
+			expect((dug - 1) * step >= wanted - step or dug == cap).toBe(true)
+		end)
+
+		it("never asks for more slots than the column has or the cap allows", function()
+			local PileSurface = require(Shared.Domain.PileSurface)
+			local width, depth, cellSize = cfg.pile.gridWidth, cfg.pile.gridDepth, cfg.pile.cellSizeStuds
+			local minSlots = cfg.pile.visual.visibleSlotsPerCell
+			local cap = cfg.pile.visual.maxVisibleSlotsPerCell
+			for _, cell in ipairs({ { 2, 2 }, { width // 2, depth // 2 }, { width - 3, depth // 2 } }) do
+				local x, z = cell[1], cell[2]
+				local base = math.floor(PileSurface.columnRecords(cfg, width, depth, cellSize, x, z))
+				local slots = PileSurface.coatSlotsAt(cfg, width, depth, cellSize, function()
+					return 0 -- every neighbour dug away: the widest possible demand
+				end, x, z, base, minSlots)
+				expect(slots).toBeLessThanOrEqual(math.max(1, math.min(cap, base)))
+				expect(slots).toBeGreaterThanOrEqual(math.min(minSlots, math.max(1, base)))
+			end
+		end)
+	end)
+
 	describe("Terrain core", function()
 		it("builds on round start, re-seats at every accepted strike, hollows at reveal, and clears on return", function()
 			local h = GameplayHarness.new(cfg)
