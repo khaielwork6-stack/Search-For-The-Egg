@@ -199,7 +199,10 @@ function RoundService.createForParty(
 	local eggSlot = math.clamp(eggCell.base - math.floor(eggCell.base * eggDepthFraction + 0.5) + 1, 2, math.max(2, eggCell.base))
 	local runtime: Runtime = {
 		state = state,
-		cutsceneDeadline = self._clock:monotonic() + self._config.round.cutsceneSeconds,
+		-- The backstop, not the intro's length: the round leaves the intro as soon as every present
+		-- member reports ready, and this is only how long one stuck client may hold the rest.
+		cutsceneDeadline = self._clock:monotonic()
+			+ (self._config.round.intro and self._config.round.intro.maxWaitSeconds or self._config.round.cutsceneSeconds),
 		createdAt = self._clock:monotonic(),
 		grid = grid,
 		nodes = self:candidateNodes(party.chapter),

@@ -1565,3 +1565,69 @@ genuinely overlapped the pile.
 Pile after the whole session: 636 rays on the mound, 100% feathers, 0% bare body, 0% see-through.
 Hand +5 over five picks, Nest Rake +54 over four sweeps, Feather Vac +54 over one hold. All 310 tests
 and `lune run lune/check` pass.
+
+## Round intro cinematic (15 Sep 2026)
+
+### What it is
+
+A 14-second cinematic between the lobby queue and gameplay: the flyer on a sign beside the south gate
+path, the player's own avatar walking in and taking it, a beat reading it, then a sweep into the farm.
+The server holds the round in its intro phase until every present member reports ready, so the timer
+does not start while anyone is still watching or still loading.
+
+**Naming note.** The brief calls the state `Intro`. The existing phase is `Cutscene`, and it already
+sits exactly where the intro belongs, between bootstrap and the countdown. It was left named
+`Cutscene` because the whole test suite and the shared gameplay harness key off that name; the
+behaviour is the brief's. Renaming it is a mechanical follow-up if the name matters.
+
+### How it was driven
+
+Through the client probe channel: `call partyCreate chapter1 normal 1`, `call partyStart`, then
+`call introStatus` for the controller's own counters, plus direct instance reads of the camera, the
+overlay and the actor clone.
+
+### Measured, solo
+
+| Check | Evidence |
+| --- | --- |
+| Intro set builds with the world | five markers plus the sign, flyer reading `REWARD: $5.00` |
+| Shot 1, poster | camera at (6, 56, 405) FOV 40, easing to the marker at (6.0, 55.9, 404.6) |
+| Shot 2, approach | slides to (12, 55, 404) FOV 54 |
+| Shot 3, reading | (9, 55, 402) FOV 48 |
+| Shot 4, farm reveal | sweeps to (6, 60, 395) FOV 62 |
+| Avatar walks | actor clone at (0.5, 407.5) → (2.0, 403.5) → (3.4, 399.6), then holds |
+| Flyer taken | held parchment becomes visible at the take beat |
+| Subtitles type in | `"I have to find i"` → `"I have to find it."` |
+| Cinematic bars | top and bottom at 0.11 of the height for the whole run |
+| Fade | opaque at the start, clear through the shot, opaque again at 13.8 s |
+| Objective card | `FIND THE EGG` on the hand-back |
+| Render step | 822 ticks to t = 14.00, the full duration |
+| Restore | camera Custom at the round spawn, HUD on, prompts on, actor and held flyer gone, overlay destroyed |
+| Skip | camera, actor and prompts all restored within 0.6 s of the skip |
+| No collection during the intro | 3 collect attempts, 3 rejected, 0 accepted |
+| Round timer | 00:49.58 → 00:52.58 → 00:55.63 over six seconds, starting only after the intro |
+| Missing marker | `IntroFarmReveal` deleted: reported as `marker part IntroFarmReveal (using the configured default)`, intro still ran to t = 14.00 and the round still started |
+
+### Not verified in Studio, and why
+
+- **Two-player and four-player parties, one player skipping while another watches, a slow-loading
+  member, and a disconnect during the intro.** The barrier these exercise is unit-tested in
+  `tests/RoundIntro.spec` (a two-player round holds until both report; a skip counts as ready; a
+  member who leaves stops being counted; a repeat report does not even bump the version). Driving two
+  real clients is not possible from this automation, so the multiplayer paths rest on those tests.
+- **Rejoining an active round.** A client only plays the intro on the intro phase, so a player
+  arriving mid-round never sees it. The wider rejoin flow is unwired in this codebase and was not part
+  of this change.
+- **R6 avatars.** The posing writes `Motor6D.Transform` keyed on the driven part's name, covering both
+  rig kinds without either rest pose, but it was exercised on the default R15 only.
+- **Mobile tap and controller B.** Bound and in the code path with Space, Enter and click, but not
+  exercised on a device.
+- **A recording.** Play-mode `screen_capture` returns blank on this machine, so the sequence could not
+  be recorded here. Framing was instead rendered per marker in Edit mode against a stand-in actor.
+
+### Pending audio
+
+`intro.ambience`, `intro.wind`, `intro.footstep`, `intro.paper` and `intro.sting` are silent
+placeholders in `audio.roles`: no ids were supplied, so nothing was guessed. `intro.type` uses a
+bundled Roblox click so the subtitle reveal is not silent. Filling those five ids in needs no code
+change.
