@@ -43,6 +43,7 @@ type Column = {
 	step: number, -- studs the column recedes per record
 	walls: { BasePart },
 	under: { { part: BasePart, depth: number } },
+	slots: number,
 	wallDepth: number, -- studs of interior wall already materialised
 	floorDepth: number, -- studs of interior floor layers already materialised
 	underlayerDone: boolean,
@@ -326,7 +327,21 @@ function PileVisualController._visibleSlots(self: PileVisualController): number
 	return if self._quality:tier() == "low" then visual.visibleSlotsPerCellMobile else visual.visibleSlotsPerCell
 end
 
-function PileVisualController._fluffPerCell(self: PileVisualController): number
+-- Ceiling for the adaptive window on this device. A low tier's ceiling is below the desktop one, so
+-- what it renders is always a subset of what the server accepts.
+function PileVisualController._maxSlots(self: PileVisualController): number
+	local visual = self._config.pile.visual
+	return if self._quality:tier() == "low" then visual.maxVisibleSlotsPerCellMobile else visual.maxVisibleSlotsPerCell
+end
+
+-- Records rendered for one column: the device floor, deepened where the dome drops faster than the
+-- coat is thick so the body never shows as a bare band between two rings. The server derives the
+-- same number from the same config, so every rendered record is accepted.
+function PileVisualController._slotsFor(self: PileVisualController, column: Column): number
+	return if column.slots > 0 then column.slots else self:_visibleSlots()
+end
+
+function PileVisualController._fluffPerCell(self: PileVisualController, coatParts: number?): number
 	local visual = self._config.pile.visual
 	local tier = self._quality:tier()
 	local perCell = if tier == "low"
@@ -342,7 +357,7 @@ function PileVisualController._fluffPerCell(self: PileVisualController): number
 	for _ in pairs(self._columns) do
 		cells += 1
 	end
-	local exposed = cells * self:_visibleSlots()
+	local exposed = coatParts or (cells * self:_visibleSlots())
 	local fluffBudget = math.max(0, budget - exposed)
 	return math.min(perCell, math.floor(fluffBudget / math.max(1, cells)))
 end
@@ -372,7 +387,7 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 	local visual = self._config.pile.visual
 	local field = (self._seatField or self._field) :: PileSurface.Field
 	local minCorner = self._minCorner :: Vector3
-	local exposed = if self._culled then {} else FeatherLayout.exposedSlots(column.base, column.mask, self:_visibleSlots())
+	local exposed = if self._culled then {} else FeatherLayout.exposedSlots(column.base, column.mask, self:_slotsFor(column))
 	local wanted: { [number]: boolean } = {}
 	for _, slot in ipairs(exposed) do
 		wanted[slot] = true
@@ -590,7 +605,7 @@ function PileVisualController._exposeFloor(self: PileVisualController, column: C
 	local spread = field.cellSize * 0.98
 	-- The records themselves fill the column down to the bottom of the rendered window (the top
 	-- `visibleSlotsPerCell` untaken slots); filler only goes below that, never into the dug space.
-	local windowBottom = math.min(column.base, column.base - column.remaining + self:_visibleSlots()) * column.step
+	local windowBottom = math.min(column.base, column.base - column.remaining + self:_slotsFor(column)) * column.step
 	local level = math.max(column.floorDepth, windowBottom - spacing) + spacing
 	local added = 0
 	while level <= depthNow + 0.01 and added < 40 do
@@ -669,7 +684,7 @@ function PileVisualController._exposeWalls(self: PileVisualController, dug: Colu
 		local topY = field.baseY + self:_columnTop(neighbour)
 		-- The neighbour's own rendered records cover its side down to the bottom of its window;
 		-- wall filler starts below that.
-		local neighbourWindow = math.min(neighbour.base, neighbour.base - neighbour.remaining + self:_visibleSlots()) * neighbour.step
+		local neighbourWindow = math.min(neighbour.base, neighbour.base - neighbour.remaining + self:_slotsFor(neighbour)) * neighbour.step
 		local depthFrom = math.max(neighbour.wallDepth, neighbourWindow - visual.wallLevelSpacingStuds)
 		local levelsAdded = 0
 		local depthNow = depthFrom + visual.wallLevelSpacingStuds
@@ -769,6 +784,7 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 			step = 0,
 			walls = {},
 			under = {},
+			slots = 0,
 			wallDepth = 0,
 			floorDepth = 0,
 			underlayerDone = false,
@@ -776,10 +792,19 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 		}
 	end
 	self:_buildRimBed(folder)
-	local fluffPerCell = self:_fluffPerCell()
+	-- Seat spacing and the render window first: the fluff budget is what the records leave over, and
+	-- steep columns render more records than flat ones.
+	local minSlots, maxSlots = self:_visibleSlots(), self:_maxSlots()
+	local coatParts = 0
 	for _, column in pairs(self._columns) do
 		local full = PileSurface.columnFullHeight(self._config, pile.width, pile.depth, pile.cellSize, column.x, column.z)
 		column.step = math.max(full / math.max(1, column.base), self._config.pile.visual.minSeatStepStuds or 0)
+		column.slots =
+			PileSurface.coatSlots(self._config, pile.width, pile.depth, pile.cellSize, column.x, column.z, column.base, minSlots, maxSlots)
+		coatParts += column.slots
+	end
+	local fluffPerCell = self:_fluffPerCell(coatParts)
+	for _, column in pairs(self._columns) do
 		-- Vary the bed a little per cell so no row reads as a grid.
 		column.fluffCount = math.max(0, math.floor(fluffPerCell * lerp(0.75, 1.25, FeatherLayout.hash(column.index, 0, 17)) + 0.5))
 	end

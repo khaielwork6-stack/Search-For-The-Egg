@@ -278,7 +278,19 @@ function CollectionService._collectFeather(
 	if PileGrid.isTaken(cell, slot) then
 		return reject(self, Envelope.Codes.ALREADY_DONE, "already_collected")
 	end
-	if not table.find(FeatherLayout.exposedSlots(cell.base, cell.taken, config.pile.visual.visibleSlotsPerCell), slot) then
+	-- The window is per column, not a constant: steep rim columns render deeper so the coat covers the
+	-- mound body instead of leaving a bare band. Same pure function the client renders from.
+	local exposedCount = PileSurface.coatSlots(
+		config,
+		grid.width,
+		grid.depth,
+		grid.cellSize,
+		(cellIndex - 1) % grid.width,
+		math.floor((cellIndex - 1) / grid.width),
+		cell.base,
+		config.pile.visual.visibleSlotsPerCell
+	)
+	if not table.find(FeatherLayout.exposedSlots(cell.base, cell.taken, exposedCount), slot) then
 		return reject(self, Envelope.Codes.INVALID_STATE, "not_exposed")
 	end
 	local origin, direction = payload.origin, payload.direction

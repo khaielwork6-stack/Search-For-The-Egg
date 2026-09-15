@@ -45,7 +45,8 @@ return function(describe, it, expect)
 			local full = PileSurface.columnFullHeight(cfg, grid.width, grid.depth, grid.cellSize, 8, 8)
 			local records = math.clamp(math.floor(math.max(cfg.pile.minRecordsPerColumn or 1, full / cfg.pile.recordSpacingStuds)), 1, 32)
 			local step = math.max(full / records, visual.minSeatStepStuds or 0)
-			local coatSpan = (visual.visibleSlotsPerCell - 1) * step + visual.coatSpanMarginStuds
+			local slots = PileSurface.coatSlots(cfg, grid.width, grid.depth, grid.cellSize, 8, 8, records, visual.visibleSlotsPerCell)
+			local coatSpan = (slots - 1) * step + visual.coatSpanMarginStuds
 			local expectedTop = field.baseY + PileSurface.heightAt(field, cx, cz) - cfg.pile.collision.surfaceInsetStuds - coatSpan
 			local top = (box.CFrame * CFrame.new(0, box.Size.Y / 2, 0)).Position
 			expect(math.abs(top.Y - expectedTop)).toBeLessThan(0.05)

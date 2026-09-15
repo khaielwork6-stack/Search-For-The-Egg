@@ -169,6 +169,54 @@ function PileSurface.columnRecords(cfg: { [string]: any }, width: number, depth:
 	return math.max(floorRecords, PileSurface.columnFullHeight(cfg, width, depth, cellSize, x, z) / cfg.pile.recordSpacingStuds)
 end
 
+-- Records a column renders (and the server therefore accepts) at the top of its stack.
+--
+-- A fixed count is wrong on a dome. The coat is a skin `slots * step` studs deep laid on the
+-- surface; where the surface drops faster than that per cell, the skin of one ring ends above the
+-- skin of the ring outside it and a band of bare mound body shows between them. That band is what
+-- reads as a smooth wall around the foot of the pile. Deepening the coat exactly where the slope
+-- demands it costs parts only on the steep rings and covers the body with real, pickable records.
+--
+-- Pure function of the config and the grid, so the client renders and the server accepts the same
+-- window without either sending the other a number.
+function PileSurface.coatSlots(
+	cfg: { [string]: any },
+	width: number,
+	depth: number,
+	cellSize: number,
+	x: number,
+	z: number,
+	base: number,
+	minSlots: number,
+	maxSlots: number?
+): number
+	local visual = cfg.pile.visual
+	local maxSlots = maxSlots or visual.maxVisibleSlotsPerCell or minSlots
+	local cap = math.min(maxSlots, math.max(1, base))
+	if cap <= minSlots then
+		return math.min(minSlots, cap)
+	end
+	local full = PileSurface.columnFullHeight(cfg, width, depth, cellSize, x, z)
+	if full <= 0 then
+		return minSlots
+	end
+	local step = math.max(full / math.max(1, base), visual.minSeatStepStuds or 0)
+	if step <= 1e-4 then
+		return minSlots
+	end
+	-- Height lost over one cell straight outward from the centre: the drop the coat has to span.
+	local dx, dz = (x + 0.5) - width / 2, (z + 0.5) - depth / 2
+	local r = math.sqrt(dx * dx + dz * dz)
+	local drop = 0
+	if r > 1e-4 then
+		local outward = PileSurface.columnFullHeight(cfg, width, depth, cellSize, x + dx / r, z + dz / r)
+		drop = math.max(full - outward, 0)
+	end
+	local span = drop * (visual.coatDropCoverage or 1.35) + (visual.coatDropMarginStuds or 0.2)
+	local needed = math.ceil(span / step) + 1
+	return math.clamp(needed, minSlots, cap)
+end
+
 -- Undepleted mound height at a world XZ (the dome with every cell full).
 function PileSurface.fullHeightAt(field: Field, worldX: number, worldZ: number): number
 	local dx, dz = worldX - field.centreX, worldZ - field.centreZ

@@ -333,7 +333,9 @@ local function shellColor(config, index: number): Color3
 end
 
 local function shellMaterial(config): Enum.Material
-	local name = config.pile.collision.material
+	-- The body is a part, not terrain, so it gets its own material: a fine weave reads as compressed
+	-- feather mass where the coat thins, where SmoothPlastic read as a moulded wall.
+	local name = config.pile.collision.bodyMaterial or config.pile.collision.material
 	return (Enum.Material :: any)[name] or Enum.Material.SmoothPlastic
 end
 
@@ -365,7 +367,10 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 		local full = PileSurface.columnFullHeight(config, field.width, field.depth, field.cellSize, x, z)
 		local records = math.clamp(math.floor(math.max(config.pile.minRecordsPerColumn or 1, full / config.pile.recordSpacingStuds)), 1, 32)
 		local step = math.max(full / records, visual.minSeatStepStuds or 0)
-		return (visual.visibleSlotsPerCell - 1) * step + (visual.coatSpanMarginStuds or 0.35)
+		-- The window is per column: a steep rim column renders deeper, so the body has to sit deeper
+		-- under it too or the coat's own lower records would be buried inside the body.
+		local slots = PileSurface.coatSlots(config, field.width, field.depth, field.cellSize, x, z, records, visual.visibleSlotsPerCell)
+		return (slots - 1) * step + (visual.coatSpanMarginStuds or 0.35)
 	end
 
 	-- One solid, axis-aligned, ground-anchored column per cell.

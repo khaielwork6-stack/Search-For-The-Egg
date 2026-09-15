@@ -652,6 +652,20 @@ function Validator.validate(raw: any): Report
 					and visual.visibleSlotsPerCellMobile <= (tonumber(visual.visibleSlotsPerCell) or 0),
 				"pile.visual.visibleSlotsPerCellMobile must be an integer 1..visibleSlotsPerCell"
 			)
+			-- Adaptive coat window: steep columns render deeper so the coat covers the mound body. A
+			-- low tier's ceiling stays at or under the desktop one, so what it renders is always a
+			-- subset of what the server accepts.
+			check(
+				isPositiveNumber(visual.maxVisibleSlotsPerCell)
+					and visual.maxVisibleSlotsPerCell % 1 == 0
+					and visual.maxVisibleSlotsPerCell >= (tonumber(visual.visibleSlotsPerCell) or 0)
+					and visual.maxVisibleSlotsPerCell <= 32
+					and isPositiveNumber(visual.maxVisibleSlotsPerCellMobile)
+					and visual.maxVisibleSlotsPerCellMobile % 1 == 0
+					and visual.maxVisibleSlotsPerCellMobile >= (tonumber(visual.visibleSlotsPerCellMobile) or 0)
+					and visual.maxVisibleSlotsPerCellMobile <= (tonumber(visual.maxVisibleSlotsPerCell) or 0),
+				"pile.visual.maxVisibleSlotsPerCell(Mobile) must be integers visibleSlotsPerCell..32 and mobile <= desktop"
+			)
 			check(
 				isPositiveNumber(visual.featherSpreadFraction) and visual.featherSpreadFraction <= 1,
 				"pile.visual.featherSpreadFraction must be within (0, 1]"
