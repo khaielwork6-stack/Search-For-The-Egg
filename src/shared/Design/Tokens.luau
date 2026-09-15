@@ -1,55 +1,85 @@
 --!strict
--- Design tokens: typography, color, spacing, radius, stroke, shadow, motion, sound semantics, and
--- input prompts. Every component reads these; nothing hard-codes a pixel offset or a colour.
--- Palette and names are original to Search for the Egg. Phase 4 folds the owner's station-button
--- language in (gold bevelled frame, deep teal panel, cream pill label, chunky rounded lettering, leaf
--- accents) so every modal, chip, card, and hotbar slot shares one visual system.
+-- Design tokens: typography, color, depth, spacing, radius, stroke, shadow, motion, sound semantics,
+-- and input prompts. Every component reads these; nothing hard-codes a pixel offset or a colour.
+--
+-- Rebuilt 15 Sep 2026 after the owner called the UI flat, bland and obviously generated, with a
+-- premium pack ("USE") supplied as the quality bar. What was taken from it is technique, not theme:
+--
+--   * a control is an extrusion, not a rectangle - a dark base with the face inset so a lip of the
+--     base shows along the bottom edge, and pressing collapses the lip,
+--   * two strokes, never one - a dark keyline around the whole control and a bright rim just inside
+--     the face, which is what makes an edge read as lit rather than drawn,
+--   * a banded sheen instead of a linear ramp - the fill returns to its own colour at both ends and
+--     lifts only through the middle, so a surface looks curved rather than shaded,
+--   * type is one family with weight and size doing the work.
+--
+-- The palette is ours and stays farm: straw and honey gold, cream and feather white, leaf, sky, warm
+-- cocoa outlines. It was lifted several steps in saturation, because the old one was pastel enough
+-- that gold read as beige and nothing on a cream panel had any contrast to sit against.
 
 local Tokens = {}
 
 Tokens.color = table.freeze({
-	-- Ink (soft browns) for all text on cream.
-	inkStrong = Color3.fromRGB(64, 44, 30),
-	ink = Color3.fromRGB(92, 68, 48),
-	inkMuted = Color3.fromRGB(150, 128, 106),
-	outline = Color3.fromRGB(88, 58, 34), -- soft cocoa outline (chunky, never black)
-	cocoa = Color3.fromRGB(122, 84, 52),
+	-- Ink (warm browns) for all text on cream. Deepened so body copy holds at small sizes.
+	inkStrong = Color3.fromRGB(56, 36, 22),
+	ink = Color3.fromRGB(86, 60, 40),
+	inkMuted = Color3.fromRGB(142, 118, 96),
+	outline = Color3.fromRGB(74, 46, 26), -- the keyline: deep cocoa, warm, never black
+	cocoa = Color3.fromRGB(116, 76, 44),
 	-- Cream and feather-white surfaces.
-	cream = Color3.fromRGB(252, 246, 234),
-	creamDeep = Color3.fromRGB(241, 229, 206),
-	creamPill = Color3.fromRGB(255, 243, 208),
+	cream = Color3.fromRGB(253, 247, 236),
+	creamDeep = Color3.fromRGB(240, 226, 200),
+	creamPill = Color3.fromRGB(255, 244, 206),
 	featherWhite = Color3.fromRGB(255, 253, 248),
-	panel = Color3.fromRGB(253, 248, 238), -- modal / card panel fill
-	panelDeep = Color3.fromRGB(245, 235, 216), -- panel gradient foot
+	panel = Color3.fromRGB(254, 249, 239), -- modal / card panel fill
+	panelDeep = Color3.fromRGB(242, 230, 208), -- panel gradient foot
 	surface = Color3.fromRGB(255, 252, 245),
-	surfaceAlt = Color3.fromRGB(247, 238, 222),
-	-- Golden yellow (frames, primary actions, highlights).
-	straw = Color3.fromRGB(230, 196, 112),
-	strawDeep = Color3.fromRGB(194, 150, 66),
-	honey = Color3.fromRGB(255, 205, 66),
-	goldLight = Color3.fromRGB(255, 226, 110),
-	gold = Color3.fromRGB(246, 184, 44),
-	goldDeep = Color3.fromRGB(196, 130, 26),
+	surfaceAlt = Color3.fromRGB(248, 238, 220),
+	-- Golden yellow (frames, primary actions, highlights). The spine of the whole thing.
+	straw = Color3.fromRGB(242, 206, 118),
+	strawDeep = Color3.fromRGB(198, 150, 60),
+	honey = Color3.fromRGB(255, 208, 60),
+	goldLight = Color3.fromRGB(255, 229, 126),
+	gold = Color3.fromRGB(255, 193, 42),
+	goldDeep = Color3.fromRGB(188, 118, 14),
 	-- Teal: small accents only (tabs, selected rings, badges).
-	tealPanel = Color3.fromRGB(38, 118, 134),
-	tealDeep = Color3.fromRGB(22, 84, 98),
-	tealLight = Color3.fromRGB(78, 170, 184),
-	tealAccent = Color3.fromRGB(46, 140, 156),
-	tealTint = Color3.fromRGB(224, 242, 244),
-	sky = Color3.fromRGB(129, 190, 220),
-	skyDeep = Color3.fromRGB(70, 136, 176),
-	leaf = Color3.fromRGB(116, 170, 92),
-	leafBright = Color3.fromRGB(128, 200, 70),
-	leafDeep = Color3.fromRGB(74, 128, 60),
-	ember = Color3.fromRGB(232, 122, 74),
-	emberDeep = Color3.fromRGB(190, 82, 44),
-	gem = Color3.fromRGB(122, 96, 220),
-	gemDeep = Color3.fromRGB(86, 62, 176),
-	overlay = Color3.fromRGB(46, 32, 20),
-	shadow = Color3.fromRGB(70, 48, 28),
-	success = Color3.fromRGB(96, 168, 90),
-	warning = Color3.fromRGB(222, 158, 44),
-	danger = Color3.fromRGB(204, 82, 66),
+	tealPanel = Color3.fromRGB(34, 124, 142),
+	tealDeep = Color3.fromRGB(18, 86, 102),
+	tealLight = Color3.fromRGB(86, 184, 198),
+	tealAccent = Color3.fromRGB(44, 150, 168),
+	tealTint = Color3.fromRGB(224, 244, 246),
+	sky = Color3.fromRGB(122, 196, 232),
+	skyDeep = Color3.fromRGB(56, 132, 182),
+	leaf = Color3.fromRGB(114, 178, 88),
+	leafBright = Color3.fromRGB(126, 210, 62),
+	leafDeep = Color3.fromRGB(58, 120, 42),
+	ember = Color3.fromRGB(246, 126, 62),
+	emberDeep = Color3.fromRGB(186, 74, 32),
+	gem = Color3.fromRGB(134, 104, 238),
+	gemDeep = Color3.fromRGB(80, 54, 176),
+	overlay = Color3.fromRGB(42, 28, 16),
+	shadow = Color3.fromRGB(62, 40, 22),
+	success = Color3.fromRGB(96, 180, 86),
+	warning = Color3.fromRGB(240, 168, 36),
+	danger = Color3.fromRGB(214, 74, 58),
+})
+
+-- Depth: the numbers that make a control an object rather than a rectangle. One place, so a button,
+-- a card, a modal header and a hotbar slot are lit the same way and read as one kit.
+Tokens.depth = table.freeze({
+	lipPx = 6, -- how much of the dark base shows under the face
+	lipPressedPx = 2, -- ...and what it collapses to when pressed
+	panelLipPx = 9,
+	keyline = 3, -- the dark outline around the whole control
+	keylineThin = 2,
+	rim = 1.5, -- the bright rim just inside the face
+	rimTransparency = 0.25,
+	-- A sheen band: the fill returns to its own colour at both ends and lifts only through the middle,
+	-- which reads as a curved surface. A plain top-to-bottom ramp reads as a flat card with a shadow.
+	sheenStops = table.freeze({ 0, 0.34, 0.5, 0.66, 1 }),
+	sheenLift = 0.17, -- how far the middle band moves towards the light colour
+	sheenDrop = 0.06, -- ...and how far the bottom band sinks, so the foot grounds
+	innerShadow = 0.82, -- transparency of the soft dark band under a panel header
 })
 
 -- Class card accent colours keyed by rarity band (weight thresholds resolved by the classes modal).
@@ -65,10 +95,12 @@ Tokens.typography = table.freeze({
 	display = table.freeze({ font = Enum.Font.FredokaOne, size = 34, lineHeight = 1.05 }),
 	title = table.freeze({ font = Enum.Font.FredokaOne, size = 24, lineHeight = 1.1 }),
 	label = table.freeze({ font = Enum.Font.FredokaOne, size = 18, lineHeight = 1.1 }), -- pill labels / station names
-	heading = table.freeze({ font = Enum.Font.GothamBold, size = 18, lineHeight = 1.15 }),
+	-- Headings are the display family too. Three families (Fredoka + GothamBold + Gotham) was most of
+	-- why screens did not look like one product; size and weight carry the hierarchy instead.
+	heading = table.freeze({ font = Enum.Font.FredokaOne, size = 19, lineHeight = 1.15 }),
 	body = table.freeze({ font = Enum.Font.GothamMedium, size = 15, lineHeight = 1.3 }),
-	caption = table.freeze({ font = Enum.Font.Gotham, size = 13, lineHeight = 1.3 }),
-	numeral = table.freeze({ font = Enum.Font.GothamBlack, size = 20, lineHeight = 1.0 }),
+	caption = table.freeze({ font = Enum.Font.GothamMedium, size = 13, lineHeight = 1.3 }),
+	numeral = table.freeze({ font = Enum.Font.FredokaOne, size = 21, lineHeight = 1.0 }),
 	minimumBodySize = 13,
 })
 
