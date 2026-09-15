@@ -121,9 +121,9 @@
       "kind": "parts",
       "material": "SmoothPlastic",
       "color": [
-        208,
-        199,
-        183
+        235,
+        229,
+        216
       ],
       "voxelResolution": 4,
       "digRadiusStuds": 2.2,
@@ -145,8 +145,8 @@
       "visibleEvidence": "OWNER 14 Sep 2026 (measured with the in-game probe): rays through the lower face of the mound passed under the coat and hit Ground.TanClearing, because the coat renders only the top records of each column and the dome surface stands studs above the sand. The collision shell is now the visible packed body under the loose coat, seated just below the rendered records.",
       "lipSurfaceStuds": 0.1,
       "lipHeightStuds": 0.25,
-      "bodyShadeJitter": 0.035,
-      "bodyMaterial": "Fabric"
+      "bodyShadeJitter": 0.03,
+      "bodyMaterial": "SmoothPlastic"
     },
     "visual": {
       "partBudgetDesktop": 26000,
@@ -310,9 +310,9 @@
       "coatSpanMarginStuds": 0.35,
       "maxVisibleSlotsPerCell": 22,
       "maxVisibleSlotsPerCellMobile": 9,
-      "coatDropCoverage": 1.35,
-      "coatDropMarginStuds": 0.25,
-      "coatDepthEvidence": "OWNER 15 Sep 2026 (screenshot of the mound foot): with a fixed 7 records per column the coat is about 0.9 studs deep while the dome drops ~1 stud per 0.6-stud cell on the rim, so each ring's coat ended above the next ring's coat and a band of bare body showed between them as a smooth wall. Columns now render ceil((drop*coatDropCoverage + coatDropMarginStuds)/step)+1 records, capped at maxVisibleSlotsPerCell, so the band is covered by real pickable feathers instead of a wall."
+      "coatDropCoverage": 1.8,
+      "coatDropMarginStuds": 0.4,
+      "coatDepthEvidence": "OWNER 15 Sep 2026 (screenshot of the mound foot): with a fixed 7 records per column the coat is about 0.9 studs deep while the dome drops ~1 stud per 0.6-stud cell on the rim, so each ring's coat ended above the next ring's coat and a band of bare body showed between them as a smooth wall. Columns now render ceil((drop*coatDropCoverage + coatDropMarginStuds)/step)+1 records, capped at maxVisibleSlotsPerCell, so the band is covered by real pickable feathers instead of a wall. Raised to 1.8/0.4 on 15 Sep 2026 after the owner could still pick out the body between strands at close range: 22,104 coat parts against the 26,000 budget."
     },
     "assumption": "ASSUMED",
     "recordSpacingStuds": 0.15,
