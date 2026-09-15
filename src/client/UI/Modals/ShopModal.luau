@@ -283,8 +283,10 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 			local dot = Instance.new("Frame")
 			dot.Name = "Pip" .. level
 			dot.Size = UDim2.fromOffset(if maxLevel > 6 then 11 else 14, if maxLevel > 6 then 11 else 14)
-			dot.BackgroundColor3 = Tokens.color.overlay
-			dot.BackgroundTransparency = 0.55
+			-- An unlit pip is a hole in the track, drawn solid. At 55% transparency over a coloured
+			-- card it took the card's colour and the track stopped reading as a track at all.
+			dot.BackgroundColor3 = Tokens.color.outline
+			dot.BackgroundTransparency = 0.15
 			dot.BorderSizePixel = 0
 			dot.ZIndex = z + 3
 			dot.LayoutOrder = level
@@ -295,14 +297,15 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 			table.insert(pipDots, dot)
 		end
 		-- Level badge in the top-left corner; the bonus reads from the pips.
-		local levelLabel = FrameKit.badge(face, "Level", "LV 0", Tokens.color.overlay, z + 4)
+		local levelLabel = FrameKit.badge(face, "Level", "LV 0", Tokens.color.outline, z + 4)
 		levelLabel.AnchorPoint = Vector2.new(0.5, 1)
 		levelLabel.Position = UDim2.new(0.5, 0, 1, -(tap + Tokens.spacing.md + 22))
-		levelLabel.BackgroundTransparency = 0.35
 		-- Price button across the bottom.
+		-- Gems buy this, so the button is the gem colour. Every action in the shop being gold said
+		-- nothing about what any of them would cost.
 		local buy = Button.build(face, {
 			text = "",
-			variant = "primary",
+			variant = "gem",
 			minimumTapTarget = tap,
 			motion = motion,
 			size = UDim2.new(1, -Tokens.spacing.md, 0, tap + Tokens.spacing.xs),
@@ -382,14 +385,21 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	local offerCards: { OfferCard } = {}
 	local offerHeight = tap * 3 + Tokens.spacing.lg
 	for index, offer in ipairs(offers(cfg)) do
-		local fill = if offer.pass then Tokens.color.gem else Tokens.color.sky
-		local deep = if offer.pass then Tokens.color.gemDeep else Tokens.color.skyDeep
+		-- Colour carries the kind, and the hero is allowed to be bigger.
+		--
+		-- Every product used to be one blue and every pass one purple, so eight cards of equal weight
+		-- said nothing about which mattered. Gems are deep blue, a permanent unlock is gold - the most
+		-- valuable colour in this game's palette, spent where the most valuable purchase is - and
+		-- whichever bundle is marked popular gets a taller card so the eye lands on it first.
+		local hero = offer.popular == true
+		local fill = if offer.pass then Tokens.color.gold else Tokens.color.sky
+		local deep = if offer.pass then Tokens.color.goldDeep else Tokens.color.skyDeep
 		local tile, face = FrameKit.tile(column, "Offer_" .. offer.key, {
 			fill = fill,
 			deep = deep,
 			zIndex = z + 1,
 			radius = Tokens.radius.lg,
-			size = UDim2.new(1, 0, 0, offerHeight),
+			size = UDim2.new(1, 0, 0, if hero then offerHeight + Tokens.spacing.xl else offerHeight),
 		})
 		tile.LayoutOrder = index
 		local scale = Instance.new("UIScale")
@@ -407,14 +417,20 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		artHolder.Name = "Art"
 		artHolder.AnchorPoint = Vector2.new(0.5, 0)
 		artHolder.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.sm)
-		artHolder.Size = UDim2.fromOffset(tap + Tokens.spacing.lg, tap + Tokens.spacing.lg)
+		local artPx = if hero then tap + Tokens.spacing.xl else tap + Tokens.spacing.lg
+		artHolder.Size = UDim2.fromOffset(artPx, artPx)
 		artHolder.BackgroundTransparency = 1
 		artHolder.ZIndex = z + 2
 		artHolder.Parent = face
-		Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 2, transparency = 0.62, color = Tokens.color.featherWhite })
-		centredArt(artHolder, offer.art, offer.icon, tap + Tokens.spacing.sm, z + 4)
+		-- The sunburst reads as light coming off the thing you are buying; brighter on the hero.
+		Skin.texture(artHolder, "texture.sunburst", {
+			zIndex = z + 2,
+			transparency = if hero then 0.44 else 0.62,
+			color = Tokens.color.featherWhite,
+		})
+		centredArt(artHolder, offer.art, offer.icon, artPx - Tokens.spacing.sm, z + 4)
 		if offer.pass then
-			local tag = FrameKit.badge(tile, "Tag", "PERMANENT", Tokens.color.gemDeep, z + 5)
+			local tag = FrameKit.badge(tile, "Tag", "FOREVER", Tokens.color.gemDeep, z + 5)
 			tag.AnchorPoint = Vector2.new(1, 0)
 			tag.Position = UDim2.new(1, Tokens.spacing.xs, 0, -Tokens.spacing.sm)
 			tag.Rotation = 8
@@ -423,7 +439,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		end
 		local buy = Button.build(face, {
 			text = if offer.robux then string.format("R$ %d", offer.robux) else "R$",
-			variant = "primary",
+			variant = "success",
 			minimumTapTarget = tap,
 			motion = motion,
 			size = UDim2.new(1, -Tokens.spacing.md, 0, tap - Tokens.spacing.xs),
@@ -452,10 +468,12 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		owned.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.md)
 		owned.Visible = false
 		if offer.popular then
-			local ribbon = FrameKit.badge(tile, "Popular", "POPULAR", Tokens.color.ember, z + 5)
-			ribbon.AnchorPoint = Vector2.new(1, 0)
-			ribbon.Position = UDim2.new(1, Tokens.spacing.xs, 0, -Tokens.spacing.sm)
-			ribbon.Rotation = 8
+			-- Top left, because FOREVER already owns the top right. They used to share a corner and a
+			-- rotation, so a popular pass printed one over the other.
+			local ribbon = FrameKit.badge(tile, "Popular", "BEST VALUE", Tokens.color.ember, z + 5)
+			ribbon.AnchorPoint = Vector2.new(0, 0)
+			ribbon.Position = UDim2.fromOffset(-Tokens.spacing.xs, -Tokens.spacing.sm)
+			ribbon.Rotation = -8
 		end
 		table.insert(offerCards, { offer = offer, tile = tile, buy = buy, owned = owned, scale = scale })
 	end
