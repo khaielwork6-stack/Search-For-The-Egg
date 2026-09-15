@@ -343,6 +343,20 @@ function PileGrid.removeFocused(grid: Grid, cells: { Cell }, weights: { number }
 	return removals, total
 end
 
+-- Bowl removal for blasts: `cells` sorted by distance; the closest cell gives up to `depthMax`
+-- records, the quota tapers to one over the first K cells (K sized so the quotas add up to about
+-- `amount`), leftovers spread outward. A deep crater in the middle, a shallow lip around it.
+function PileGrid.removeBowl(grid: Grid, cells: { Cell }, amount: number, depthMax: number): ({ Removal }, number)
+	local depth = math.max(1, math.floor(depthMax))
+	local k = math.max(1, math.ceil(3 * amount / depth))
+	local weights: { number } = {}
+	for i = 1, #cells do
+		local t = (i - 1) / k
+		weights[i] = if i <= k then math.max(1, math.floor(depth * (1 - t) * (1 - t) + 0.5)) else 0
+	end
+	return PileGrid.removeFocused(grid, cells, weights, amount)
+end
+
 -- Centre-heavy weights for cells sorted by distance from a strike: the struck cell takes `focus`
 -- of the yield, the rest falls off with distance.
 function PileGrid.focusWeights(grid: Grid, cells: { Cell }, localX: number, localZ: number, radiusStuds: number, focus: number): { number }

@@ -326,6 +326,39 @@ return function(describe, it, expect)
 		end)
 	end)
 
+	describe("Bowl removal", function()
+		it("digs deep at the centre and tapers outward, spending exactly the yield", function()
+			local roll = 0
+			local grid = PileGrid.create(cfg.pile, 1, {}, function()
+				roll = (roll + 0.41) % 1
+				return roll
+			end, function()
+				return 32
+			end)
+			local centre = PileGrid.get(grid, grid.width // 2, grid.depth // 2)
+			local localX, localZ = PileGrid.cellCenter(grid, centre)
+			local cells = PileGrid.cellsWithinStuds(grid, localX, localZ, 12)
+			local removals, total = PileGrid.removeBowl(grid, cells, 115, 14)
+			expect(total).toBe(115)
+			local byIndex = {}
+			for _, removal in ipairs(removals) do
+				byIndex[removal.index] = removal.removed
+			end
+			expect(byIndex[centre.index]).toBeGreaterThanOrEqual(12)
+			-- Only a few dozen cells are touched: the crater is local, not a film over the disc.
+			expect(#removals).toBeLessThan(60)
+			-- Removed counts fall with distance (the sorted order).
+			local previous = math.huge
+			for i, cell in ipairs(cells) do
+				local removed = byIndex[cell.index] or 0
+				if i <= 8 then
+					expect(removed).toBeLessThanOrEqual(previous)
+					previous = removed
+				end
+			end
+		end)
+	end)
+
 	describe("Terrain core", function()
 		it("builds on round start, dents and re-writes at every accepted strike, hollows at reveal, and clears on return", function()
 			local h = GameplayHarness.new(cfg)

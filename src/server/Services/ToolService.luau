@@ -428,7 +428,7 @@ function ToolService._spawnCharge(
 		miniChargeChance = spec.miniChargeChance,
 		miniChargeCount = spec.miniChargeCount,
 		miniChargeFuseSeconds = spec.miniChargeFuseSeconds,
-		craterFocus = spec.craterFocus,
+		craterDepthRecords = spec.craterDepthRecords,
 		mini = mini,
 	}
 	runtime.charges[charge.id] = charge
@@ -468,15 +468,8 @@ function ToolService._explode(self: ToolService, runtime: any, charge: any, now:
 	if state and state.alive and capacity and not capacity.infinite then
 		amount = math.max(0, math.min(amount, capacity.capacity - (state.carriedStandard + state.carriedRainbow)))
 	end
-	-- Crater: records leave from the centre outwards, weight (1 - d/r)^craterFocus.
-	local localX, localZ = charge.position.X - minCorner.X, charge.position.Z - minCorner.Z
-	local weights = {}
-	for i, cell in ipairs(cells) do
-		local cx, cz = PileGrid.cellCenter(grid, cell)
-		local d = math.sqrt((cx - localX) ^ 2 + (cz - localZ) ^ 2)
-		weights[i] = math.max(0.02, (1 - d / math.max(charge.radiusStuds, 0.01)) ^ (charge.craterFocus or 2))
-	end
-	local removals, total = PileGrid.removeFocused(grid, cells, weights, amount)
+	-- Crater: a bowl from the landing point outwards (deep in the middle, a lip around it).
+	local removals, total = PileGrid.removeBowl(grid, cells, amount, charge.craterDepthRecords or 14)
 	local cleared = 0
 	for _, removal in ipairs(removals) do
 		self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining, removal.mask)

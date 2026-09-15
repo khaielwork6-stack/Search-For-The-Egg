@@ -104,7 +104,7 @@ function ToolSpecs.confettiCharge(cfg: { [string]: any }, levels: Levels, modifi
 		miniChargeChance = modifiers.procs.miniChargeChance or 0,
 		miniChargeCount = modifiers.params.miniChargeCount or 0,
 		miniChargeFuseSeconds = tool.miniChargeFuseSeconds,
-		craterFocus = tool.craterFocus or 2,
+		craterDepthRecords = tool.craterDepthRecords or 14,
 	}
 end
 
