@@ -184,6 +184,19 @@ local function depthTint(visual: { [string]: any }, t: number, depth: number): n
 	return math.clamp(t * (1 - weight) + deep * weight, 0, 0.999)
 end
 
+-- Cosmetic undulation of the coat. The logical dome is a perfect profile until it is dug, which
+-- reads as a blob; rendered feathers ride this smooth deterministic wave so the mound has natural
+-- rises and hollows. Aim, collision and every server number use the clean surface underneath.
+local function seatLump(visual: { [string]: any }, wx: number, wz: number): number
+	local amplitude = visual.seatLumpStuds or 0
+	if amplitude <= 0 then
+		return 0
+	end
+	local broad = math.sin(wx * 0.27 + wz * 0.17) * math.cos(wz * 0.31 - wx * 0.11)
+	local fine = math.sin((wx + wz) * 0.52 + 1.3)
+	return amplitude * (broad * 0.62 + fine * 0.38)
+end
+
 local function paletteColor(cfg: { [string]: any }, t: number): Color3
 	local palette = cfg.pile.visual.palette
 	local scaled = math.clamp(t, 0, 0.9999) * (#palette - 1)
@@ -364,7 +377,7 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 		local y, normal = self:_surfaceAt(wx, wz)
 		-- Seat by slot, never by rank: a record's place is fixed for the round whatever gets taken
 		-- above or beside it (the server resolves the same point for its aim check).
-		local seatY = y + FeatherLayout.seatOffset(visual, column.base, slot, column.step)
+		local seatY = y + FeatherLayout.seatOffset(visual, column.base, slot, column.step) + seatLump(visual, wx, wz) * scale
 		-- Rim factor: 0 well inside the coat, 1 at the outermost strands, used to curl the edge under
 		-- instead of letting it radiate outward as blades.
 		local rimMin = visual.rimMinScale

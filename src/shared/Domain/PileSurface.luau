@@ -160,7 +160,11 @@ end
 
 -- Records a column holds: its full height divided by the record spacing (at least one).
 function PileSurface.columnRecords(cfg: { [string]: any }, width: number, depth: number, cellSize: number, x: number, z: number): number
-	return math.max(1, PileSurface.columnFullHeight(cfg, width, depth, cellSize, x, z) / cfg.pile.recordSpacingStuds)
+	-- Rim columns follow the dome down to a single record, which made an edge sweep pay +1 while the
+	-- same swing on the slope paid a full yield. A floor keeps the reward legible; the mound's shape
+	-- is untouched because height is remaining/base, and a full column is 1 whatever the base is.
+	local floorRecords = math.max(1, cfg.pile.minRecordsPerColumn or 1)
+	return math.max(floorRecords, PileSurface.columnFullHeight(cfg, width, depth, cellSize, x, z) / cfg.pile.recordSpacingStuds)
 end
 
 -- Undepleted mound height at a world XZ (the dome with every cell full).
