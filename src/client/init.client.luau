@@ -924,6 +924,23 @@ if RunService:IsStudio() then
 			book:open()
 			return { open = book:isOpen() }
 		end,
+		-- Page turns without a mouse, so the page-flip sound can be counted in Studio: presses that do
+		-- not actually change the spread (already at an end, or mid-flip) must stay silent.
+		flipBook = function(direction, times)
+			local moved = 0
+			local function page(): number
+				return (book :: any)._session and (book :: any)._session.page or 0
+			end
+			for _ = 1, math.max(1, tonumber(times) or 1) do
+				local before = page()
+				book:_flip(if tonumber(direction) and tonumber(direction) < 0 then -1 else 1)
+				task.wait(0.45)
+				if page() ~= before then
+					moved += 1
+				end
+			end
+			return { moved = moved, page = page(), flips = book.stats.flips }
+		end,
 		closeBook = function()
 			book:close()
 			return { open = book:isOpen() }
