@@ -724,7 +724,10 @@ function PileVisualController._exposeWalls(self: PileVisualController, dug: Colu
 		local depthFrom = neighbour.wallDepth
 		local levelsAdded = 0
 		local depthNow = depthFrom + visual.wallLevelSpacingStuds
-		while depthNow <= exposure and levelsAdded < 40 do
+		-- One level past the floor of the pit. Levels land on a 0.6-stud grid, so the last one can stop
+		-- most of a stud short of the bottom and leave a slot where the wall meets the floor - which is
+		-- exactly where a low sight line skims out. Overshooting buries the junction instead.
+		while depthNow <= exposure + visual.wallLevelSpacingStuds and levelsAdded < 40 do
 			for k = 1, strandsPerLevel do
 				local salt = math.floor(depthNow * 100) * 7 + k
 				local h = function(s2: number)
