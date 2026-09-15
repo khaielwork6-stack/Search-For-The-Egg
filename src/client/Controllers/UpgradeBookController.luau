@@ -186,9 +186,13 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 		pipLayout.Parent = pips
 		pips.Parent = tile
 		local maxLevel = preview and preview.maxLevel or 0
-		for level = 1, math.min(maxLevel, 8) do
+		-- Every step of the ladder, not the first eight. The dots used to stop at 8 while the Shop drew
+		-- all ten for the same kind of track, so a long ladder looked shorter than it was and a player
+		-- could not see how far they had left. Dots shrink instead of disappearing.
+		local dotSize = if maxLevel > 8 then 8 elseif maxLevel > 6 then 9 else 10
+		for level = 1, maxLevel do
 			local dot = Instance.new("Frame")
-			dot.Size = UDim2.fromOffset(10, 10)
+			dot.Size = UDim2.fromOffset(dotSize, dotSize)
 			dot.BackgroundColor3 = if preview and level <= preview.level then Tokens.color.gold else Tokens.color.creamDeep
 			dot.BorderSizePixel = 0
 			dot.ZIndex = z + 2
@@ -257,7 +261,7 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 			hit.Size = UDim2.fromScale(1, 1)
 			hit.ZIndex = z + 5
 			hit.Parent = tile
-			session.trove:add(hit.Activated:Connect(function()
+			session.pageTrove:add(hit.Activated:Connect(function()
 				deps.audio:play(Tokens.sound.uiTab)
 				session.selectedPath[item.id] = pathId
 				self:_renderPage(page, item)
@@ -384,7 +388,7 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 	buy.button.AnchorPoint = Vector2.new(0.5, 1)
 	buy.button.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.sm)
 	buy.setEnabled(buyEnabled)
-	session.trove:add(buy.destroy)
+	session.pageTrove:add(buy.destroy)
 end
 
 -- Index pages: the feathers of the nest.
@@ -498,6 +502,16 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 end
 
 function UpgradeBookController._renderSpread(self: UpgradeBookController)
+	-- Everything a spread creates lives on its own trove, replaced here. Before this, each re-render
+	-- added another set of button handles and tile connections to the session trove, which only
+	-- emptied when the book closed: a long session leaked one set per click.
+	local existing = self._session
+	if existing then
+		if existing.pageTrove then
+			existing.pageTrove:destroy()
+		end
+		existing.pageTrove = Trove.new()
+	end
 	local session = self._session
 	if not session then
 		return
@@ -576,6 +590,7 @@ function UpgradeBookController.open(self: UpgradeBookController)
 		page = 1,
 		items = itemList(cfg),
 		selectedPath = {},
+		pageTrove = Trove.new(),
 		flipping = false,
 		rainbowSeen = false,
 	}
@@ -662,6 +677,50 @@ function UpgradeBookController.open(self: UpgradeBookController)
 		padding.PaddingBottom = UDim.new(0, Tokens.spacing.md)
 		padding.Parent = page
 		Skin.texture(page, "texture.studs", { zIndex = 3, transparency = 0.96, tile = 28 })
+		-- Parchment rather than paper: a warm gradient down the sheet, a darker edge where it meets
+		-- the spine so the two halves read as one bound object, and stitched corners.
+		local age = Instance.new("UIGradient")
+		age.Rotation = 90
+		age.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(253, 248, 235)),
+			ColorSequenceKeypoint.new(0.55, PAGE),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(236, 223, 195)),
+		})
+		age.Parent = page
+		local gutter = Instance.new("Frame")
+		gutter.Name = "Gutter"
+		gutter.AnchorPoint = Vector2.new(1 - anchorX, 0)
+		gutter.Position = UDim2.fromScale(1 - anchorX, 0)
+		gutter.Size = UDim2.new(0, 14, 1, 0)
+		gutter.BackgroundColor3 = Color3.fromRGB(214, 198, 166)
+		gutter.BorderSizePixel = 0
+		gutter.ZIndex = 4
+		gutter.Parent = page
+		local gutterFade = Instance.new("UIGradient")
+		gutterFade.Rotation = if anchorX == 0 then 0 else 180
+		gutterFade.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(1, 0.25),
+		})
+		gutterFade.Parent = gutter
+		for _, corner in ipairs({ Vector2.new(0, 0), Vector2.new(1, 0), Vector2.new(0, 1), Vector2.new(1, 1) }) do
+			local stitch = Instance.new("Frame")
+			stitch.Name = "Stitch"
+			stitch.AnchorPoint = corner
+			stitch.Position = UDim2.new(corner.X, (if corner.X == 0 then 1 else -1) * 9, corner.Y, (if corner.Y == 0 then 1 else -1) * 9)
+			stitch.Size = UDim2.fromOffset(16, 16)
+			stitch.BackgroundTransparency = 1
+			stitch.ZIndex = 5
+			stitch.Parent = page
+			local stitchStroke = Instance.new("UIStroke")
+			stitchStroke.Thickness = 1.6
+			stitchStroke.Color = Color3.fromRGB(198, 172, 128)
+			stitchStroke.Transparency = 0.2
+			stitchStroke.Parent = stitch
+			local stitchCorner = Instance.new("UICorner")
+			stitchCorner.CornerRadius = UDim.new(0, 5)
+			stitchCorner.Parent = stitch
+		end
 		page.Parent = cover
 		return page
 	end
@@ -674,8 +733,27 @@ function UpgradeBookController.open(self: UpgradeBookController)
 	spine.Size = UDim2.new(0, Tokens.spacing.md, 1, 0)
 	spine.BackgroundColor3 = Tokens.color.tealDeep
 	spine.BorderSizePixel = 0
-	spine.ZIndex = 4
+	spine.ZIndex = 6
 	spine.Parent = cover
+	local spineShade = Instance.new("UIGradient")
+	spineShade.Rotation = 0
+	spineShade.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(16, 54, 68)),
+		ColorSequenceKeypoint.new(0.5, Tokens.color.tealPanel),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(16, 54, 68)),
+	})
+	spineShade.Parent = spine
+	for _, at in ipairs({ 0.16, 0.84 }) do
+		local band = Instance.new("Frame")
+		band.Name = "SpineBand"
+		band.AnchorPoint = Vector2.new(0.5, 0.5)
+		band.Position = UDim2.fromScale(0.5, at)
+		band.Size = UDim2.new(1, 6, 0, 7)
+		band.BackgroundColor3 = Tokens.color.goldDeep
+		band.BorderSizePixel = 0
+		band.ZIndex = 7
+		band.Parent = spine
+	end
 
 	-- Side tabs.
 	local tabs = Instance.new("Frame")
@@ -796,6 +874,11 @@ function UpgradeBookController.close(self: UpgradeBookController)
 		return
 	end
 	self._session = nil
+	-- The current spread's handles go with the book, not with whatever renders next.
+	if session.pageTrove then
+		session.pageTrove:destroy()
+		session.pageTrove = Trove.new()
+	end
 	self._deps.audio:play(Tokens.sound.uiClose)
 	local motion = self._deps.accessibility:motionSettings()
 	if motion.reducedMotion then
