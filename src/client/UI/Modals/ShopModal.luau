@@ -167,14 +167,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 	plus.button.AnchorPoint = Vector2.new(1, 0.5)
 	plus.button.Position = UDim2.fromScale(1, 0.5)
 	table.insert(cleanups, plus.destroy)
-	if deps.openGemShop then
-		table.insert(
-			cleanups,
-			plus.button.Activated:Connect(function()
-				deps.openGemShop()
-			end)
-		)
-	end
+	-- The opener itself is connected once, further down, together with the rail acknowledgement.
 
 	-- Body: perk grid (left) and the Robux column (right), sized by scale so phones fit.
 	local body = Instance.new("Frame")
@@ -465,9 +458,11 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 		table.insert(offerCards, { offer = offer, tile = tile, buy = buy, owned = owned, scale = scale })
 	end
 	local firstBundle = offerCards[1]
-	table.insert(
-		cleanups,
-		plus.button.Activated:Connect(function()
+	-- Deliberately not a second Activated connection on `plus`: it already opens the gem shop, and
+	-- connecting twice made one tap do two things. The rail's attention pop is exposed as a function
+	-- the opener calls instead.
+	local function flashFirstBundle()
+		do
 			if firstBundle then
 				firstBundle.scale.Scale = 1.08
 				Tween.scale(firstBundle.scale, "release", motion, 1)
@@ -477,8 +472,19 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 					TweenService:Create(stroke, TweenInfo.new(0.8), { Color = Tokens.color.outline }):Play()
 				end
 			end
-		end)
-	)
+		end
+	end
+
+	-- One tap on "+" does one thing: it opens the gem shop, and the rail acknowledges it.
+	if deps.openGemShop then
+		table.insert(
+			cleanups,
+			plus.button.Activated:Connect(function()
+				deps.openGemShop()
+				flashFirstBundle()
+			end)
+		)
+	end
 
 	-- Close ----------------------------------------------------------------------------------------
 	local close = Button.build(container, {
@@ -521,14 +527,17 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 					TweenService:Create(dotScale, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 				end
 			end
+			-- What this level gives, and what the next one would: the card used to compute the next
+			-- figure and throw it away, so a player could not see what they were buying.
+			record.levelLabel.RichText = true
 			if preview.maxed then
-				record.levelLabel.Text = string.format("LV %d  ·  +%d%%", preview.level, currentPct)
+				record.levelLabel.Text = string.format("LV %d  ·  +%d%%  MAX", preview.level, currentPct)
 				record.buy.button.Visible = false
 				record.maxBadge.Visible = true
 			else
 				local nextPct = math.floor(((preview.nextMultiplier or 1) - 1) * 100 + 0.5)
-				record.levelLabel.Text = string.format("LV %d  ·  +%d%%", preview.level, currentPct)
-				local _ = nextPct
+				record.levelLabel.Text =
+					string.format('LV %d  ·  +%d%% <font color="#FFE26E">→</font> +%d%%', preview.level, currentPct, nextPct)
 				record.buy.button.Visible = true
 				record.maxBadge.Visible = false
 				local affordable = projection.currencies.gems >= (preview.costGems or 0)
