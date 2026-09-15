@@ -467,6 +467,50 @@ function StudioDebug.install(container: any): any?
 	-- Server-side collect for a simulated (characterless) player standing beside cell (x, z): drives the
 	-- real CollectionService with a temporary position provider, so a same-cell race with the live
 	-- client can be verified in Studio without a second machine.
+	-- Digs a tunnel the way a tool does - top records first, through queueDelta and onAwarded - but
+	-- without the bag, the cooling or the suction rate in the way. A vacuum needs minutes to cut deep
+	-- enough to test whether a pit wall stays covered; this gets there in one call so the coat, the
+	-- body and the grid can be compared at real excavation depth.
+	function hooks.digAt(userId: number, cellX: number, cellZ: number, radiusCells: number?, perCell: number?)
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return { ok = false, err = "no_round" }
+		end
+		local PileGrid = require(game:GetService("ReplicatedStorage").Shared.Domain.PileGrid)
+		local ChapterLayout = require(game:GetService("ReplicatedStorage").Shared.Domain.ChapterLayout)
+		local grid = runtime.grid
+		local layout = ChapterLayout[runtime.state.chapter]
+		local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
+		local radius = math.max(0, math.floor(radiusCells or 2))
+		local want = math.max(1, math.floor(perCell or 12))
+		local removed, touched = 0, {}
+		for dz = -radius, radius do
+			for dx = -radius, radius do
+				if dx * dx + dz * dz <= radius * radius then
+					local x, z = math.floor(cellX) + dx, math.floor(cellZ) + dz
+					if x >= 0 and z >= 0 and x < grid.width and z < grid.depth then
+						local cell = grid.cells[PileGrid.index(grid.width, x, z)]
+						if cell and cell.remaining > 0 then
+							-- Fewer records the further from the middle, so the hole is a bowl with walls
+							-- rather than a cylinder punched through.
+							local falloff = 1 - math.sqrt(dx * dx + dz * dz) / math.max(1, radius + 1)
+							local take = math.min(cell.remaining, math.max(1, math.floor(want * falloff + 0.5)))
+							local removal = PileGrid.remove(grid, cell, take)
+							removed += removal.removed
+							container.rounds:queueDelta(runtime.state.roundId, cell.index, cell.remaining, removal.mask)
+							table.insert(touched, { index = cell.index, removed = removal.removed, remaining = cell.remaining })
+						end
+					end
+				end
+			end
+		end
+		if #touched > 0 then
+			local lx, lz = PileGrid.cellCenter(grid, grid.cells[PileGrid.index(grid.width, math.floor(cellX), math.floor(cellZ))])
+			container.pileTerrain:onAwarded(runtime, { hitX = minCorner.X + lx, hitZ = minCorner.Z + lz, cells = touched })
+		end
+		return { ok = true, removed = removed, cells = #touched, removedFraction = PileGrid.removedFraction(grid) }
+	end
+
 	function hooks.simulateCollect(userId: number, cellX: number, cellZ: number)
 		local runtime = container.rounds:roundOf(userId)
 		if not runtime then
