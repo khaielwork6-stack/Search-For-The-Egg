@@ -127,7 +127,8 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	grid.LayoutOrder = 3
 	grid.ZIndex = z
 	local layout = Instance.new("UIGridLayout")
-	layout.CellSize = UDim2.new(1 / COLUMNS, -Tokens.spacing.sm, 0, math.floor(tap * 2.9))
+	local CELL_HEIGHT = math.floor(tap * 2.9)
+	layout.CellSize = UDim2.new(1 / COLUMNS, -Tokens.spacing.sm, 0, CELL_HEIGHT)
 	layout.CellPadding = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = grid
@@ -150,9 +151,17 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		local stroke = root:FindFirstChild("Outline") :: UIStroke
 
 		-- Header band: the day number, always legible against the card whatever state it is in.
+		-- Bands, measured off the cell height, so the header, amount, artwork and footer occupy four
+		-- strips that cannot intersect whatever the viewport scale does.
+		local headerHeight = Tokens.typography.label.size + Tokens.spacing.sm
+		local amountHeight = Tokens.typography.heading.size + 2
+		local footerHeight = Tokens.typography.caption.size + Tokens.spacing.sm
+		local artTop = headerHeight + amountHeight + Tokens.spacing.xs
+		local artHeight = math.max(18, CELL_HEIGHT - artTop - footerHeight - Tokens.spacing.sm * 2)
+
 		local header = Instance.new("Frame")
 		header.Name = "Header"
-		header.Size = UDim2.new(1, 0, 0, Tokens.typography.label.size + Tokens.spacing.sm)
+		header.Size = UDim2.new(1, 0, 0, headerHeight)
 		header.BackgroundColor3 = Tokens.color.strawDeep
 		header.BorderSizePixel = 0
 		header.ZIndex = z + 2
@@ -173,17 +182,17 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			color = Tokens.color.goldDeep,
 		})
 		amount.AnchorPoint = Vector2.new(0.5, 0)
-		amount.Position = UDim2.new(0.5, 0, 0, header.Size.Y.Offset + Tokens.spacing.xs)
-		amount.Size = UDim2.new(1, 0, 0, Tokens.typography.heading.size + 2)
+		amount.Position = UDim2.new(0.5, 0, 0, headerHeight)
+		amount.Size = UDim2.new(1, 0, 0, amountHeight)
 
 		-- Artwork band. The grand prize gets a cluster rather than a single stone, so "a lot" reads
 		-- without writing the word.
 		local art = Instance.new("Frame")
 		art.Name = "Art"
 		art.BackgroundTransparency = 1
-		art.AnchorPoint = Vector2.new(0.5, 0.5)
-		art.Position = UDim2.fromScale(0.5, 0.56)
-		art.Size = UDim2.new(1, -Tokens.spacing.sm, 0.44, 0)
+		art.AnchorPoint = Vector2.new(0.5, 0)
+		art.Position = UDim2.new(0.5, 0, 0, artTop)
+		art.Size = UDim2.new(1, -Tokens.spacing.sm, 0, artHeight)
 		art.ZIndex = z + 3
 		art.Parent = face
 		local gems: { Frame } = {}
@@ -194,7 +203,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			gem.AnchorPoint = Vector2.new(0.5, 0.5)
 			if grand then
 				local ring = (index - 1) / cluster * math.pi * 2
-				gem.Position = UDim2.fromScale(0.5 + math.cos(ring) * 0.2, 0.5 + math.sin(ring) * 0.26)
+				gem.Position = UDim2.fromScale(0.5 + math.cos(ring) * 0.22, 0.5 + math.sin(ring) * 0.2)
 			else
 				gem.Position = UDim2.fromScale(0.5, 0.5)
 			end
@@ -206,7 +215,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		footer.Name = "Footer"
 		footer.AnchorPoint = Vector2.new(0.5, 1)
 		footer.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.xs)
-		footer.Size = UDim2.new(1, -Tokens.spacing.sm, 0, Tokens.typography.caption.size + Tokens.spacing.sm)
+		footer.Size = UDim2.new(1, -Tokens.spacing.sm, 0, footerHeight)
 		footer.BackgroundColor3 = Tokens.color.creamDeep
 		footer.BorderSizePixel = 0
 		footer.AutoButtonColor = false
