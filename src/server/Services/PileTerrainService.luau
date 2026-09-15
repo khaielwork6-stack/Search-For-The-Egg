@@ -390,11 +390,9 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 		local ground = field.groundY or field.baseY
 		local surface = PileSurface.heightAt(field, cx, cz) - dentAt(cx, cz)
 		local top = field.baseY + math.max(0, surface - collision.surfaceInsetStuds - coatSpan(config, field, x, z))
-		-- At the lip the coat is barely a stud tall, so subtracting a whole coat span drops the body
-		-- under the sand. Wherever there is any mound above the floor the body keeps a face above it.
-		if surface > (collision.lipSurfaceStuds or 0.1) then
-			top = math.max(top, ground + (collision.lipHeightStuds or 0.25))
-		end
+		-- No floor under `top`. A lip forced above the sand here used to stop a low sight line slipping
+		-- under the mound's cut-off edge, but the dome reaches the sand on its own now, so all the lip
+		-- did was stand the outermost ring of boxes on the ground as bare bricks beyond the coat.
 		local floor = math.min(ground, field.baseY) - (collision.bodyBuryStuds or 2)
 		local height = math.max(top - floor, 0.05)
 		local size = field.cellSize * collision.shellOverlap
