@@ -117,41 +117,41 @@
         "IntroPosterClose": {
           "position": [
             6.0,
-            55.6,
-            400.4
+            55.9,
+            404.6
           ],
           "lookAt": [
             6.0,
-            55.4,
-            397.3
+            55.9,
+            397.6
           ],
           "fieldOfView": 40.0
         },
         "IntroPlayerApproach": {
           "position": [
-            11.6,
-            55.2,
-            401.2
+            11.2,
+            55.4,
+            403.4
           ],
           "lookAt": [
-            6.6,
-            54.6,
-            398.2
+            4.8,
+            54.8,
+            399.2
           ],
-          "fieldOfView": 52.0
+          "fieldOfView": 54.0
         },
         "IntroPlayerReading": {
           "position": [
-            9.6,
-            55.0,
-            400.2
+            8.9,
+            55.1,
+            402.2
           ],
           "lookAt": [
-            6.4,
-            54.4,
-            398.6
+            4.2,
+            54.7,
+            399.6
           ],
-          "fieldOfView": 46.0
+          "fieldOfView": 48.0
         },
         "IntroFarmReveal": {
           "position": [
@@ -202,14 +202,14 @@
       },
       "actor": {
         "startPosition": [
-          1.5,
+          0.5,
           52.18,
-          404.6
+          407.5
         ],
         "standPosition": [
-          6.2,
+          3.4,
           52.18,
-          399.7
+          399.6
         ],
         "walkAt": 4.5,
         "walkSeconds": 2.7,

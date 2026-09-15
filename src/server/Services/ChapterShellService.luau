@@ -7,10 +7,12 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ChapterLayout = require(ReplicatedStorage.Shared.Domain.ChapterLayout)
+local RoundIntro = require(ReplicatedStorage.Shared.Domain.RoundIntro)
 
 local ChapterShellService = {}
 
 ChapterShellService.FOLDER_NAME = "SFE_Chapter1"
+ChapterShellService.INTRO_FOLDER_NAME = "SFE_IntroSet"
 ChapterShellService.PLACEHOLDER_TAG = "PHASE_6_ART"
 
 local function part(
@@ -670,12 +672,191 @@ function ChapterShellService.stageToolModels(workspaceService: Workspace, replic
 end
 
 -- Builds the Chapter 1 arena: the owner's map when present, the greybox otherwise.
+-- The round intro's set: a rustic sign with a parchment flyer beside the south gate path, and the
+-- five named camera markers. Built once with the world, not per round.
+--
+-- The markers are real named parts rather than numbers buried in a controller, so framing can be
+-- adjusted by dragging them in Studio and read straight back out; `round.intro.markers` is only the
+-- authored default. The client falls back to the config, and then to a plain fade, if a marker is
+-- missing, so a deleted marker degrades the shot instead of trapping the player.
+--
+-- The flyer's reward is left at the chapter's own value here. The client rewrites it locally for the
+-- difficulty its round is actually being played on, which never replicates and so cannot disagree
+-- between two parties sharing a server.
+function ChapterShellService.buildIntroSet(folder: Instance, config: { [string]: any }): Folder
+	local intro = config.round.intro
+	local layout = ChapterLayout.chapter1
+	local existing = folder:FindFirstChild(ChapterShellService.INTRO_FOLDER_NAME)
+	if existing then
+		existing:Destroy()
+	end
+	local set = Instance.new("Folder")
+	set.Name = ChapterShellService.INTRO_FOLDER_NAME
+	set.Parent = folder
+
+	for name, marker in pairs(intro.markers) do
+		local position = Vector3.new(marker.position[1], marker.position[2], marker.position[3])
+		local lookAt = Vector3.new(marker.lookAt[1], marker.lookAt[2], marker.lookAt[3])
+		local pin = part(name, Vector3.new(0.6, 0.6, 1.6), CFrame.lookAt(position, lookAt), Color3.fromRGB(255, 120, 60), nil, set, false)
+		pin.Transparency = 1
+		pin.CanQuery = false
+		pin.CanTouch = false
+		pin.CastShadow = false
+		pin:SetAttribute("SFE_FieldOfView", marker.fieldOfView)
+	end
+
+	local sign = intro.sign
+	local base = Vector3.new(sign.position[1], sign.position[2], sign.position[3])
+	local facing = Vector3.new(sign.facing[1], sign.facing[2], sign.facing[3])
+	if facing.Magnitude < 0.01 then
+		facing = Vector3.new(0, 0, 1)
+	end
+	facing = facing.Unit
+	local postHeight = sign.postHeightStuds
+	local board = Vector3.new(sign.boardSizeStuds[1], sign.boardSizeStuds[2], sign.boardSizeStuds[3])
+	local model = Instance.new("Model")
+	model.Name = "SFE_IntroSign"
+	model.Parent = set
+
+	local postCF = CFrame.lookAt(base + Vector3.new(0, postHeight / 2, 0), base + Vector3.new(0, postHeight / 2, 0) + facing)
+	part("SignPost", Vector3.new(0.7, postHeight, 0.7), postCF, Color3.fromRGB(152, 99, 60), nil, model, true)
+	-- The board hangs on the camera-facing side of the post, not centred on it, or the post draws a
+	-- stripe straight down the middle of the flyer.
+	local boardCentre = base + Vector3.new(0, postHeight - board.Y / 2 + 0.3, 0) + facing * (0.35 + board.Z / 2)
+	local boardCF = CFrame.lookAt(boardCentre, boardCentre + facing)
+	local boardPart = part("SignBoard", board, boardCF, Color3.fromRGB(190, 137, 85), nil, model, true)
+	model.PrimaryPart = boardPart
+
+	-- The parchment is its own part so the intro can lift it off the board and put it in the actor's
+	-- hand without rebuilding anything.
+	local inset = sign.parchmentInsetStuds
+	local paper = Vector3.new(board.X - inset * 2, board.Y - inset * 2, 0.08)
+	local paperCF = boardCF * CFrame.new(0, 0, -(board.Z / 2 + paper.Z / 2 + 0.01))
+	local parchment = part("IntroParchment", paper, paperCF, Color3.fromRGB(246, 232, 198), nil, model, false)
+	parchment.CanQuery = false
+	parchment:SetAttribute("SFE_IntroParchment", true)
+	local tackCF = paperCF * CFrame.new(0, paper.Y / 2 - 0.3, -0.06)
+	local tack = part("Tack", Vector3.new(0.22, 0.22, 0.12), tackCF, Color3.fromRGB(120, 92, 64), nil, model, false)
+	tack.Shape = Enum.PartType.Cylinder
+	tack.CFrame = tackCF * CFrame.Angles(0, math.rad(90), 0)
+	tack.CanQuery = false
+
+	ChapterShellService.paintParchment(parchment, config, "chapter1", "normal")
+	local _ = layout
+	return set
+end
+
+-- Draws the flyer onto a parchment part. Text is laid out on a fixed pixel canvas at a high
+-- pixels-per-stud and never scaled to fit, so it stays crisp and does not shimmer as the camera
+-- moves or the graphics level changes. Safe to call again to change the wording.
+function ChapterShellService.paintParchment(parchment: BasePart, config: { [string]: any }, chapter: string, difficulty: string)
+	local intro = config.round.intro
+	local lines = RoundIntro.posterLines(config, chapter, difficulty)
+	local existing = parchment:FindFirstChild("Flyer")
+	if existing then
+		existing:Destroy()
+	end
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "Flyer"
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = intro.sign.pixelsPerStud
+	gui.LightInfluence = 0
+	gui.AlwaysOnTop = false
+	gui.MaxDistance = 90
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	local paper = Instance.new("Frame")
+	paper.Name = "Paper"
+	paper.Size = UDim2.fromScale(1, 1)
+	paper.BackgroundColor3 = Color3.fromRGB(246, 232, 198)
+	paper.BorderSizePixel = 0
+	paper.Parent = gui
+	local aged = Instance.new("UIGradient")
+	aged.Rotation = 90
+	aged.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(250, 240, 212)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(243, 228, 192)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(230, 208, 166)),
+	})
+	aged.Parent = paper
+	local edge = Instance.new("UIStroke")
+	edge.Thickness = 3
+	edge.Color = Color3.fromRGB(176, 143, 96)
+	edge.Transparency = 0.25
+	edge.Parent = paper
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0.06, 0)
+	pad.PaddingBottom = UDim.new(0.05, 0)
+	pad.PaddingLeft = UDim.new(0.07, 0)
+	pad.PaddingRight = UDim.new(0.07, 0)
+	pad.Parent = paper
+
+	-- Text is sized from the canvas rather than scaled to fit, so a line never resizes itself between
+	-- graphics levels (which is what makes SurfaceGui text shimmer as the camera moves).
+	local canvasHeight = parchment.Size.Y * intro.sign.pixelsPerStud
+	local function text(name: string, value: string, y: number, height: number, scale: number, color: Color3)
+		local size = math.max(8, math.floor(canvasHeight * scale + 0.5))
+		local label = Instance.new("TextLabel")
+		label.Name = name
+		label.BackgroundTransparency = 1
+		label.AnchorPoint = Vector2.new(0.5, 0)
+		label.Position = UDim2.fromScale(0.5, y)
+		label.Size = UDim2.fromScale(1, height)
+		label.Font = Enum.Font.FredokaOne
+		label.TextScaled = false
+		label.TextSize = size
+		label.TextWrapped = true
+		label.TextColor3 = color
+		label.Text = value
+		label.Parent = paper
+		return label
+	end
+	local cocoa = Color3.fromRGB(96, 62, 34)
+	local ember = Color3.fromRGB(188, 68, 44)
+	text("Title", lines[1], 0.01, 0.13, 0.125, cocoa)
+	text("Subtitle", lines[2], 0.15, 0.15, 0.065, ember)
+	text("Reward", lines[3], 0.32, 0.13, 0.115, cocoa)
+	text("Footer", lines[4], 0.9, 0.08, 0.05, Color3.fromRGB(150, 118, 78))
+
+	-- A drawn mound of feathers rather than an uploaded image, so the flyer needs no art pipeline.
+	local mound = Instance.new("Frame")
+	mound.Name = "Mound"
+	mound.BackgroundTransparency = 1
+	mound.AnchorPoint = Vector2.new(0.5, 1)
+	mound.Position = UDim2.fromScale(0.5, 0.88)
+	mound.Size = UDim2.fromScale(0.86, 0.36)
+	mound.Parent = paper
+	for index = 1, 26 do
+		local quill = Instance.new("Frame")
+		quill.Name = "Quill" .. index
+		local t = (index - 1) / 25
+		local row = index % 4
+		quill.AnchorPoint = Vector2.new(0.5, 1)
+		quill.Position = UDim2.fromScale(0.08 + t * 0.84, 1 - row * 0.17 - math.abs(t - 0.5) * 0.1)
+		quill.Size = UDim2.fromScale(0.2, 0.07)
+		quill.BackgroundColor3 = if row % 2 == 0 then Color3.fromRGB(176, 143, 96) else Color3.fromRGB(152, 120, 76)
+		quill.BorderSizePixel = 0
+		quill.Rotation = -28 + (index % 7) * 9
+		local round = Instance.new("UICorner")
+		round.CornerRadius = UDim.new(1, 0)
+		round.Parent = quill
+		quill.Parent = mound
+	end
+	gui.Parent = parchment
+end
+
 function ChapterShellService.build(workspaceService: Workspace, config: { [string]: any }): Folder
 	local mapModel = workspaceService:FindFirstChild(ChapterLayout.CHAPTER1_MAP_NAME)
-	if mapModel then
-		return ChapterShellService.buildFromMap(workspaceService, mapModel, config)
+	local folder = if mapModel
+		then ChapterShellService.buildFromMap(workspaceService, mapModel, config)
+		else ChapterShellService.buildGreybox(workspaceService, config)
+	local ok, err = pcall(ChapterShellService.buildIntroSet, folder, config)
+	if not ok then
+		-- The intro set is presentation only: the round must still start without it.
+		warn("[SFE][Chapter] intro set failed to build: " .. tostring(err))
 	end
-	return ChapterShellService.buildGreybox(workspaceService, config)
+	return folder
 end
 
 -- Creates the Egg part at reveal time (never earlier: clients cannot learn the position from the
