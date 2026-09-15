@@ -11,9 +11,9 @@ return function(describe, it, expect)
 	local maxVisible = cfg.hud.carriedStack.maxVisibleFeathers
 
 	describe("CarriedDisplay", function()
-		it("caps the visible bundle at 10..12 feathers", function()
+		it("caps the visible bundle at a fixed number of feathers, never one per feather carried", function()
 			expect(maxVisible).toBeGreaterThanOrEqual(10)
-			expect(maxVisible).toBeLessThanOrEqual(12)
+			expect(maxVisible).toBeLessThanOrEqual(24)
 		end)
 
 		it("scales a finite bag by fullness: empty shows nothing, one feather shows one, full shows the cap", function()
@@ -62,6 +62,34 @@ return function(describe, it, expect)
 				expect(count - last).toBeLessThanOrEqual(1)
 				last = count
 			end
+		end)
+
+		it("shows the bag composition, and any rainbow at all is visible", function()
+			local capacity = 20
+			local total, rainbow = CarriedDisplay.split(cfg, 0, 0, capacity, false)
+			expect(total).toBe(0)
+			expect(rainbow).toBe(0)
+			-- All ordinary: no rainbow feather in the bundle.
+			local allStandard, noRainbow = CarriedDisplay.split(cfg, capacity, 0, capacity, false)
+			expect(allStandard).toBe(maxVisible)
+			expect(noRainbow).toBe(0)
+			-- One Rainbow Feather in a full bag rounds to nothing by proportion, and still shows.
+			local mixedTotal, mixedRainbow = CarriedDisplay.split(cfg, capacity - 1, 1, capacity, false)
+			expect(mixedTotal).toBe(maxVisible)
+			expect(mixedRainbow).toBe(1)
+			-- A bag that is all rainbow shows a bundle that is all rainbow.
+			local pureTotal, pureRainbow = CarriedDisplay.split(cfg, 0, capacity, capacity, false)
+			expect(pureRainbow).toBe(pureTotal)
+			-- Rainbow never outnumbers the bundle it sits in, at any mix.
+			for standard = 0, capacity do
+				local t, r = CarriedDisplay.split(cfg, standard, capacity - standard, capacity, false)
+				expect(r).toBeLessThanOrEqual(t)
+				expect(r).toBeGreaterThanOrEqual(0)
+			end
+			-- Same rules on an infinite bag.
+			local infTotal, infRainbow = CarriedDisplay.split(cfg, 400, 2, 0, true)
+			expect(infTotal).toBe(maxVisible)
+			expect(infRainbow).toBe(1)
 		end)
 
 		it("labels the bundle for reports", function()

@@ -1440,7 +1440,7 @@
   },
   "hud": {
     "carriedStack": {
-      "maxVisibleFeathers": 12,
+      "maxVisibleFeathers": 18,
       "infiniteCapCount": 200,
       "anchorX": 1.0,
       "anchorBottomOffsetPx": 24,
@@ -1458,10 +1458,27 @@
       "bobHz": 1.9,
       "swayDegrees": 3.5,
       "easeSeconds": 0.18,
-      "widthFraction": 0.19,
-      "minWidthPx": 130,
-      "maxWidthPx": 260,
-      "aspect": 0.66
+      "widthFraction": 0.26,
+      "minWidthPx": 170,
+      "maxWidthPx": 330,
+      "aspect": 0.66,
+      "bundle": {
+        "spreadDegrees": 58.0,
+        "leanDegrees": -38.0,
+        "baseX": 0.4,
+        "baseY": -1.55,
+        "baseZ": 0.2,
+        "layerSpreadGain": 0.34,
+        "layerRiseStuds": 0.18,
+        "layerDepthStuds": 0.42
+      },
+      "depositSeconds": 0.34,
+      "depositStaggerSeconds": 0.018,
+      "depositRiseStuds": 1.6,
+      "depositDriftStuds": -1.1,
+      "rainbowHueRate": 0.35,
+      "rainbowSaturation": 0.55,
+      "compositionEvidence": "OWNER 15 Sep 2026: the bundle had to read larger, fuller and organised, and had to show what the player is actually carrying. maxVisibleFeathers 12 -> 18 over three overlapping depth layers, frame width 0.19 -> 0.26 of the viewport (170-330px, still clamped inside the safe area), carried Rainbow Feathers appear as animated rainbow feathers at the front of the bundle (emissive surface and motes, no light instance, so nothing else is tinted), and a sale flies the bundle out instead of deleting it."
     }
   },
   "toolFeel": {

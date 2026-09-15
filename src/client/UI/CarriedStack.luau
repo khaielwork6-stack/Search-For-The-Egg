@@ -31,7 +31,9 @@ export type CarriedStack = typeof(setmetatable(
 		_config: { [string]: any },
 		_motion: () -> Motion.MotionSettings,
 		_feathers: { BasePart },
+		_rainbowParts: { [BasePart]: number },
 		_count: number,
+		_rainbowCount: number,
 		_tier: string,
 		_visible: boolean,
 		_hiddenByUi: boolean,
@@ -54,7 +56,25 @@ local TEMPLATE_SIZE = Vector3.new(0.54, 1.44, 0.13)
 local REST_CAMERA = CFrame.lookAt(Vector3.new(0, 0.2, 7.0), Vector3.new(0, 0, 0))
 local RENDER_NAME = "SFE_CarriedStackSway"
 
-local function makeFeather(index: number, palette: { { number } }): BasePart
+-- Rainbow dressing, the same recipe the pile uses: an emissive surface and a few motes, and no light
+-- source at all. Nothing here can tint a neighbouring feather, and inside a ViewportFrame it could
+-- not reach the world even if it tried.
+local function dressRainbow(part: BasePart, index: number)
+	part.Material = Enum.Material.Neon
+	local motes = Instance.new("ParticleEmitter")
+	motes.Name = "RainbowMotes"
+	motes.Rate = 4
+	motes.Lifetime = NumberRange.new(0.6, 1.1)
+	motes.Speed = NumberRange.new(0.2, 0.6)
+	motes.Size = NumberSequence.new(0.1, 0)
+	motes.Transparency = NumberSequence.new(0.25, 1)
+	motes.LightEmission = 0.8
+	motes.Color = ColorSequence.new(Color3.fromRGB(255, 240, 255))
+	motes.Parent = part
+	local _ = index
+end
+
+local function makeFeather(index: number, palette: { { number } }, rainbow: boolean?): BasePart
 	local template = AssetManifest.model("feather")
 	local part: BasePart
 	if template and template:IsA("BasePart") then
@@ -79,24 +99,37 @@ local function makeFeather(index: number, palette: { { number } }): BasePart
 	local i = math.floor(scaled) + 1
 	local a, b = palette[i], palette[math.min(#palette, i + 1)]
 	part.Color = Color3.fromRGB(a[1], a[2], a[3]):Lerp(Color3.fromRGB(b[1], b[2], b[3]), scaled - (i - 1))
+	if rainbow then
+		dressRainbow(part, index)
+	end
 	return part
 end
 
--- Rest pose of the k-th feather (of `count`): every stem meets at the bundle's base (lower right of
--- the viewport); heads fan up and to the left across a fixed arc, each a touch further back so they
--- read as neatly overlapping layers. The arc is the same for any count, so twelve feathers overlap
--- more tightly rather than spreading wider, and no head ever reaches the frame edge.
-local function restPose(index: number, count: number): CFrame
+-- Rest pose of the k-th feather (of `count`). A single flat fan reads as a handful of loose quills
+-- once there are more than about eight of them, so the bundle is built as three overlapping depth
+-- layers instead: stems still gather to one point at the lower right, but each layer sits a little
+-- further back, a little higher and fans a little wider, so the front layer reads as the near face
+-- of a thick bunch rather than a row of separate feathers. The arc never widens with count - more
+-- feathers overlap more tightly - so a full bundle cannot reach the frame edge.
+local LAYERS = 3
+
+local function restPose(index: number, count: number, geometry: { [string]: any }): CFrame
 	local h = function(salt: number)
 		return FeatherLayout.hash(index, 11, salt)
 	end
-	local base = Vector3.new(0.4, -1.5, 0.2)
-	local spread = math.rad(64)
-	local t = if count <= 1 then 0.5 else (index - 1) / (count - 1)
+	local perLayer = math.max(1, math.ceil(count / LAYERS))
+	local layer = math.min(LAYERS, math.floor((index - 1) / perLayer) + 1)
+	local within = (index - 1) % perLayer
+	local inLayer = math.min(perLayer, count - (layer - 1) * perLayer)
+	local t = if inLayer <= 1 then 0.5 else within / (inLayer - 1)
+	-- Back layers fan wider and ride higher, so they fill the gaps the front layer leaves.
+	local layerT = (layer - 1) / math.max(1, LAYERS - 1)
+	local spread = math.rad(geometry.spreadDegrees) * (1 + layerT * geometry.layerSpreadGain)
+	local base = Vector3.new(geometry.baseX, geometry.baseY + layerT * geometry.layerRiseStuds, geometry.baseZ)
 	local fan = -spread / 2 + spread * t + (h(1) - 0.5) * math.rad(3)
-	local lean = math.rad(-38) -- fan centre leans up-left, away from the crosshair
+	local lean = math.rad(geometry.leanDegrees) -- fan centre leans up-left, away from the crosshair
 	local roll = (h(2) - 0.5) * math.rad(12)
-	local depth = (0.5 - t) * 0.4 + (h(3) - 0.5) * 0.06
+	local depth = -layerT * geometry.layerDepthStuds + (0.5 - t) * 0.22 + (h(3) - 0.5) * 0.05
 	-- Quill (+Y) points from the base up-left; rotate about the view axis to fan.
 	local frame = CFrame.new(base + Vector3.new(0, 0, depth)) * CFrame.Angles(0, 0, lean + fan) * CFrame.Angles(math.rad(10), 0, roll)
 	return frame * CFrame.new(0, TEMPLATE_SIZE.Y * 1.65 * 0.5, 0) -- centre the mesh half a length up the quill
@@ -142,7 +175,9 @@ function CarriedStack.new(
 		_config = config,
 		_motion = motion,
 		_feathers = {},
+		_rainbowParts = {},
 		_count = 0,
+		_rainbowCount = 0,
 		_tier = "empty",
 		_visible = false,
 		_hiddenByUi = false,
@@ -192,32 +227,53 @@ function CarriedStack.countFor(config: { [string]: any }, carried: number, capac
 	return CarriedDisplay.count(config, carried, capacity, infinite)
 end
 
--- Mirrors the authoritative bag: the displayed count follows carried / capacity (logarithmic when
--- infinite), capped at `maxVisibleFeathers`; the HUD counter shows the true amount.
-function CarriedStack.setBag(self: CarriedStack, carried: number, capacity: number, infinite: boolean, animate: boolean?)
-	local count = CarriedDisplay.count(self._config, carried, capacity, infinite)
+-- Mirrors the authoritative bag, in size and in composition: the displayed count follows carried /
+-- capacity (logarithmic when infinite) capped at `maxVisibleFeathers`, and the Rainbow Feathers the
+-- player is actually carrying are shown as rainbow feathers in the bundle. The HUD counter shows the
+-- true amount.
+function CarriedStack.setBag(self: CarriedStack, standard: number, rainbow: number, capacity: number, infinite: boolean, animate: boolean?)
+	local count, rainbowCount = CarriedDisplay.split(self._config, standard, rainbow, capacity, infinite)
 	self._tier = CarriedDisplay.tier(count, self._config.hud.carriedStack.maxVisibleFeathers)
-	self:_setCount(count, animate == true)
+	self:_setCount(count, animate == true, rainbowCount)
 end
 
-function CarriedStack._setCount(self: CarriedStack, count: number, animate: boolean)
+function CarriedStack._setCount(self: CarriedStack, count: number, animate: boolean, rainbowCount: number?)
 	local palette = self._config.pile.visual.palette
 	local carried = self._config.hud.carriedStack
 	local motion = self._motion()
 	local previous = #self._feathers
+	local rainbowWanted = math.clamp(rainbowCount or 0, 0, count)
+	-- Rainbow feathers sit at the front of the bundle (lowest indices are the near layer) so they are
+	-- never buried behind ordinary ones. A change in composition rebuilds only the parts whose kind
+	-- changed, not the whole bundle.
+	local needRebuild = rainbowWanted ~= self._rainbowCount
+	if needRebuild then
+		for _, part in ipairs(self._feathers) do
+			part:Destroy()
+		end
+		table.clear(self._feathers)
+		table.clear(self._rainbowParts)
+		previous = 0
+	end
 	while #self._feathers > count do
 		local part = table.remove(self._feathers) :: BasePart
+		self._rainbowParts[part] = nil
 		part:Destroy()
 	end
 	for index = #self._feathers + 1, count do
-		local part = makeFeather(index, palette)
+		local isRainbow = index <= rainbowWanted
+		local part = makeFeather(index, palette, isRainbow)
 		part.Parent = self._world
 		table.insert(self._feathers, part)
+		if isRainbow then
+			self._rainbowParts[part] = FeatherLayout.hash(index, 23, 5)
+		end
 	end
+	self._rainbowCount = rainbowWanted
 	-- Re-fan the whole bundle so stems stay gathered as it grows; new feathers settle in from above.
 	local seconds = Motion.clampSeconds(carried.bounceSeconds, motion)
 	for index, part in ipairs(self._feathers) do
-		local rest = restPose(index, count)
+		local rest = restPose(index, count, carried.bundle)
 		if animate and index > previous then
 			part.CFrame = rest * CFrame.new(0, carried.bounceStuds * 3, 0)
 			TweenService:Create(part, TweenInfo.new(seconds, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { CFrame = rest }):Play()
@@ -244,9 +300,37 @@ function CarriedStack.pulse(self: CarriedStack)
 	TweenService:Create(self._scale, TweenInfo.new(squash, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 end
 
-function CarriedStack.clear(self: CarriedStack)
+-- Emptying the bundle. A sale or a deposit should look like the feathers leaving, so `animate` hands
+-- the current parts to a short fly-out (up and away towards the crate, shrinking) and detaches them
+-- from the bundle immediately, so a pick landing during the animation builds a fresh bundle rather
+-- than fighting the one on its way out.
+function CarriedStack.clear(self: CarriedStack, animate: boolean?)
 	self._tier = "empty"
-	self:_setCount(0, false)
+	if not animate or #self._feathers == 0 then
+		self:_setCount(0, false, 0)
+		return
+	end
+	local carried = self._config.hud.carriedStack
+	local leaving = self._feathers
+	self._feathers = {}
+	self._rainbowParts = {}
+	self._count = 0
+	self._rainbowCount = 0
+	local seconds = Motion.clampSeconds(carried.depositSeconds, self._motion())
+	for index, part in ipairs(leaving) do
+		local away = part.CFrame * CFrame.new(carried.depositDriftStuds, carried.depositRiseStuds, 0)
+		local delay = (index - 1) * carried.depositStaggerSeconds
+		task.delay(delay, function()
+			if not part.Parent then
+				return
+			end
+			local info = TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+			TweenService:Create(part, info, { CFrame = away, Size = part.Size * 0.2, Transparency = 1 }):Play()
+			task.delay(seconds, function()
+				part:Destroy()
+			end)
+		end)
+	end
 end
 
 -- Walking bob and camera sway, eased back to rest. Bound only while visible.
@@ -281,6 +365,18 @@ function CarriedStack._bind(self: CarriedStack)
 		local swayLimit = if settings.reducedMotion then 0 else math.rad(carried.swayDegrees)
 		local swayTarget = math.clamp(-delta / math.max(0.001, dt) * 0.02, -swayLimit, swayLimit)
 		self._sway += (swayTarget - self._sway) * ease
+		-- Rainbow hue flows on the bundle's own parts only. Desaturated like the pile's records rather
+		-- than raw neon, and no light anywhere: the ordinary feathers beside them keep their colour.
+		if next(self._rainbowParts) ~= nil then
+			local clock = os.clock() * carried.rainbowHueRate
+			for part, phase in pairs(self._rainbowParts) do
+				if part.Parent then
+					part.Color = Color3.fromHSV((clock + phase) % 1, carried.rainbowSaturation, 1)
+				else
+					self._rainbowParts[part] = nil
+				end
+			end
+		end
 		local bobY = math.sin(self._bobPhase) * self._bob
 		local bobX = math.cos(self._bobPhase * 0.5) * self._bob * 0.6
 		self._camera.CFrame = REST_CAMERA * CFrame.new(-bobX, -bobY, 0) * CFrame.Angles(0, self._sway, self._sway * 0.35)

@@ -767,12 +767,12 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 			self._infiniteBag = player.bagInfinite == true
 		end
 		self.round:setBag(player.carriedStandard + player.carriedRainbow, capacity, self._infiniteBag == true, false)
-		self.carriedStack:setBag(player.carriedStandard + player.carriedRainbow, capacity, self._infiniteBag == true, false)
+		self.carriedStack:setBag(player.carriedStandard, player.carriedRainbow, capacity, self._infiniteBag == true, false)
 		self.round:setCash(player.cashCents, false)
 	end))
 	self._trove:add(round.sale:Connect(function(sale)
 		self.round:setBag(0, deps.config.bags.levels[(round.player and round.player.bagLevel) or 1].capacity, false, true)
-		self.carriedStack:clear()
+		self.carriedStack:clear(true)
 		deps.audio:play(Tokens.sound.sellArc)
 		self.round:setCash(sale.cashCents, true, function()
 			deps.audio:play(Tokens.sound.sellTick, { pitchVariance = 0.05 })
@@ -846,7 +846,10 @@ function HUDController.onCollected(self: HUDController, data: { [string]: any })
 	else
 		self.round:setBag(data.carried, data.capacity, data.infinite == true, true)
 	end
-	self.carriedStack:setBag(data.carried, data.capacity, data.infinite == true, true)
+	-- The award carries the bag's composition, not just its size, so a Rainbow Feather shows up in the
+	-- bundle on the pick that earned it rather than waiting for the next projection push.
+	local carriedRainbow = data.carriedRainbow or 0
+	self.carriedStack:setBag(math.max(0, (data.carried or 0) - carriedRainbow), carriedRainbow, data.capacity, data.infinite == true, true)
 	self.carriedStack:pulse()
 	if awarded > 0 and data.hitX and data.hitZ then
 		self:floatPickup(Vector3.new(data.hitX, data.hitY or 0, data.hitZ), awarded, (data.rainbow or 0) > 0)

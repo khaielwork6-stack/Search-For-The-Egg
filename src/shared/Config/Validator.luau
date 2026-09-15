@@ -797,8 +797,10 @@ function Validator.validate(raw: any): Report
 	check(type(carried) == "table", "hud.carriedStack missing")
 	if type(carried) == "table" then
 		check(
-			isPositiveNumber(carried.maxVisibleFeathers) and carried.maxVisibleFeathers % 1 == 0 and carried.maxVisibleFeathers <= 16,
-			"hud.carriedStack.maxVisibleFeathers must be an integer 1..16"
+			-- The bundle is three overlapping layers now, so it carries more than the old flat fan could
+			-- without reading as loose quills. It is still a fixed cap: never one model per feather.
+			isPositiveNumber(carried.maxVisibleFeathers) and carried.maxVisibleFeathers % 1 == 0 and carried.maxVisibleFeathers <= 24,
+			"hud.carriedStack.maxVisibleFeathers must be an integer 1..24"
 		)
 		check(
 			isPositiveNumber(carried.infiniteCapCount) and carried.infiniteCapCount >= 2,
@@ -836,6 +838,29 @@ function Validator.validate(raw: any): Report
 			check(isNonNegativeNumber(carried[key]), "hud.carriedStack." .. key .. " must be >= 0")
 		end
 		check(isNonNegativeNumber(carried.anchorBottomOffsetPx), "hud.carriedStack.anchorBottomOffsetPx must be >= 0")
+		for _, key in ipairs({ "depositSeconds", "depositStaggerSeconds", "rainbowHueRate" }) do
+			check(isPositiveNumber(carried[key]), "hud.carriedStack." .. key .. " must be > 0")
+		end
+		check(
+			isNonNegativeNumber(carried.rainbowSaturation) and carried.rainbowSaturation <= 1,
+			"hud.carriedStack.rainbowSaturation must be 0..1"
+		)
+		check(type(carried.depositRiseStuds) == "number", "hud.carriedStack.depositRiseStuds must be a number")
+		check(type(carried.depositDriftStuds) == "number", "hud.carriedStack.depositDriftStuds must be a number")
+		local bundle = carried.bundle
+		check(type(bundle) == "table", "hud.carriedStack.bundle missing")
+		if type(bundle) == "table" then
+			for _, key in ipairs({ "spreadDegrees", "layerSpreadGain", "layerRiseStuds", "layerDepthStuds" }) do
+				check(isNonNegativeNumber(bundle[key]), "hud.carriedStack.bundle." .. key .. " must be >= 0")
+			end
+			check(
+				isPositiveNumber(bundle.spreadDegrees) and bundle.spreadDegrees <= 120,
+				"hud.carriedStack.bundle.spreadDegrees must be within (0, 120]"
+			)
+			for _, key in ipairs({ "leanDegrees", "baseX", "baseY", "baseZ" }) do
+				check(type(bundle[key]) == "number", "hud.carriedStack.bundle." .. key .. " must be a number")
+			end
+		end
 	end
 	if type(raw.interaction) == "table" then
 		check(
