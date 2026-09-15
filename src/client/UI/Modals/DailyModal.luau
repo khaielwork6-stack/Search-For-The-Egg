@@ -52,6 +52,7 @@ type Cell = {
 	title: TextLabel,
 	amount: TextLabel,
 	footer: TextButton,
+	hit: TextButton,
 	gems: { Frame },
 	check: Frame,
 	lock: Frame,
@@ -156,7 +157,9 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		-- strips that cannot intersect whatever the viewport scale does.
 		local headerHeight = Tokens.typography.label.size + Tokens.spacing.sm
 		local amountHeight = Tokens.typography.heading.size + 2
-		local footerHeight = Tokens.typography.caption.size + Tokens.spacing.sm
+		-- Tall enough to read as a button rather than a printed strip. The card itself carries the tap
+		-- target (see the hit layer below), so this is about weight, not reach.
+		local footerHeight = Tokens.typography.label.size + Tokens.spacing.md
 		local artTop = headerHeight + amountHeight + Tokens.spacing.xs
 		local artHeight = math.max(18, CELL_HEIGHT - artTop - footerHeight - Tokens.spacing.sm * 2)
 
@@ -211,7 +214,22 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			table.insert(gems, gem)
 		end
 
-		-- Footer: the state, and the only place a card can be pressed.
+		-- The whole card is the tap target.
+		--
+		-- The footer band used to be the only place a card could be pressed, which made the real target
+		-- 124x21 - less than half the 44px minimum the tokens declare, on the one control in this modal
+		-- a player is here to press. The band still shows the state; this sits over the card and takes
+		-- the press, so the target is the full 127px cell.
+		local hit = Instance.new("TextButton")
+		hit.Name = "Hit"
+		hit.Size = UDim2.fromScale(1, 1)
+		hit.BackgroundTransparency = 1
+		hit.Text = ""
+		hit.AutoButtonColor = false
+		hit.ZIndex = z + 6
+		hit.Parent = face
+
+		-- Footer: the state the card is in, drawn as the affordance.
 		local footer = Instance.new("TextButton")
 		footer.Name = "Footer"
 		footer.AnchorPoint = Vector2.new(0.5, 1)
@@ -259,6 +277,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			title = title,
 			amount = amount,
 			footer = footer,
+			hit = hit,
 			gems = gems,
 			check = check,
 			lock = lock,
@@ -462,14 +481,15 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	-- A card is pressable only in the state that set Active, so Locked, Claimed and countdown cards
 	-- swallow the press instead of firing a request the server would only refuse.
 	for _, cell in ipairs(cells) do
-		table.insert(
-			cleanups,
-			cell.footer.Activated:Connect(function()
-				if cell.footer.Active then
-					doClaim()
-				end
-			end)
-		)
+		-- `Active` on the footer is still what says "this card is claimable"; the hit layer only decides
+		-- where a finger has to land, so both fire the same guarded handler.
+		local function pressed()
+			if cell.footer.Active then
+				doClaim()
+			end
+		end
+		table.insert(cleanups, cell.footer.Activated:Connect(pressed))
+		table.insert(cleanups, cell.hit.Activated:Connect(pressed))
 	end
 	if api.registerDebug then
 		api.registerDebug({

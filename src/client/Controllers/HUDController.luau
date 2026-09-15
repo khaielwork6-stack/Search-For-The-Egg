@@ -331,7 +331,7 @@ function HUDController.new(deps: any): HUDController
 	local bookCapText = bookCap:FindFirstChild("Glyph") :: TextLabel?
 	local bookLabel = FrameKit.pill(bookHandle.button, "Caption", "Upgrades", {
 		size = UDim2.fromOffset(0, Tokens.typography.caption.size + Tokens.spacing.sm),
-		textSize = Tokens.typography.caption.size - 1,
+		textSize = Tokens.typography.caption.size,
 		zIndex = Tokens.zIndex.hud + 4,
 		fill = Tokens.color.creamPill,
 		textColor = Tokens.color.inkStrong,

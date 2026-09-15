@@ -220,8 +220,9 @@ function Button.build(parent: Instance, options: Options): Handle
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
 	label.Font = style.font
-	label.TextSize = options.textSize
-		or (if variantName == "pill" then Tokens.typography.label.size else Tokens.typography.heading.size + 1)
+	label.TextSize = FrameKit.textSize(
+		options.textSize or (if variantName == "pill" then Tokens.typography.label.size else Tokens.typography.heading.size + 1)
+	)
 	label.TextColor3 = style.text
 	label.Text = if options.image then "" else options.text
 	label.TextTruncate = Enum.TextTruncate.AtEnd

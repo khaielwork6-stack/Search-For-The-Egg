@@ -44,6 +44,15 @@ end
 Frame.texture = texture
 
 -- Chunky lettering: a cocoa outline around the glyphs (the pack's titles use the same device).
+-- No text in this game renders below the readable floor the tokens declare.
+--
+-- Screens kept shaving a pixel off a caption to make something fit - the upgrade pill and the vac's
+-- heat label were both at 12 against a declared minimum of 13 - and a pixel at that size is a real
+-- loss of legibility on a phone. Fitting is the layout's problem, not the reader's.
+function Frame.textSize(size: number): number
+	return math.max(size, Tokens.typography.minimumBodySize)
+end
+
 function Frame.outline(label: TextLabel | TextButton, thickness: number?, color: Color3?): UIStroke
 	local stroke = Instance.new("UIStroke")
 	stroke.Name = "TextOutline"
@@ -214,7 +223,7 @@ function Frame.pill(
 	label.BackgroundColor3 = opts.fill or Tokens.color.creamPill
 	label.BorderSizePixel = 0
 	label.Font = Tokens.typography.label.font
-	label.TextSize = opts.textSize or Tokens.typography.label.size
+	label.TextSize = Frame.textSize(opts.textSize or Tokens.typography.label.size)
 	label.TextColor3 = opts.textColor or Tokens.color.goldDeep
 	label.Text = text
 	label.TextTruncate = Enum.TextTruncate.AtEnd
@@ -269,7 +278,7 @@ function Frame.text(
 	label.Size = opts.size or UDim2.new(1, 0, 0, typo.size + Tokens.spacing.xs)
 	label.BackgroundTransparency = 1
 	label.Font = typo.font
-	label.TextSize = typo.size
+	label.TextSize = Frame.textSize(typo.size)
 	label.TextColor3 = opts.color or Tokens.color.ink
 	label.TextXAlignment = opts.align or Enum.TextXAlignment.Left
 	label.TextWrapped = opts.wrap ~= false

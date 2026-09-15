@@ -105,7 +105,9 @@ function ModalShell.create(
 	closeButton.Name = "Close"
 	closeButton.AnchorPoint = Vector2.new(1, 0.5)
 	closeButton.Position = UDim2.new(1, -Tokens.spacing.sm, 0.5, 0)
-	closeButton.Size = UDim2.fromOffset(tap - 2, tap - 2)
+	-- The full tap target, not two pixels under it. Close is the control every player reaches for
+	-- first and the one most likely to be pressed in a hurry on a phone.
+	closeButton.Size = UDim2.fromOffset(tap, tap)
 	closeButton.BackgroundColor3 = Tokens.color.emberDeep
 	closeButton.Text = ""
 	closeButton.AutoButtonColor = false
