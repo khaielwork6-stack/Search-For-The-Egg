@@ -208,6 +208,12 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	status.BackgroundTransparency = 1
 	status.Font = Tokens.typography.heading.font
 	status.TextSize = Tokens.typography.caption.size - 2
+	status.TextScaled = true
+	status.TextWrapped = false
+	local statusSize = Instance.new("UITextSizeConstraint")
+	statusSize.MaxTextSize = Tokens.typography.caption.size - 2
+	statusSize.MinTextSize = 7
+	statusSize.Parent = status
 	status.TextColor3 = Tokens.color.inkStrong
 	status.Text = ""
 	status.ZIndex = z + 4

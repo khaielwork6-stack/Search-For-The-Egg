@@ -1459,15 +1459,16 @@
       "lagSpringHz": 6.0
     },
     "nestRake": {
-      "viewmodelScale": 0.26,
+      "viewmodelScale": 0.34,
       "thrustSeconds": 0.11,
-      "thrustStuds": 1.7,
-      "thrustDropStuds": 0.55,
+      "thrustStuds": 1.15,
+      "thrustDropStuds": 0.42,
       "returnSeconds": 0.36,
       "impactShake": 0.14,
       "dentRadiusStuds": 1.4,
       "dentSeconds": 0.22,
-      "swingSoundVolume": 0.4
+      "swingSoundVolume": 0.4,
+      "anticipateSeconds": 0.08
     },
     "confettiCharge": {
       "viewmodelScale": 0.22,

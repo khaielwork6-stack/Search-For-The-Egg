@@ -875,13 +875,22 @@ function HUDController.floatPickup(self: HUDController, position: Vector3, amoun
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.fromScale(1, 1)
-	label.Font = Tokens.typography.label.font
-	label.TextSize = if rainbow then Tokens.typography.display.size else Tokens.typography.title.size + 4
-	label.TextColor3 = if rainbow then Tokens.color.gem else Tokens.color.goldLight
+	label.Font = Enum.Font.FredokaOne
+	-- A big haul shouts; a single feather still reads. Heavy cocoa outline so it holds up against
+	-- the mound, which is the brightest thing on screen.
+	label.TextSize = if rainbow then 52 elseif amount >= 10 then 46 elseif amount >= 5 then 38 else 32
+	label.TextColor3 = if rainbow then Color3.fromRGB(226, 150, 255) else Tokens.color.goldLight
 	label.Text = "+" .. tostring(amount)
 	label.Parent = gui
+	local gradient = Instance.new("UIGradient")
+	gradient.Rotation = 90
+	gradient.Color = ColorSequence.new(
+		if rainbow then Color3.fromRGB(255, 226, 255) else Tokens.color.featherWhite,
+		if rainbow then Color3.fromRGB(196, 96, 255) else Tokens.color.gold
+	)
+	gradient.Parent = label
 	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = 2.6
+	stroke.Thickness = 4.5
 	stroke.Color = Tokens.color.outline
 	stroke.Parent = label
 	local scale = Instance.new("UIScale")
@@ -889,10 +898,10 @@ function HUDController.floatPickup(self: HUDController, position: Vector3, amoun
 	scale.Parent = label
 	gui.Parent = anchor
 	anchor.Parent = workspace
-	local rise = Motion.amplitude(if rainbow then 4 else 2.6, motion)
+	local rise = Motion.amplitude(if rainbow then 4.4 else 3.2, motion)
 	local seconds = Motion.clampSeconds(0.9, motion)
 	TweenService
-		:Create(scale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = if rainbow then 1.25 else 1 })
+		:Create(scale, TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = if rainbow then 1.3 else 1.08 })
 		:Play()
 	TweenService:Create(anchor, TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		CFrame = anchor.CFrame + Vector3.new(0, rise, 0),

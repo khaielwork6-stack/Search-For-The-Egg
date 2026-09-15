@@ -19,15 +19,41 @@ ToolViewmodelController.__index = ToolViewmodelController
 local RENDER_NAME = "SFE_ToolViewmodel"
 local MODELS_FOLDER = "SFE_ToolModels"
 
-type Pose = { model: string, offset: CFrame, rotation: CFrame, nozzle: string?, fuse: string?, tip: string? }
+type Pose = {
+	model: string,
+	offset: CFrame,
+	rotation: CFrame?,
+	quill: Vector3?, -- camera-space direction the model's local +Y (its shaft) should point
+	spin: number?, -- degrees about that shaft
+	nozzle: string?,
+	fuse: string?,
+	tip: string?,
+}
+
+-- Orientation from an explicit shaft direction. Euler triples are impossible to reason about for a
+-- held tool; "the shaft points this way in camera space, rolled this far about itself" is not.
+local function fromQuill(quill: Vector3, spin: number): CFrame
+	local up = quill.Unit
+	local reference = if math.abs(up.Z) < 0.95 then Vector3.new(0, 0, -1) else Vector3.new(1, 0, 0)
+	local right = up:Cross(reference)
+	if right.Magnitude < 0.01 then
+		right = up:Cross(Vector3.new(1, 0, 0))
+	end
+	right = right.Unit
+	return CFrame.fromMatrix(Vector3.zero, right, up, right:Cross(up)) * CFrame.Angles(0, math.rad(spin), 0)
+end
 -- Hold poses relative to the camera (x right, y up, z back): the grip sits low on the right and the
 -- working end reaches toward the reticle. Model axes: the pitchfork and dynamite stand along +Y from
 -- their Origin, the vacuum's nozzle points along -X.
 local POSES: { [string]: Pose } = {
+	-- Solved in camera space so the fork head lands in the lower right third and the shaft sweeps
+	-- down to a grip just off the corner: at scale 0.34 the crossbar sits 2.24 studs up the shaft,
+	-- the tips 2.82, so this anchor puts the head around 40 % down and 17 % right of centre.
 	nestRake = {
 		model = "Pitchfork",
-		offset = CFrame.new(0.55, -0.5, -0.45),
-		rotation = CFrame.Angles(math.rad(-110), math.rad(-9), math.rad(6)),
+		offset = CFrame.new(1.31, -1.69, -0.72),
+		quill = Vector3.new(-0.34, 0.42, -0.84),
+		spin = 8,
 		tip = "ForkCrossbar",
 	},
 	confettiCharge = {
@@ -196,6 +222,9 @@ function ToolViewmodelController._build(self: ToolViewmodelController, toolId: s
 	end
 	local model = source:Clone()
 	model.Name = "SFE_Viewmodel_" .. toolId
+	if not model.PrimaryPart then
+		model.PrimaryPart = model:FindFirstChild("Origin") :: BasePart? or model:FindFirstChildWhichIsA("BasePart", true)
+	end
 	local scale = self:_feelFor(toolId).viewmodelScale or 0.4
 	model:ScaleTo(scale)
 	for _, descendant in ipairs(model:GetDescendants()) do
@@ -390,7 +419,8 @@ function ToolViewmodelController.step(self: ToolViewmodelController, dt: number)
 		self:_stepStreaks(dt)
 	end
 	local action = self:_actionOffset(now)
-	model:PivotTo(camera.CFrame * CFrame.new(bobX, bobY, 0) * lagRot * pose.offset * live * action * pose.rotation)
+	local orientation = pose.rotation or fromQuill(pose.quill :: Vector3, pose.spin or 0)
+	model:PivotTo(camera.CFrame * CFrame.new(bobX, bobY, 0) * lagRot * pose.offset * live * action * orientation)
 	if self._toolId == "confettiCharge" and self._action.kind == "lit" and self._fuseLight then
 		self._fuseLight.Brightness = 1.2 + math.sin(now * 30) * 0.6
 	end
