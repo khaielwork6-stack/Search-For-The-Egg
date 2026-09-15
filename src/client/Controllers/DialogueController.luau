@@ -2,6 +2,21 @@
 -- NPC dialogue in the reference style: the camera eases in to frame the speaker, the rig gets an
 -- outline, and a dark translucent box across the bottom types the line out. One press, tap or
 -- Cancel closes it; the camera and controls come back exactly as they were.
+--
+-- Two rules keep a player from getting stuck in here, both learned from spamming the Farmer's prompt:
+--
+-- 1. **One conversation at a time.** `open` used to begin with "if a box is up, close it and start
+--    again". Every press of E on the prompt therefore tore a session down and built another, and the
+--    new one read its "put the camera back like this" baseline off a camera that the old one had left
+--    Scriptable and was still tweening. So it saved Scriptable as the thing to restore, and restored
+--    it - camera dead, mouse locked, no way out. `open` now refuses while a conversation is live.
+--
+-- 2. **The camera baseline outlives the session.** It is taken the first time this controller makes
+--    the camera Scriptable and released only once the camera is genuinely handed back, so a reopen
+--    during the return tween inherits the real gameplay camera rather than a frame of the animation.
+--
+-- The press that opens a box also cannot close it: the close inputs arm a moment later, or the E that
+-- triggered the prompt would be read again here on the same press and shut the box instantly.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,12 +31,24 @@ local DialogueController = {}
 DialogueController.__index = DialogueController
 
 export type DialogueController = typeof(setmetatable(
-	{} :: { _deps: any, _trove: any, _session: any?, stats: { opens: number, closes: number } },
+	{} :: {
+		_deps: any,
+		_trove: any,
+		_session: any?,
+		_cameraBaseline: { type: Enum.CameraType, cframe: CFrame }?,
+		_restoreTween: Tween?,
+		stats: { opens: number, closes: number, refused: number, recovered: number },
+	},
 	DialogueController
 ))
 
 local TYPE_SECONDS_PER_CHARACTER = 0.028
 local MIN_SECONDS = 1.2
+-- How long after the box appears before a press can dismiss it. Long enough that the press which
+-- opened it is finished, short enough that nobody notices they have to wait.
+local INPUT_ARM_SECONDS = 0.18
+-- If the hand-back tween never reports finishing, the camera is given back anyway this long after.
+local RESTORE_BACKSTOP_SECONDS = 1.5
 
 function DialogueController.new(deps: {
 	input: any,
@@ -31,15 +58,22 @@ function DialogueController.new(deps: {
 	accessibility: any,
 	config: { [string]: any },
 }): DialogueController
-	local self = setmetatable({ _deps = deps, _trove = Trove.new(), _session = nil, stats = { opens = 0, closes = 0 } }, DialogueController)
+	local self = setmetatable({
+		_deps = deps,
+		_trove = Trove.new(),
+		_session = nil,
+		_cameraBaseline = nil,
+		_restoreTween = nil,
+		stats = { opens = 0, closes = 0, refused = 0, recovered = 0 },
+	}, DialogueController)
 	self._trove:add(deps.input.actionBegan:Connect(function(action)
-		if self._session and (action == "Cancel" or action == "Back") then
+		if self:_armed() and (action == "Cancel" or action == "Back") then
 			self:close()
 		end
 	end))
 	-- Gameplay actions are suspended while the box is up, so E / A / a click are read here directly.
 	self._trove:add(UserInputService.InputBegan:Connect(function(input, processed)
-		if not self._session or processed then
+		if processed or not self:_armed() then
 			return
 		end
 		if
@@ -52,6 +86,12 @@ function DialogueController.new(deps: {
 			self:close()
 		end
 	end))
+	-- A respawn must not leave the camera framing an NPC the player is no longer standing next to.
+	self._trove:add(Players.LocalPlayer.CharacterAdded:Connect(function()
+		if self._session then
+			self:close()
+		end
+	end))
 	return self
 end
 
@@ -59,21 +99,36 @@ function DialogueController.isOpen(self: DialogueController): boolean
 	return self._session ~= nil
 end
 
+-- True once the open press has passed and a close input should be taken seriously.
+function DialogueController._armed(self: DialogueController): boolean
+	local session = self._session
+	return session ~= nil and os.clock() >= session.armedAt
+end
+
 -- Frames `model` (its Head when it has one) and types `line`. `options.seconds` holds the box for
 -- that long after the reveal before it closes itself (nil = wait for a press).
-function DialogueController.open(self: DialogueController, model: Model, line: string, options: { seconds: number?, name: string? }?)
+function DialogueController.open(
+	self: DialogueController,
+	model: Model,
+	line: string,
+	options: { seconds: number?, name: string? }?
+): boolean
+	-- The debounce. A second conversation cannot begin on top of a live one: the press is simply
+	-- ignored, which is what stops a spammed prompt from cycling this controller through states it was
+	-- never meant to be in.
 	if self._session then
-		self:close()
+		self.stats.refused += 1
+		return false
 	end
 	local opts = (options or {}) :: any
 	local deps = self._deps
 	local player = Players.LocalPlayer
 	local camera = workspace.CurrentCamera
 	if not (player and camera) then
-		return
+		return false
 	end
 	local motion = deps.accessibility:motionSettings()
-	local session = { trove = Trove.new(), model = model }
+	local session = { trove = Trove.new(), model = model, armedAt = os.clock() + INPUT_ARM_SECONDS }
 	self._session = session
 	self.stats.opens += 1
 	deps.audio:play(Tokens.sound.uiOpen)
@@ -109,8 +164,18 @@ function DialogueController.open(self: DialogueController, model: Model, line: s
 	local right = pivot.RightVector
 	local eye = focus + forward * 6.5 + right * 2.2 + Vector3.new(0, 1.2, 0)
 	local target = CFrame.lookAt(eye, focus + Vector3.new(0, -0.6, 0))
-	local previousType = camera.CameraType
-	local previousCFrame = camera.CFrame
+	-- A hand-back may still be running from the conversation before this one. Stop it, and keep the
+	-- baseline it was restoring towards: that is the real gameplay camera. Reading the camera again
+	-- here would capture a frame of that animation, and its CameraType is Scriptable because we are
+	-- the ones holding it - which is how this used to restore Scriptable and strand the player.
+	if self._restoreTween then
+		self._restoreTween:Cancel()
+		self._restoreTween = nil
+	end
+	if not self._cameraBaseline then
+		self._cameraBaseline = { type = camera.CameraType, cframe = camera.CFrame }
+	end
+	local baseline = self._cameraBaseline :: { type: Enum.CameraType, cframe: CFrame }
 	camera.CameraType = Enum.CameraType.Scriptable
 	local seconds = if motion.reducedMotion then 0.05 else 0.4
 	TweenService:Create(camera, TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = target }):Play()
@@ -118,11 +183,35 @@ function DialogueController.open(self: DialogueController, model: Model, line: s
 		local back = TweenService:Create(
 			camera,
 			TweenInfo.new(if motion.reducedMotion then 0.05 else 0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
-			{ CFrame = previousCFrame }
+			{ CFrame = baseline.cframe }
 		)
+		self._restoreTween = back
+		local function release()
+			if self._restoreTween ~= back then
+				return -- a newer conversation owns the camera; it will hand it back itself
+			end
+			self._restoreTween = nil
+			if self._session then
+				return
+			end
+			camera.CameraType = baseline.type
+			self._cameraBaseline = nil
+		end
+		back.Completed:Once(release)
 		back:Play()
-		back.Completed:Once(function()
-			camera.CameraType = previousType
+		-- Completed does not fire on a cancelled tween, and a cancelled-then-abandoned hand-back would
+		-- leave the camera Scriptable with nobody left to give it back. This is the floor under that.
+		task.delay(RESTORE_BACKSTOP_SECONDS, function()
+			if self._restoreTween == back or (self._cameraBaseline ~= nil and self._session == nil) then
+				if self._session == nil and self._cameraBaseline ~= nil then
+					self.stats.recovered += 1
+					camera.CameraType = (self._cameraBaseline :: any).type
+					self._cameraBaseline = nil
+				end
+				if self._restoreTween == back then
+					self._restoreTween = nil
+				end
+			end
 		end)
 	end)
 
@@ -142,7 +231,9 @@ function DialogueController.open(self: DialogueController, model: Model, line: s
 	catcher.ZIndex = 1
 	catcher.Parent = gui
 	session.trove:add(catcher.Activated:Connect(function()
-		self:close()
+		if self:_armed() then
+			self:close()
+		end
 	end))
 	local box = Instance.new("Frame")
 	box.Name = "Box"
@@ -246,6 +337,7 @@ function DialogueController.open(self: DialogueController, model: Model, line: s
 		end
 	end)
 	session.trove:add(connection)
+	return true
 end
 
 function DialogueController.close(self: DialogueController)

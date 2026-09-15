@@ -985,6 +985,39 @@ if RunService:IsStudio() then
 				cameraMode = tostring(player.CameraMode),
 			}
 		end,
+		-- Dialogue: drive it and read what the camera, the HUD and the controls are actually doing, so a
+		-- spammed prompt can be checked for the trap it used to be.
+		dialogueSay = function(line, seconds)
+			local arena = workspace:FindFirstChild("SFE_Chapter1")
+			local farmer = arena and arena:FindFirstChild("Farmer")
+			if not (farmer and farmer:IsA("Model")) then
+				return { opened = false, reason = "no_farmer" }
+			end
+			return {
+				opened = dialogue:open(farmer, tostring(line or "Find me the egg buddy!"), {
+					seconds = tonumber(seconds),
+					name = "Farmer",
+				}),
+			}
+		end,
+		dialogueStatus = function()
+			local camera = workspace.CurrentCamera
+			return {
+				open = dialogue:isOpen(),
+				stats = dialogue.stats,
+				promptStats = interaction.stats,
+				cameraType = tostring(camera and camera.CameraType),
+				mouseBehaviour = tostring(game:GetService("UserInputService").MouseBehavior),
+				hudEnabled = hud.gui.Enabled,
+				promptsEnabled = game:GetService("ProximityPromptService").Enabled,
+				box = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("SFE_Dialogue") ~= nil,
+				cameraMode = tostring(player.CameraMode),
+			}
+		end,
+		dialogueClose = function()
+			dialogue:close()
+			return { open = dialogue:isOpen() }
+		end,
 		introSkip = function()
 			intro:skip()
 			return { playing = intro:isPlaying() }

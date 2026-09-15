@@ -24,7 +24,7 @@ export type InteractionController = typeof(setmetatable(
 		openUpgrades: any,
 		stationRequested: any,
 		_trove: Trove.Trove,
-		stats: { prompts: number },
+		stats: { prompts: number, suppressed: number },
 	},
 	InteractionController
 ))
@@ -41,7 +41,7 @@ function InteractionController.new(
 		stationRequested = Signal.new(),
 		displayRequested = Signal.new(),
 		_trove = Trove.new(),
-		stats = { prompts = 0 },
+		stats = { prompts = 0, suppressed = 0 },
 	}, InteractionController)
 
 	self._trove:add(ProximityPromptService.PromptTriggered:Connect(function(prompt, player)
@@ -67,8 +67,15 @@ end
 
 -- Dispatches by prompt name. Returns the envelope (or nil) for tests/debug.
 function InteractionController.handle(self: InteractionController, promptName: string): any
-	self.stats.prompts += 1
 	local deps = self._deps
+	-- A conversation owns the screen: the camera is framing an NPC, the HUD is down and gameplay input
+	-- is suspended. Every world prompt is ignored until it ends, so a held or spammed E cannot stack a
+	-- second conversation on the first, and cannot fire the server request behind one either.
+	if deps.dialogue and deps.dialogue:isOpen() then
+		self.stats.suppressed += 1
+		return nil
+	end
+	self.stats.prompts += 1
 	local station = string.match(promptName, "^SFE_Station_(%w+)$")
 	if station then
 		deps.audio:play(Tokens.sound.uiOpen)
