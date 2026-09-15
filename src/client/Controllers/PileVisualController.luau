@@ -655,6 +655,30 @@ function PileVisualController._columnTop(self: PileVisualController, column: Col
 	return PileSurface.heightAt(field, cx, cz) - (column.base - column.remaining) * column.step
 end
 
+-- Wall strands a column no longer needs.
+--
+-- Strands line a column's exposed face and were added once and never taken back. When that column is
+-- itself dug, every strand above its new top is left standing in open air - wrong to look at, and an
+-- unbounded part leak as an excavation spreads: eight craters took the coat from 22k parts to 42k,
+-- most of it faces that had since been dug away. Anything above the column's own surface goes back to
+-- the pool.
+function PileVisualController._trimWalls(self: PileVisualController, column: Column)
+	local field = self._seatField
+	if not field or #column.walls == 0 then
+		return
+	end
+	local topY = field.baseY + self:_columnTop(column)
+	local kept: { BasePart } = {}
+	for _, part in ipairs(column.walls) do
+		if part.Position.Y <= topY + 0.15 then
+			table.insert(kept, part)
+		else
+			releasePart(self, part)
+		end
+	end
+	column.walls = kept
+end
+
 -- The interior is feathers too: when a dug column drops below a neighbour, that neighbour's newly
 -- exposed side gets strands down to the new depth (added once, never moved or removed), so a pit's
 -- walls are layered feathers all the way to its floor.
@@ -1028,6 +1052,9 @@ function PileVisualController.applyDelta(self: PileVisualController, payload: { 
 			if slots ~= column.slots or touched[index] then
 				column.slots = slots
 				self:_applyColumn(column, folder)
+				if touched[index] then
+					self:_trimWalls(column)
+				end
 				self:_exposeFloor(column)
 				self:_exposeWalls(column)
 			end
