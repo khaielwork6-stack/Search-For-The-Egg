@@ -103,6 +103,7 @@ local toolVisuals = trove:add(ToolVisualController.new({
 	config = config,
 	pile = pile,
 	camera = camera,
+	hud = hud,
 }))
 local tools = trove:add(ToolController.new({
 	net = net,

@@ -279,6 +279,88 @@ end
 -- Removes up to `amount` feathers spread round-robin across `cells` (one per cell per pass), so a
 -- sweep touches each eligible cell at most once per pass and never exceeds the total. Returns the
 -- per-cell removals (only cells that lost feathers) and the total removed.
+-- Focused removal: `cells` come sorted by distance with a weight each (centre high, rim low); each
+-- cell gets a quota of `amount` in proportion to its weight and gives up that many records from its
+-- top, leftovers round-robin. The result is a dent that is deep where the tool struck and shallow
+-- at the edge, instead of one record from every cell.
+function PileGrid.removeFocused(grid: Grid, cells: { Cell }, weights: { number }, amount: number): ({ Removal }, number)
+	assert(amount >= 0 and amount % 1 == 0, "amount must be a non-negative integer")
+	local taken: { [number]: { number } } = {}
+	local total = 0
+	local function take(cell: Cell, count: number): number
+		local got = 0
+		while got < count do
+			local slot = PileGrid.topSlot(cell)
+			if not slot then
+				break
+			end
+			cell.taken = bit32.bor(cell.taken, slotBit(slot))
+			cell.remaining -= 1
+			grid.removed += 1
+			taken[cell.index] = taken[cell.index] or {}
+			table.insert(taken[cell.index], slot)
+			got += 1
+		end
+		return got
+	end
+	local weightSum = 0
+	for i = 1, #cells do
+		weightSum += math.max(0, weights[i] or 0)
+	end
+	local remainingAmount = amount
+	if weightSum > 0 then
+		for i, cell in ipairs(cells) do
+			if remainingAmount <= 0 then
+				break
+			end
+			local quota = math.min(remainingAmount, math.floor(amount * math.max(0, weights[i] or 0) / weightSum + 0.5))
+			remainingAmount -= take(cell, quota)
+		end
+	end
+	-- Leftovers (rounding, exhausted cells): one at a time from the centre outward.
+	local progress = true
+	while remainingAmount > 0 and progress do
+		progress = false
+		for _, cell in ipairs(cells) do
+			if remainingAmount <= 0 then
+				break
+			end
+			if take(cell, 1) == 1 then
+				remainingAmount -= 1
+				progress = true
+			end
+		end
+	end
+	local removals: { Removal } = {}
+	for _, cell in ipairs(cells) do
+		local slots = taken[cell.index]
+		if slots then
+			grid.version += 1
+			table.insert(removals, { index = cell.index, remaining = cell.remaining, removed = #slots, mask = cell.taken, slots = slots })
+			total += #slots
+		end
+	end
+	return removals, total
+end
+
+-- Centre-heavy weights for cells sorted by distance from a strike: the struck cell takes `focus`
+-- of the yield, the rest falls off with distance.
+function PileGrid.focusWeights(grid: Grid, cells: { Cell }, localX: number, localZ: number, radiusStuds: number, focus: number): { number }
+	local weights: { number } = {}
+	local ringSum = 0
+	for i, cell in ipairs(cells) do
+		local cx, cz = PileGrid.cellCenter(grid, cell)
+		local d = math.sqrt((cx - localX) ^ 2 + (cz - localZ) ^ 2)
+		local w = if i == 1 then 0 else math.max(0.05, (1 - d / math.max(radiusStuds, 0.01)) ^ 2)
+		weights[i] = w
+		ringSum += w
+	end
+	if #cells > 0 then
+		weights[1] = if #cells == 1 then 1 else (ringSum * focus / math.max(0.01, 1 - focus))
+	end
+	return weights
+end
+
 function PileGrid.removeSpread(grid: Grid, cells: { Cell }, amount: number): ({ Removal }, number)
 	assert(amount >= 0 and amount % 1 == 0, "amount must be a non-negative integer")
 	local taken: { [number]: { number } } = {}

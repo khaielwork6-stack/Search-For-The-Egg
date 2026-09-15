@@ -280,6 +280,48 @@ return function(describe, it, expect)
 		end)
 	end)
 
+	describe("Focused removal", function()
+		it("takes most records from the struck cell and falls off with distance, never inventing records", function()
+			local roll = 0
+			local grid = PileGrid.create(cfg.pile, 1, {}, function()
+				roll = (roll + 0.37) % 1
+				return roll
+			end, function()
+				return 32
+			end)
+			local cx, cz = grid.width // 2, grid.depth // 2
+			local centre = PileGrid.get(grid, cx, cz)
+			local localX, localZ = PileGrid.cellCenter(grid, centre)
+			local cells = PileGrid.cellsWithinStuds(grid, localX, localZ, cfg.tools.nestRake.sweepRadiusStuds)
+			expect(cells[1].index).toBe(centre.index)
+			local weights = PileGrid.focusWeights(grid, cells, localX, localZ, cfg.tools.nestRake.sweepRadiusStuds, 0.6)
+			local before = grid.removed
+			local removals, total = PileGrid.removeFocused(grid, cells, weights, 20)
+			expect(total).toBe(20)
+			expect(grid.removed - before).toBe(20)
+			local fromCentre = 0
+			local sumRemoved = 0
+			for _, removal in ipairs(removals) do
+				sumRemoved += removal.removed
+				expect(#removal.slots).toBe(removal.removed)
+				if removal.index == centre.index then
+					fromCentre = removal.removed
+				end
+			end
+			expect(sumRemoved).toBe(20)
+			expect(fromCentre).toBeGreaterThanOrEqual(10) -- 60 % of the sweep from the struck cell
+			expect(centre.remaining).toBe(32 - fromCentre)
+			-- Exhausted centre: the rest still comes out of the ring, one at a time, no more than exists.
+			local _, more = PileGrid.removeFocused(grid, cells, weights, 5000)
+			local left = 0
+			for _, cell in ipairs(cells) do
+				left += cell.remaining
+			end
+			expect(left).toBe(0)
+			expect(more).toBe(#cells * 32 - 20)
+		end)
+	end)
+
 	describe("Terrain core", function()
 		it("builds on round start, dents and re-writes at every accepted strike, hollows at reveal, and clears on return", function()
 			local h = GameplayHarness.new(cfg)

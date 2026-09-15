@@ -684,6 +684,28 @@ local function onFeathersAwarded(userId: number, runtime: any, result: any)
 end
 collection.collected:Connect(onFeathersAwarded)
 tools.awarded:Connect(onFeathersAwarded)
+-- Tool awards that arrive outside a request (vac ticks, blasts) reach the owner as a targeted
+-- event so the HUD can float "+N" from the exact spot and pulse the bag.
+tools.awarded:Connect(function(userId, _runtime, result)
+	local player = playerData:playerOf(userId)
+	if player and typeof(player) == "Instance" and type(result) == "table" then
+		send(player, "ToolEvent", {
+			kind = "tool_award",
+			userId = userId,
+			toolId = result.toolId,
+			awarded = result.awarded or 0,
+			rainbow = result.rainbow or 0,
+			removed = result.removed or 0,
+			carried = result.carried,
+			capacity = result.capacity,
+			infinite = result.infinite,
+			bagFull = result.bagFull,
+			hitX = result.hitX,
+			hitY = result.hitY,
+			hitZ = result.hitZ,
+		})
+	end
+end)
 
 -- Tool / bundle events: broadcast to the round (or one member when targeted).
 local function broadcastToolEvent(roundId: string, payload: { [string]: any }, targetUserId: number?)

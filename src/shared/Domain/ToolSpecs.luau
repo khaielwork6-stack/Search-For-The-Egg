@@ -73,10 +73,15 @@ function ToolSpecs.nestRake(cfg: { [string]: any }, levels: Levels, modifiers: a
 	local sweep = entry(cfg, "nestRake", "sweep", levels.sweep)
 	local cooldown = entry(cfg, "nestRake", "cooldown", levels.cooldown)
 	local hold = entry(cfg, "nestRake", "hold", levels.hold)
+	local tool = cfg.tools.nestRake
+	local cellSize = cfg.pile.cellSizeStuds
 	return {
 		toolId = "nestRake",
 		amount = math.max(1, math.floor(sweep.yield * modifiers.rakeYieldMultiplier * modifiers.toolYieldMultiplier + 0.5)),
-		radiusCells = 1,
+		radiusCells = math.max(1, math.ceil((tool.sweepRadiusStuds or cellSize) / cellSize)),
+		radiusStuds = tool.sweepRadiusStuds or cellSize,
+		reachStuds = tool.reachStuds or cellSize * 3,
+		focusWeight = tool.focusWeight or 0.6,
 		cooldownSeconds = if hold.enabled and hold.intervalSeconds then hold.intervalSeconds else cooldown.seconds,
 		holdEnabled = hold.enabled == true,
 	}
@@ -99,6 +104,7 @@ function ToolSpecs.confettiCharge(cfg: { [string]: any }, levels: Levels, modifi
 		miniChargeChance = modifiers.procs.miniChargeChance or 0,
 		miniChargeCount = modifiers.params.miniChargeCount or 0,
 		miniChargeFuseSeconds = tool.miniChargeFuseSeconds,
+		craterFocus = tool.craterFocus or 2,
 	}
 end
 
@@ -107,12 +113,17 @@ function ToolSpecs.featherVac(cfg: { [string]: any }, levels: Levels, modifiers:
 	local power = entry(cfg, "featherVac", "power", levels.power)
 	local cooling = entry(cfg, "featherVac", "cooling", levels.cooling)
 	local runtime = entry(cfg, "featherVac", "runtime", levels.runtime)
+	local tool = cfg.tools.featherVac
+	local cellSize = cfg.pile.cellSizeStuds
 	return {
 		toolId = "featherVac",
 		perSecond = power.perSecond * modifiers.toolYieldMultiplier,
 		runtimeSeconds = runtime.seconds,
 		coolingSeconds = cooling.seconds,
-		radiusCells = 1,
+		radiusCells = math.max(1, math.ceil((tool.suctionRadiusStuds or cellSize) / cellSize)),
+		radiusStuds = tool.suctionRadiusStuds or cellSize,
+		reachStuds = tool.reachStuds or cellSize * 2,
+		focusWeight = tool.focusWeight or 0.7,
 	}
 end
 

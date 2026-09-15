@@ -428,6 +428,7 @@ function ToolService._spawnCharge(
 		miniChargeChance = spec.miniChargeChance,
 		miniChargeCount = spec.miniChargeCount,
 		miniChargeFuseSeconds = spec.miniChargeFuseSeconds,
+		craterFocus = spec.craterFocus,
 		mini = mini,
 	}
 	runtime.charges[charge.id] = charge
@@ -467,7 +468,15 @@ function ToolService._explode(self: ToolService, runtime: any, charge: any, now:
 	if state and state.alive and capacity and not capacity.infinite then
 		amount = math.max(0, math.min(amount, capacity.capacity - (state.carriedStandard + state.carriedRainbow)))
 	end
-	local removals, total = PileGrid.removeSpread(grid, cells, amount)
+	-- Crater: records leave from the centre outwards, weight (1 - d/r)^craterFocus.
+	local localX, localZ = charge.position.X - minCorner.X, charge.position.Z - minCorner.Z
+	local weights = {}
+	for i, cell in ipairs(cells) do
+		local cx, cz = PileGrid.cellCenter(grid, cell)
+		local d = math.sqrt((cx - localX) ^ 2 + (cz - localZ) ^ 2)
+		weights[i] = math.max(0.02, (1 - d / math.max(charge.radiusStuds, 0.01)) ^ (charge.craterFocus or 2))
+	end
+	local removals, total = PileGrid.removeFocused(grid, cells, weights, amount)
 	local cleared = 0
 	for _, removal in ipairs(removals) do
 		self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining, removal.mask)
@@ -527,6 +536,7 @@ function ToolService._explode(self: ToolService, runtime: any, charge: any, now:
 			infinite = award.infinite,
 			bagFull = award.bagFull,
 			hitX = charge.position.X,
+			hitY = charge.position.Y + 1.5,
 			hitZ = charge.position.Z,
 			removedFraction = PileGrid.removedFraction(grid),
 			cells = removals,
@@ -666,15 +676,27 @@ function ToolService._tickVac(self: ToolService, runtime: any, userId: number, s
 			self:_stopVac(runtime, userId, state, "bag_full")
 			return
 		end
-		-- Only the cells under the reticle feed the nozzle: the vac never wanders to a fuller patch
-		-- on its own (the player re-aims; the client re-sends the aim while the button is held).
-		local cells = PileGrid.cellsWithin(grid, rt.aimX, rt.aimZ, spec.radiusCells)
+		-- Only the cells under the reticle feed the nozzle (a hair of reach so a bare spot pulls
+		-- from the feathers beside it); the vac never wanders to a fuller patch on its own.
+		local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
+		local localX = (rt.aimHitX or aimWorld.X) - minCorner.X
+		local localZ = (rt.aimHitZ or aimWorld.Z) - minCorner.Z
+		local radiusStuds = spec.radiusStuds or grid.cellSize
+		local cells = PileGrid.cellsWithinStuds(grid, localX, localZ, radiusStuds)
+		if #cells == 0 and spec.reachStuds then
+			local nearest = PileGrid.cellsWithinStuds(grid, localX, localZ, spec.reachStuds)[1]
+			if nearest then
+				localX, localZ = PileGrid.cellCenter(grid, nearest)
+				cells = PileGrid.cellsWithinStuds(grid, localX, localZ, radiusStuds)
+			end
+		end
 		if #cells == 0 then
 			rt.carry = 0
 			return
 		end
 		local amount = math.min(whole, if free == math.huge then whole else free)
-		local removals, total = PileGrid.removeSpread(grid, cells, amount)
+		local weights = PileGrid.focusWeights(grid, cells, localX, localZ, radiusStuds, spec.focusWeight or 0.7)
+		local removals, total = PileGrid.removeFocused(grid, cells, weights, amount)
 		if total == 0 then
 			return
 		end
@@ -708,8 +730,9 @@ function ToolService._tickVac(self: ToolService, runtime: any, userId: number, s
 			capacity = award.capacity,
 			infinite = award.infinite,
 			bagFull = award.bagFull,
-			hitX = aimWorld.X,
-			hitZ = aimWorld.Z,
+			hitX = rt.aimHitX or aimWorld.X,
+			hitY = aimWorld.Y + 1,
+			hitZ = rt.aimHitZ or aimWorld.Z,
 			removedFraction = PileGrid.removedFraction(grid),
 			cells = removals,
 			heat = rt.heat,

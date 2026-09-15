@@ -404,12 +404,17 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 	end
 	local grid = runtime.grid
 	local spec = self:spec(runtime, userId, toolId)
-	local cells: { PileGrid.Cell }
-	if spec.radiusCells > 0 then
-		cells = PileGrid.cellsWithin(grid, aim.cx, aim.cz, spec.radiusCells)
-	else
-		local target = PileGrid.findTarget(grid, aim.cx, aim.cz, 1)
-		cells = if target then { target } else {}
+	-- The sweep is a disc around the strike point; a strike on bare ground re-centres on the
+	-- nearest feathers within reach so a dug hole never leaves the rake swinging at nothing.
+	local localX, localZ = aim.hit.X - aim.minCorner.X, aim.hit.Z - aim.minCorner.Z
+	local radiusStuds = spec.radiusStuds or grid.cellSize
+	local cells = PileGrid.cellsWithinStuds(grid, localX, localZ, radiusStuds)
+	if #cells == 0 and spec.reachStuds then
+		local nearest = PileGrid.cellsWithinStuds(grid, localX, localZ, spec.reachStuds)[1]
+		if nearest then
+			localX, localZ = PileGrid.cellCenter(grid, nearest)
+			cells = PileGrid.cellsWithinStuds(grid, localX, localZ, radiusStuds)
+		end
 	end
 	if #cells == 0 then
 		return reject(self, Envelope.Codes.NOT_FOUND, "no_feathers")
@@ -420,7 +425,8 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 	if toolId == "hand" then
 		amount = math.min(amount, if free == math.huge then amount else free)
 	end
-	local removals, removed = PileGrid.removeSpread(grid, cells, amount)
+	local weights = PileGrid.focusWeights(grid, cells, localX, localZ, radiusStuds, spec.focusWeight or 0.6)
+	local removals, removed = PileGrid.removeFocused(grid, cells, weights, amount)
 	local cellsCleared = 0
 	for _, removal in ipairs(removals) do
 		self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining, removal.mask)
@@ -444,11 +450,12 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 
 	local primary = cells[1]
 	-- The strike point is the exact surface point the player targeted (clamped into the awarded
-	-- cell), so every client effect and the terrain carve originate where the reticle was.
+	-- cell; the re-centred cell when the strike was bare), so every client effect and the terrain
+	-- carve originate where the feathers actually left.
 	local worldX, worldZ = PileGrid.cellCenter(grid, primary)
 	local cellHalf = grid.cellSize / 2
-	local strikeX = math.clamp(aim.hit.X, aim.minCorner.X + worldX - cellHalf, aim.minCorner.X + worldX + cellHalf)
-	local strikeZ = math.clamp(aim.hit.Z, aim.minCorner.Z + worldZ - cellHalf, aim.minCorner.Z + worldZ + cellHalf)
+	local strikeX = math.clamp(aim.minCorner.X + localX, aim.minCorner.X + worldX - cellHalf, aim.minCorner.X + worldX + cellHalf)
+	local strikeZ = math.clamp(aim.minCorner.Z + localZ, aim.minCorner.Z + worldZ - cellHalf, aim.minCorner.Z + worldZ + cellHalf)
 	local strikeY = math.max(aim.layout.nestBaseY, aim.hit.Y)
 	local hitWorld = Vector3.new(strikeX, aim.layout.nestBaseY, strikeZ)
 	local bundle = nil

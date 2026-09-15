@@ -239,6 +239,21 @@ function ToolController.new(deps: {
 		elseif payload.kind == "chick_deposit" then
 			-- The deposit event carries the traded count (the unit's load is already zeroed by then).
 			deps.hud.toasts:push(string.format("Scout Chick traded %d feathers", payload.feathers or 0), "success")
+		elseif payload.kind == "tool_award" and (payload.awarded or 0) + (payload.rainbow or 0) > 0 then
+			-- Vac ticks and blasts: the same feedback as a hand or rake pick (+N, bag pulse, sounds).
+			if payload.toolId == "featherVac" then
+				deps.audio:play(Tokens.sound.collectRelease, { pitchVariance = 0.15 })
+				deps.haptics:pulse(0.12, 0.03)
+			end
+			if (payload.rainbow or 0) > 0 then
+				deps.audio:play(Tokens.sound.collectRainbow)
+			end
+			if payload.bagFull then
+				deps.audio:play(Tokens.sound.bagFull)
+			end
+			pcall(function()
+				self.collected:Fire(payload)
+			end)
 		end
 	end))
 	return self
@@ -595,6 +610,13 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 		return true
 	end
 	self.stats.rejected += 1
+	if
+		result.message == "no_feathers"
+		and now - (self._bagFullToastAt or 0) > self._deps.config.pile.visual.bagFullToastCooldownSeconds
+	then
+		self._bagFullToastAt = now
+		self._deps.hud.toasts:push("Nothing left there - aim at fresh feathers", "info")
+	end
 	-- A refused request never re-sends immediately: hold the debounce window before the next try,
 	-- and a server cooldown refusal waits out that cooldown instead of hammering it.
 	local debounce = self._deps.config.interaction.collectDebounceSeconds

@@ -465,7 +465,11 @@
       "baseYield": 12,
       "baseCooldownSeconds": 0.85,
       "permanentIncludesMaxUpgrades": true,
-      "evidence": "VERIFIED packaging and first values; ASSUMED target name"
+      "evidence": "VERIFIED packaging and first values; ASSUMED target name",
+      "sweepRadiusStuds": 1.5,
+      "reachStuds": 3.2,
+      "focusWeight": 0.6,
+      "shapeEvidence": "ASSUMED 14 Sep 2026: sweep takes from cells within sweepRadiusStuds of the strike, centre-heavy (focusWeight of the yield from the struck cell), and re-centres on the nearest feathers within reachStuds when the strike lands on bare ground"
     },
     "confettiCharge": {
       "displayName": "Confetti Charge",
@@ -479,7 +483,9 @@
       "cooldownSeconds": 1.2,
       "miniChargeFuseSeconds": 0.8,
       "permanentIncludesMaxUpgrades": true,
-      "evidence": "VERIFIED soft/permanent public; ASSUMED one-round price and mechanics values"
+      "evidence": "VERIFIED soft/permanent public; ASSUMED one-round price and mechanics values",
+      "craterFocus": 2.0,
+      "shapeEvidence": "ASSUMED 14 Sep 2026: blast records come from the centre outwards, weight (1 - d/r)^craterFocus, so the crater is deep in the middle"
     },
     "featherVac": {
       "displayName": "Feather Vac",
@@ -490,7 +496,10 @@
       "baseRuntimeSeconds": 8,
       "baseCoolingSeconds": 20,
       "permanentIncludesMaxUpgrades": true,
-      "evidence": "VERIFIED packaging/cooling; ASSUMED suction/runtime"
+      "evidence": "VERIFIED packaging/cooling; ASSUMED suction/runtime",
+      "suctionRadiusStuds": 1.2,
+      "reachStuds": 2.0,
+      "focusWeight": 0.7
     },
     "scoutChick": {
       "displayName": "Scout Chick",

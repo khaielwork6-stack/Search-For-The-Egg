@@ -137,6 +137,7 @@ function ToolVisualController.new(deps: {
 	config: { [string]: any },
 	pile: any?,
 	camera: any?,
+	hud: any?,
 }): ToolVisualController
 	local folder = Instance.new("Folder")
 	folder.Name = "SFE_ToolVisuals"
@@ -430,6 +431,30 @@ function ToolVisualController._explodeCharge(self: ToolVisualController, payload
 	local radius = payload.radius or 8
 	local mini = payload.mini == true
 	self.stats.explosions += 1
+	-- The validated records leave the crater one by one: up out of the blast, then to the owner.
+	local pile = self._deps.pile
+	if pile and payload.cells then
+		local userId = payload.userId
+		local function destination(): Vector3
+			if userId == Players.LocalPlayer.UserId and self._nozzleProvider then
+				local stack = self._deps.hud and self._deps.hud.carriedStackWorldPoint and self._deps.hud:carriedStackWorldPoint()
+				if stack then
+					return stack
+				end
+			end
+			return characterPoint(userId, Vector3.new(0, 0.5, -1)) or (position + Vector3.new(0, 6, 0))
+		end
+		local index = 0
+		for _, removal in ipairs(payload.cells) do
+			for _, slot in ipairs(removal.slots or {}) do
+				local featherId = FeatherLayout.featherId(removal.index, slot)
+				task.delay(math.min(1.2, index * 0.012), function()
+					pile:collectFeather(featherId, position, destination, { pullSeconds = 0.55, quiet = true })
+				end)
+				index += 1
+			end
+		end
+	end
 	-- Flash: a neon sphere that swells past the blast radius and fades in a beat.
 	local flash = placeholder("Flash", Vector3.new(1, 1, 1), Tokens.color.honey)
 	flash.Material = Enum.Material.Neon
