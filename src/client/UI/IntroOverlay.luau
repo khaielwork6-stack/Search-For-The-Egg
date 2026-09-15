@@ -163,15 +163,26 @@ function IntroOverlay.create(parent: Instance, options: Options): Overlay
 	end
 
 	local alive = true
-	local function tween(object: Instance, seconds: number, goal: { [string]: any })
-		local clamped = Motion.clampSeconds(seconds, motion)
+	-- `Motion.clampSeconds` caps every tween at the UI budget (0.45 s) to keep buttons and modals
+	-- snappy. A cinematic fade is not a button: that cap was cutting a 0.9 s fade in half, which is
+	-- what made the open and close read as hard cuts. These durations still honour reduced motion,
+	-- which is an accessibility setting, but are not held to the snappiness budget.
+	local function cinematicSeconds(seconds: number): number
+		if motion.reducedMotion then
+			return seconds * motion.reducedMotionScale
+		end
+		return seconds
+	end
+	local function tween(object: Instance, seconds: number, goal: { [string]: any }, style: Enum.EasingStyle?)
+		local clamped = cinematicSeconds(seconds)
 		if clamped <= 0.01 then
 			for key, value in pairs(goal) do
 				(object :: any)[key] = value
 			end
 			return
 		end
-		TweenService:Create(object, TweenInfo.new(clamped, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), goal):Play()
+		local easing = style or Enum.EasingStyle.Sine
+		TweenService:Create(object, TweenInfo.new(clamped, easing, Enum.EasingDirection.Out), goal):Play()
 	end
 
 	local overlay: Overlay
@@ -183,13 +194,16 @@ function IntroOverlay.create(parent: Instance, options: Options): Overlay
 			end
 			tween(fade, seconds or 0, { BackgroundTransparency = 1 - math.clamp(alpha, 0, 1) })
 		end,
+		-- Bars close in on an eased curve as the picture arrives, and are taken away instantly behind
+		-- the black at the end. Retracting them over the top of a lifting fade is what read as a cut.
 		setLetterbox = function(shown: boolean, seconds: number?)
 			if not alive then
 				return
 			end
 			local height = if shown then intro.letterboxFraction else 0
-			tween(topBar, seconds or intro.letterboxSeconds, { Size = UDim2.fromScale(1, height) })
-			tween(bottomBar, seconds or intro.letterboxSeconds, { Size = UDim2.fromScale(1, height) })
+			local span = seconds or intro.letterboxSeconds
+			tween(topBar, span, { Size = UDim2.fromScale(1, height) }, Enum.EasingStyle.Quint)
+			tween(bottomBar, span, { Size = UDim2.fromScale(1, height) }, Enum.EasingStyle.Quint)
 		end,
 		setSubtitle = function(text: string?)
 			if not alive then

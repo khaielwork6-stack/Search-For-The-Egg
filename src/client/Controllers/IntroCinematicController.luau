@@ -285,7 +285,8 @@ function IntroCinematicController.finish(self: IntroCinematicController, reason:
 		end)
 		self._session = nil
 		if overlay then
-			overlay.setLetterbox(false, 0.25)
+			-- Instant, behind the black: the viewer never sees the frame open back up.
+			overlay.setLetterbox(false, 0)
 			overlay.showObjective(intro.objectiveLabel, intro.objectiveSeconds)
 			overlay.setFade(0, 0.35)
 			-- The round music starts with the round, not under the cinematic.
@@ -456,9 +457,15 @@ function IntroCinematicController._run(self: IntroCinematicController, session: 
 
 	self:_takeOver(session)
 	self.stats.stage = "takeover"
-	overlay.setLetterbox(true, intro.letterboxSeconds)
 	overlay.setFade(1, 0)
 	overlay.setFade(0, intro.fadeInSeconds)
+	-- The bars ride in with the picture. Setting them before the fade lifts means they are already at
+	-- full height when the first frame appears, which reads as a hard edge rather than a shot opening.
+	task.delay(math.max(0, intro.fadeInSeconds * 0.3), function()
+		if self._session == session and not session.finishing then
+			overlay.setLetterbox(true, intro.letterboxSeconds)
+		end
+	end)
 
 	-- Skip on click, tap, Space, Enter or controller B.
 	if intro.allowSkip then
