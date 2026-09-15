@@ -331,6 +331,43 @@ local function run(command: string): string
 			return debugBridge:Invoke("collect", times)
 		end)
 		table.insert(lines, if ok then HttpService:JSONEncode(result) else ("collect failed: " .. tostring(result)))
+	elseif verb == "call" then
+		-- Bridge to any client debug action by name, with simple typed arguments. The assistant's
+		-- command thread cannot invoke a BindableFunction itself, so this is how the outside drives
+		-- equip / collect / emulate / modalAction / playSound and reads their results.
+		if not debugBridge then
+			return "no SFE_ClientDebug bridge"
+		end
+		local action = words[2]
+		if not action then
+			return "call <action> [args...]"
+		end
+		local args: { any } = {}
+		for index = 3, #words do
+			local word = words[index]
+			local number = tonumber(word)
+			if number then
+				table.insert(args, number)
+			elseif word == "true" then
+				table.insert(args, true)
+			elseif word == "false" then
+				table.insert(args, false)
+			elseif word == "nil" then
+				table.insert(args, nil)
+			else
+				table.insert(args, (string.gsub(word, "~", " ")))
+			end
+		end
+		local ok, result = pcall(function()
+			return debugBridge:Invoke(action, table.unpack(args))
+		end)
+		if not ok then
+			return "call failed: " .. tostring(result)
+		end
+		local encoded, encodeError = pcall(function()
+			return HttpService:JSONEncode(result)
+		end)
+		table.insert(lines, if encoded then tostring(encodeError) else tostring(result))
 	elseif verb == "probe" then
 		probe(lines)
 	elseif verb == "config" then
@@ -368,7 +405,7 @@ local function run(command: string): string
 			table.insert(lines, "config unreadable: " .. tostring(cfg))
 		end
 	else
-		table.insert(lines, "commands: round | stand x y z lx ly lz | dig seconds [x y z lx ly lz] | probe | config")
+		table.insert(lines, "commands: round | stand ... | dig ... | hit ... | call <action> [args] | probe | config")
 	end
 	return table.concat(lines, "\n")
 end
