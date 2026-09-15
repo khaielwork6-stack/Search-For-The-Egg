@@ -277,7 +277,8 @@
       "frontSkirtEvidence": "OWNER 14 Sep 2026: fixed overlapping strands cover the small gap at the mound's front rim (spawn side); not records, never picked",
       "revealFadeSeconds": 0.32,
       "liftPreviewStuds": 0.22,
-      "layEvidence": "OWNER 14 Sep 2026: surface feathers lie tangent with overlapping tips (tilt 2-9 deg, roll +-20 deg), ivory-to-grey palette for depth, newly exposed records fade in beneath the removed one instead of popping"
+      "layEvidence": "OWNER 14 Sep 2026: surface feathers lie tangent with overlapping tips (tilt 2-9 deg, roll +-20 deg), ivory-to-grey palette for depth, newly exposed records fade in beneath the removed one instead of popping",
+      "depthEvidence": "ASSUMED 14 Sep 2026: a sweep or suction tick never takes more than maxPerCell records from one cell, so every accepted record is one of the rendered (top 10) feathers and the excavation spreads along the tool's contact area instead of tunnelling one cell"
     },
     "assumption": "ASSUMED",
     "recordSpacingStuds": 0.15,
@@ -480,7 +481,8 @@
       "shapeEvidence": "ASSUMED 14 Sep 2026: the sweep's contact area is a narrow fan - cells within sweepHalfWidthStuds either side of the swing line, from sweepAheadStuds past the strike back toward the player for sweepRadiusStuds - centre-heavy (focusWeight from the struck cell); a strike on bare ground re-centres within reachStuds. Accepted records animate one after another every streamStaggerSeconds.",
       "sweepHalfWidthStuds": 0.9,
       "sweepAheadStuds": 0.35,
-      "streamStaggerSeconds": 0.028
+      "streamStaggerSeconds": 0.028,
+      "maxPerCellPerSweep": 8
     },
     "confettiCharge": {
       "displayName": "Confetti Charge",
@@ -510,7 +512,8 @@
       "evidence": "VERIFIED packaging/cooling; ASSUMED suction/runtime",
       "suctionRadiusStuds": 1.2,
       "reachStuds": 2.0,
-      "focusWeight": 0.7
+      "focusWeight": 0.7,
+      "maxPerCellPerTick": 6
     },
     "scoutChick": {
       "displayName": "Scout Chick",

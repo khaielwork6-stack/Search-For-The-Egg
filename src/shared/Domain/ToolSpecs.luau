@@ -84,6 +84,7 @@ function ToolSpecs.nestRake(cfg: { [string]: any }, levels: Levels, modifiers: a
 		focusWeight = tool.focusWeight or 0.6,
 		halfWidthStuds = tool.sweepHalfWidthStuds,
 		aheadStuds = tool.sweepAheadStuds,
+		perCellCap = tool.maxPerCellPerSweep,
 		cooldownSeconds = if hold.enabled and hold.intervalSeconds then hold.intervalSeconds else cooldown.seconds,
 		holdEnabled = hold.enabled == true,
 	}
@@ -126,6 +127,7 @@ function ToolSpecs.featherVac(cfg: { [string]: any }, levels: Levels, modifiers:
 		radiusStuds = tool.suctionRadiusStuds or cellSize,
 		reachStuds = tool.reachStuds or cellSize * 2,
 		focusWeight = tool.focusWeight or 0.7,
+		perCellCap = tool.maxPerCellPerTick,
 	}
 end
 

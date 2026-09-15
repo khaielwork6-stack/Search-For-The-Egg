@@ -283,12 +283,21 @@ end
 -- cell gets a quota of `amount` in proportion to its weight and gives up that many records from its
 -- top, leftovers round-robin. The result is a dent that is deep where the tool struck and shallow
 -- at the edge, instead of one record from every cell.
-function PileGrid.removeFocused(grid: Grid, cells: { Cell }, weights: { number }, amount: number): ({ Removal }, number)
+function PileGrid.removeFocused(
+	grid: Grid,
+	cells: { Cell },
+	weights: { number },
+	amount: number,
+	perCellCap: number?
+): ({ Removal }, number)
 	assert(amount >= 0 and amount % 1 == 0, "amount must be a non-negative integer")
 	local taken: { [number]: { number } } = {}
 	local total = 0
+	local cap = perCellCap or math.huge
 	local function take(cell: Cell, count: number): number
 		local got = 0
+		local already = if taken[cell.index] then #taken[cell.index] else 0
+		count = math.min(count, cap - already)
 		while got < count do
 			local slot = PileGrid.topSlot(cell)
 			if not slot then

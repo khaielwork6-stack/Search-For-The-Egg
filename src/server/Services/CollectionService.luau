@@ -447,7 +447,7 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 		amount = math.min(amount, if free == math.huge then amount else free)
 	end
 	local weights = PileGrid.focusWeights(grid, cells, localX, localZ, radiusStuds, spec.focusWeight or 0.6)
-	local removals, removed = PileGrid.removeFocused(grid, cells, weights, amount)
+	local removals, removed = PileGrid.removeFocused(grid, cells, weights, amount, spec.perCellCap)
 	local cellsCleared = 0
 	for _, removal in ipairs(removals) do
 		self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining, removal.mask)

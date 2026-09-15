@@ -689,7 +689,7 @@ function ToolService._tickVac(self: ToolService, runtime: any, userId: number, s
 		end
 		local amount = math.min(whole, if free == math.huge then whole else free)
 		local weights = PileGrid.focusWeights(grid, cells, localX, localZ, radiusStuds, spec.focusWeight or 0.7)
-		local removals, total = PileGrid.removeFocused(grid, cells, weights, amount)
+		local removals, total = PileGrid.removeFocused(grid, cells, weights, amount, spec.perCellCap)
 		if total == 0 then
 			return
 		end
