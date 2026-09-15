@@ -320,7 +320,9 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		lock.Visible = false
 		local ribbon: TextLabel? = nil
 		if grand then
-			ribbon = FrameKit.badge(face, "Ribbon", "GRAND PRIZE", Tokens.color.ember, z + 6);
+			-- One word. "GRAND PRIZE" did not fit the card's width and was rendering clipped, and a
+			-- truncated label on the one card meant to feel like the prize is worse than a shorter one.
+			ribbon = FrameKit.badge(face, "Ribbon", "JACKPOT", Tokens.color.ember, z + 6);
 			(ribbon :: TextLabel).AnchorPoint = Vector2.new(0.5, 0);
 			(ribbon :: TextLabel).Position = UDim2.new(0.5, 0, 0, header.Size.Y.Offset + Tokens.spacing.xs)
 		end
