@@ -360,7 +360,7 @@ return function(describe, it, expect)
 	end)
 
 	describe("Terrain core", function()
-		it("builds on round start, dents and re-writes at every accepted strike, hollows at reveal, and clears on return", function()
+		it("builds on round start, re-seats at every accepted strike, hollows at reveal, and clears on return", function()
 			local h = GameplayHarness.new(cfg)
 			h.join(1)
 			local roundId, runtime = h.startRound({ 1 })
@@ -368,13 +368,13 @@ return function(describe, it, expect)
 			expect(h.terrainAdapter.field.apex).toBe(cfg.pile.maxVisualHeightStuds)
 			local result = h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			expect(result.ok).toBe(true)
-			expect(h.pileTerrain.stats.carves).toBe(1)
-			-- Voxels re-write at record thresholds, never on every pick.
-			expect(#h.terrainAdapter.regionWrites).toBe(if cfg.pile.collision.rewriteEveryRecords == 1 then 1 else 0)
-			for _ = 2, cfg.pile.collision.rewriteEveryRecords do
+			-- One accepted strike, one re-seat: the body is never left standing where the coat has gone.
+			expect(#h.terrainAdapter.regionWrites).toBe(1)
+			for _ = 2, 6 do
 				expect(h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2).ok).toBe(true)
 			end
-			expect(#h.terrainAdapter.regionWrites).toBe(1)
+			-- Six picks, six re-seats.
+			expect(#h.terrainAdapter.regionWrites).toBe(6)
 			-- The re-written region covers the strike plus the configured margin.
 			local region = h.terrainAdapter.regionWrites[1]
 			-- The region grows from cell centres; the strike point sits up to half a cell from one.
@@ -383,14 +383,12 @@ return function(describe, it, expect)
 			expect(region.maxX).toBeGreaterThanOrEqual(result.data.hitX + margin - 1e-6)
 			-- Cell health became geometry: the field the adapter received is depleted at the struck cell.
 			expect(h.terrainAdapter.field.fractions[result.data.cellIndex]).toBeLessThan(1)
-			-- Every accepted strike recorded a dent at its own point (dents overlap within the dig radius).
-			local depthOne = h.pileTerrain:dentDepthAt(runtime, result.data.hitX, result.data.hitZ)
-			expect(depthOne).toBeGreaterThanOrEqual(cfg.pile.collision.strikeDentDepthStuds)
-			expect(depthOne).toBeLessThanOrEqual(cfg.pile.collision.strikeDentDepthStuds * cfg.pile.collision.rewriteEveryRecords + 1e-9)
+			-- The surface the body is seated at is the record surface, with nothing subtracted from it
+			-- that the coat does not also lose: strike once and it drops by what the records lost.
 			local surfaceOne = h.pileTerrain:intendedSurfaceY(runtime, result.data.hitX, result.data.hitZ)
 			expect(surfaceOne).toBeLessThan(result.data.hitY)
 			-- Repeated strikes at one spot deepen the pit (every feather of the cell, then its neighbours).
-			local strikes = cfg.pile.collision.rewriteEveryRecords
+			local strikes = 0
 			for _, offset in ipairs({ { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } }) do
 				local cell = runtime.grid.cells[PileGrid.index(
 					runtime.grid.width,
@@ -402,26 +400,29 @@ return function(describe, it, expect)
 					strikes += 1
 				end
 			end
-			expect(h.pileTerrain.stats.carves).toBe(10)
-			expect(h.pileTerrain:intendedSurfaceY(runtime, result.data.hitX, result.data.hitZ)).toBeLessThan(surfaceOne - 1)
-			-- Away from every strike there is no dent.
-			expect(h.pileTerrain:dentDepthAt(runtime, result.data.hitX + 12, result.data.hitZ)).toBe(0)
-			-- Rejected strikes never dent or re-write.
+			expect(h.pileTerrain:intendedSurfaceY(runtime, result.data.hitX, result.data.hitZ)).toBeLessThan(surfaceOne)
+			-- Twelve studs away nothing was touched, so the surface there is still the full dome. This is
+			-- the guarantee the dent map broke: its bowls reached 2.2 studs past whatever the tool hit.
+			local farX = result.data.hitX + 12
+			local untouched = h.pileTerrain:intendedSurfaceY(runtime, farX, result.data.hitZ)
+			expect(h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2).ok).toBe(true)
+			expect(h.pileTerrain:intendedSurfaceY(runtime, farX, result.data.hitZ)).toBe(untouched)
+			-- Rejected strikes never move the body.
 			runtime.players[1].alive = false
-			local carves, writes = h.pileTerrain.stats.carves, #h.terrainAdapter.regionWrites
+			local writes = #h.terrainAdapter.regionWrites
 			h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
-			expect(h.pileTerrain.stats.carves).toBe(carves)
 			expect(#h.terrainAdapter.regionWrites).toBe(writes)
 			runtime.players[1].alive = true
-			-- Reveal opens a hollow; returning clears the mound and the dent map.
+			-- Reveal opens the hollow by taking records out, so the coat loses those feathers too.
 			h.rounds:markEggRevealed(roundId)
 			local hollows = h.pileTerrain.stats.hollows
 			local eggPosition = h.egg:position(runtime)
+			local beforeHollow = h.pileTerrain:intendedSurfaceY(runtime, eggPosition.X, eggPosition.Z)
+			local removedBefore = runtime.grid.removed
 			h.egg.revealed:Fire(runtime, eggPosition)
 			expect(h.pileTerrain.stats.hollows).toBe(hollows + 1)
-			expect(h.pileTerrain:dentDepthAt(runtime, eggPosition.X, eggPosition.Z)).toBeGreaterThanOrEqual(
-				cfg.pile.collision.eggHollowDepthStuds
-			)
+			expect(runtime.grid.removed).toBeGreaterThan(removedBefore)
+			expect(h.pileTerrain:intendedSurfaceY(runtime, eggPosition.X, eggPosition.Z)).toBeLessThan(beforeHollow)
 			h.rounds:claim(roundId, 1, h.token(1))
 			h.rounds:commitAndFinish(roundId, function()
 				return true
@@ -429,7 +430,6 @@ return function(describe, it, expect)
 			h.rounds:returnToLobby(roundId)
 			expect(h.terrainAdapter.clears).toBe(1)
 			expect(#h.terrainAdapter.regionWrites).toBe(0)
-			expect(h.pileTerrain:dentDepthAt(runtime, result.data.hitX, result.data.hitZ)).toBe(0)
 		end)
 
 		it("a fresh round starts with a full grid and a new mound", function()

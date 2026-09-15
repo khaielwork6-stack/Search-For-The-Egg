@@ -113,6 +113,40 @@ function PileSurface.buildField(cfg: { [string]: any }, grid: { [string]: any },
 	}
 end
 
+-- Recomputes one window of the field in place, instead of rebuilding all 2,916 columns.
+--
+-- The body is re-seated after every accepted award now, and a full `buildField` there meant smoothing
+-- the entire grid and allocating three fresh arrays for a swing that moved four cells. Only the cells
+-- that changed - plus the one-cell halo the 3x3 smoothing reaches - can have moved, so only those are
+-- recomputed. Reads the live cells directly, so no snapshot is allocated either.
+function PileSurface.refreshWindow(field: Field, cells: { any }, minCellX: number, minCellZ: number, maxCellX: number, maxCellZ: number)
+	local halfW, halfD = field.width * field.cellSize / 2, field.depth * field.cellSize / 2
+	local function fractionOf(index: number): number
+		local cell = cells[index]
+		if not cell then
+			return 0
+		end
+		return cell.remaining / math.max(1, cell.base)
+	end
+	local x0 = math.max(0, math.floor(minCellX) - 1)
+	local z0 = math.max(0, math.floor(minCellZ) - 1)
+	local x1 = math.min(field.width - 1, math.ceil(maxCellX) + 1)
+	local z1 = math.min(field.depth - 1, math.ceil(maxCellZ) + 1)
+	for z = z0, z1 do
+		for x = x0, x1 do
+			local index = z * field.width + x + 1
+			local cx = (x + 0.5) * field.cellSize - halfW
+			local cz = (z + 0.5) * field.cellSize - halfD
+			local rNorm = math.sqrt(cx * cx + cz * cz) / field.radius
+			local fraction = smoothed(field.width, field.depth, x, z, fractionOf)
+			local full = field.apex * PileSurface.domeProfile(rNorm)
+			field.fractions[index] = fraction
+			field.depths[index] = full * (1 - fraction)
+			field.heights[index] = full * fraction
+		end
+	end
+end
+
 -- Column height by cell coordinates (0 outside the grid).
 function PileSurface.columnHeight(field: Field, x: number, z: number): number
 	if x < 0 or z < 0 or x >= field.width or z >= field.depth then
@@ -225,6 +259,82 @@ function PileSurface.coatSlots(
 	local span = drop * (visual.coatDropCoverage or 1.35) + (visual.coatDropMarginStuds or 0.2)
 	local needed = math.ceil(span / step) + 1
 	return math.clamp(needed, minSlots, cap)
+end
+
+-- Slots a column should render given the mound as it stands right now.
+--
+-- `coatSlots` above measures the drop off the undug dome, which is correct until somebody digs. A
+-- vacuum sinks one column several studs below the one next to it; the neighbour's coat, sized for the
+-- dome's gentle slope, then ends far above the new floor and the packed body shows through as a flat
+-- wall down the side of the hole. That wall is what reads as white blocks inside the pile.
+--
+-- Measuring the drop against the neighbours' current heights covers a fresh pit wall with real,
+-- pickable feathers, and costs extra slots only beside holes somebody actually dug. With every cell
+-- full it agrees with `coatSlots`, because then the neighbour drop *is* the dome drop.
+export type HeightOf = (x: number, z: number) -> number
+
+function PileSurface.coatSlotsAt(
+	cfg: { [string]: any },
+	width: number,
+	depth: number,
+	cellSize: number,
+	heightOf: HeightOf,
+	x: number,
+	z: number,
+	base: number,
+	minSlots: number,
+	maxSlots: number?
+): number
+	local visual = cfg.pile.visual
+	local cap = math.min(maxSlots or visual.maxVisibleSlotsPerCell or minSlots, math.max(1, base))
+	if cap <= minSlots then
+		return math.min(minSlots, cap)
+	end
+	local full = PileSurface.columnFullHeight(cfg, width, depth, cellSize, x, z)
+	if full <= 0 then
+		return minSlots
+	end
+	local step = math.max(full / math.max(1, base), visual.minSeatStepStuds or 0)
+	if step <= 1e-4 then
+		return minSlots
+	end
+	local here = heightOf(x, z)
+	local drop = 0
+	-- Past the rim the neighbour is the ground, which is the same case as a column dug to nothing.
+	for _, offset in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+		drop = math.max(drop, here - heightOf(x + offset[1], z + offset[2]))
+	end
+	local span = drop * (visual.coatDropCoverage or 1.35) + (visual.coatDropMarginStuds or 0.2)
+	return math.clamp(math.ceil(span / step) + 1, minSlots, cap)
+end
+
+-- A height sampler over a built field.
+function PileSurface.fieldHeights(field: Field): HeightOf
+	return function(x: number, z: number): number
+		return PileSurface.columnHeight(field, x, z)
+	end
+end
+
+-- A height sampler straight off the live grid cells, for callers that hold no field. Same number the
+-- field would report: the dome profile scaled by the smoothed remaining fraction.
+function PileSurface.cellHeights(cfg: { [string]: any }, width: number, depth: number, cellSize: number, cells: { any }): HeightOf
+	local function fractionOf(index: number): number
+		local cell = cells[index]
+		if not cell then
+			return 0
+		end
+		return cell.remaining / math.max(1, cell.base)
+	end
+	return function(x: number, z: number): number
+		if x < 0 or z < 0 or x >= width or z >= depth then
+			return 0
+		end
+		local full = PileSurface.columnFullHeight(cfg, width, depth, cellSize, x, z)
+		if full <= 0 then
+			return 0
+		end
+		return full * smoothed(width, depth, x, z, fractionOf)
+	end
 end
 
 -- Undepleted mound height at a world XZ (the dome with every cell full).

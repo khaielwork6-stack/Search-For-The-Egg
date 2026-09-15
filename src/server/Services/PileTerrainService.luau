@@ -1,13 +1,24 @@
 --!strict
--- The pile's collision core (ASSUMED A-PILE-01): the logical mound is written into Roblox Terrain
--- (one voxel material, custom colour) so players stand and walk on a smooth, fully closed, natively
--- collidable surface with no seams or invisible walls. The terrain is a pure function of two server
--- facts, re-written locally after every accepted award:
---   * the logical field (cell health -> geometry: a soft hollow after a few strikes, a crater once a
---     cell and its neighbours empty), and
---   * a dent map of accepted strike points, each lowering the surface by a fixed depth inside the dig
---     radius, so repeated strikes at one spot dig a visible pit and the Egg gets a hollow at reveal.
--- Dents go through the voxel writer (not FillBall, whose small radii miss 4-stud voxel centres).
+-- The pile's collision core (ASSUMED A-PILE-01).
+--
+-- One rule holds this together: **the remaining records are the only thing that decides where the
+-- surface is.** The body a player stands on, the coat they see, and the saved grid are three views of
+-- that one number, so they cannot disagree.
+--
+-- They used to. Alongside the records there was a dent map - every accepted strike added a smooth
+-- bowl of `digRadiusStuds` (2.2 studs) and `strikeDentDepthStuds`, and those bowls were subtracted
+-- from the collision surface and from nothing else. The client seats its feathers at the record
+-- surface and has never known dents exist. So a few seconds of vacuuming summed forty bowls, the
+-- body under a 2.2-stud circle dropped metres, and the player walked forward into a mound that was
+-- still drawn as solid feathers - while the vac had only ever touched a 1.2-stud circle. The dent map
+-- is gone. A pit is dug by removing records, which lowers the drawn surface and the body together,
+-- and only where the tool actually reached.
+--
+-- The rewrite throttle went with it. Re-seating the body only every `rewriteEveryRecords` records
+-- left collision standing above the coat between thresholds, which is the invisible wall you hit
+-- while looking at open air. The touched region is re-seated on every accepted award; it is a few
+-- dozen parts having their Size and CFrame set, and correctness is worth more than that.
+--
 -- Terrain access goes through an injected adapter so the service runs headlessly in tests.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -19,16 +30,13 @@ local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local PileTerrainService = {}
 PileTerrainService.__index = PileTerrainService
 
-export type DentAt = (x: number, z: number) -> number
-
 export type Adapter = {
-	writeMound: (self: Adapter, field: any, config: { [string]: any }, dentAt: DentAt) -> number, -- voxels written
-	-- Re-writes the columns inside [minX,maxX]x[minZ,maxZ]; never raises an existing voxel.
+	writeMound: (self: Adapter, field: any, config: { [string]: any }) -> number, -- voxels written
+	-- Re-seats the columns inside [minX,maxX]x[minZ,maxZ] from the current field.
 	writeRegion: (
 		self: Adapter,
 		field: any,
 		config: { [string]: any },
-		dentAt: DentAt,
 		minX: number,
 		minZ: number,
 		maxX: number,
@@ -38,14 +46,11 @@ export type Adapter = {
 	kind: string,
 }
 
-type Dent = { x: number, z: number, radius: number, depth: number }
-
 export type PileTerrainService = typeof(setmetatable(
 	{} :: {
 		_config: { [string]: any },
 		_adapter: Adapter,
 		_fields: { [string]: any },
-		_dents: { [string]: { Dent } },
 		stats: { builds: number, carves: number, hollows: number, clears: number, voxels: number, regionWrites: number },
 	},
 	PileTerrainService
@@ -56,7 +61,6 @@ function PileTerrainService.new(options: { config: { [string]: any }, adapter: A
 		_config = options.config,
 		_adapter = options.adapter,
 		_fields = {},
-		_dents = {},
 		stats = { builds = 0, carves = 0, hollows = 0, clears = 0, voxels = 0, regionWrites = 0 },
 	}, PileTerrainService)
 end
@@ -66,76 +70,45 @@ function PileTerrainService.fieldFor(self: PileTerrainService, runtime: any): an
 	return PileSurface.buildField(self._config, PileGrid.snapshot(runtime.grid), layout)
 end
 
--- Total dent depth at a world XZ: smooth falloff inside each dent's radius, summed.
-function PileTerrainService.dentDepthAt(self: PileTerrainService, runtime: any, x: number, z: number): number
-	local dents = self._dents[runtime.state.roundId]
-	if not dents then
-		return 0
-	end
-	local total = 0
-	for _, dent in ipairs(dents) do
-		local dx, dz = x - dent.x, z - dent.z
-		local d = math.sqrt(dx * dx + dz * dz)
-		if d < dent.radius then
-			local t = 1 - d / dent.radius
-			total += dent.depth * t * t * (3 - 2 * t) -- smoothstep bowl
-		end
-	end
-	return total
-end
-
-function PileTerrainService._dentSampler(self: PileTerrainService, runtime: any): DentAt
-	return function(x, z)
-		return self:dentDepthAt(runtime, x, z)
-	end
-end
-
 -- Writes the round's mound. Called once when a round is created.
 function PileTerrainService.build(self: PileTerrainService, runtime: any)
 	local field = self:fieldFor(runtime)
 	local roundId = runtime.state.roundId
 	self._fields[roundId] = field
-	self._dents[roundId] = {}
 	self.stats.builds += 1
-	self.stats.voxels += self._adapter:writeMound(field, self._config, self:_dentSampler(runtime))
+	self.stats.voxels += self._adapter:writeMound(field, self._config)
 end
 
--- Records a dent (no terrain write; callers re-write the region afterwards).
-function PileTerrainService.carveAt(self: PileTerrainService, runtime: any, x: number, z: number, radius: number, depth: number)
-	local dents = self._dents[runtime.state.roundId]
-	if not dents then
-		return
-	end
-	table.insert(dents, { x = x, z = z, radius = radius, depth = depth })
-	self.stats.carves += 1
-end
-
--- Re-writes the mound inside the bounds (plus the configured cell margin) from the current field
--- and dent map.
+-- Re-seats the mound inside the bounds (plus the configured cell margin) from the current field.
 function PileTerrainService.rewrite(self: PileTerrainService, runtime: any, minX: number, minZ: number, maxX: number, maxZ: number)
 	local roundId = runtime.state.roundId
 	if not self._fields[roundId] then
 		return
 	end
-	local field = self:fieldFor(runtime)
-	self._fields[roundId] = field
-	local margin = self._config.pile.collision.rewriteMarginCells * runtime.grid.cellSize
-	self.stats.regionWrites += 1
-	self.stats.voxels += self._adapter:writeRegion(
+	-- Update the cached field in place rather than rebuilding every column: the only cells that can
+	-- have moved are the ones inside these bounds.
+	local field = self._fields[roundId]
+	local cellSize = runtime.grid.cellSize
+	PileSurface.refreshWindow(
 		field,
-		self._config,
-		self:_dentSampler(runtime),
-		minX - margin,
-		minZ - margin,
-		maxX + margin,
-		maxZ + margin
+		runtime.grid.cells,
+		(minX - field.minX) / cellSize - 1,
+		(minZ - field.minZ) / cellSize - 1,
+		(maxX - field.minX) / cellSize,
+		(maxZ - field.minZ) / cellSize
 	)
+	local margin = self._config.pile.collision.rewriteMarginCells * cellSize
+	self.stats.regionWrites += 1
+	self.stats.voxels += self._adapter:writeRegion(field, self._config, minX - margin, minZ - margin, maxX + margin, maxZ + margin)
 end
 
--- Reacts to an accepted collection/tool award: the primary strike dents the dig radius, a sweep
--- (several cells) dents each touched cell more lightly, and the neighbourhood is re-written.
+-- Reacts to an accepted award by re-seating the body under every cell the tool actually took from.
+--
+-- No dents and no threshold. The award already tells us which cells lost records, and a lost record
+-- is the whole of what lowers this mound; re-seating exactly those cells is both the correct surface
+-- and the smallest possible write. A tool that reached one cell moves one column, which is why a
+-- vacuum can no longer hollow out ground it never pointed at.
 function PileTerrainService.onAwarded(self: PileTerrainService, runtime: any, result: { [string]: any })
-	local collision = self._config.pile.collision
 	if not self._fields[runtime.state.roundId] then
 		return
 	end
@@ -147,11 +120,6 @@ function PileTerrainService.onAwarded(self: PileTerrainService, runtime: any, re
 		minX, minZ = math.min(minX, x), math.min(minZ, z)
 		maxX, maxZ = math.max(maxX, x), math.max(maxZ, z)
 	end
-	-- Voxels are re-written only when a touched cell crosses a record threshold (every N records
-	-- or empty), so a single pick never shifts the collision surface under the coat; dents are
-	-- recorded every time and land with the next rewrite.
-	local every = collision.rewriteEveryRecords
-	local due = false
 	local cells = result.cells
 	if type(cells) == "table" then
 		for _, removal in ipairs(cells) do
@@ -159,39 +127,61 @@ function PileTerrainService.onAwarded(self: PileTerrainService, runtime: any, re
 			if cell and removal.removed and removal.removed > 0 then
 				local lx, lz = PileGrid.cellCenter(grid, cell)
 				include(minCorner.X + lx, minCorner.Z + lz)
-				if cell.index ~= result.cellIndex then
-					self:carveAt(runtime, minCorner.X + lx, minCorner.Z + lz, collision.sweepDigRadiusStuds, collision.sweepDentDepthStuds)
-				end
-				local removedSoFar = cell.base - cell.remaining
-				if cell.remaining == 0 or removedSoFar % every == 0 or removal.removed >= every then
-					due = true
-				end
 			end
 		end
 	end
-	if type(result.hitX) == "number" and type(result.hitZ) == "number" then
-		include(result.hitX, result.hitZ)
-		self:carveAt(runtime, result.hitX, result.hitZ, collision.digRadiusStuds, collision.strikeDentDepthStuds)
-	end
-	if minX < math.huge and due then
+	if minX < math.huge then
 		self:rewrite(runtime, minX, minZ, maxX, maxZ)
 	end
 end
 
--- Opens a hollow around the Egg the moment it is revealed so it never clips through the core.
-function PileTerrainService.openEggHollow(self: PileTerrainService, runtime: any, position: Vector3)
+-- Opens a hollow around the Egg the moment it is revealed so it never clips through the mound.
+--
+-- This used to add one very deep dent, which moved the body and left the coat drawn across the top of
+-- the hole. It now takes the records out of the columns inside the radius, the same way a tool does:
+-- the clients get the removals as ordinary deltas and stop drawing those feathers, the body follows
+-- the records down, and the hollow is a real hole in the mound rather than a hole in the collision.
+function PileTerrainService.openEggHollow(
+	self: PileTerrainService,
+	runtime: any,
+	position: Vector3,
+	onRemoved: ((index: number, remaining: number, mask: number) -> ())?
+)
 	local collision = self._config.pile.collision
-	local field = self._fields[runtime.state.roundId]
-	local remainingHeight = if field then PileSurface.heightAt(field, position.X, position.Z) else 0
-	self:carveAt(
-		runtime,
-		position.X,
-		position.Z,
-		collision.eggHollowRadiusStuds,
-		math.max(collision.eggHollowDepthStuds, remainingHeight + 1)
-	)
-	self.stats.hollows += 1
+	if not self._fields[runtime.state.roundId] then
+		return
+	end
+	local grid = runtime.grid
+	local layout = ChapterLayout[runtime.state.chapter]
+	local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
 	local r = collision.eggHollowRadiusStuds
+	local depth = collision.eggHollowDepthStuds
+	local spacing = math.max(self._config.pile.recordSpacingStuds, 1e-3)
+	for _, cell in ipairs(PileGrid.cellsWithinStuds(grid, position.X - minCorner.X, position.Z - minCorner.Z, r)) do
+		if cell.remaining > 0 then
+			local lx, lz = PileGrid.cellCenter(grid, cell)
+			local dx, dz = minCorner.X + lx - position.X, minCorner.Z + lz - position.Z
+			-- A bowl, not a cylinder: deepest over the Egg and feathering out to nothing at the rim,
+			-- so the hollow reads as something that was dug rather than punched.
+			local t = math.clamp(1 - math.sqrt(dx * dx + dz * dz) / math.max(r, 1e-3), 0, 1)
+			local wanted = math.floor(depth * t * t * (3 - 2 * t) / spacing + 0.5)
+			local removed = 0
+			while removed < wanted and cell.remaining > 0 do
+				local slot = PileGrid.topSlot(cell)
+				if not slot then
+					break
+				end
+				if not PileGrid.removeFeather(grid, cell, slot) then
+					break
+				end
+				removed += 1
+			end
+			if removed > 0 and onRemoved then
+				onRemoved(cell.index, cell.remaining, cell.taken)
+			end
+		end
+	end
+	self.stats.hollows += 1
 	self:rewrite(runtime, position.X - r, position.Z - r, position.X + r, position.Z + r)
 end
 
@@ -204,7 +194,6 @@ function PileTerrainService.clear(self: PileTerrainService, runtime: any)
 	end
 	self._adapter:clear(field)
 	self._fields[roundId] = nil
-	self._dents[roundId] = nil
 	self.stats.clears += 1
 end
 
@@ -215,7 +204,7 @@ function PileTerrainService.intendedSurfaceY(self: PileTerrainService, runtime: 
 		return 0
 	end
 	local field = self:fieldFor(runtime) -- the live logical surface, not the last voxel write
-	local height = PileSurface.heightAt(field, x, z) - self:dentDepthAt(runtime, x, z)
+	local height = PileSurface.heightAt(field, x, z)
 	return field.baseY + math.max(0, height)
 end
 
@@ -228,7 +217,7 @@ function PileTerrainService.terrainAdapter(terrain: Terrain): Adapter
 	local adapter = { kind = "terrain" }
 	-- Writes the field's columns inside the bounds. When `lowerOnly` is set the existing voxels are
 	-- read first and never raised.
-	local function writeColumns(field, config, dentAt: DentAt, minX, minZ, maxX, maxZ, lowerOnly)
+	local function writeColumns(field, config, minX, minZ, maxX, maxZ, lowerOnly)
 		local collision = config.pile.collision
 		local material = (Enum.Material :: any)[collision.material] or Enum.Material.Snow
 		local resolution = collision.voxelResolution
@@ -256,7 +245,7 @@ function PileTerrainService.terrainAdapter(terrain: Terrain): Adapter
 				for iz = 1, nz do
 					local wz = origin.Z + (iz - 0.5) * resolution
 					-- Fraction of the voxel below the intended surface (sampled at the voxel centre XZ).
-					local height = PileSurface.heightAt(field, wx, wz) - dentAt(wx, wz) - inset
+					local height = PileSurface.heightAt(field, wx, wz) - inset
 					local surface = field.baseY + math.max(0, height)
 					local bottom = wy - resolution / 2
 					local fill = math.clamp((surface - bottom) / resolution, 0, 1)
@@ -279,24 +268,15 @@ function PileTerrainService.terrainAdapter(terrain: Terrain): Adapter
 		terrain:WriteVoxels(region, resolution, materials, occupancy)
 		return written
 	end
-	function adapter.writeMound(_, field, config, dentAt)
+	function adapter.writeMound(_, field, config)
 		local collision = config.pile.collision
 		local material = (Enum.Material :: any)[collision.material] or Enum.Material.Snow
 		terrain:SetMaterialColor(material, Color3.fromRGB(collision.color[1], collision.color[2], collision.color[3]))
 		local rim = field.radius * PileSurface.RIM_STRETCH
-		return writeColumns(
-			field,
-			config,
-			dentAt,
-			field.centreX - rim,
-			field.centreZ - rim,
-			field.centreX + rim,
-			field.centreZ + rim,
-			false
-		)
+		return writeColumns(field, config, field.centreX - rim, field.centreZ - rim, field.centreX + rim, field.centreZ + rim, false)
 	end
-	function adapter.writeRegion(_, field, config, dentAt, minX, minZ, maxX, maxZ)
-		return writeColumns(field, config, dentAt, minX, minZ, maxX, maxZ, true)
+	function adapter.writeRegion(_, field, config, minX, minZ, maxX, maxZ)
+		return writeColumns(field, config, minX, minZ, maxX, maxZ, true)
 	end
 	function adapter.clear(_, field)
 		local rim = field.radius * PileSurface.RIM_STRETCH + 8
@@ -369,7 +349,22 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 		local step = math.max(full / records, visual.minSeatStepStuds or 0)
 		-- The window is per column: a steep rim column renders deeper, so the body has to sit deeper
 		-- under it too or the coat's own lower records would be buried inside the body.
-		local slots = PileSurface.coatSlots(config, field.width, field.depth, field.cellSize, x, z, records, visual.visibleSlotsPerCell)
+		-- Both windows, same as the pick test: the body has to clear whichever coat is deeper, or a pit
+		-- wall's extra records would be seated inside it.
+		local slots = math.max(
+			PileSurface.coatSlots(config, field.width, field.depth, field.cellSize, x, z, records, visual.visibleSlotsPerCell),
+			PileSurface.coatSlotsAt(
+				config,
+				field.width,
+				field.depth,
+				field.cellSize,
+				PileSurface.fieldHeights(field),
+				x,
+				z,
+				records,
+				visual.visibleSlotsPerCell
+			)
+		)
 		return (slots - 1) * step + (visual.coatSpanMarginStuds or 0.35)
 	end
 
@@ -383,12 +378,12 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 	-- the coat. A vertical box that starts below the sand and ends just under the rendered records
 	-- cannot open a gap at any camera angle: its sides are parallel, it overlaps its neighbours by
 	-- `shellOverlap`, and there is nothing underneath it to look into.
-	local function seat(field, config, dentAt: DentAt, index: number, x: number, z: number): (CFrame, Vector3)
+	local function seat(field, config, index: number, x: number, z: number): (CFrame, Vector3)
 		local collision = config.pile.collision
 		local cx = field.minX + (x + 0.5) * field.cellSize
 		local cz = field.minZ + (z + 0.5) * field.cellSize
 		local ground = field.groundY or field.baseY
-		local surface = PileSurface.heightAt(field, cx, cz) - dentAt(cx, cz)
+		local surface = PileSurface.heightAt(field, cx, cz)
 		local top = field.baseY + math.max(0, surface - collision.surfaceInsetStuds - coatSpan(config, field, x, z))
 		-- No floor under `top`. A lip forced above the sand here used to stop a low sight line slipping
 		-- under the mound's cut-off edge, but the dome reaches the sand on its own now, so all the lip
@@ -399,7 +394,7 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 		local _ = index
 		return CFrame.new(cx, floor + height / 2, cz), Vector3.new(size, height, size)
 	end
-	local function write(field, config, dentAt: DentAt, minX: number?, minZ: number?, maxX: number?, maxZ: number?): number
+	local function write(field, config, minX: number?, minZ: number?, maxX: number?, maxZ: number?): number
 		local container = ensureFolder(config)
 		local written = 0
 		for z = 0, field.depth - 1 do
@@ -410,7 +405,7 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 					continue
 				end
 				local index = z * field.width + x + 1
-				local frame, size = seat(field, config, dentAt, index, x, z)
+				local frame, size = seat(field, config, index, x, z)
 				local box = boxes[index]
 				if not box then
 					box = Instance.new("Part")
@@ -435,7 +430,7 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 		end
 		return written
 	end
-	function adapter.writeMound(_, field, config, dentAt)
+	function adapter.writeMound(_, field, config)
 		if terrain then
 			local rim = field.radius * PileSurface.RIM_STRETCH + 8
 			local region = Region3.new(
@@ -444,10 +439,10 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 			):ExpandToGrid(4)
 			terrain:FillRegion(region, 4, Enum.Material.Air)
 		end
-		return write(field, config, dentAt)
+		return write(field, config)
 	end
-	function adapter.writeRegion(_, field, config, dentAt, minX, minZ, maxX, maxZ)
-		return write(field, config, dentAt, minX, minZ, maxX, maxZ)
+	function adapter.writeRegion(_, field, config, minX, minZ, maxX, maxZ)
+		return write(field, config, minX, minZ, maxX, maxZ)
 	end
 	function adapter.clear(_, _field)
 		if folder then
@@ -467,7 +462,7 @@ function PileTerrainService.mockAdapter(): Adapter
 		self.field = field
 		return field.width * field.depth
 	end
-	function adapter.writeRegion(self, field, _config, _dentAt, minX, minZ, maxX, maxZ)
+	function adapter.writeRegion(self, field, _config, minX, minZ, maxX, maxZ)
 		self.field = field
 		table.insert(self.regionWrites, { minX = minX, minZ = minZ, maxX = maxX, maxZ = maxZ })
 		return 0

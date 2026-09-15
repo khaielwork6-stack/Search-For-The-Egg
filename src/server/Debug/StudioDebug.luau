@@ -617,7 +617,6 @@ function StudioDebug.install(container: any): any?
 			{ remaining = snapshot.remaining, base = snapshot.base, masks = snapshot.masks, width = snapshot.width, depth = snapshot.depth }
 		if probeX and probeZ then
 			out.intendedSurfaceY = container.pileTerrain:intendedSurfaceY(runtime, tonumber(probeX) :: number, tonumber(probeZ) :: number)
-			out.dentDepth = container.pileTerrain:dentDepthAt(runtime, tonumber(probeX) :: number, tonumber(probeZ) :: number)
 		end
 		return out
 	end

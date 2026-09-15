@@ -279,16 +279,27 @@ function CollectionService._collectFeather(
 		return reject(self, Envelope.Codes.ALREADY_DONE, "already_collected")
 	end
 	-- The window is per column, not a constant: steep rim columns render deeper so the coat covers the
-	-- mound body instead of leaving a bare band. Same pure function the client renders from.
-	local exposedCount = PileSurface.coatSlots(
-		config,
-		grid.width,
-		grid.depth,
-		grid.cellSize,
-		(cellIndex - 1) % grid.width,
-		math.floor((cellIndex - 1) / grid.width),
-		cell.base,
-		config.pile.visual.visibleSlotsPerCell
+	-- mound body instead of leaving a bare band, and so does a column standing over a freshly dug pit.
+	-- The same two pure functions the client renders from.
+	--
+	-- Whichever window is wider wins. The dug-aware one depends on live neighbour heights, and a client
+	-- a delta or two behind us would otherwise be drawing a feather we had already decided was buried;
+	-- taking the max means a pick is refused only when it is genuinely under the coat on both readings.
+	local cellX, cellZ = (cellIndex - 1) % grid.width, math.floor((cellIndex - 1) / grid.width)
+	local minSlots = config.pile.visual.visibleSlotsPerCell
+	local exposedCount = math.max(
+		PileSurface.coatSlots(config, grid.width, grid.depth, grid.cellSize, cellX, cellZ, cell.base, minSlots),
+		PileSurface.coatSlotsAt(
+			config,
+			grid.width,
+			grid.depth,
+			grid.cellSize,
+			PileSurface.cellHeights(config, grid.width, grid.depth, grid.cellSize, grid.cells),
+			cellX,
+			cellZ,
+			cell.base,
+			minSlots
+		)
 	)
 	if not table.find(FeatherLayout.exposedSlots(cell.base, cell.taken, exposedCount), slot) then
 		return reject(self, Envelope.Codes.INVALID_STATE, "not_exposed")

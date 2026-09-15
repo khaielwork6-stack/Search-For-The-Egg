@@ -146,27 +146,46 @@ return function(describe, it, expect)
 		end)
 	end)
 
-	describe("Terrain thresholds", function()
-		it("re-writes voxels only every N records of a cell (and when it empties)", function()
+	describe("Body follows the records", function()
+		it("re-seats the body on every accepted pick, so collision never stands above the coat", function()
+			-- This used to re-seat only every `rewriteEveryRecords` records. Between thresholds the body
+			-- stayed where it was while the coat came down with the records, which is an invisible wall
+			-- standing in open air. One pick, one re-seat.
 			local h = GameplayHarness.new(cfg)
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
-			local every = cfg.pile.collision.rewriteEveryRecords
 			local cell = runtime.grid.cells[PileGrid.index(runtime.grid.width, runtime.grid.width // 2, runtime.grid.depth // 2)]
-			expect(cell.base).toBeGreaterThanOrEqual(every + 1)
+			expect(cell.base).toBeGreaterThanOrEqual(4)
 			local writes = #h.terrainAdapter.regionWrites
-			for i = 1, every - 1 do
+			for i = 1, 4 do
 				expect(h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2).ok).toBe(true)
-				expect(#h.terrainAdapter.regionWrites).toBe(writes) -- no rewrite yet
-				expect(h.pileTerrain.stats.carves).toBe(i) -- dents are still recorded
+				expect(#h.terrainAdapter.regionWrites).toBe(writes + i)
 			end
-			expect(h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2).ok).toBe(true)
-			expect(#h.terrainAdapter.regionWrites).toBe(writes + 1)
-			while cell.remaining > 0 do
-				runtime.players[1].carriedStandard = 0 -- the column outlasts one bag; keep the bag open
-				expect(h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2).ok).toBe(true)
-			end
-			expect(#h.terrainAdapter.regionWrites).toBeGreaterThanOrEqual(writes + 2) -- the empty cell forced one
+		end)
+
+		it("lowers the body by exactly what the records lost, with no extra depth of its own", function()
+			-- The dent map used to subtract a 2.2-stud bowl from the collision surface for every strike
+			-- and from nothing else, so the body sank far below the feathers still being drawn. The only
+			-- thing that may move this surface is a record leaving the column.
+			local h = GameplayHarness.new(cfg)
+			h.join(1)
+			local _, runtime = h.startRound({ 1 })
+			local x, z = runtime.grid.width // 2, runtime.grid.depth // 2
+			local cell = runtime.grid.cells[PileGrid.index(runtime.grid.width, x, z)]
+			local minCorner =
+				ChapterLayout.gridMinCorner(ChapterLayout.chapter1, runtime.grid.width, runtime.grid.depth, runtime.grid.cellSize)
+			local lx, lz = PileGrid.cellCenter(runtime.grid, cell)
+			local wx, wz = minCorner.X + lx, minCorner.Z + lz
+			local before = h.pileTerrain:intendedSurfaceY(runtime, wx, wz)
+			local fullBefore = cell.remaining
+			expect(h.collectAt(1, runtime, x, z).ok).toBe(true)
+			local lost = fullBefore - cell.remaining
+			expect(lost).toBeGreaterThan(0)
+			local after = h.pileTerrain:intendedSurfaceY(runtime, wx, wz)
+			expect(after).toBeLessThan(before)
+			-- A record is `recordSpacingStuds` of column, smoothed over a 3x3, so the drop is bounded by
+			-- what was actually taken. Anything deeper would be collision the player cannot see.
+			expect(before - after).toBeLessThanOrEqual(lost * cfg.pile.recordSpacingStuds * 4)
 		end)
 	end)
 end

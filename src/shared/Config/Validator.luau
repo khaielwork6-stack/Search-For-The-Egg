@@ -591,23 +591,25 @@ function Validator.validate(raw: any): Report
 			)
 			check(collision.voxelResolution == 4, "pile.collision.voxelResolution must be 4 (Roblox terrain)")
 			for _, key in ipairs({
-				"digRadiusStuds",
-				"sweepDigRadiusStuds",
 				"eggHollowRadiusStuds",
 				"lineOfSightToleranceStuds",
-				"strikeDentDepthStuds",
-				"sweepDentDepthStuds",
 				"eggHollowDepthStuds",
 			}) do
 				check(isPositiveNumber(collision[key]), "pile.collision." .. key .. " must be > 0")
 			end
 			check(isNonNegativeNumber(collision.surfaceInsetStuds), "pile.collision.surfaceInsetStuds must be >= 0")
-			check(
-				isPositiveNumber(collision.rewriteEveryRecords)
-					and collision.rewriteEveryRecords % 1 == 0
-					and collision.rewriteEveryRecords <= 12,
-				"pile.collision.rewriteEveryRecords must be an integer 1..12"
-			)
+			-- The dent map is gone: records are the only thing that lowers this surface, so a strike no
+			-- longer has a radius or a depth of its own and the body is re-seated on every award. A config
+			-- still carrying those keys is stale and says so rather than being quietly ignored.
+			for _, dead in ipairs({
+				"digRadiusStuds",
+				"sweepDigRadiusStuds",
+				"strikeDentDepthStuds",
+				"sweepDentDepthStuds",
+				"rewriteEveryRecords",
+			}) do
+				check(collision[dead] == nil, "pile.collision." .. dead .. " was removed with the dent map; delete it from the config")
+			end
 			check(
 				isPositiveNumber(collision.rewriteMarginCells)
 					and collision.rewriteMarginCells % 1 == 0

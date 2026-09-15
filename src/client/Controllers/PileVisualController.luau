@@ -799,8 +799,7 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 	for _, column in pairs(self._columns) do
 		local full = PileSurface.columnFullHeight(self._config, pile.width, pile.depth, pile.cellSize, column.x, column.z)
 		column.step = math.max(full / math.max(1, column.base), self._config.pile.visual.minSeatStepStuds or 0)
-		column.slots =
-			PileSurface.coatSlots(self._config, pile.width, pile.depth, pile.cellSize, column.x, column.z, column.base, minSlots, maxSlots)
+		column.slots = self:_coatWindow(column, minSlots, maxSlots)
 		coatParts += column.slots
 	end
 	local fluffPerCell = self:_fluffPerCell(coatParts)
@@ -933,6 +932,37 @@ function PileVisualController._recount(self: PileVisualController)
 	self.stats.fluffPlaced = fluff + #self._rimBed
 end
 
+-- How many records a column draws: the deeper of the dome window and the dug window.
+--
+-- The dug window is why a neighbour has to be re-evaluated when a column is dug. A column that loses
+-- records leaves the one beside it standing over a hole, and that one now has to draw far enough down
+-- to cover the wall it just became - otherwise the packed body shows through the side of the pit as a
+-- flat pale block, which is exactly what a vacuum used to carve out.
+function PileVisualController._coatWindow(self: PileVisualController, column: any, minSlots: number, maxSlots: number): number
+	local pile = self._pile
+	local heights = if self._field then PileSurface.fieldHeights(self._field) else nil
+	local dome =
+		PileSurface.coatSlots(self._config, pile.width, pile.depth, pile.cellSize, column.x, column.z, column.base, minSlots, maxSlots)
+	if not heights then
+		return dome
+	end
+	return math.max(
+		dome,
+		PileSurface.coatSlotsAt(
+			self._config,
+			pile.width,
+			pile.depth,
+			pile.cellSize,
+			heights,
+			column.x,
+			column.z,
+			column.base,
+			minSlots,
+			maxSlots
+		)
+	)
+end
+
 -- Applies an authoritative delta ({ i, r, m } per cell): only the touched cells change (a taken
 -- record leaves, the next one appears, that cell's fluff settles one layer). Neighbours never move.
 function PileVisualController.applyDelta(self: PileVisualController, payload: { [string]: any })
@@ -944,7 +974,7 @@ function PileVisualController.applyDelta(self: PileVisualController, payload: { 
 		return
 	end
 	local grid = self._grid :: { [string]: any }
-	local changed = false
+	local touched: { [number]: boolean } = {}
 	for _, change in ipairs(payload.cells) do
 		local column = self._columns[change.i]
 		if not column then
@@ -957,16 +987,46 @@ function PileVisualController.applyDelta(self: PileVisualController, payload: { 
 				column.mask = change.m
 			end
 			grid.remaining[change.i] = change.r
-			self:_applyColumn(column, self._folder :: Folder)
-			self:_exposeFloor(column)
-			self:_exposeWalls(column)
-			changed = true
+			touched[change.i] = true
 		end
 	end
-	if changed then
-		self._field = PileSurface.buildField(self._config, grid, self._layout)
-		self:_recount()
+	if next(touched) == nil then
+		return
 	end
+	-- The field carries the heights the coat window is measured against, so it has to be current
+	-- before any column is re-seated.
+	self._field = PileSurface.buildField(self._config, grid, self._layout)
+	-- A dug column changes how deep its four neighbours have to draw, so they are re-seated with it.
+	local pile = self._pile
+	local minSlots, maxSlots = self:_visibleSlots(), self:_maxSlots()
+	local dirty: { [number]: boolean } = {}
+	for index in pairs(touched) do
+		dirty[index] = true
+		local column = self._columns[index]
+		if column then
+			for _, offset in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+				local nx, nz = column.x + offset[1], column.z + offset[2]
+				if nx >= 0 and nz >= 0 and nx < pile.width and nz < pile.depth then
+					dirty[nz * pile.width + nx + 1] = true
+				end
+			end
+		end
+	end
+	local folder = self._folder :: Folder
+	for index in pairs(dirty) do
+		local column = self._columns[index]
+		if column then
+			local slots = self:_coatWindow(column, minSlots, maxSlots)
+			-- A neighbour that has not changed depth needs no work; only the dug cells always re-seat.
+			if slots ~= column.slots or touched[index] then
+				column.slots = slots
+				self:_applyColumn(column, folder)
+				self:_exposeFloor(column)
+				self:_exposeWalls(column)
+			end
+		end
+	end
+	self:_recount()
 end
 
 -- ---------------------------------------------------------------------------------------------

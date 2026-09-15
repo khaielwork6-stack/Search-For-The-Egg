@@ -876,7 +876,11 @@ upgrades.purchased:Connect(function(userId, runtime, result)
 end)
 
 egg.revealed:Connect(function(runtime, position)
-	pileTerrain:openEggHollow(runtime, position)
+	-- The hollow takes real records out of the mound, so every client has to hear about them the same
+	-- way they hear about a rake swing, or they would go on drawing feathers over the hole.
+	pileTerrain:openEggHollow(runtime, position, function(index, remaining, mask)
+		rounds:queueDelta(runtime.state.roundId, index, remaining, mask)
+	end)
 	ChapterShellService.spawnEgg(arena, position, config)
 	for _, player in ipairs(memberPlayers(runtime.state.members)) do
 		send(player, "EggRevealed", {
