@@ -254,18 +254,27 @@ function AudioDirector.loop(self: AudioDirector, role: string, at: BasePart): So
 end
 
 function AudioDirector.stopLoop(self: AudioDirector, sound: Sound)
+	if not sound.Parent then
+		return
+	end
 	-- Renamed first, so a loop asked for again while this one is fading out starts a fresh sound
 	-- instead of finding the dying one.
 	sound.Name = "LoopStopping"
-	if not sound.IsPlaying then
+	local seconds = audioConfig(self._config).loopFadeSeconds
+	if not sound.IsPlaying or sound.Volume <= 0.001 or seconds <= 0 then
+		sound:Stop()
 		sound:Destroy()
 		return
 	end
-	local fade = TweenService:Create(sound, TweenInfo.new(audioConfig(self._config).loopFadeSeconds, Enum.EasingStyle.Sine), { Volume = 0 })
-	fade:Play()
-	fade.Completed:Once(function()
-		sound:Stop()
-		sound:Destroy()
+	TweenService:Create(sound, TweenInfo.new(seconds, Enum.EasingStyle.Sine), { Volume = 0 }):Play()
+	-- A timer, not the tween's Completed event: a tween that is cancelled or collected before it
+	-- finishes never fires it, and the sound would then sit under the tool for the rest of the round.
+	-- A silent orphan there is exactly the overlapping copy this is supposed to prevent.
+	task.delay(seconds + 0.05, function()
+		if sound.Parent then
+			sound:Stop()
+			sound:Destroy()
+		end
 	end)
 end
 
