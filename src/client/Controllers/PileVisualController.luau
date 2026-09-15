@@ -81,6 +81,7 @@ export type PileVisualController = typeof(setmetatable(
 		_lastPile: { [string]: any }?,
 		_lastChapter: string?,
 		_lifted: { [number]: { part: BasePart, seat: CFrame } },
+		_recountPending: boolean?,
 		_trove: Trove.Trove,
 		target: Target?,
 		stats: {
@@ -825,6 +826,18 @@ function PileVisualController._buildRimBed(self: PileVisualController, folder: F
 	end
 end
 
+-- Counts are refreshed once per frame at most: a 27-record sweep marks the pass dirty 27 times.
+function PileVisualController._requestRecount(self: PileVisualController)
+	if self._recountPending then
+		return
+	end
+	self._recountPending = true
+	task.defer(function()
+		self._recountPending = false
+		self:_recount()
+	end)
+end
+
 function PileVisualController._recount(self: PileVisualController)
 	local feathers, fluff = 0, 0
 	for _, column in pairs(self._columns) do
@@ -1178,7 +1191,7 @@ function PileVisualController.collectFeather(
 		self:_applyColumn(column, folder)
 		self:_exposeFloor(column)
 		self:_exposeWalls(column)
-		self:_recount()
+		self:_requestRecount()
 	end
 	if self.target and self.target.featherId == featherId then
 		self:_setTarget(nil)
