@@ -202,7 +202,7 @@
       "pickupVolume": 0.7,
       "bagFullToastCooldownSeconds": 1.5,
       "assumption": "ASSUMED",
-      "visibleSlotsPerCell": 10,
+      "visibleSlotsPerCell": 7,
       "visibleSlotsPerCellMobile": 3,
       "featherWidthRange": [
         0.42,
@@ -257,28 +257,28 @@
       "floorLevelSpacingStuds": 0.5,
       "rimMinScale": 0.72,
       "underlayerGridDesktop": [
-        0,
+        2,
         0
       ],
       "underlayerGridMobile": [
-        0,
+        1,
         0
       ],
       "underlayerDepths": [
-        1.6,
-        2.0
+        0.9,
+        1.5
       ],
       "underlayerLengthRange": [
-        0.9,
-        1.4
+        0.85,
+        1.25
       ],
       "underlayerWidthRange": [
-        0.8,
-        1.2
+        0.4,
+        0.58
       ],
       "underlayerTiltRangeDegrees": [
         0,
-        7
+        6
       ],
       "frontSkirtStrandsDesktop": 820,
       "frontSkirtStrandsMobile": 260,
@@ -293,12 +293,13 @@
       "depthTintWeight": 0.55,
       "depthTintSlots": 16,
       "shadingEvidence": "OWNER 14 Sep 2026 (clip review): the mound was uniformly white with no depth cue. Records now tint down the palette with their depth in the column (depthTintWeight of the colour comes from depth over depthTintSlots records).",
-      "rimCurlDegrees": 26,
+      "rimCurlDegrees": 16,
       "rimEvidence": "OWNER 14 Sep 2026 (clip review): the rim read as a spiky ball. Rim feathers taper to rimMinScale over rimTaperStuds and pitch down by rimCurlDegrees so the edge curls under.",
       "seatLumpStuds": 0.55,
       "lumpEvidence": "OWNER 14 Sep 2026 (clip review): the dome is a perfect mathematical profile until it is dug, so it read as a smooth blob. Rendered feathers are seated along a smooth deterministic undulation of this amplitude; the logical surface, aim and collision are untouched.",
       "seatLumpFadeStuds": 3.0,
-      "gapEvidence": "OWNER 14 Sep 2026: bare sand showed through near the foot. The undulation was sinking thin-coat feathers below ground and the rim taper thinned the cover over too wide a band; the lump now fades with coat height, nothing seats below the floor, and the taper is narrower."
+      "gapEvidence": "OWNER 14 Sep 2026: bare sand showed through near the foot. The undulation was sinking thin-coat feathers below ground and the rim taper thinned the cover over too wide a band; the lump now fades with coat height, nothing seats below the floor, and the taper is narrower.",
+      "minSeatStepStuds": 0.1
     },
     "assumption": "ASSUMED",
     "recordSpacingStuds": 0.15,
@@ -504,7 +505,7 @@
       "sweepHalfWidthStuds": 1.25,
       "sweepAheadStuds": 0.35,
       "streamStaggerSeconds": 0.028,
-      "maxPerCellPerSweep": 10
+      "maxPerCellPerSweep": 7
     },
     "confettiCharge": {
       "displayName": "Confetti Charge",
@@ -535,7 +536,7 @@
       "suctionRadiusStuds": 1.2,
       "reachStuds": 2.0,
       "focusWeight": 0.7,
-      "maxPerCellPerTick": 6
+      "maxPerCellPerTick": 5
     },
     "scoutChick": {
       "displayName": "Scout Chick",

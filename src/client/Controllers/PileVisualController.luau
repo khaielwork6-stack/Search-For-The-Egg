@@ -42,6 +42,7 @@ type Column = {
 	fluffCount: number,
 	step: number, -- studs the column recedes per record
 	walls: { BasePart },
+	under: { { part: BasePart, depth: number } },
 	wallDepth: number, -- studs of interior wall already materialised
 	floorDepth: number, -- studs of interior floor layers already materialised
 	underlayerDone: boolean,
@@ -382,6 +383,16 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 			column.feathers[slot] = nil
 		end
 	end
+	-- Bed filler sits at a fixed depth under the original surface. Once the cell is dug past it the
+	-- filler would hang in mid air inside the hole, so it goes with the records above it.
+	local dug = (column.base - column.remaining) * column.step
+	for index = #column.under, 1, -1 do
+		local entry = column.under[index]
+		if entry.depth <= dug then
+			releasePart(self, entry.part)
+			table.remove(column.under, index)
+		end
+	end
 	for _, slot in ipairs(exposed) do
 		local placement = FeatherLayout.placement(visual, column.index, slot, field.cellSize)
 		local wx, wz = FeatherLayout.worldXZ(minCorner, field.cellSize, column.x, column.z, placement)
@@ -403,7 +414,9 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 		-- instead of letting it radiate outward as blades.
 		local rimMin = visual.rimMinScale
 		local rimFactor = if rimMin < 1 then math.clamp((1 - scale) / (1 - rimMin), 0, 1) else 0
-		local tilt = placement.tilt - rimFactor * math.rad(visual.rimCurlDegrees or 0)
+		-- Curl the rim down towards lying flat, never past it: a negative tilt drives the feather
+		-- into the surface and leaves nothing but its base above the sand.
+		local tilt = math.max(placement.tilt - rimFactor * math.rad(visual.rimCurlDegrees or 0), 0)
 		local part = column.feathers[slot]
 		if not part then
 			part = acquirePart(self)
@@ -553,7 +566,7 @@ function PileVisualController._applyUnderlayer(self: PileVisualController, colum
 					lerp(visual.underlayerWidthRange[1], visual.underlayerWidthRange[2], h(8)) * scale
 				)
 				part.Parent = folder
-				table.insert(column.walls, part)
+				table.insert(column.under, { part = part, depth = depth })
 			end
 		end
 	end
@@ -753,6 +766,7 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 			fluffCount = 0,
 			step = 0,
 			walls = {},
+			under = {},
 			wallDepth = 0,
 			floorDepth = 0,
 			underlayerDone = false,
@@ -763,7 +777,7 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 	local fluffPerCell = self:_fluffPerCell()
 	for _, column in pairs(self._columns) do
 		local full = PileSurface.columnFullHeight(self._config, pile.width, pile.depth, pile.cellSize, column.x, column.z)
-		column.step = full / math.max(1, column.base)
+		column.step = math.max(full / math.max(1, column.base), self._config.pile.visual.minSeatStepStuds or 0)
 		-- Vary the bed a little per cell so no row reads as a grid.
 		column.fluffCount = math.max(0, math.floor(fluffPerCell * lerp(0.75, 1.25, FeatherLayout.hash(column.index, 0, 17)) + 0.5))
 	end
@@ -1381,6 +1395,10 @@ function PileVisualController.clear(self: PileVisualController)
 			releasePart(self, part)
 		end
 		table.clear(column.walls)
+		for _, entry in ipairs(column.under) do
+			releasePart(self, entry.part)
+		end
+		table.clear(column.under)
 	end
 	table.clear(self._columns)
 	for _, part in ipairs(self._rimBed) do
