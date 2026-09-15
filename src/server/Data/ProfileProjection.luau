@@ -13,6 +13,10 @@ export type Extras = {
 	daily: { status: string, dayIndex: number, gems: number, nextClaimInSeconds: number, graceRemainingSeconds: number }?,
 	slotCount: number?,
 	sessionSeconds: number?,
+	-- Today's quests as the client draws them: objective, exact progress, reward and claim state.
+	-- No transaction ids and no stored record, so nothing here can leak a claim key.
+	quests: { any }?,
+	questResetInSeconds: number?,
 }
 
 function ProfileProjection.project(
@@ -45,6 +49,8 @@ function ProfileProjection.project(
 			cosmetics = table.clone(data.inventory.cosmetics),
 		},
 		rewards = {
+			quests = if ex.quests then table.clone(ex.quests) else nil,
+			questResetInSeconds = ex.questResetInSeconds,
 			dailyIndex = data.rewards.dailyIndex,
 			dailyReady = dailyReady,
 			groupRewardClaimed = data.rewards.groupRewardClaimed,
