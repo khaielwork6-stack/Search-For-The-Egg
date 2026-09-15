@@ -26,7 +26,6 @@ export type AudioDirector = typeof(setmetatable(
 		_pool: { Sound },
 		_manifest: { [string]: string },
 		_tuning: { [string]: RoleTuning },
-		_loops: { [string]: { sound: Sound, key: string } },
 		_volumes: { music: number, sfx: number },
 		_trove: Trove.Trove,
 	},
@@ -77,7 +76,6 @@ function AudioDirector.new(profile: any, config: { [string]: any }): AudioDirect
 		_pool = {},
 		_manifest = {},
 		_tuning = {},
-		_loops = {},
 		_volumes = { music = 0.7, sfx = 0.85 },
 		_trove = Trove.new(),
 	}, AudioDirector)
@@ -229,15 +227,17 @@ function AudioDirector.loop(self: AudioDirector, role: string, at: BasePart): So
 		return nil
 	end
 	local tuning = self._tuning[role]
-	local key = role .. "@" .. tostring(at:GetDebugId())
-	local existing = self._loops[key]
-	if existing and existing.sound.Parent then
-		return existing.sound
+	-- The running loop is its own registry: one child named for the role under the part it belongs
+	-- to. Asking twice finds it and returns it rather than stacking a second copy over it.
+	local name = "Loop_" .. role
+	local existing = at:FindFirstChild(name)
+	if existing and existing:IsA("Sound") then
+		return existing
 	end
 	local audio = audioConfig(self._config)
 	local volume = if tuning and tuning.volume then tuning.volume else 0.35
 	local sound = Instance.new("Sound")
-	sound.Name = "Loop_" .. role
+	sound.Name = name
 	sound.SoundId = assetId
 	sound.Looped = true
 	sound.Volume = 0
@@ -245,22 +245,18 @@ function AudioDirector.loop(self: AudioDirector, role: string, at: BasePart): So
 	sound.RollOffMaxDistance = 40
 	sound.SoundGroup = self._buses.Ambience
 	sound.Parent = at
-	sound:SetAttribute("SFE_LoopKey", key)
-	sound:SetAttribute("SFE_LoopVolume", volume)
 	if assetId ~= "" then
 		sound:Play()
 		TweenService:Create(sound, TweenInfo.new(audio.loopFadeSeconds, Enum.EasingStyle.Sine), { Volume = volume }):Play()
 	end
-	self._loops[key] = { sound = sound, key = key }
 	self._trove:add(sound)
 	return sound
 end
 
 function AudioDirector.stopLoop(self: AudioDirector, sound: Sound)
-	local key = sound:GetAttribute("SFE_LoopKey")
-	if type(key) == "string" then
-		self._loops[key] = nil
-	end
+	-- Renamed first, so a loop asked for again while this one is fading out starts a fresh sound
+	-- instead of finding the dying one.
+	sound.Name = "LoopStopping"
 	if not sound.IsPlaying then
 		sound:Destroy()
 		return

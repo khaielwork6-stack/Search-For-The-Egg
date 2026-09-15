@@ -364,10 +364,8 @@ local function run(command: string): string
 		if not ok then
 			return "call failed: " .. tostring(result)
 		end
-		local encoded, encodeError = pcall(function()
-			return HttpService:JSONEncode(result)
-		end)
-		table.insert(lines, if encoded then tostring(encodeError) else tostring(result))
+		-- The bridge already returns JSON; anything else gets encoded so the report is one line.
+		table.insert(lines, if type(result) == "string" then result else HttpService:JSONEncode(result))
 	elseif verb == "probe" then
 		probe(lines)
 	elseif verb == "config" then
