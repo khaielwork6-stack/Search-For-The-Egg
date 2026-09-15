@@ -237,13 +237,14 @@ return function(describe, it, expect)
 			acquire(h, 1, "nestRake")
 			local state = runtime.players[1]
 			-- Not equipped: the Hand is still active.
-			local unequipped = h.collectAt(1, runtime, 6, 6, "nestRake")
+			local mx, mz = runtime.grid.width // 2, runtime.grid.depth // 2
+			local unequipped = h.collectAt(1, runtime, mx, mz, "nestRake")
 			expect(unequipped.message).toBe("not_equipped")
 			expect(h.equip(1, "nestRake").ok).toBe(true)
-			local wrongTool = h.collectAt(1, runtime, 6, 6, "hand")
+			local wrongTool = h.collectAt(1, runtime, mx, mz, "hand")
 			expect(wrongTool.message).toBe("not_equipped")
 			local before = gridSum(runtime.grid)
-			local sweep = h.collectAt(1, runtime, 6, 6, "nestRake")
+			local sweep = h.collectAt(1, runtime, mx, mz, "nestRake")
 			expect(sweep.ok).toBe(true)
 			local spec = h.collection:spec(runtime, 1, "nestRake")
 			expect(sweep.data.removed).toBe(spec.amount)
@@ -256,8 +257,8 @@ return function(describe, it, expect)
 				expect(seen[removal.index]).toBeNil()
 				seen[removal.index] = true
 				local cell = runtime.grid.cells[removal.index]
-				expect(math.abs(cell.x - 6)).toBeLessThanOrEqual(1)
-				expect(math.abs(cell.z - 6)).toBeLessThanOrEqual(1)
+				expect(math.abs(cell.x - mx)).toBeLessThanOrEqual(1)
+				expect(math.abs(cell.z - mz)).toBeLessThanOrEqual(1)
 			end
 			expect(sweep.data.cooldownMs).toBe(math.floor(cfg.toolUpgrades.nestRake.cooldown[1].seconds * 1000))
 			-- Cooldown: an immediate second sweep is rate limited and removes nothing.

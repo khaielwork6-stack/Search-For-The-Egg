@@ -58,7 +58,12 @@ function PileGrid.create(
 			if coverCells[index] then
 				base *= pileConfig.coverDepthMultiplier
 			end
-			local rounded = math.clamp(math.floor(base + 0.5), 1, PileGrid.MAX_SLOTS)
+			-- A column the dome does not reach holds nothing. It used to be floored at one record, so
+			-- cells outside the mound carried records with no geometry above them: the client drew
+			-- none, every aim at them was rejected as not_exposed, and the round could never reach a
+			-- clear. The square grid always has such corners, and squaring the dome to the grid edge
+			-- made them 624 cells rather than a handful.
+			local rounded = if perCell <= 0 then 0 else math.clamp(math.floor(base + 0.5), 1, PileGrid.MAX_SLOTS)
 			cells[index] = { index = index, x = x, z = z, base = rounded, remaining = rounded, taken = 0 }
 			total += rounded
 		end

@@ -5,6 +5,7 @@
 -- the configured removal window, and a reveal camera anchor offset. Pure; server-selected.
 
 local PileGrid = require(script.Parent.PileGrid)
+local PileSurface = require(script.Parent.PileSurface)
 
 local EggNodes = {}
 
@@ -23,18 +24,26 @@ function EggNodes.build(chapter: string, pileConfig: { [string]: any }, eggConfi
 	local margin = radius + 1
 	local usableW, usableD = width - margin * 2, depth - margin * 2
 	local target = eggConfig.spawnNodeCountTarget
-	local columns = math.max(1, math.ceil(math.sqrt(target * usableW / math.max(1, usableD))))
-	local rows = math.max(1, math.ceil(target / columns))
+	-- The lattice is square and the mound is round, so roughly a quarter of the lattice points fall
+	-- outside the dome and are dropped below. Oversample by that ratio and thin the survivors back to
+	-- the target, so the chapter still offers the configured number of spawn nodes.
+	local lattice = math.ceil(target * 4 / math.pi)
+	local columns = math.max(1, math.ceil(math.sqrt(lattice * usableW / math.max(1, usableD))))
+	local rows = math.max(1, math.ceil(lattice / columns))
 	local nodes: { Node } = {}
 	for row = 0, rows - 1 do
 		for column = 0, columns - 1 do
-			if #nodes >= target then
-				break
-			end
 			local x = margin + math.floor((column + 0.5) * usableW / columns)
 			local z = margin + math.floor((row + 0.5) * usableD / rows)
 			x = math.clamp(x, margin, width - margin - 1)
 			z = math.clamp(z, margin, depth - margin - 1)
+			-- The grid is square and the mound is round, so this lattice puts candidates in corners the
+			-- dome never reaches. A node there sits in a column with no records, which counts as
+			-- already uncovered: the Egg would reveal on the round's first collection anywhere.
+			local cfg = { pile = pileConfig }
+			if PileSurface.columnFullHeight(cfg, width, depth, pileConfig.cellSizeStuds, x, z) <= 0 then
+				continue
+			end
 			local cover = {}
 			for dz = -radius, radius do
 				for dx = -radius, radius do
@@ -49,7 +58,7 @@ function EggNodes.build(chapter: string, pileConfig: { [string]: any }, eggConfi
 			local coreWeight = eggConfig.coreNodeWeight or 1
 			local weight = edgeWeight + (coreWeight - edgeWeight) * centred
 			table.insert(nodes, {
-				id = string.format("%s:node_%d", chapter, #nodes + 1),
+				id = "",
 				x = x,
 				z = z,
 				coverIndexes = cover,
@@ -57,7 +66,19 @@ function EggNodes.build(chapter: string, pileConfig: { [string]: any }, eggConfi
 			})
 		end
 	end
-	return nodes
+	-- Thin evenly across the surviving lattice so the kept nodes stay spread over the mound rather
+	-- than clustered in the rows the loop happened to reach first.
+	local kept: { Node } = nodes
+	if #nodes > target then
+		kept = {}
+		for i = 1, target do
+			table.insert(kept, nodes[math.floor((i - 0.5) * #nodes / target) + 1])
+		end
+	end
+	for i, node in ipairs(kept) do
+		node.id = string.format("%s:node_%d", chapter, i)
+	end
+	return kept
 end
 
 -- Depth fraction for a node: uniform within [minimumRemovalFraction, maximumRemovalFraction] (Normal)

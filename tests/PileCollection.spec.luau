@@ -111,7 +111,7 @@ return function(describe, it, expect)
 			local h = GameplayHarness.new(cfg)
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
-			local result = h.collectAt(1, runtime, 5, 9)
+			local result = h.collectAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
 			expect(result.ok).toBe(true)
 			local cell = runtime.grid.cells[result.data.cellIndex]
 			local grid = runtime.grid

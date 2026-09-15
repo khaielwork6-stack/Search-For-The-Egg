@@ -109,8 +109,10 @@ return function(describe, it, expect)
 			local h = GameplayHarness.new(cfg)
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
+			-- Cells inside the dome: the square grid's corners hold no records at all.
+			local mx, mz = runtime.grid.width // 2 - 3, runtime.grid.depth // 2
 			for i = 0, 5 do
-				expect(h.collectAt(1, runtime, 4 + i, 4).ok).toBe(true)
+				expect(h.collectAt(1, runtime, mx + i, mz).ok).toBe(true)
 			end
 			local state = runtime.players[1]
 			expect(state.carriedStandard).toBe(6)
@@ -125,7 +127,7 @@ return function(describe, it, expect)
 			expect(state.carriedStandard).toBe(0)
 			crate:start(runtime.state.roundId, "chapter1", sale.data.standardCount, 1)
 			-- Gather one more and try again mid-run: refused, nothing changes.
-			expect(h.collectAt(1, runtime, 10, 4).ok).toBe(true)
+			expect(h.collectAt(1, runtime, mx + 8, mz).ok).toBe(true)
 			h.standAt(1, layout.sellStation + Vector3.new(0, 3, 4))
 			local cashBefore = state.cashCents
 			local again = h.selling:sell(1, h.token(1), { gate = gate })

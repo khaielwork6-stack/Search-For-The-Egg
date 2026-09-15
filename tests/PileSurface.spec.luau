@@ -66,7 +66,9 @@ return function(describe, it, expect)
 				PileSurface.columnFullHeight(cfg, grid.width, grid.depth, grid.cellSize, cx, cz) / cfg.pile.recordSpacingStuds,
 				1e-9
 			)
-			expect(PileSurface.columnRecords(cfg, grid.width, grid.depth, grid.cellSize, 0, 0)).toBeGreaterThanOrEqual(1)
+			-- A grid corner lies outside the round mound: no height, so no records and nothing to aim at.
+			expect(PileSurface.columnRecords(cfg, grid.width, grid.depth, grid.cellSize, 0, 0)).toBe(0)
+			expect(records).toBeGreaterThanOrEqual(1)
 		end)
 
 		it("interpolates a continuous height between columns and returns 0 outside the nest", function()
@@ -153,12 +155,12 @@ return function(describe, it, expect)
 			expect(code).toBe("out_of_range")
 			expect(message).toBe("aim")
 			-- The hand harness aim lands on exactly the requested column's exposed feather.
-			local exact = h.collectAt(1, runtime, 3, 12)
+			local ex, ez = runtime.grid.width // 2 - 3, runtime.grid.depth // 2 + 4
+			local exactIndex = ez * runtime.grid.width + ex + 1
+			local exact = h.collectAt(1, runtime, ex, ez)
 			expect(exact.ok).toBe(true)
-			expect(exact.data.cellIndex).toBe(12 * runtime.grid.width + 3 + 1)
-			expect(runtime.grid.cells[12 * runtime.grid.width + 3 + 1].remaining).toBeLessThan(
-				runtime.grid.cells[12 * runtime.grid.width + 3 + 1].base
-			)
+			expect(exact.data.cellIndex).toBe(exactIndex)
+			expect(runtime.grid.cells[exactIndex].remaining).toBeLessThan(runtime.grid.cells[exactIndex].base)
 		end)
 
 		describe("Rainbow Feathers", function()
