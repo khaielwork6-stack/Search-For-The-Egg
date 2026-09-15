@@ -363,8 +363,15 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 		local collision = config.pile.collision
 		local cx = field.minX + (x + 0.5) * field.cellSize
 		local cz = field.minZ + (z + 0.5) * field.cellSize
-		local height = PileSurface.heightAt(field, cx, cz) - dentAt(cx, cz) - collision.surfaceInsetStuds - coatSpan(config, field, x, z)
+		local surface = PileSurface.heightAt(field, cx, cz) - dentAt(cx, cz)
+		local height = surface - collision.surfaceInsetStuds - coatSpan(config, field, x, z)
 		local top = field.baseY + math.max(0, height)
+		-- At the lip the coat is barely a stud tall, so subtracting a coat span drops the body below
+		-- the sand and a low sight line passes over it, under the coat and straight out the far side.
+		-- Wherever there is mound above the floor the body keeps a face above the ground.
+		if surface > (collision.lipSurfaceStuds or 0.1) then
+			top = math.max(top, (field.groundY or field.baseY) + (collision.lipHeightStuds or 0.2))
+		end
 		local normal = PileSurface.normalAt(field, cx, cz)
 		local size = field.cellSize * collision.shellOverlap
 		local thickness = collision.shellThicknessStuds

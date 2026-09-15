@@ -22,6 +22,7 @@ export type Field = {
 	radius: number, -- half of the smaller footprint side
 	apex: number,
 	baseY: number,
+	groundY: number,
 	heights: { number }, -- per cell index (1-based, x + z * width + 1)
 	fractions: { number }, -- smoothed remaining/base per cell
 	depths: { number }, -- smoothed removed-record depth (studs) per cell
@@ -99,6 +100,7 @@ function PileSurface.buildField(cfg: { [string]: any }, grid: { [string]: any },
 		radius = radius,
 		apex = apex,
 		baseY = layout.nestBaseY,
+		groundY = layout.groundY or layout.nestBaseY,
 		heights = heights,
 		fractions = fractions,
 		depths = depths,

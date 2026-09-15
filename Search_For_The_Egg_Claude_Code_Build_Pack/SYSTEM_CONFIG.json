@@ -141,7 +141,9 @@
       "shellThicknessStuds": 3.0,
       "shellFolderName": "SFE_PileCollision",
       "visible": true,
-      "visibleEvidence": "OWNER 14 Sep 2026 (measured with the in-game probe): rays through the lower face of the mound passed under the coat and hit Ground.TanClearing, because the coat renders only the top records of each column and the dome surface stands studs above the sand. The collision shell is now the visible packed body under the loose coat, seated just below the rendered records."
+      "visibleEvidence": "OWNER 14 Sep 2026 (measured with the in-game probe): rays through the lower face of the mound passed under the coat and hit Ground.TanClearing, because the coat renders only the top records of each column and the dome surface stands studs above the sand. The collision shell is now the visible packed body under the loose coat, seated just below the rendered records.",
+      "lipSurfaceStuds": 0.1,
+      "lipHeightStuds": 0.25
     },
     "visual": {
       "partBudgetDesktop": 26000,
