@@ -318,7 +318,7 @@
       "rewriteEvidence": "OWNER 15 Sep 2026: the dent map and the rewrite threshold are both gone. Records are the only thing that moves this surface, and the body is re-seated on every accepted award, so the collision, the coat and the saved grid cannot disagree. digRadiusStuds/strikeDentDepthStuds/sweepDentDepthStuds/sweepDigRadiusStuds/rewriteEveryRecords fed that system and were removed with it."
     },
     "visual": {
-      "partBudgetDesktop": 26000,
+      "partBudgetDesktop": 42000,
       "partBudgetMobile": 10500,
       "featherLengthRange": [
         1.15,
@@ -428,7 +428,7 @@
         0.28
       ],
       "wallStrandsPerLevel": 4,
-      "wallLevelSpacingStuds": 0.5,
+      "wallLevelSpacingStuds": 0.6,
       "floorStrandsPerLevel": 2,
       "floorLevelSpacingStuds": 0.5,
       "rimMinScale": 0.72,
@@ -484,7 +484,9 @@
       "coatDepthEvidence": "OWNER 15 Sep 2026 (screenshot of the mound foot): with a fixed 7 records per column the coat is about 0.9 studs deep while the dome drops ~1 stud per 0.6-stud cell on the rim, so each ring's coat ended above the next ring's coat and a band of bare body showed between them as a smooth wall. Columns now render ceil((drop*coatDropCoverage + coatDropMarginStuds)/step)+1 records, capped at maxVisibleSlotsPerCell, so the band is covered by real pickable feathers instead of a wall. Raised to 1.8/0.4 on 15 Sep 2026 after the owner could still pick out the body between strands at close range: 22,104 coat parts against the 26,000 budget.",
       "mobileCoatEvidence": "ASSUMED 15 Sep 2026: the adaptive coat window is capped at 4 on a low tier (9,144 coat parts for the 54x54 grid) so a phone is not asked for the desktop coat. The body is feather-coloured and solid, so the low tier shows slightly more packed mass between strands but never a see-through gap.",
       "interiorEvidence": "OWNER 15 Sep 2026 (stood inside a shaft dug to the floor): the mound was hollow. The coat only draws the top slots of each column, so a horizontal sight line from the bottom of an excavation passes under every neighbouring column's coat and out to the sand - measured at 151 of 396 rays hitting Ground.TanClearing from an eye one stud above the shaft floor. _exposeWalls and _exposeFloor were written for exactly this and were both set to 0. Wall strands line a neighbour's newly exposed face from the bottom of its coat down to the pit floor; floor strands pack a dug column below its own render window. Both add parts only where somebody has actually dug.",
-      "capEvidence": "OWNER 15 Sep 2026: the coat window was capped at 22 slots. A centre column holds 32 records at a step of 0.5 studs, so even a column standing over a hole to the floor could only draw 11 studs of a 16-stud face and the bottom five studs were open air. The cap is the column itself now (32), so a wall renders every record it has - real, pickable feathers rather than filler - and only columns beside a drop ever ask for that many."
+      "capEvidence": "OWNER 15 Sep 2026: the coat window was capped at 22 slots. A centre column holds 32 records at a step of 0.5 studs, so even a column standing over a hole to the floor could only draw 11 studs of a 16-stud face and the bottom five studs were open air. The cap is the column itself now (32), so a wall renders every record it has - real, pickable feathers rather than filler - and only columns beside a drop ever ask for that many.",
+      "wallStrandsPerLevelMobile": 2,
+      "budgetEvidence": "OWNER 15 Sep 2026: 26,000 was the target from when the mound was a hollow shell - and it was never enforced on anything but the initial fluff bed, which allocates nothing. A mound whose interior is genuinely packed costs about 24k surface records plus wall filler that grows with how much has been dug: measured at 42k parts with 8.8% of the mound excavated across eight craters. The number now says what the system actually costs. Phones line a face at wallStrandsPerLevelMobile instead, on top of their much shallower coat window."
     },
     "assumption": "ASSUMED",
     "recordSpacingStuds": 0.15,

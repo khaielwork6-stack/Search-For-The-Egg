@@ -690,6 +690,11 @@ function PileVisualController._exposeWalls(self: PileVisualController, dug: Colu
 		return
 	end
 	local visual = self._config.pile.visual
+	-- A phone lines a face more sparsely, the same way it draws a shallower coat: the filler is what
+	-- scales with how much has been dug, so it is the part that has to know about the tier.
+	local strandsPerLevel = if self._quality:tier() == "low"
+		then (visual.wallStrandsPerLevelMobile or visual.wallStrandsPerLevel)
+		else visual.wallStrandsPerLevel
 	local grid = self._grid :: { [string]: any }
 	local dugTop = self:_columnTop(dug)
 	for _, offset in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
@@ -720,7 +725,7 @@ function PileVisualController._exposeWalls(self: PileVisualController, dug: Colu
 		local levelsAdded = 0
 		local depthNow = depthFrom + visual.wallLevelSpacingStuds
 		while depthNow <= exposure and levelsAdded < 40 do
-			for k = 1, visual.wallStrandsPerLevel do
+			for k = 1, strandsPerLevel do
 				local salt = math.floor(depthNow * 100) * 7 + k
 				local h = function(s2: number)
 					return FeatherLayout.hash(neighbour.index, salt, s2)
