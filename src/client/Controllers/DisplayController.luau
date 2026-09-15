@@ -33,6 +33,7 @@ local DISPLAYS: { [string]: { name: string, upgradeId: string?, productKey: stri
 	infiniteBag = { name = "Infinite Bag", productKey = "infiniteBag", pass = "infiniteBag" },
 	nestRake = { name = "Nest Rake", upgradeId = "tool:nestRake" },
 	confettiCharge = { name = "Confetti Charge", upgradeId = "tool:confettiCharge" },
+	featherVac = { name = "Feather Vac", upgradeId = "tool:featherVac" },
 	scoutChick = { name = "Scout Chick", upgradeId = "tool:scoutChick" },
 }
 

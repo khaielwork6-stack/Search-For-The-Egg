@@ -59,6 +59,13 @@ local COPY: { [string]: { name: string, story: string, tag: string, toolId: stri
 		toolId = "confettiCharge",
 		upgradeId = "tool:confettiCharge",
 	},
+	featherVac = {
+		name = "Feather Vac",
+		story = "Hold it on the nest and it pulls feathers straight out of the pile.\n\nNo swinging and no waiting between pulls: a steady stream for as long as you keep it running, until the motor needs a moment to cool.",
+		tag = "NEVER STOPS",
+		toolId = "featherVac",
+		upgradeId = "tool:featherVac",
+	},
 	scoutChick = {
 		name = "Scout Chick",
 		story = "A little forager that works the nest while you do.\n\nSend it out and it pecks feathers, hops them to the crate and trades them for cash on its own, trip after trip.",

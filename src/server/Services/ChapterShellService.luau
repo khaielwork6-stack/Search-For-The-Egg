@@ -475,18 +475,19 @@ end
 -- The owner's item models become shop displays inside the supplies barn: two bags on the counter,
 -- the pitchfork and the dynamite on the rear wall boards. Each carries a Buy prompt; the client
 -- draws the price card from the round previews. Missing models are skipped, never rebuilt.
-local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, scale: number?, stand: CFrame? } } = {
+local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, scale: number?, stand: CFrame?, backboard: boolean? } } = {
 	{
 		key = "bag",
 		model = "FeatherBag",
-		cframe = CFrame.new(-47, 58.75, 299) * CFrame.Angles(0, math.rad(180), 0),
+		-- Turned to face the counter the player stands at, not the wall behind it.
+		cframe = CFrame.new(-47, 58.75, 299),
 		name = "Upgrade Bag",
 		scale = 0.8,
 	},
 	{
 		key = "infiniteBag",
 		model = "InfiniteBag",
-		cframe = CFrame.new(-36.5, 58.75, 299) * CFrame.Angles(0, math.rad(180), 0),
+		cframe = CFrame.new(-36.5, 58.75, 299),
 		name = "Infinite Bag",
 		scale = 0.8,
 	},
@@ -506,6 +507,17 @@ local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, sc
 		cframe = CFrame.new(-60.4, 58.4, 310) * CFrame.Angles(0, math.rad(90), 0) * CFrame.Angles(0, 0, math.rad(-8)),
 		name = "Confetti Charge",
 	},
+	-- The Feather Vac had a pass, a product, a price and a viewmodel, but no display: its model sat
+	-- parked below the world and was never placed. It hangs on the same wall as the other tools, on a
+	-- backboard of its own because the map only authored two board slots.
+	{
+		key = "featherVac",
+		model = "Vacuum",
+		cframe = CFrame.new(-60.2, 59.4, 293.4) * CFrame.Angles(0, math.rad(90), 0) * CFrame.Angles(0, 0, math.rad(-6)),
+		name = "Feather Vac",
+		scale = 0.9,
+		backboard = true,
+	},
 	-- The Scout Chick (owner's Bird) perches on a rope-tied crate beside the counter.
 	{
 		key = "scoutChick",
@@ -516,6 +528,92 @@ local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, sc
 		stand = CFrame.new(-31.5, 55.3, 303.5),
 	},
 }
+
+-- A wall mount for a display that has no authored board: a tan backboard with a cocoa frame, two
+-- brackets under the tool, a warm light and a name plate. Built in the display's own frame, so moving
+-- the display CFrame moves the whole fitting with it.
+local function buildBackboard(parent: Instance, key: string, cframe: CFrame, name: string, extent: Vector3): Model
+	local existing = parent:FindFirstChild("SFE_DisplayMount_" .. key)
+	if existing then
+		existing:Destroy()
+	end
+	local mount = Instance.new("Model")
+	mount.Name = "SFE_DisplayMount_" .. key
+	mount.Parent = parent
+	local width = math.max(extent.Z, extent.X) + 1.8
+	local height = math.max(extent.Y, 2.2) + 2.6
+	-- The board sits behind the tool, flush to the wall, in the display's own orientation.
+	local boardCF = cframe * CFrame.new(0, 0.2, -0.75)
+	local frame = part("MountFrame", Vector3.new(0.34, height + 0.5, width + 0.5), boardCF, Color3.fromRGB(122, 84, 52), nil, mount, false)
+	frame.CanQuery = false
+	local face = part(
+		"MountFace",
+		Vector3.new(0.2, height, width),
+		boardCF * CFrame.new(0.12, 0, 0),
+		Color3.fromRGB(214, 176, 124),
+		nil,
+		mount,
+		false
+	)
+	face.CanQuery = false
+	for _, side in ipairs({ -1, 1 }) do
+		local bracket = part(
+			"MountBracket",
+			Vector3.new(0.9, 0.3, 0.32),
+			cframe * CFrame.new(0.35, -math.max(extent.Y, 1.2) / 2 - 0.2, side * width * 0.22),
+			Color3.fromRGB(96, 62, 34),
+			nil,
+			mount,
+			false
+		)
+		bracket.CanQuery = false
+	end
+	-- A warm key light on the tool itself. Range is short so it lights the fitting, not the barn.
+	local lamp = part(
+		"MountLamp",
+		Vector3.new(0.5, 0.3, 0.9),
+		cframe * CFrame.new(0.9, height / 2 - 0.4, 0),
+		Color3.fromRGB(255, 226, 140),
+		nil,
+		mount,
+		false
+	)
+	lamp.CanQuery = false
+	lamp.Material = Enum.Material.Neon
+	local light = Instance.new("PointLight")
+	light.Brightness = 0.9
+	light.Range = 9
+	light.Color = Color3.fromRGB(255, 226, 158)
+	light.Parent = lamp
+	-- Name plate under the tool, reading off the board's outward face.
+	local plate = part(
+		"MountPlate",
+		Vector3.new(0.22, 0.9, width * 0.72),
+		boardCF * CFrame.new(0.2, -height / 2 + 0.7, 0),
+		Color3.fromRGB(96, 62, 34),
+		nil,
+		mount,
+		false
+	)
+	plate.CanQuery = false
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "Plate"
+	gui.Face = Enum.NormalId.Right
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 64
+	gui.LightInfluence = 0
+	gui.MaxDistance = 60
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(252, 246, 234)
+	label.Text = string.upper(name)
+	label.Parent = gui
+	gui.Parent = plate
+	return mount
+end
 
 -- A cream crate tied with two tan ropes: the stand under a display (the reference's drone crate).
 local function buildStand(parent: Instance, cframe: CFrame): Part
@@ -591,6 +689,10 @@ function ChapterShellService.placeDisplays(workspaceService: Workspace, config: 
 			buildStand(holder, spec.stand)
 		end
 		model:PivotTo(spec.cframe)
+		if spec.backboard then
+			local _, extent = model:GetBoundingBox()
+			buildBackboard(model.Parent or workspaceService, spec.key, spec.cframe, spec.name, extent)
+		end
 		model:SetAttribute("SFE_Display", spec.key)
 		if not model.PrimaryPart then
 			model.PrimaryPart = model:FindFirstChildWhichIsA("BasePart", true)
