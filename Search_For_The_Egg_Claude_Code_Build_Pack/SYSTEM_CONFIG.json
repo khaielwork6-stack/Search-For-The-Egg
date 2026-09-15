@@ -31,7 +31,8 @@
     "petsEnabled": false,
     "tradingEnabled": false,
     "offlineProgressEnabled": false,
-    "subscriptionsEnabled": false
+    "subscriptionsEnabled": false,
+    "dailyAutoOpenOnJoin": true
   },
   "round": {
     "cutsceneSeconds": 18,

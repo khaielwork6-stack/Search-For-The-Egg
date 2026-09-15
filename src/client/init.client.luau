@@ -304,6 +304,43 @@ hud:setGemShopOpener(function()
 	end
 end)
 
+-- The Daily Nest shows itself once, on join, and only after the profile has actually arrived: before
+-- that there is no streak to draw and the modal would open empty. One latch for the whole session,
+-- dropped the moment it fires, so closing it, respawning or opening anything else never brings it
+-- back - the player reopens it from the nest station like any other modal.
+if config.featureFlags.dailyAutoOpenOnJoin ~= false and config.featureFlags.dailyRewardsEnabled ~= false then
+	local dailyShown = false
+	local dailyWatch: RBXScriptConnection? = nil
+	local function showDailyOnce()
+		if dailyShown then
+			return
+		end
+		local projection = profile.projection
+		if not (projection and projection.rewards and projection.rewards.daily) then
+			return -- data still loading
+		end
+		dailyShown = true
+		if dailyWatch then
+			dailyWatch:Disconnect()
+			dailyWatch = nil
+		end
+		task.defer(function()
+			local phase = round:phase()
+			if (phase == nil or phase == "Lobby") and modals:openCount() == 0 then
+				lobbyMeta:open("daily")
+			end
+		end)
+	end
+	dailyWatch = profile.changed:Connect(showDailyOnce)
+	trove:add(function()
+		if dailyWatch then
+			dailyWatch:Disconnect()
+			dailyWatch = nil
+		end
+	end)
+	showDailyOnce() -- in case the projection landed before this point
+end
+
 audio:setState("Lobby")
 lobby:start()
 arena:start()
