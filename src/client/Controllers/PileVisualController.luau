@@ -100,6 +100,7 @@ export type PileVisualController = typeof(setmetatable(
 local TEMPLATE_SIZE = Vector3.new(0.54, 1.44, 0.13) -- repo Feather mesh extents (quill along +Y)
 local RENDER_NAME = "SFE_PileTargeting"
 local FEATHER_ID_ATTRIBUTE = "SFE_FeatherId"
+local RAINBOW_ATTRIBUTE = "SFE_Rainbow"
 local CELL_ATTRIBUTE = "SFE_Cell"
 
 function PileVisualController.new(
@@ -248,6 +249,18 @@ local function releasePart(self: PileVisualController, part: BasePart)
 	part.CanQuery = true
 	part:SetAttribute(FEATHER_ID_ATTRIBUTE, nil)
 	part:SetAttribute(CELL_ATTRIBUTE, nil)
+	-- A Rainbow Feather is dressed in place (Neon plus a mote emitter). Without stripping that here
+	-- the part carries the dressing back into the pool and returns as a glowing ordinary feather,
+	-- so glowing strands accumulate across the coat over a round.
+	if part:GetAttribute(RAINBOW_ATTRIBUTE) then
+		part:SetAttribute(RAINBOW_ATTRIBUTE, nil)
+		part.Material = Enum.Material.SmoothPlastic
+		local motes = part:FindFirstChild("RainbowMotes")
+		if motes then
+			motes:Destroy()
+		end
+		self._rainbowParts[part] = nil
+	end
 	table.insert(self._partPool, part)
 end
 
@@ -1297,7 +1310,7 @@ end
 -- Dresses a record as a Rainbow Feather: registered for the colour flow, a soft glow and a few
 -- drifting motes. Cheap per part; the count is bounded by pile.rainbowChance.
 function PileVisualController._dressRainbow(self: PileVisualController, part: BasePart, cellIndex: number, slot: number)
-	part:SetAttribute("SFE_Rainbow", true)
+	part:SetAttribute(RAINBOW_ATTRIBUTE, true)
 	-- Local emissive colour only: no light source and no halo sprite, so neighbouring feathers keep
 	-- their own colour and brightness. The glow is the Neon surface plus a few motes.
 	part.Material = Enum.Material.Neon
