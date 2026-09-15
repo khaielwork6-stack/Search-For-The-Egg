@@ -113,8 +113,8 @@
     "surfaceVariance": 0.25,
     "coverDepthMultiplier": 2.0,
     "coverRadiusCells": 1,
-    "rainbowChance": 0.015,
-    "rainbowChanceEvidence": "ASSUMED initial rate; one record in ~67 is a Rainbow Feather",
+    "rainbowChance": 0.0035,
+    "rainbowChanceEvidence": "OWNER 14 Sep 2026 (clip review): at 1.5% roughly 900 records were rainbow and 5-8 were in view at all times with halo sprites smearing over neighbours. 0.35% puts about one in 285 records, a couple in view, and the halo is gone.",
     "maxVisualHeightStuds": 16,
     "aimPlaneHeightStuds": 1.75,
     "collision": {
@@ -133,7 +133,7 @@
       "rewriteMarginCells": 2,
       "sweepDigRadiusStuds": 1.1,
       "eggHollowRadiusStuds": 6.0,
-      "surfaceInsetStuds": 0.3,
+      "surfaceInsetStuds": 0.0,
       "lineOfSightToleranceStuds": 1.5,
       "assumption": "ASSUMED",
       "rewriteEveryRecords": 6,
@@ -145,38 +145,53 @@
       "partBudgetDesktop": 26000,
       "partBudgetMobile": 8500,
       "featherLengthRange": [
-        2.4,
-        3.4
+        0.95,
+        1.4
       ],
       "tiltRangeDegrees": [
-        2,
-        9
+        3,
+        13
       ],
       "palette": [
         [
-          246,
-          240,
-          226
+          252,
+          248,
+          240
         ],
         [
-          238,
-          229,
-          208
+          243,
+          236,
+          221
         ],
         [
-          229,
-          217,
-          190
+          231,
+          221,
+          199
         ],
         [
-          219,
-          204,
-          170
+          214,
+          201,
+          173
         ],
         [
-          206,
-          188,
-          148
+          190,
+          175,
+          143
+        ],
+        [
+          161,
+          146,
+          115
+        ],
+        [
+          131,
+          118,
+          92
+        ],
+        [
+          104,
+          93,
+          72
         ]
       ],
       "cullDistanceDesktopStuds": 220,
@@ -195,20 +210,20 @@
       "visibleSlotsPerCell": 10,
       "visibleSlotsPerCellMobile": 3,
       "featherWidthRange": [
-        1.3,
-        1.9
+        0.5,
+        0.72
       ],
-      "featherSpreadFraction": 0.8,
-      "rollRangeDegrees": 40,
+      "featherSpreadFraction": 0.95,
+      "rollRangeDegrees": 58,
       "layerStepStuds": 0.35,
       "surfaceLiftStuds": 0.12,
       "fluffLengthRange": [
-        1.6,
-        2.6
+        0.7,
+        1.05
       ],
       "fluffWidthRange": [
-        1.0,
-        1.6
+        0.4,
+        0.6
       ],
       "fluffTiltRangeDegrees": [
         3,
@@ -219,13 +234,13 @@
       "fluffTintShift": 0.35,
       "selectionOutlineColor": [
         255,
-        246,
-        200
+        168,
+        38
       ],
-      "selectionFillTransparency": 0.75,
-      "downslopeYawJitterDegrees": 35,
+      "selectionFillTransparency": 0.42,
+      "downslopeYawJitterDegrees": 42,
       "rimInsetStuds": -1.2,
-      "rimTaperStuds": 1.2,
+      "rimTaperStuds": 3.4,
       "liftSeconds": 0.09,
       "liftStuds": 0.5,
       "pickScale": 1.25,
@@ -245,7 +260,7 @@
       "wallLevelSpacingStuds": 0.5,
       "floorStrandsPerLevel": 0,
       "floorLevelSpacingStuds": 0.5,
-      "rimMinScale": 0.85,
+      "rimMinScale": 0.42,
       "underlayerGridDesktop": [
         0,
         0
@@ -270,15 +285,21 @@
         0,
         7
       ],
-      "frontSkirtStrandsDesktop": 460,
-      "frontSkirtStrandsMobile": 150,
+      "frontSkirtStrandsDesktop": 1100,
+      "frontSkirtStrandsMobile": 320,
       "frontSkirtArcDegrees": 140,
-      "frontSkirtDepthStuds": 6.0,
+      "frontSkirtDepthStuds": 5.0,
       "frontSkirtEvidence": "OWNER 14 Sep 2026: fixed overlapping strands cover the small gap at the mound's front rim (spawn side); not records, never picked",
       "revealFadeSeconds": 0.32,
       "liftPreviewStuds": 0.22,
       "layEvidence": "OWNER 14 Sep 2026: surface feathers lie tangent with overlapping tips (tilt 2-9 deg, roll +-20 deg), ivory-to-grey palette for depth, newly exposed records fade in beneath the removed one instead of popping",
-      "depthEvidence": "ASSUMED 14 Sep 2026: a sweep or suction tick never takes more than maxPerCell records from one cell, so every accepted record is one of the rendered (top 10) feathers and the excavation spreads along the tool's contact area instead of tunnelling one cell"
+      "depthEvidence": "ASSUMED 14 Sep 2026: a sweep or suction tick never takes more than maxPerCell records from one cell, so every accepted record is one of the rendered (top 10) feathers and the excavation spreads along the tool's contact area instead of tunnelling one cell",
+      "scaleEvidence": "OWNER 14 Sep 2026 (clip review): feathers were 2.4-3.4 studs, about half a character, so the mound read as pillows and every pickup was a visible chunk. A feather is now ~1.2 studs; the same record count reads as thousands of small pieces.",
+      "depthTintWeight": 0.62,
+      "depthTintSlots": 14,
+      "shadingEvidence": "OWNER 14 Sep 2026 (clip review): the mound was uniformly white with no depth cue. Records now tint down the palette with their depth in the column (depthTintWeight of the colour comes from depth over depthTintSlots records).",
+      "rimCurlDegrees": 26,
+      "rimEvidence": "OWNER 14 Sep 2026 (clip review): the rim read as a spiky ball. Rim feathers taper to rimMinScale over rimTaperStuds and pitch down by rimCurlDegrees so the edge curls under."
     },
     "assumption": "ASSUMED",
     "recordSpacingStuds": 0.15,
@@ -475,14 +496,14 @@
       "baseCooldownSeconds": 0.85,
       "permanentIncludesMaxUpgrades": true,
       "evidence": "VERIFIED packaging and first values; ASSUMED target name",
-      "sweepRadiusStuds": 1.5,
+      "sweepRadiusStuds": 2.1,
       "reachStuds": 3.2,
       "focusWeight": 0.6,
       "shapeEvidence": "ASSUMED 14 Sep 2026: the sweep's contact area is a narrow fan - cells within sweepHalfWidthStuds either side of the swing line, from sweepAheadStuds past the strike back toward the player for sweepRadiusStuds - centre-heavy (focusWeight from the struck cell); a strike on bare ground re-centres within reachStuds. Accepted records animate one after another every streamStaggerSeconds.",
-      "sweepHalfWidthStuds": 0.9,
+      "sweepHalfWidthStuds": 1.25,
       "sweepAheadStuds": 0.35,
       "streamStaggerSeconds": 0.028,
-      "maxPerCellPerSweep": 8
+      "maxPerCellPerSweep": 10
     },
     "confettiCharge": {
       "displayName": "Confetti Charge",

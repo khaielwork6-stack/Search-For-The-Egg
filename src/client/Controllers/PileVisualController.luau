@@ -172,6 +172,18 @@ local function lerp(a: number, b: number, t: number): number
 	return a + (b - a) * t
 end
 
+-- Colour for a record: `t` is its own hash tint, `depth` how many records sit above it. Most of
+-- the colour comes from depth, so the coat reads light on top and dark in a dig.
+local function depthTint(visual: { [string]: any }, t: number, depth: number): number
+	local weight = visual.depthTintWeight or 0
+	if weight <= 0 then
+		return t
+	end
+	local span = math.max(1, visual.depthTintSlots or 14)
+	local deep = math.clamp(depth / span, 0, 1)
+	return math.clamp(t * (1 - weight) + deep * weight, 0, 0.999)
+end
+
 local function paletteColor(cfg: { [string]: any }, t: number): Color3
 	local palette = cfg.pile.visual.palette
 	local scaled = math.clamp(t, 0, 0.9999) * (#palette - 1)
@@ -201,6 +213,7 @@ local function acquirePart(self: PileVisualController): BasePart
 		part = fallback
 	end
 	part.Name = "Feather"
+	part.Material = Enum.Material.Fabric
 	part.Anchored = true
 	part.CanCollide = false
 	part.CanQuery = true
@@ -352,30 +365,24 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 		-- Seat by slot, never by rank: a record's place is fixed for the round whatever gets taken
 		-- above or beside it (the server resolves the same point for its aim check).
 		local seatY = y + FeatherLayout.seatOffset(visual, column.base, slot, column.step)
+		-- Rim factor: 0 well inside the coat, 1 at the outermost strands, used to curl the edge under
+		-- instead of letting it radiate outward as blades.
+		local rimMin = visual.rimMinScale
+		local rimFactor = if rimMin < 1 then math.clamp((1 - scale) / (1 - rimMin), 0, 1) else 0
+		local tilt = placement.tilt - rimFactor * math.rad(visual.rimCurlDegrees or 0)
 		local part = column.feathers[slot]
 		if not part then
 			part = acquirePart(self)
 			part.Name = "Feather"
 			part.CanQuery = true
-			part.Color = paletteColor(self._config, placement.tint)
+			part.Color = paletteColor(self._config, depthTint(visual, placement.tint, column.base - slot))
 			part:SetAttribute(FEATHER_ID_ATTRIBUTE, FeatherLayout.featherId(column.index, slot))
 			column.feathers[slot] = part
 			if FeatherLayout.isRainbow(self._config, self._rainbowSeed or 0, column.index, slot) then
 				self:_dressRainbow(part, column.index, slot)
 			end
 			local yaw = self:_downslope(wx, wz) + (placement.yaw / (math.pi * 2) - 0.5) * math.rad(visual.downslopeYawJitterDegrees) * 2
-			placeFeather(
-				part,
-				wx,
-				seatY,
-				wz,
-				normal,
-				yaw,
-				placement.tilt,
-				placement.roll,
-				placement.length * scale,
-				placement.width * scale
-			)
+			placeFeather(part, wx, seatY, wz, normal, yaw, tilt, placement.roll, placement.length * scale, placement.width * scale)
 			if column.built and not self._culled then
 				-- Newly exposed record: it was always there beneath; fade it in rather than pop.
 				local seconds = Motion.clampSeconds(visual.revealFadeSeconds or 0.32, self._accessibility:motionSettings())
@@ -1177,7 +1184,8 @@ function PileVisualController.collectFeather(
 		part.CanQuery = false
 		local placement = FeatherLayout.placement(visual, cellIndex or 1, slot or 1, (self._field :: PileSurface.Field).cellSize)
 		part.Size = Vector3.new(placement.width, placement.length, 0.1)
-		part.Color = paletteColor(self._config, placement.tint)
+		local column2 = cellIndex and self._columns[cellIndex]
+		part.Color = paletteColor(self._config, depthTint(visual, placement.tint, if column2 and slot then column2.base - slot else 0))
 		part.CFrame = CFrame.new(hitPosition)
 		part.Parent = folder
 	end
@@ -1274,32 +1282,9 @@ end
 -- drifting motes. Cheap per part; the count is bounded by pile.rainbowChance.
 function PileVisualController._dressRainbow(self: PileVisualController, part: BasePart, cellIndex: number, slot: number)
 	part:SetAttribute("SFE_Rainbow", true)
-	-- Local emissive colour only: no light source, so neighbouring feathers keep their own colour
-	-- and brightness (owner requirement). The glow is the Neon surface plus motes and a halo sprite.
+	-- Local emissive colour only: no light source and no halo sprite, so neighbouring feathers keep
+	-- their own colour and brightness. The glow is the Neon surface plus a few motes.
 	part.Material = Enum.Material.Neon
-	local halo = Instance.new("BillboardGui")
-	halo.Name = "RainbowHalo"
-	halo.Size = UDim2.fromScale(2.4, 2.4)
-	halo.LightInfluence = 0
-	halo.AlwaysOnTop = false
-	halo.MaxDistance = 90
-	local haloDot = Instance.new("Frame")
-	haloDot.Size = UDim2.fromScale(1, 1)
-	haloDot.BackgroundColor3 = Color3.fromRGB(255, 220, 255)
-	haloDot.BackgroundTransparency = 0.82
-	haloDot.BorderSizePixel = 0
-	local haloCorner = Instance.new("UICorner")
-	haloCorner.CornerRadius = UDim.new(1, 0)
-	haloCorner.Parent = haloDot
-	local haloGradient = Instance.new("UIGradient")
-	haloGradient.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.5, 0.35),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	haloGradient.Parent = haloDot
-	haloDot.Parent = halo
-	halo.Parent = part
 	local motes = Instance.new("ParticleEmitter")
 	motes.Name = "RainbowMotes"
 	motes.Rate = 3
@@ -1328,11 +1313,7 @@ function PileVisualController._ensureRainbowLoop(self: PileVisualController)
 			else
 				local hue = (t + phase) % 1
 				part.Color = Color3.fromHSV(hue, 0.55, 1)
-				local halo = part:FindFirstChild("RainbowHalo")
-				local haloDot = halo and halo:FindFirstChildOfClass("Frame")
-				if haloDot then
-					haloDot.BackgroundColor3 = Color3.fromHSV(hue, 0.45, 1)
-				end
+				-- The record's own surface is the only thing that changes colour.
 			end
 		end
 	end)
