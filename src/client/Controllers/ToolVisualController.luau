@@ -489,13 +489,36 @@ function ToolVisualController._explodeCharge(self: ToolVisualController, payload
 	if not mini then
 		self:_debris(position, radius)
 	end
-	-- Persistent scorch crater at the blast point (cleared with the round).
+	-- Scorch at the blast point: a mark the blast leaves, not a mark the blast makes permanent.
+	--
+	-- This used to stay until the round ended, so a handful of charges tiled the nest with black discs
+	-- that never went away and had nothing to do with where the feathers actually were. It holds, then
+	-- fades and goes. Still tracked in `_craters` so a round teardown mid-fade takes it with everything
+	-- else, and taken back out of that list when it removes itself.
 	local crater = placeholder("SFE_Crater", Vector3.new(0.1, radius * 1.4, radius * 1.4), Tokens.color.shadow, Enum.PartType.Cylinder)
 	crater.Material = Enum.Material.Slate
 	crater.Transparency = feel.craterTransparency or 0.35
 	crater.CFrame = CFrame.new(payload.x, payload.y + 0.08, payload.z) * CFrame.Angles(0, 0, math.rad(90))
 	crater.Parent = self._folder
 	table.insert(self._craters, crater)
+	local holdSeconds = feel.craterSeconds or 1.6
+	local fadeSeconds = feel.craterFadeSeconds or 0.7
+	task.delay(holdSeconds, function()
+		if not crater.Parent then
+			return
+		end
+		TweenService:Create(crater, TweenInfo.new(fadeSeconds, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Transparency = 1,
+			Size = Vector3.new(0.1, radius * 1.7, radius * 1.7),
+		}):Play()
+		task.delay(fadeSeconds, function()
+			local index = table.find(self._craters, crater)
+			if index then
+				table.remove(self._craters, index)
+			end
+			crater:Destroy()
+		end)
+	end)
 	-- Sound and shake fall off with distance for everyone in the round.
 	self._deps.audio:play(Tokens.sound.blast, { pitchVariance = 0.08 })
 	local camera = workspace.CurrentCamera

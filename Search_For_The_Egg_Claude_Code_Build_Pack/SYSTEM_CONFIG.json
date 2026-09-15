@@ -1699,7 +1699,10 @@
       "blastShakeRangeStuds": 40,
       "debrisCount": 10,
       "debrisSeconds": 0.9,
-      "craterTransparency": 0.35
+      "craterTransparency": 0.35,
+      "craterSeconds": 1.6,
+      "craterFadeSeconds": 0.7,
+      "craterEvidence": "OWNER 15 Sep 2026: the scorch disc was left in the world until the round ended, so a few charges tiled the nest with permanent black circles. It holds for craterSeconds and fades out over craterFadeSeconds."
     },
     "featherVac": {
       "viewmodelScale": 0.22,
@@ -1894,7 +1897,7 @@
         "group": "denial"
       },
       "sell.arc": {
-        "id": "rbxasset://sounds/unsheath.wav",
+        "id": "",
         "volume": 0.45,
         "speed": 1.1,
         "variance": 0.05,
@@ -2071,7 +2074,7 @@
         "looped": true
       },
       "tool.throw": {
-        "id": "rbxasset://sounds/unsheath.wav",
+        "id": "",
         "volume": 0.4,
         "speed": 0.9,
         "variance": 0.08,
@@ -2154,7 +2157,8 @@
     "assumption": "ASSUMED",
     "evidence": "OWNER 15 Sep 2026 supplied six ids: nest rake/shovel 81267530921314 at the contact moment, feather vac 91395529514868 as a managed loop while sucking, dynamite 124256466623788 at the explosion, class result 90853027572825 once the spinner lands, in-round music 130867147321580 (lobby silent), and the upgrade book page flip 114448027739800 once per real page change. The spinner's slap (class.spin) is silenced, tool.rakeSwing and tool.vacSuck are silenced so each tool makes exactly one sound, and ui.error shares a denial throttle group with collect.bagFull so one refusal is one sound whatever fires it. Every id, volume, speed, variance, loop flag and cooldown lives here rather than in code.",
     "introEvidence": "PLACEHOLDER 15 Sep 2026: the owner supplied no ids for the round intro's farm ambience, wind, footsteps, paper rustle or decision sting, so intro.ambience/wind/footstep/paper/sting are silent here rather than guessed. intro.type uses a bundled Roblox click so the subtitle reveal is not silent. Fill these five ids in and the intro picks them up with no code change.",
-    "clickEvidence": "OWNER 15 Sep 2026: one ordinary UI click sound (15675059323) on every click-shaped role, all sharing the uiClick throttle group so two callers for a single press still make exactly one sound. Opening a UI is silent: ui.open has no id. The page flip keeps its own role and its own group so a page turn is never stacked with a click."
+    "clickEvidence": "OWNER 15 Sep 2026: one ordinary UI click sound (15675059323) on every click-shaped role, all sharing the uiClick throttle group so two callers for a single press still make exactly one sound. Opening a UI is silent: ui.open has no id. The page flip keeps its own role and its own group so a page turn is never stacked with a click.",
+    "swordEvidence": "OWNER 15 Sep 2026: sell.arc and tool.throw were both rbxasset://sounds/unsheath.wav - Roblox's stock sword-draw - so selling a bag and throwing a charge each made a sword noise. Both are silenced. The sale still has sell.tick and sell.burst, and a throw still has the fuse and the blast, so neither action lost its voice; it lost a sound that belonged to a different game."
   },
   "dailyQuests": {
     "slots": 3,

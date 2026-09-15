@@ -516,12 +516,20 @@ local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, sc
 	-- studs off it, the same standoff the rake and the charge use on the left, at z=313 - between the
 	-- door and the Scout Chick's crate, in an otherwise empty bay, square in view on the way in.
 	--
-	-- Mounted level. The old -6 degrees of roll read as something knocked askew rather than something
-	-- put on display, and this is a 249 R$ unlock.
+	-- Mounted level and lying along the wall.
+	--
+	-- Measured: the model is 5.66 studs along its own Z, 1.84 across its X. At yaw -90 that long axis
+	-- pointed down world X - straight out of the wall, like a cannon aimed into the shop, with the
+	-- board it was supposed to be hanging on edge-on behind it. The left wall had the same fault before
+	-- the move; nobody had looked at that corner. At yaw 180 the length runs along world Z (along the
+	-- wall) and the thin face turns into the room, which is also the direction the board faces.
+	--
+	-- Level, too: the old -6 degrees of roll read as knocked askew rather than put on display, and this
+	-- is a 249 R$ unlock.
 	{
 		key = "featherVac",
 		model = "Vacuum",
-		cframe = CFrame.new(-29.8, 59.0, 313.0) * CFrame.Angles(0, math.rad(-90), 0),
+		cframe = CFrame.new(-29.8, 59.0, 313.0) * CFrame.Angles(0, math.rad(180), 0),
 		name = "Feather Vac",
 		scale = 0.9,
 		backboard = true,
@@ -551,7 +559,12 @@ local function buildBackboard(parent: Instance, key: string, cframe: CFrame, nam
 	local width = math.max(extent.Z, extent.X) + 1.8
 	local height = math.max(extent.Y, 2.2) + 2.6
 	-- The board sits behind the tool, flush to the wall, in the display's own orientation.
-	local boardCF = cframe * CFrame.new(0, 0.2, -0.75)
+	--
+	-- In this frame local +X is out of the wall, local Z runs along it, local Y is up - which is what
+	-- the face plate, the brackets and the lamp below already assume. "Behind" was being taken along
+	-- local -Z, which is along the wall: the board was shifted three quarters of a stud sideways
+	-- instead of set back, and every fitting on it was offset the same wrong way.
+	local boardCF = cframe * CFrame.new(-0.75, 0.2, 0)
 	local frame = part("MountFrame", Vector3.new(0.34, height + 0.5, width + 0.5), boardCF, Color3.fromRGB(122, 84, 52), nil, mount, false)
 	frame.CanQuery = false
 	local face = part(
