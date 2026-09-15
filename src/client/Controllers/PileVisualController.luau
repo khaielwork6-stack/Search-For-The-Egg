@@ -409,7 +409,8 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 		local height = y - field.baseY
 		local lumpFade = math.clamp(height / math.max(0.01, visual.seatLumpFadeStuds or 3), 0, 1)
 		local seatY = y + FeatherLayout.seatOffset(visual, column.base, slot, column.step) + seatLump(visual, wx, wz) * scale * lumpFade
-		seatY = math.max(seatY, field.baseY + 0.04)
+		local floorY = math.max(field.baseY, (self._layout and self._layout.groundY) or field.baseY)
+		seatY = math.max(seatY, floorY + 0.06)
 		-- Rim factor: 0 well inside the coat, 1 at the outermost strands, used to curl the edge under
 		-- instead of letting it radiate outward as blades.
 		local rimMin = visual.rimMinScale
@@ -530,8 +531,9 @@ function PileVisualController._applyUnderlayer(self: PileVisualController, colum
 	local originZ = minCorner.Z + column.z * cell
 	for sheet = 1, 2 do
 		local n = grid[sheet]
-		local depth = visual.underlayerDepths[sheet]
-		if depth >= column.base * column.step then
+		local span = column.base * column.step
+		local depth = math.min(visual.underlayerDepths[sheet], span * 0.55)
+		if n <= 0 or depth <= 0.02 then
 			continue
 		end
 		local shift = if sheet == 2 then 0.5 else 0
