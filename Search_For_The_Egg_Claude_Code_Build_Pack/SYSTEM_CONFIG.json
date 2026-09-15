@@ -269,7 +269,12 @@
       "underlayerTiltRangeDegrees": [
         0,
         7
-      ]
+      ],
+      "frontSkirtStrandsDesktop": 320,
+      "frontSkirtStrandsMobile": 110,
+      "frontSkirtArcDegrees": 140,
+      "frontSkirtDepthStuds": 4.5,
+      "frontSkirtEvidence": "OWNER 14 Sep 2026: fixed overlapping strands cover the small gap at the mound's front rim (spawn side); not records, never picked"
     },
     "assumption": "ASSUMED",
     "recordSpacingStuds": 0.15,

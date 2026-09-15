@@ -312,13 +312,17 @@ return function(describe, it, expect)
 			expect(fromCentre).toBeGreaterThanOrEqual(10) -- 60 % of the sweep from the struck cell
 			expect(centre.remaining).toBe(32 - fromCentre)
 			-- Exhausted centre: the rest still comes out of the ring, one at a time, no more than exists.
+			local capacity = 0
+			for _, cell in ipairs(cells) do
+				capacity += cell.base
+			end
 			local _, more = PileGrid.removeFocused(grid, cells, weights, 5000)
 			local left = 0
 			for _, cell in ipairs(cells) do
 				left += cell.remaining
 			end
 			expect(left).toBe(0)
-			expect(more).toBe(#cells * 32 - 20)
+			expect(more).toBe(capacity - 20)
 		end)
 	end)
 

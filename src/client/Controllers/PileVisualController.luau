@@ -742,20 +742,36 @@ end
 function PileVisualController._buildRimBed(self: PileVisualController, folder: Folder)
 	local visual = self._config.pile.visual
 	local field = self._seatField :: PileSurface.Field
-	local count = if self._quality:tier() == "low" then visual.rimStrandsMobile else visual.rimStrandsDesktop
+	local low = self._quality:tier() == "low"
+	local count = if low then visual.rimStrandsMobile else visual.rimStrandsDesktop
+	-- Front skirt (owner request): fixed, overlapping strands over the front rim on the spawn side
+	-- (+Z), two layers deep, so the mound's foot never shows a gap from the approach. They are not
+	-- records and are never picked (CanQuery false); the records above them are untouched.
+	local skirtCount = if low then (visual.frontSkirtStrandsMobile or 0) else (visual.frontSkirtStrandsDesktop or 0)
+	local skirtArc = math.rad(visual.frontSkirtArcDegrees or 140)
+	local skirtDepth = visual.frontSkirtDepthStuds or 4.5
 	local half = field.width * field.cellSize / 2
 	local foot = field.radius * PileSurface.RIM_STRETCH - visual.rimInsetStuds
 	local placed = 0
 	local attempt = 0
-	while placed < count and attempt < count * 8 do
+	local total = count + skirtCount
+	while placed < total and attempt < total * 8 do
 		attempt += 1
 		local h = function(salt: number)
 			return FeatherLayout.hash(attempt, 3, salt)
 		end
-		local angle = h(1) * math.pi * 2
-		local r = foot - h(2) * h(2) * 3.2
+		local skirt = placed >= count
+		local angle, r
+		if skirt then
+			-- Front arc centred on +Z, packed from the foot inward in two overlapping bands.
+			angle = math.pi / 2 + (h(1) - 0.5) * skirtArc
+			r = foot - h(2) * skirtDepth
+		else
+			angle = h(1) * math.pi * 2
+			r = foot - h(2) * h(2) * 3.2
+		end
 		local dx, dz = math.cos(angle) * r, math.sin(angle) * r
-		if math.abs(dx) <= half - 0.3 and math.abs(dz) <= half - 0.3 then
+		if not skirt and math.abs(dx) <= half - 0.3 and math.abs(dz) <= half - 0.3 then
 			continue -- inside the grid: the cells' own bed covers it
 		end
 		local wx, wz = field.centreX + dx, field.centreZ + dz
@@ -771,7 +787,7 @@ function PileVisualController._buildRimBed(self: PileVisualController, folder: F
 		placeFeather(
 			part,
 			wx,
-			y + lerp(0.1, 0.3, h(3)),
+			y + (if skirt then lerp(0.05, 0.55, h(3)) else lerp(0.1, 0.3, h(3))),
 			wz,
 			normal,
 			self:_downslope(wx, wz) + (h(4) - 0.5) * math.rad(visual.downslopeYawJitterDegrees) * 2,
