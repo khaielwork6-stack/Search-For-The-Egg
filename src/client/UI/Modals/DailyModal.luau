@@ -140,7 +140,10 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	grid.LayoutOrder = 3
 	grid.ZIndex = z
 	local layout = Instance.new("UIGridLayout")
-	local CELL_HEIGHT = math.floor(tap * 2.9)
+	-- Tall enough for the artwork to be the biggest thing on the card. At 2.9 the four bands added up
+	-- to more than the cell, so the art band collapsed to its 18px floor and the gems came out smaller
+	-- than the vector lozenges they replaced.
+	local CELL_HEIGHT = math.floor(tap * 3.4)
 	layout.CellSize = UDim2.new(1 / COLUMNS, -Tokens.spacing.sm, 0, CELL_HEIGHT)
 	layout.CellPadding = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -167,9 +170,9 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		-- Bands, measured off the cell height, so the header, amount, artwork and footer occupy four
 		-- strips that cannot intersect whatever the viewport scale does.
 		local headerHeight = Tokens.typography.label.size + Tokens.spacing.sm
-		-- The number is the reward, so it gets display type rather than heading type. It could not be
-		-- this big while it was carrying "+50 Gems"; a bare "+50" has the room.
-		local amountHeight = Tokens.typography.display.size + 2
+		-- Big, but not so big it starves the picture underneath: display type at full size took 36px of
+		-- a 127px card and left the art 18. This is the number's own size, set once here.
+		local amountHeight = Tokens.typography.title.size + 6
 		-- Tall enough to read as a button rather than a printed strip. The card itself carries the tap
 		-- target (see the hit layer below), so this is about weight, not reach.
 		local footerHeight = Tokens.typography.label.size + Tokens.spacing.md
@@ -198,6 +201,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			zIndex = z + 3,
 			color = Tokens.color.goldDeep,
 		})
+		amount.TextSize = Tokens.typography.title.size + 4
 		amount.AnchorPoint = Vector2.new(0.5, 0)
 		amount.Position = UDim2.new(0.5, 0, 0, headerHeight)
 		amount.Size = UDim2.new(1, 0, 0, amountHeight)
