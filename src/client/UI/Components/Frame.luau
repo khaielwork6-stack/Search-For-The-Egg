@@ -10,12 +10,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Depth = require(script.Parent.Depth)
 local Motion = require(Shared.Design.Motion)
 local AssetManifest = require(Shared.Design.AssetManifest)
 
 local Frame = {}
 
-local LIP = 5
+-- The lip is the thickness of a card. Five pixels read as a hairline at the sizes these are drawn at.
+local LIP = Tokens.depth.panelLipPx
 
 local function texture(parent: GuiObject, role: string, transparency: number, color: Color3, tile: number?, zIndex: number?): ImageLabel?
 	local id = AssetManifest.image(role)
@@ -91,11 +93,7 @@ function Frame.goldPanel(
 	local outerCorner = Instance.new("UICorner")
 	outerCorner.CornerRadius = UDim.new(0, radius)
 	outerCorner.Parent = outer
-	local outline = Instance.new("UIStroke")
-	outline.Thickness = Tokens.stroke.bold
-	outline.Color = Tokens.color.outline
-	outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	outline.Parent = outer
+	Depth.keyline(outer)
 
 	local panel = Instance.new("Frame")
 	panel.Name = "Panel"
@@ -106,15 +104,19 @@ function Frame.goldPanel(
 	local panelCorner = Instance.new("UICorner")
 	panelCorner.CornerRadius = UDim.new(0, radius)
 	panelCorner.Parent = panel
+	-- Paper: white at the very top, the panel colour through the body, and a deeper foot so the card
+	-- sits down rather than floating. The rim along the inside of the lip is what reads as its edge.
 	local light = Instance.new("UIGradient")
 	light.Name = "Paper"
 	light.Rotation = 90
 	light.Color = ColorSequence.new({
 		ColorSequenceKeypoint.new(0, Tokens.color.featherWhite),
-		ColorSequenceKeypoint.new(0.25, opts.fill or Tokens.color.panel),
+		ColorSequenceKeypoint.new(0.22, opts.fill or Tokens.color.panel),
+		ColorSequenceKeypoint.new(0.72, opts.fill or Tokens.color.panel),
 		ColorSequenceKeypoint.new(1, Tokens.color.panelDeep),
 	})
 	light.Parent = panel
+	Depth.rim(panel, opts.fill or Tokens.color.panel, Tokens.color.featherWhite)
 	if opts.texture ~= false then
 		-- On the outer card (not inside the panel's list layout), drawn above the panel body and
 		-- below its content.
@@ -512,12 +514,7 @@ function Frame.tile(
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, radius)
 	corner.Parent = tile
-	local stroke = Instance.new("UIStroke")
-	stroke.Name = "Outline"
-	stroke.Thickness = Tokens.stroke.frame
-	stroke.Color = Tokens.color.outline
-	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	stroke.Parent = tile
+	Depth.keyline(tile, Tokens.stroke.frame)
 	local face = Instance.new("Frame")
 	face.Name = "Face"
 	face.Size = UDim2.new(1, 0, 1, -lip)
@@ -527,11 +524,8 @@ function Frame.tile(
 	local faceCorner = Instance.new("UICorner")
 	faceCorner.CornerRadius = UDim.new(0, radius)
 	faceCorner.Parent = face
-	local gradient = Instance.new("UIGradient")
-	gradient.Rotation = 90
-	local light = options.fill:Lerp(Color3.new(1, 1, 1), 0.28)
-	gradient.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, light), ColorSequenceKeypoint.new(1, options.fill) })
-	gradient.Parent = face
+	Depth.applySheen(face, options.fill)
+	Depth.rim(face, options.fill)
 	face.Parent = tile
 	tile.Parent = parent
 	return tile, face

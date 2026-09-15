@@ -1,6 +1,7 @@
 --!strict
 -- Hand-drawn button: a coloured face on a darker lip (the face drops onto the lip when pressed),
--- cocoa outline, outlined lettering on strong variants, hover wash and lift, elastic release,
+-- cocoa keyline and a bright inner rim, banded sheen, outlined lettering on strong variants, hover
+-- wash and lift, elastic release,
 -- selected ring, disabled dim, pending spinner, controller focus ring, and layered sounds.
 -- Variants: primary (gold), secondary (cream), ghost (outline only), teal (accent), pill (cream
 -- nameplate), danger (ember). "gold" stays an alias of primary. Image faces serve station buttons.
@@ -11,6 +12,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Depth = require(script.Parent.Depth)
 local Motion = require(Shared.Design.Motion)
 local Tween = require(script.Parent.Tween)
 local Icons = require(script.Parent.Icons)
@@ -141,7 +143,9 @@ local STYLES: { [string]: Style } = {
 }
 STYLES.gold = STYLES.primary
 
-local LIP = 4
+-- The lip is what gives the control a thickness. Four pixels was not enough to read as one at any
+-- size the game actually draws buttons at.
+local LIP = Tokens.depth.lipPx
 
 function Button.create(parent: Instance, options: Options): (TextButton, () -> ())
 	local handle = Button.build(parent, options)
@@ -167,13 +171,8 @@ function Button.build(parent: Instance, options: Options): Handle
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, if options.round then 999 else style.radius)
 	corner.Parent = button
-	local outline = Instance.new("UIStroke")
-	outline.Name = "Outline"
-	outline.Thickness = Tokens.stroke.bold
-	outline.Color = Tokens.color.outline
-	outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	local outline = Depth.keyline(button)
 	outline.Transparency = if style.ghost then 0.35 else 0
-	outline.Parent = button
 	local constraint = Instance.new("UISizeConstraint")
 	constraint.MinSize = Vector2.new(options.minimumTapTarget, options.minimumTapTarget)
 	constraint.Parent = button
@@ -198,15 +197,11 @@ function Button.build(parent: Instance, options: Options): Handle
 	local faceCorner = Instance.new("UICorner")
 	faceCorner.CornerRadius = UDim.new(0, if options.round then 999 else style.radius)
 	faceCorner.Parent = face
-	local gradient = Instance.new("UIGradient")
-	gradient.Name = "Fill"
-	gradient.Rotation = 90
-	gradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, style.faceLight),
-		ColorSequenceKeypoint.new(0.6, style.face),
-		ColorSequenceKeypoint.new(1, style.face),
-	})
-	gradient.Parent = face
+	-- The banded sheen and the rim are the two things that stop a face reading as a flat rectangle.
+	-- The rim goes on the face, not the button, so it traces the lit edge and not the lip.
+	local gradient = Depth.applySheen(face, style.face, style.faceLight)
+	local rim = Depth.rim(face, style.face)
+	rim.Transparency = if style.ghost then 1 else Tokens.depth.rimTransparency
 	face.Parent = button
 	local wash = Instance.new("Frame")
 	wash.Name = "Wash"
@@ -500,11 +495,9 @@ function Button.build(parent: Instance, options: Options): Handle
 			face.BackgroundColor3 = style.face
 			label.TextColor3 = style.text
 			label.Font = style.font
-			gradient.Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0, style.faceLight),
-				ColorSequenceKeypoint.new(0.6, style.face),
-				ColorSequenceKeypoint.new(1, style.face),
-			})
+			gradient.Color = Depth.sheen(style.face, style.faceLight)
+			rim.Color = Depth.shade(style.face, 0.45)
+			rim.Transparency = if style.ghost then 1 else Tokens.depth.rimTransparency
 			face.Size = UDim2.new(1, 0, 1, if style.ghost then 0 else -LIP)
 			if textOutline then
 				textOutline.Enabled = style.outlined
