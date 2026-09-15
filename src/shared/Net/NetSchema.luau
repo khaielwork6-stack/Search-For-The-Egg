@@ -170,6 +170,9 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 			4
 		),
 		request("DailyClaim", Schema.none(), slowRate, 4),
+		-- One quest, by id. The server refuses an id that is not on today's board and replays a retry
+		-- rather than paying twice.
+		request("QuestClaim", Schema.object({ questId = Schema.id() }), slowRate, 4),
 		request(
 			"CodeRedeem",
 			Schema.object({ code = Schema.string({ min = 1, max = cfg.codePolicy.maxLength + 8, pattern = "^[%w%s%-_]+$" }) }),

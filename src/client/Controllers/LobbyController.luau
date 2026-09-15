@@ -22,6 +22,7 @@ local GemShopModal = require(script.Parent.Parent.UI.Modals.GemShopModal)
 local ClassesModal = require(script.Parent.Parent.UI.Modals.ClassesModal)
 local ShopModal = require(script.Parent.Parent.UI.Modals.ShopModal)
 local DailyModal = require(script.Parent.Parent.UI.Modals.DailyModal)
+local QuestsModal = require(script.Parent.Parent.UI.Modals.QuestsModal)
 local CodesModal = require(script.Parent.Parent.UI.Modals.CodesModal)
 local InventoryModal = require(script.Parent.Parent.UI.Modals.InventoryModal)
 local StatsModal = require(script.Parent.Parent.UI.Modals.StatsModal)
@@ -51,6 +52,7 @@ export type LobbyController = typeof(setmetatable(
 -- Permanent side menu: only the three account screens. Everything else opens from the world
 -- (NPCs, the portal, the nest, the chest) so the lobby stays the way to find things.
 local SIDE_MENU: { { id: string, title: string, short: string, image: string } } = {
+	{ id = "quests", title = "Daily Quests", short = "Quests", image = "station.daily.normal" },
 	{ id = "stats", title = "Forager Ledger", short = "Stats", image = "station.stats" },
 	{ id = "inventory", title = "Tool Rack", short = "Inventory", image = "station.inventory" },
 	{ id = "codes", title = "Nest Mailbox", short = "Codes", image = "station.codes" },
@@ -314,7 +316,7 @@ function LobbyController.new(deps: any): LobbyController
 			offer.setVisible(not inRound)
 		end
 		if inRound then
-			for _, id in ipairs({ "party", "classes", "shop", "daily", "codes", "inventory", "stats", "event" }) do
+			for _, id in ipairs({ "party", "classes", "shop", "daily", "quests", "codes", "inventory", "stats", "event" }) do
 				deps.modals:close(id)
 			end
 		end
@@ -365,6 +367,7 @@ function LobbyController.open(self: LobbyController, id: string): boolean
 		classes = ClassesModal.build,
 		shop = ShopModal.build,
 		daily = DailyModal.build,
+		quests = QuestsModal.build,
 		codes = CodesModal.build,
 		inventory = InventoryModal.build,
 		stats = StatsModal.build,

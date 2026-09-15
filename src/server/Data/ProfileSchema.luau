@@ -49,6 +49,9 @@ function ProfileSchema.default(now: number): { [string]: any }
 			claimedCodes = {},
 			groupRewardClaimed = false,
 		},
+		-- Daily quests: only progress and claims are stored. Which three a player has is derived from
+		-- the player and the day, so nothing has to be written when a day turns.
+		quests = { day = 0, progress = {}, claimed = {} },
 		tutorial = { version = ProfileSchema.TUTORIAL_VERSION, completedSteps = {}, completed = false },
 		stats = {
 			playtimeSeconds = 0,
@@ -358,6 +361,12 @@ function ProfileSchema.reconcile(raw: any, cfg: { [string]: any }, now: number):
 	end
 
 	-- Tutorial ---------------------------------------------------------------------------------
+	-- Quests: a record from a previous day is left alone here; the service rolls it over when it next
+	-- touches it, and the view already reads a stale day as zero progress.
+	ensureTable(profile, "quests", default.quests, issues, "quests")
+	reconcileNumber(profile.quests, "day", 0, 0, 1e12, issues, "quests.day", true)
+	ensureTable(profile.quests, "progress", {}, issues, "quests.progress")
+	ensureTable(profile.quests, "claimed", {}, issues, "quests.claimed")
 	ensureTable(profile, "tutorial", default.tutorial, issues, "tutorial")
 	reconcileNumber(profile.tutorial, "version", ProfileSchema.TUTORIAL_VERSION, 0, 1000, issues, "tutorial.version", true)
 	ensureTable(profile.tutorial, "completedSteps", {}, issues, "tutorial.completedSteps")

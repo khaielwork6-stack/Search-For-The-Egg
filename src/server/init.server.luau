@@ -471,8 +471,13 @@ local leaderboards = LeaderboardService.new({
 	log = log,
 })
 playerData:setProjectionExtras(function(userId, data)
+	-- Quests ride the profile projection, so progress and a claim both reach the open UI on the next
+	-- push without it having to ask or be reopened.
+	local questView, questResetIn = rewards:questView(data, userId)
 	return {
 		daily = rewards:dailyEvaluation(data),
+		quests = questView,
+		questResetInSeconds = questResetIn,
 		slotCount = ClassRoll.slotCount(config, getEntitlements(userId)),
 	}
 end)
@@ -830,6 +835,10 @@ crate.runFinished:Connect(function()
 end)
 
 selling.sold:Connect(function(userId, runtime, sale)
+	-- Quest progress from a completed trade: the feathers that actually reached the crate, and the bag
+	-- itself. Counting on the pickup instead would put a profile write on every feather.
+	rewards:advanceQuests(userId, "feathersCollected", (sale.standardCount or 0) + (sale.rainbowCount or 0))
+	rewards:advanceQuests(userId, "bagsSold", 1)
 	local player = playerData:playerOf(userId)
 	if player then
 		local payload = table.clone(sale)
@@ -845,6 +854,7 @@ selling.sold:Connect(function(userId, runtime, sale)
 end)
 
 upgrades.purchased:Connect(function(userId, runtime, result)
+	rewards:advanceQuests(userId, "upgradesBought", 1)
 	local player = playerData:playerOf(userId)
 	if player then
 		local payload = table.clone(result)
@@ -884,6 +894,8 @@ egg.revealed:Connect(function(runtime, position)
 end)
 
 egg.claimed:Connect(function(runtime, userId)
+	-- The finder found it; everyone present wins the round, which is credited at the commit below.
+	rewards:advanceQuests(userId, "eggsFound", 1)
 	if objectives:current(userId) == "claim_or_complete_round" then
 		objectives:complete(userId, "claim_or_complete_round")
 	end
@@ -905,6 +917,7 @@ victory.committed:Connect(function(runtime, results)
 				objectives:complete(player.UserId, "claim_or_complete_round")
 			end
 			playerData:pushProjection(player, config)
+			rewards:advanceQuests(player.UserId, "roundsWon", 1)
 			local profile = profiles:get(player.UserId)
 			if profile then
 				leaderboards:submit(player.UserId, leaderboards:valuesFor(profile.data))
@@ -1094,6 +1107,9 @@ registry:onRequest("ToolActionAim", function(player, payload)
 end)
 registry:onRequest("SellRequest", function(player, payload)
 	return selling:sell(player.UserId, payload.sessionToken, { gate = crateGate })
+end)
+registry:onRequest("QuestClaim", function(player, payload)
+	return pushAfter(player, rewards:claimQuest(player.UserId, payload.questId))
 end)
 registry:onRequest("UpgradePurchase", function(player, payload)
 	return upgrades:purchase(player.UserId, payload.sessionToken, payload.upgradeId, payload.expectedLevel)

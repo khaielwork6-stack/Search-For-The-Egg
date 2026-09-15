@@ -32,7 +32,8 @@
     "tradingEnabled": false,
     "offlineProgressEnabled": false,
     "subscriptionsEnabled": false,
-    "dailyAutoOpenOnJoin": true
+    "dailyAutoOpenOnJoin": true,
+    "dailyQuestsEnabled": true
   },
   "round": {
     "cutsceneSeconds": 18,
@@ -2157,5 +2158,61 @@
     "evidence": "OWNER 15 Sep 2026 supplied six ids: nest rake/shovel 81267530921314 at the contact moment, feather vac 91395529514868 as a managed loop while sucking, dynamite 124256466623788 at the explosion, class result 90853027572825 once the spinner lands, in-round music 130867147321580 (lobby silent), and the upgrade book page flip 114448027739800 once per real page change. The spinner's slap (class.spin) is silenced, tool.rakeSwing and tool.vacSuck are silenced so each tool makes exactly one sound, and ui.error shares a denial throttle group with collect.bagFull so one refusal is one sound whatever fires it. Every id, volume, speed, variance, loop flag and cooldown lives here rather than in code.",
     "introEvidence": "PLACEHOLDER 15 Sep 2026: the owner supplied no ids for the round intro's farm ambience, wind, footsteps, paper rustle or decision sting, so intro.ambience/wind/footstep/paper/sting are silent here rather than guessed. intro.type uses a bundled Roblox click so the subtitle reveal is not silent. Fill these five ids in and the intro picks them up with no code change.",
     "clickEvidence": "OWNER 15 Sep 2026: one ordinary UI click sound (15675059323) on every click-shaped role, all sharing the uiClick throttle group so two callers for a single press still make exactly one sound. Opening a UI is silent: ui.open has no id. The page flip keeps its own role and its own group so a page turn is never stacked with a click."
+  },
+  "dailyQuests": {
+    "slots": 3,
+    "resetSeconds": 86400,
+    "pool": [
+      {
+        "id": "gatherFeathers",
+        "metric": "feathersCollected",
+        "target": 250,
+        "gems": 15,
+        "title": "Gather {target} feathers",
+        "detail": "Counts every feather you trade at the crate."
+      },
+      {
+        "id": "gatherFeathersBig",
+        "metric": "feathersCollected",
+        "target": 600,
+        "gems": 28,
+        "title": "Gather {target} feathers",
+        "detail": "Counts every feather you trade at the crate."
+      },
+      {
+        "id": "tradeBags",
+        "metric": "bagsSold",
+        "target": 4,
+        "gems": 12,
+        "title": "Trade {target} bags",
+        "detail": "Walk a full bag back to the collection crate."
+      },
+      {
+        "id": "findEgg",
+        "metric": "eggsFound",
+        "target": 1,
+        "gems": 30,
+        "title": "Find the Egg",
+        "detail": "Be the one who lifts the Egg out of the nest."
+      },
+      {
+        "id": "winSearch",
+        "metric": "roundsWon",
+        "target": 1,
+        "gems": 25,
+        "title": "Win a search",
+        "detail": "Finish a round with the Egg found."
+      },
+      {
+        "id": "buyUpgrades",
+        "metric": "upgradesBought",
+        "target": 3,
+        "gems": 10,
+        "title": "Buy {target} upgrades",
+        "detail": "Anything from the book or the supplies counter."
+      }
+    ],
+    "assumption": "ASSUMED",
+    "evidence": "OWNER 15 Sep 2026: daily quests did not exist. Three are drawn per player per day, deterministically from the player and the day so a rejoin shows the same three. Targets and gem rewards are assumptions pending owner numbers; the metrics are all counters the server already produces, so progress never touches the collection hot path."
   }
 }
