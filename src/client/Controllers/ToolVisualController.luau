@@ -340,7 +340,10 @@ function ToolVisualController._spawnCharge(
 			local speed = feel.throwSpeedStudsPerSecond or 26
 			local flat = (landing - start)
 			local seconds = math.clamp(flat.Magnitude / speed, 0.28, 0.9)
-			local height = (feel.arcHeightStuds or 4.5) * math.clamp(flat.Magnitude / 16, 0.4, 1.2)
+			-- The arc rises in proportion to how far the throw actually went, measured against the tool's
+			-- configured range rather than a fixed distance, so retuning the range retunes the arc.
+			local reference = math.max(1, self._deps.config.tools.confettiCharge.throwDistanceStuds)
+			local height = (feel.arcHeightStuds or 4.5) * math.clamp(flat.Magnitude / reference, 0.4, 1.2)
 			task.spawn(function()
 				local elapsed = 0
 				local spin = 0

@@ -535,7 +535,9 @@
       "permanentIncludesMaxUpgrades": true,
       "evidence": "VERIFIED soft/permanent public; ASSUMED one-round price and mechanics values",
       "shapeEvidence": "ASSUMED 14 Sep 2026: a blast digs a bowl - the closest cells give up to craterDepthRecords each, tapering with distance until the yield is spent - so the crater is deep in the middle instead of one record from every cell in the radius",
-      "craterDepthRecords": 14
+      "craterDepthRecords": 14,
+      "throwFloorDropStuds": 40.0,
+      "throwEvidence": "OWNER 15 Sep 2026: the charge must be throwable at any valid world position inside throwDistanceStuds and must never snap toward the pile. The throw resolves against the nearest of the mound surface and the first solid thing in the world instead of the pile-reaching aim rule, carries to the end of its range and falls throwFloorDropStuds to the ground when it meets nothing, and clamps to the range measured flat from the character rather than refusing. A throw away from the pile still lands, explodes and plays its effects, and simply finds no feathers."
     },
     "featherVac": {
       "displayName": "Feather Vac",

@@ -332,16 +332,17 @@ return function(describe, it, expect)
 			expect(h.equip(1, "confettiCharge").ok).toBe(true)
 			expect(h.beginAt(1, runtime, "nestRake", 8, 8).code).toBe("invalid_payload") -- discrete tools never use begin
 			expect(h.beginAt(1, runtime, "featherVac", 8, 8).code).toBe("not_authorized") -- not owned
-			-- Out of throw range: character far from the aim point.
-			local _, direction = h.aimAt(1, runtime, 8, 8)
-			h.standAt(1, h.positions[1] + Vector3.new(0, 0, -(spec.throwDistanceStuds + 10)))
-			local far = h.tools:actionBegin(1, {
+			-- A claimed origin nowhere near where the server has the character is refused outright: the
+			-- range is measured from the server's character, so a spoofed origin cannot extend a throw.
+			local _, direction = h.aimAt(1, runtime, runtime.grid.width // 2, runtime.grid.depth // 2)
+			local spoofed = h.tools:actionBegin(1, {
 				sessionToken = h.token(1),
 				toolId = "confettiCharge",
-				origin = h.positions[1] + Vector3.new(0, 1.5, 0),
+				origin = h.positions[1] + Vector3.new(0, 1.5, spec.throwDistanceStuds + 40),
 				direction = direction,
 			})
-			expect(far.code).toBe("out_of_range")
+			expect(spoofed.code).toBe("out_of_range")
+			expect(spoofed.message).toBe("origin")
 			local thrown = h.beginAt(1, runtime, "confettiCharge", runtime.grid.width // 2, runtime.grid.depth // 2)
 			expect(thrown.ok).toBe(true)
 			expect(thrown.data.fuseMs).toBe(math.floor(spec.fuseSeconds * 1000))
@@ -402,6 +403,61 @@ return function(describe, it, expect)
 			expect(events[2].rainbow).toBe(events[2].removed)
 			expect(state.carriedRainbow).toBe(math.min(events[2].removed, capacity))
 			expect(h.tools.stats.miniCharges).toBe(0) -- no class: never any mini-charge even with a winning roll
+		end)
+
+		it("throws free of the pile: any world point in range, clamped, and nothing awarded off the pile", function()
+			local h = harness()
+			h.join(1)
+			local _, runtime = h.startRound({ 1 })
+			acquire(h, 1, "confettiCharge")
+			h.equip(1, "confettiCharge")
+			local spec = h.collection:spec(runtime, 1, "confettiCharge")
+			local state = runtime.players[1]
+			local layout = ChapterLayout.chapter1
+			local minCorner = ChapterLayout.gridMinCorner(layout, runtime.grid.width, runtime.grid.depth, runtime.grid.cellSize)
+			local centre = Vector3.new(
+				minCorner.X + runtime.grid.width * runtime.grid.cellSize / 2,
+				layout.nestBaseY,
+				minCorner.Z + runtime.grid.depth * runtime.grid.cellSize / 2
+			)
+
+			-- Well away from the mound, aiming straight down at bare ground. The old aim rule refused this
+			-- as "outside_nest"; a throw is not a reach into the pile, so it goes where it is aimed.
+			local away = centre + Vector3.new(spec.radiusStuds * 4 + 30, 0, 0)
+			h.standAt(1, away)
+			local before = gridSum(runtime.grid)
+			local carriedBefore = state.carriedStandard + state.carriedRainbow
+			local offPile = h.tools:actionBegin(1, {
+				sessionToken = h.token(1),
+				toolId = "confettiCharge",
+				origin = away + Vector3.new(0, 1.5, 0),
+				direction = Vector3.new(0, -1, 0),
+			})
+			expect(offPile.ok).toBe(true)
+			-- It landed where it was thrown, not somewhere nearer the feathers.
+			local pulled = Vector3.new(offPile.data.x - centre.X, 0, offPile.data.z - centre.Z).Magnitude
+			expect(pulled).toBeGreaterThan(spec.radiusStuds)
+
+			h.advanceTools(spec.fuseSeconds + 0.4, 0.1)
+			local exploded = h.eventsOfKind("charge_exploded")
+			-- It still goes off: the event fires so the client plays the blast and its effects...
+			expect(#exploded).toBe(1)
+			-- ...and takes nothing, because no feathers were inside it.
+			expect(exploded[1].removed).toBe(0)
+			expect(gridSum(runtime.grid)).toBe(before)
+			expect(state.carriedStandard + state.carriedRainbow).toBe(carriedBefore)
+
+			-- Aiming past the arm's reach throws as far as the arm reaches instead of refusing.
+			h.clock:advance(spec.cooldownSeconds + 1)
+			local flatAim = h.tools:actionBegin(1, {
+				sessionToken = h.token(1),
+				toolId = "confettiCharge",
+				origin = away + Vector3.new(0, 1.5, 0),
+				direction = Vector3.new(0.2, -0.05, 1).Unit,
+			})
+			expect(flatAim.ok).toBe(true)
+			local reach = Vector3.new(flatAim.data.x - away.X, 0, flatAim.data.z - away.Z).Magnitude
+			expect(reach).toBeLessThanOrEqual(spec.throwDistanceStuds + 0.01)
 		end)
 
 		it("Blast Artist mini-charges come only from the resolved class modifier", function()

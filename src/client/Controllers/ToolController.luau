@@ -864,7 +864,9 @@ function ToolController.beginAction(self: ToolController, aimTarget: Vector3?): 
 	elseif message == "charge_live" then
 		self._deps.hud.toasts:push("One charge at a time", "info")
 	elseif result.code == "out_of_range" then
-		self._deps.hud.toasts:push("Aim at the nest", "info")
+		-- A charge is thrown wherever it is aimed, so this is no longer "aim at the nest": the only
+		-- way a throw is out of range now is the server disagreeing about where the character is.
+		self._deps.hud.toasts:push(if self._equipped == "confettiCharge" then "Too far to throw from here" else "Aim at the nest", "info")
 	end
 	if result.code ~= "rate_limited" then
 		self._deps.audio:play(Tokens.sound.uiError)

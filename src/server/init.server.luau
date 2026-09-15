@@ -346,6 +346,29 @@ local tools = ToolService.new({
 	crateBusy = function()
 		return crate:isBusy()
 	end,
+	-- First solid surface along a ray, for the thrown charge. The pile's own coat and tool visuals
+	-- are not surfaces (the stick lands on the mound body, which the analytic dome already supplies),
+	-- and neither are players, so a charge cannot be stopped by a teammate walking through the throw.
+	worldCast = function(origin: Vector3, direction: Vector3, distance: number): Vector3?
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		local exclude: { Instance } = {}
+		for _, name in ipairs({ "SFE_PileVisual", "SFE_ToolVisuals", "SFE_PileCollision" }) do
+			local folder = workspace:FindFirstChild(name)
+			if folder then
+				table.insert(exclude, folder)
+			end
+		end
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player.Character then
+				table.insert(exclude, player.Character)
+			end
+		end
+		params.FilterDescendantsInstances = exclude
+		params.IgnoreWater = true
+		local result = workspace:Raycast(origin, direction.Unit * math.max(0.1, distance), params)
+		return if result then result.Position else nil
+	end,
 	analytics = analytics,
 	log = log,
 })

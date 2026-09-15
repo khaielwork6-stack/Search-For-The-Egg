@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local RoundReducer = require(Shared.Reducers.RoundReducer)
 local PileGrid = require(Shared.Domain.PileGrid)
+local PileSurface = require(Shared.Domain.PileSurface)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local ToolSpecs = require(Shared.Domain.ToolSpecs)
 local EconomyMath = require(Shared.EconomyMath)
@@ -34,6 +35,7 @@ export type ToolService = typeof(setmetatable(
 		_getCharacterPosition: (userId: number) -> Vector3?,
 		_getEntitlements: ((userId: number) -> { [string]: boolean }?)?,
 		_crateBusy: (() -> boolean)?,
+		_worldCast: ((origin: Vector3, direction: Vector3, distance: number) -> Vector3?)?,
 		_analytics: any?,
 		_log: any?,
 		_lastTick: number?,
@@ -77,6 +79,8 @@ function ToolService.new(
 		getCharacterPosition: (userId: number) -> Vector3?,
 		getEntitlements: ((userId: number) -> { [string]: boolean }?)?,
 		crateBusy: (() -> boolean)?,
+		-- First solid surface along a ray, or nil. Injected so the service stays headless in tests.
+		worldCast: ((origin: Vector3, direction: Vector3, distance: number) -> Vector3?)?,
 		analytics: any?,
 		log: any?,
 	}
@@ -96,6 +100,7 @@ function ToolService.new(
 		_getCharacterPosition = options.getCharacterPosition,
 		_getEntitlements = options.getEntitlements,
 		_crateBusy = options.crateBusy,
+		_worldCast = options.worldCast,
 		_analytics = options.analytics,
 		_log = options.log,
 		_lastTick = nil,
@@ -379,12 +384,11 @@ function ToolService._throwCharge(
 		return reject(self, Envelope.Codes.INVALID_STATE, "charge_live")
 	end
 	local spec = self:spec(runtime, userId, "confettiCharge")
-	local aim, aimCode, aimMessage =
-		CollectionService.resolveAim(self._config, runtime, characterPosition, payload.origin, payload.direction, spec.throwDistanceStuds)
-	if not aim then
+	local landing, aimCode, aimMessage =
+		self:_resolveThrowLanding(runtime, characterPosition, payload.origin, payload.direction, spec.throwDistanceStuds)
+	if not landing then
 		return reject(self, aimCode :: string, aimMessage)
 	end
-	local landing = Vector3.new(aim.hit.X, aim.layout.nestBaseY, aim.hit.Z)
 	local charge = self:_spawnCharge(runtime, userId, landing, spec, spec.fuseSeconds, false, now)
 	rt.liveChargeId = charge.id
 	rt.nextThrowAt = now + spec.cooldownSeconds
@@ -405,6 +409,71 @@ function ToolService._throwCharge(
 		y = landing.Y,
 		z = landing.Z,
 	})
+end
+
+-- Where a thrown charge lands.
+--
+-- Deliberately not `CollectionService.resolveAim`, which is the aim rule for reaching into the pile:
+-- it marches the mound, refuses a ray that is not pointing downward, and refuses anything outside
+-- the nest footprint. A charge is thrown, not reached with, so it goes wherever the player is
+-- looking: the nearest of the mound surface and the first solid thing in the world, within the
+-- configured range. Nothing here consults where the feathers are, so the landing point can never be
+-- pulled towards the pile; a throw across the yard lands across the yard and simply finds no
+-- feathers when it goes off.
+--
+-- Three exploit gates, in order: the client's claimed origin has to be within
+-- `serverPositionToleranceStuds` of where the server has the character, the ray stops at the first
+-- solid surface so a charge cannot be placed through a wall, and the landing is clamped to the
+-- configured range measured flat from the character.
+function ToolService._resolveThrowLanding(
+	self: ToolService,
+	runtime: any,
+	characterPosition: Vector3,
+	origin: Vector3,
+	direction: Vector3,
+	rangeStuds: number
+): (Vector3?, string?, string?)
+	local interaction = self._config.interaction
+	if (origin - characterPosition).Magnitude > interaction.serverPositionToleranceStuds then
+		return nil, Envelope.Codes.OUT_OF_RANGE, "origin"
+	end
+	if direction.Magnitude < 0.01 then
+		return nil, Envelope.Codes.INVALID_PAYLOAD, "direction"
+	end
+	local unit = direction.Unit
+	local layout = ChapterLayout[runtime.state.chapter]
+	local grid = runtime.grid
+	local field = PileSurface.buildField(self._config, PileGrid.snapshot(grid), layout)
+	local function surfaceY(x: number, z: number): number
+		-- The mound where there is mound, the nest floor everywhere else.
+		return field.baseY + PileSurface.heightAt(field, x, z)
+	end
+
+	local best: Vector3? = PileSurface.march(field, origin, unit, rangeStuds, 0.5)
+	if self._worldCast then
+		local worldHit = self._worldCast(origin, unit, rangeStuds)
+		if worldHit and (best == nil or (worldHit - origin).Magnitude < ((best :: Vector3) - origin).Magnitude) then
+			best = worldHit
+		end
+	end
+	if best == nil then
+		-- Open air for the whole throw: it carries to the end of its range and drops to the ground.
+		local far = origin + unit * rangeStuds
+		local drop = self._config.tools.confettiCharge.throwFloorDropStuds
+		local floor = if self._worldCast then self._worldCast(far, Vector3.new(0, -1, 0), drop) else nil
+		best = floor or Vector3.new(far.X, surfaceY(far.X, far.Z), far.Z)
+	end
+	local landing = best :: Vector3
+	local flat = Vector3.new(landing.X - characterPosition.X, 0, landing.Z - characterPosition.Z)
+	if flat.Magnitude > rangeStuds then
+		-- Aiming past the arm's reach throws as far as the arm reaches rather than refusing.
+		local edge = characterPosition + flat.Unit * rangeStuds
+		local drop = self._config.tools.confettiCharge.throwFloorDropStuds
+		local above = Vector3.new(edge.X, landing.Y + drop * 0.5, edge.Z)
+		local floor = if self._worldCast then self._worldCast(above, Vector3.new(0, -1, 0), drop) else nil
+		landing = floor or Vector3.new(edge.X, surfaceY(edge.X, edge.Z), edge.Z)
+	end
+	return landing
 end
 
 function ToolService._spawnCharge(

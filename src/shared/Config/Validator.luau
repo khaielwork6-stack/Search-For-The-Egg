@@ -877,6 +877,7 @@ function Validator.validate(raw: any): Report
 			check(isPositiveNumber(charge.throwDistanceStuds), "tools.confettiCharge.throwDistanceStuds must be > 0")
 			check(isNonNegativeNumber(charge.cooldownSeconds), "tools.confettiCharge.cooldownSeconds must be >= 0")
 			check(isPositiveNumber(charge.miniChargeFuseSeconds), "tools.confettiCharge.miniChargeFuseSeconds must be > 0")
+			check(isPositiveNumber(charge.throwFloorDropStuds), "tools.confettiCharge.throwFloorDropStuds must be > 0")
 		end
 		local chick = raw.tools.scoutChick
 		if type(chick) == "table" then
