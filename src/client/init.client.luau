@@ -965,6 +965,9 @@ if RunService:IsStudio() then
 			local topBar = overlay and overlay:FindFirstChild("TopBar")
 			return {
 				playing = intro:isPlaying(),
+				stage = intro.stats.stage,
+				ticks = intro.stats.ticks,
+				lastT = intro.stats.lastT,
 				stats = intro.stats,
 				phase = round:phase(),
 				overlay = overlay ~= nil,

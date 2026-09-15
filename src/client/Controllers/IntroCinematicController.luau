@@ -50,7 +50,7 @@ export type IntroCinematicController = typeof(setmetatable(
 		_session: any?,
 		_playedRounds: { [string]: boolean },
 		finished: Signal.Signal<string>,
-		stats: { plays: number, skips: number, failures: number, missing: { string } },
+		stats: { plays: number, skips: number, failures: number, missing: { string }, ticks: number, stage: string, lastT: number },
 	},
 	IntroCinematicController
 ))
@@ -73,7 +73,7 @@ function IntroCinematicController.new(deps: Deps): IntroCinematicController
 		_session = nil,
 		_playedRounds = {},
 		finished = Signal.new(),
-		stats = { plays = 0, skips = 0, failures = 0, missing = {} },
+		stats = { plays = 0, skips = 0, failures = 0, missing = {}, ticks = 0, stage = "idle", lastT = 0 },
 	}, IntroCinematicController)
 	return self
 end
@@ -409,6 +409,7 @@ function IntroCinematicController._takeOver(self: IntroCinematicController, sess
 end
 
 function IntroCinematicController._run(self: IntroCinematicController, session: any)
+	self.stats.stage = "run"
 	local deps = self._deps
 	local intro = deps.config.round.intro
 	local motion = deps.accessibility:motionSettings()
@@ -443,6 +444,7 @@ function IntroCinematicController._run(self: IntroCinematicController, session: 
 			self:skip()
 		end,
 	})
+	self.stats.stage = "overlay"
 	session.overlay = overlay
 	trove:add(function()
 		-- The overlay outlives the takeover by design (it holds the black through the restore), so
@@ -453,6 +455,7 @@ function IntroCinematicController._run(self: IntroCinematicController, session: 
 	end)
 
 	self:_takeOver(session)
+	self.stats.stage = "takeover"
 	overlay.setLetterbox(true, intro.letterboxSeconds)
 	overlay.setFade(1, 0)
 	overlay.setFade(0, intro.fadeInSeconds)
@@ -511,6 +514,7 @@ function IntroCinematicController._run(self: IntroCinematicController, session: 
 	end
 
 	local actor = self:_buildActor(trove)
+	self.stats.stage = "actor"
 
 	-- Layered bed for the shot. Every one of these but the tick is a silent placeholder until the
 	-- owner supplies an id, so a missing sound costs nothing and changes no code.
@@ -534,12 +538,15 @@ function IntroCinematicController._run(self: IntroCinematicController, session: 
 	local duration = RoundIntro.duration(deps.config)
 	local started = os.clock()
 	local lastTyped = ""
+	self.stats.stage = "binding"
 	local frame = "SFE_RoundIntroCamera"
 	RunService:BindToRenderStep(frame, Enum.RenderPriority.Camera.Value + 6, function()
 		if not self._session or session.finishing then
 			return
 		end
 		local t = os.clock() - started
+		self.stats.ticks += 1
+		self.stats.lastT = t
 		local camera = workspace.CurrentCamera
 		local shot, progress = RoundIntro.shotAt(shots, t)
 		if shot then
@@ -608,6 +615,7 @@ function IntroCinematicController._run(self: IntroCinematicController, session: 
 			self:finish("played")
 		end
 	end)
+	self.stats.stage = "bound"
 	trove:add(function()
 		RunService:UnbindFromRenderStep(frame)
 		if boardParchment and boardParchment.Parent then
