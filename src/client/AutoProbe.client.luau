@@ -11,6 +11,7 @@
 -- round and measure the pile without ever loading a module. Inert outside Studio and inert until a
 -- command is written, so it costs a live game nothing.
 
+local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 if not RunService:IsStudio() then
 	return
@@ -311,6 +312,25 @@ local function run(command: string): string
 			task.wait(0.3)
 		end
 		probe(lines)
+	elseif verb == "hit" then
+		-- Exact reject codes for a burst of hand collections from where the player is standing.
+		if not debugBridge then
+			return "no SFE_ClientDebug bridge"
+		end
+		local times = tonumber(words[2]) or 12
+		if words[3] then
+			local _, root = character()
+			if root then
+				root.CFrame = CFrame.new(tonumber(words[3]) or 0, tonumber(words[4]) or 56, tonumber(words[5]) or 386)
+				task.wait(0.4)
+			end
+			debugBridge:Invoke("lookAt", tonumber(words[6]) or 0, tonumber(words[7]) or 55, tonumber(words[8]) or 378)
+			task.wait(0.3)
+		end
+		local ok, result = pcall(function()
+			return debugBridge:Invoke("collect", times)
+		end)
+		table.insert(lines, if ok then HttpService:JSONEncode(result) else ("collect failed: " .. tostring(result)))
 	elseif verb == "probe" then
 		probe(lines)
 	elseif verb == "config" then
