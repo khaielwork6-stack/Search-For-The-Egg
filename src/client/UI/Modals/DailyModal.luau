@@ -20,6 +20,7 @@ local Tween = require(script.Parent.Parent.Components.Tween)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
 local Icons = require(script.Parent.Parent.Components.Icons)
+local Skin = require(script.Parent.Parent.Components.Skin)
 local Confetti = require(script.Parent.Parent.Components.Confetti)
 
 local DailyModal = {}
@@ -54,6 +55,7 @@ type Cell = {
 	footer: TextButton,
 	hit: TextButton,
 	gems: { Frame },
+	rays: GuiObject?,
 	check: Frame,
 	lock: Frame,
 	ribbon: TextLabel?,
@@ -71,9 +73,11 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local finalDay = #rewards
 
 	-- Header: the one line that says where the streak stands, with the live countdown beside it.
+	-- Warm, not navy. A cold dark slab across the top of the first screen a player ever sees belongs
+	-- to some other game; this is a barn.
 	local header, headerFace = FrameKit.tile(container, "Header", {
-		fill = Tokens.color.tealPanel,
-		deep = Tokens.color.tealDeep,
+		fill = Tokens.color.cocoa,
+		deep = Tokens.color.outline,
 		zIndex = z,
 		radius = Tokens.radius.lg,
 		size = UDim2.new(1, 0, 0, tap + Tokens.spacing.md),
@@ -87,7 +91,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	status.AnchorPoint = Vector2.new(0, 0)
 	status.Position = UDim2.fromOffset(0, Tokens.spacing.sm)
 	status.Size = UDim2.new(1, 0, 0, Tokens.typography.heading.size + 2)
-	local timer = FrameKit.text(headerFace, "Timer", "", "caption", { zIndex = z + 2, color = Tokens.color.tealTint })
+	local timer = FrameKit.text(headerFace, "Timer", "", "caption", { zIndex = z + 2, color = Tokens.color.straw })
 	timer.AnchorPoint = Vector2.new(0, 1)
 	timer.Position = UDim2.new(0, 0, 1, -Tokens.spacing.sm)
 	timer.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 2)
@@ -96,7 +100,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local rail = Instance.new("Frame")
 	rail.Name = "Rail"
 	rail.BackgroundTransparency = 1
-	rail.Size = UDim2.new(1, 0, 0, 10)
+	rail.Size = UDim2.new(1, 0, 0, 14)
 	rail.LayoutOrder = 2
 	rail.ZIndex = z
 	local railLayout = Instance.new("UIListLayout")
@@ -115,8 +119,15 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		notch.BorderSizePixel = 0
 		notch.ZIndex = z + 1
 		local notchCorner = Instance.new("UICorner")
-		notchCorner.CornerRadius = UDim.new(0, Tokens.radius.sm)
+		notchCorner.CornerRadius = UDim.new(1, 0)
 		notchCorner.Parent = notch
+		-- A keyline, so an unfilled notch is a visible empty slot rather than a pale smudge on cream.
+		local notchLine = Instance.new("UIStroke")
+		notchLine.Thickness = 1.5
+		notchLine.Color = Tokens.color.strawDeep
+		notchLine.Transparency = 0.35
+		notchLine.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		notchLine.Parent = notch
 		notch.Parent = rail
 		table.insert(notches, notch)
 	end
@@ -199,17 +210,43 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		art.Size = UDim2.new(1, -Tokens.spacing.sm, 0, artHeight)
 		art.ZIndex = z + 3
 		art.Parent = face
+		-- The real gem, not a drawn diamond.
+		--
+		-- Every card used to show `Icons.gem` - a flat teal vector lozenge that looks nothing like the
+		-- gem in the player's own HUD - at 32px in a 46px band, so eight cards each held one small cold
+		-- shape. It is the game's gem art now, sized off the band, and *how many* are drawn scales with
+		-- what the day actually pays: one stone for a small day, a row of three for a good one, a heap
+		-- for the grand prize. "A lot" then reads off the picture without anyone writing the word.
+		local rays = Skin.texture(art, "texture.sunburst", {
+			zIndex = z + 3,
+			transparency = 0.55,
+			color = Tokens.color.goldLight,
+		})
 		local gems: { Frame } = {}
-		local cluster = if grand then 5 else 1
+		local biggest = 0
+		for _, reward in ipairs(rewards) do
+			biggest = math.max(biggest, reward.gems or 0)
+		end
+		local share = if biggest > 0 then (entry.gems or 0) / biggest else 0
+		local cluster = if grand then 6 elseif share >= 0.45 then 3 elseif share >= 0.18 then 2 else 1
+		local px = math.floor(math.clamp(artHeight * (if cluster > 3 then 0.52 else 0.82), 18, 54))
 		for index = 1, cluster do
-			local px = if grand then Tokens.icon.md else Tokens.icon.lg
-			local gem = Icons.gem(art, px, { zIndex = z + 4 })
+			local gem = Skin.icon(art, "hud.gem", px, z + 4) or Icons.gem(art, px, { zIndex = z + 4 })
 			gem.AnchorPoint = Vector2.new(0.5, 0.5)
-			if grand then
-				local ring = (index - 1) / cluster * math.pi * 2
-				gem.Position = UDim2.fromScale(0.5 + math.cos(ring) * 0.22, 0.5 + math.sin(ring) * 0.2)
-			else
+			if cluster == 1 then
 				gem.Position = UDim2.fromScale(0.5, 0.5)
+			elseif cluster <= 3 then
+				-- A row, slightly fanned, so three stones read as a handful rather than a diagram.
+				local t = (index - 1) / math.max(1, cluster - 1) - 0.5
+				gem.Position = UDim2.fromScale(0.5 + t * 0.44, 0.5 - math.abs(t) * 0.12)
+				gem.Rotation = t * 14
+			else
+				-- A heap: a back row and a front row, the front one larger and lower.
+				local back = index <= 3
+				local within = if back then index - 2 else index - 5
+				gem.Position = UDim2.fromScale(0.5 + within * (if back then 0.3 else 0.26), if back then 0.38 else 0.62)
+				gem.Rotation = within * 10
+				gem.Size = UDim2.fromOffset(px, px)
 			end
 			table.insert(gems, gem)
 		end
@@ -279,6 +316,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			footer = footer,
 			hit = hit,
 			gems = gems,
+			rays = rays,
 			check = check,
 			lock = lock,
 			ribbon = ribbon,
@@ -318,6 +356,39 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 
 	local doClaim: () -> ()
 
+	-- Steps a piece of artwork back without making anything appear that was not there.
+	--
+	-- Writing the dim straight onto every descendant would set BackgroundTransparency on the icon's own
+	-- container - a frame that is deliberately invisible - and paint a solid box behind the gem. Each
+	-- part's own starting transparency is remembered the first time it is touched, and the dim is
+	-- applied as a fraction of what is left, so a part that began invisible stays invisible.
+	local BASE_ATTRIBUTE = "SFE_BaseTransparency"
+	local function fadePart(part: Instance, property: string, amount: number)
+		local key = BASE_ATTRIBUTE .. property
+		local base = part:GetAttribute(key)
+		if typeof(base) ~= "number" then
+			base = (part :: any)[property]
+			part:SetAttribute(key, base)
+		end
+		(part :: any)[property] = base + (1 - base) * amount
+	end
+	local function fade(root: GuiObject, amount: number)
+		if root:IsA("ImageLabel") or root:IsA("ImageButton") then
+			fadePart(root, "ImageTransparency", amount)
+		elseif root:IsA("Frame") then
+			fadePart(root, "BackgroundTransparency", amount)
+		end
+		for _, piece in ipairs(root:GetDescendants()) do
+			if piece:IsA("ImageLabel") or piece:IsA("ImageButton") then
+				fadePart(piece, "ImageTransparency", amount)
+			elseif piece:IsA("Frame") then
+				fadePart(piece, "BackgroundTransparency", amount)
+			elseif piece:IsA("UIStroke") then
+				fadePart(piece, "Transparency", amount)
+			end
+		end
+	end
+
 	local function evaluation(): any?
 		local projection = deps.profile.projection
 		return projection and projection.rewards.daily or nil
@@ -337,7 +408,9 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			cell.amount.Text = string.format("+%d Gems", info.gems)
 			cell.title.Text = "DAY " .. info.day
 			cell.check.Visible = info.claimed
-			cell.lock.Visible = not info.claimed and not info.current
+			-- The grand prize says GRAND PRIZE. A padlock pinned over its header as well read as a
+			-- rendering fault rather than a state.
+			cell.lock.Visible = not info.claimed and not info.current and not grand
 			cell.footer.Active = false
 			cell.footer.AutoButtonColor = false
 			for _, gem in ipairs(cell.gems) do
@@ -376,17 +449,32 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				cell.footer.TextColor3 = Tokens.color.featherWhite
 				cell.footer.Text = "--:--:--"
 			else
+				-- Not yet, rather than dead.
+				--
+				-- A locked day used to take an inkMuted header and inkMuted type, so five of the eight
+				-- cards were grey-brown slabs and the grid read as mostly switched off. It keeps the
+				-- warm straw of the set and simply steps back: paler header, cocoa type, and the gems
+				-- dimmed rather than the whole card drained. The reward is still the thing you see.
 				cell.face.BackgroundColor3 = Tokens.color.surface
-				cell.header.BackgroundColor3 = Tokens.color.inkMuted
+				cell.header.BackgroundColor3 = Tokens.color.straw
 				cell.stroke.Color = Tokens.color.strawDeep
 				cell.stroke.Thickness = Tokens.stroke.standard
-				cell.amount.TextColor3 = Tokens.color.inkMuted
+				cell.amount.TextColor3 = Tokens.color.cocoa
 				cell.footer.BackgroundColor3 = Tokens.color.creamDeep
-				cell.footer.TextColor3 = Tokens.color.inkMuted
-				cell.footer.Text = "LOCKED"
-				for _, gem in ipairs(cell.gems) do
-					gem.Visible = true
-				end
+				cell.footer.TextColor3 = Tokens.color.cocoa
+				cell.footer.Text = "DAY " .. info.day
+			end
+			-- The artwork carries the state: full strength on the day you can claim, stepped back while
+			-- locked, quiet once it is done. The rays only ever burn behind the claimable card, which is
+			-- what makes one card out of eight obviously the one to press.
+			local claimable = info.current and ready
+			local dim = if claimable then 0 elseif info.claimed then 0.45 else 0.3
+			for _, gem in ipairs(cell.gems) do
+				gem.Visible = true
+				fade(gem, dim)
+			end
+			if cell.rays then
+				cell.rays.Visible = claimable or (grand and not info.claimed)
 			end
 			if grand and not info.claimed then
 				-- The grand prize keeps a gold face even while locked, so the run has a visible end.
@@ -402,7 +490,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			-- Only the claimable day breathes; everything else stays still.
 			local shouldPulse = info.current and ready
 			if shouldPulse and not cell.stopPulse then
-				cell.stopPulse = Tween.pulseLoop(cell.scale, motion, 0.04)
+				cell.stopPulse = Tween.pulseLoop(cell.scale, motion, 0.055)
 			elseif not shouldPulse and cell.stopPulse then
 				cell.stopPulse()
 				cell.stopPulse = nil
