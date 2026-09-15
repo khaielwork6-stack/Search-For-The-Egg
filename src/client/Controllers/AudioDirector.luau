@@ -9,7 +9,6 @@ local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
-local Tokens = require(Shared.Design.Tokens)
 
 local AudioDirector = {}
 AudioDirector.__index = AudioDirector
@@ -26,146 +25,38 @@ export type AudioDirector = typeof(setmetatable(
 		_lastPlayed: { [string]: number },
 		_pool: { Sound },
 		_manifest: { [string]: string },
+		_tuning: { [string]: RoleTuning },
+		_loops: { [string]: { sound: Sound, key: string } },
 		_volumes: { music: number, sfx: number },
 		_trove: Trove.Trove,
 	},
 	AudioDirector
 ))
 
--- Semantic role -> asset id. UI roles use Roblox's bundled sounds (always available, no upload)
--- layered through pitch variance and per-role throttles; world/music roles stay silent stubs until
--- the Phase 6 audio pass. Empty string = silent stub.
-local BUILTIN = {
-	click = "rbxasset://sounds/clickfast.wav",
-	button = "rbxasset://sounds/button.wav",
-	ping = "rbxasset://sounds/electronicpingshort.wav",
-	swoosh = "rbxasset://sounds/unsheath.wav",
-	snap = "rbxasset://sounds/snap.mp3",
-	flash = "rbxasset://sounds/flashbulb.wav",
-	band = "rbxasset://sounds/switch3.wav",
-	bass = "rbxasset://sounds/bass.wav",
-	splat = "rbxasset://sounds/splat.wav",
-	uuhhh = "rbxasset://sounds/uuhhh.mp3",
-	swing = "rbxasset://sounds/unsheath.wav",
-	boom = "rbxasset://sounds/Rocket shot.wav",
-	rocket = "rbxasset://sounds/Launching rocket.wav",
-	collide = "rbxasset://sounds/collide.wav",
-}
--- Owner-supplied sound ids (13 Sep 2026) for the UI and gameplay beats; built-ins fill the gaps.
-local OWNER = {
-	upgrade = "rbxassetid://134116566819117",
-	sell = "rbxassetid://100822837900340",
-	hover = "rbxassetid://136108770017536",
-	click = "rbxassetid://75757588904639",
-	pickup = "rbxassetid://75757588904639",
-	purchase = "rbxassetid://134116566819117",
-	denied = "rbxassetid://133211074702094",
-	roll = "rbxassetid://96666005075540",
-	openClose = "rbxassetid://127877437691780",
-	notification = "rbxassetid://131661992591924",
-	queue = "rbxassetid://72264591133889",
-	musicLoop = "rbxassetid://130291967851605",
-}
-local MANIFEST: { [string]: string } = {
-	[Tokens.sound.uiTap] = OWNER.click,
-	[Tokens.sound.uiHover] = OWNER.hover,
-	[Tokens.sound.uiTab] = OWNER.click,
-	[Tokens.sound.uiSwitch] = BUILTIN.snap,
-	[Tokens.sound.uiSelect] = OWNER.click,
-	[Tokens.sound.uiConfirm] = BUILTIN.ping,
-	[Tokens.sound.uiCancel] = BUILTIN.button,
-	[Tokens.sound.uiOpen] = OWNER.openClose,
-	[Tokens.sound.uiClose] = OWNER.click,
-	[Tokens.sound.uiToast] = OWNER.notification,
-	[Tokens.sound.uiError] = OWNER.denied,
-	[Tokens.sound.uiPop] = BUILTIN.snap,
-	[Tokens.sound.uiConfetti] = BUILTIN.flash,
-	[Tokens.sound.purchase] = OWNER.purchase,
-	[Tokens.sound.rewardTick] = BUILTIN.click,
-	[Tokens.sound.collectTug] = BUILTIN.click, -- soft per-feather tick under the pickup sound
-	[Tokens.sound.collectRelease] = OWNER.pickup,
-	[Tokens.sound.collectRainbow] = BUILTIN.ping,
-	[Tokens.sound.bagFull] = OWNER.denied,
-	[Tokens.sound.sellArc] = BUILTIN.swoosh,
-	[Tokens.sound.sellTick] = BUILTIN.click,
-	[Tokens.sound.sellBurst] = OWNER.sell,
-	[Tokens.sound.upgradeChord] = OWNER.upgrade,
-	[Tokens.sound.eggChime] = BUILTIN.ping,
-	[Tokens.sound.eggClaimHold] = "",
-	[Tokens.sound.victoryStem] = BUILTIN.flash,
-	[Tokens.sound.countdownTick] = BUILTIN.click,
-	[Tokens.sound.countdownGo] = OWNER.queue,
-	[Tokens.sound.rewardLand] = OWNER.purchase,
-	[Tokens.sound.rollSpin] = OWNER.roll,
-	[Tokens.sound.rollLand] = BUILTIN.snap,
-	[Tokens.sound.stationHum] = "",
-	[Tokens.sound.stationChime] = BUILTIN.button,
-	[Tokens.sound.partyReady] = OWNER.queue,
-	["music.lobby"] = OWNER.musicLoop,
-	["music.search"] = OWNER.musicLoop,
-	["music.discovery"] = OWNER.musicLoop,
-	["music.victory"] = OWNER.musicLoop,
-	["music.results"] = OWNER.musicLoop,
-	["ambience.henhouse"] = "",
-	-- Tool feel: PLACEHOLDER built-ins (owner ids pending for the motor loop, fuse hiss and blast).
-	[Tokens.sound.rakeSwing] = BUILTIN.swing,
-	[Tokens.sound.rakeImpact] = BUILTIN.collide,
-	[Tokens.sound.fuseLight] = BUILTIN.snap,
-	[Tokens.sound.fuseHiss] = "",
-	[Tokens.sound.throw] = BUILTIN.swing,
-	[Tokens.sound.blast] = BUILTIN.boom,
-	[Tokens.sound.vacMotor] = BUILTIN.rocket,
-	[Tokens.sound.vacSuck] = BUILTIN.swing,
-	[Tokens.sound.chickChirp] = BUILTIN.ping,
+-- Every role's asset id, volume, playback speed, pitch variance, loop flag and cooldown comes from
+-- `config.audio`. Nothing about a sound is written in this file any more: adding an owner id, muting
+-- a placeholder or retuning a mix is a config edit.
+--
+-- Two behaviours the config drives that are worth naming:
+--   * `group`: roles that share a group share one cooldown. `ui.error` and `collect.bagFull` are the
+--     same denial sound played by a dozen callers, and a single refusal often trips more than one of
+--     them; grouping them means one refusal is one sound whoever fires it.
+--   * `looped`: a role meant to run while something is happening (the vac motor) rather than fire
+--     once. `loop` fades those in, refuses to start a second copy on the same part, and fades out.
+
+type RoleTuning = {
+	id: string,
+	volume: number,
+	speed: number,
+	variance: number,
+	minGap: number,
+	group: string?,
+	looped: boolean?,
 }
 
--- Per-role tuning: base pitch, pitch variance, volume, and the minimum gap between repeats so a
--- burst of identical events (hover sweeps, count-up ticks) never machine-guns.
-local ROLE_TUNING: { [string]: { pitch: number?, variance: number?, volume: number?, minGap: number? } } = {
-	[Tokens.sound.uiTap] = { pitch = 1.0, variance = 0.04, volume = 0.6, minGap = 0.05 },
-	[Tokens.sound.uiHover] = { pitch = 1.0, variance = 0.04, volume = 0.35, minGap = 0.09 },
-	[Tokens.sound.uiTab] = { pitch = 1.08, variance = 0.03, volume = 0.5, minGap = 0.08 },
-	[Tokens.sound.uiSwitch] = { pitch = 1.2, variance = 0.05, volume = 0.5, minGap = 0.08 },
-	[Tokens.sound.uiSelect] = { pitch = 1.0, variance = 0.03, volume = 0.5, minGap = 0.08 },
-	[Tokens.sound.uiConfirm] = { pitch = 1.25, variance = 0.03, volume = 0.5, minGap = 0.12 },
-	[Tokens.sound.uiCancel] = { pitch = 0.85, variance = 0.03, volume = 0.45, minGap = 0.12 },
-	[Tokens.sound.uiOpen] = { pitch = 1.0, variance = 0.02, volume = 0.55, minGap = 0.2 },
-	[Tokens.sound.uiClose] = { pitch = 0.92, variance = 0.02, volume = 0.5, minGap = 0.2 },
-	[Tokens.sound.uiToast] = { pitch = 1.0, variance = 0.02, volume = 0.5, minGap = 0.15 },
-	[Tokens.sound.uiError] = { pitch = 1.0, variance = 0.02, volume = 0.6, minGap = 0.25 },
-	[Tokens.sound.uiPop] = { pitch = 1.5, variance = 0.08, volume = 0.45, minGap = 0.06 },
-	[Tokens.sound.uiConfetti] = { pitch = 1.4, variance = 0.05, volume = 0.35, minGap = 0.4 },
-	[Tokens.sound.rewardTick] = { pitch = 1.7, variance = 0.12, volume = 0.3, minGap = 0.04 },
-	[Tokens.sound.rewardLand] = { pitch = 1.0, variance = 0.02, volume = 0.65, minGap = 0.3 },
-	[Tokens.sound.purchase] = { pitch = 1.0, variance = 0.02, volume = 0.65, minGap = 0.3 },
-	[Tokens.sound.collectRelease] = { pitch = 1.0, variance = 0.08, volume = 0.55, minGap = 0.04 },
-	[Tokens.sound.collectTug] = { pitch = 1.6, variance = 0.2, volume = 0.18, minGap = 0.025 },
-	[Tokens.sound.sellTick] = { pitch = 1.5, variance = 0.12, volume = 0.3, minGap = 0.04 },
-	[Tokens.sound.sellArc] = { pitch = 1.1, variance = 0.05, volume = 0.45, minGap = 0.3 },
-	[Tokens.sound.sellBurst] = { pitch = 1.0, variance = 0.02, volume = 0.7, minGap = 0.5 },
-	[Tokens.sound.rollSpin] = { pitch = 1.3, variance = 0.15, volume = 0.3, minGap = 0.04 },
-	[Tokens.sound.rollLand] = { pitch = 0.9, variance = 0.03, volume = 0.6, minGap = 0.3 },
-	[Tokens.sound.upgradeChord] = { pitch = 1.0, variance = 0.02, volume = 0.65, minGap = 0.3 },
-	[Tokens.sound.eggChime] = { pitch = 1.4, variance = 0.02, volume = 0.6, minGap = 0.5 },
-	[Tokens.sound.victoryStem] = { pitch = 0.9, variance = 0.02, volume = 0.6, minGap = 1 },
-	[Tokens.sound.countdownTick] = { pitch = 1.0, variance = 0.02, volume = 0.5, minGap = 0.3 },
-	[Tokens.sound.countdownGo] = { pitch = 1.3, variance = 0.02, volume = 0.6, minGap = 0.5 },
-	[Tokens.sound.collectRainbow] = { pitch = 1.6, variance = 0.04, volume = 0.7, minGap = 0.2 },
-	[Tokens.sound.bagFull] = { pitch = 0.9, variance = 0.02, volume = 0.55, minGap = 0.6 },
-	[Tokens.sound.partyReady] = { pitch = 1.0, variance = 0.02, volume = 0.65, minGap = 0.4 },
-	[Tokens.sound.countdownGo] = { pitch = 1.0, variance = 0.02, volume = 0.65, minGap = 0.5 },
-	[Tokens.sound.stationChime] = { pitch = 1.1, variance = 0.05, volume = 0.35, minGap = 0.5 },
-	[Tokens.sound.rakeSwing] = { pitch = 1.15, variance = 0.08, volume = 0.35, minGap = 0.08 },
-	[Tokens.sound.rakeImpact] = { pitch = 0.8, variance = 0.1, volume = 0.45, minGap = 0.08 },
-	[Tokens.sound.fuseLight] = { pitch = 1.1, variance = 0.05, volume = 0.5, minGap = 0.2 },
-	[Tokens.sound.throw] = { pitch = 0.9, variance = 0.08, volume = 0.4, minGap = 0.2 },
-	[Tokens.sound.blast] = { pitch = 0.95, variance = 0.06, volume = 0.8, minGap = 0.15 },
-	[Tokens.sound.vacSuck] = { pitch = 0.7, variance = 0.05, volume = 0.3, minGap = 0.3 },
-	[Tokens.sound.chickChirp] = { pitch = 1.9, variance = 0.15, volume = 0.3, minGap = 0.25 },
-}
-
-local MUSIC_STATES: { [string]: string } =
-	{ Lobby = "music.lobby", Search = "music.search", Discovery = "music.discovery", Victory = "music.victory", Results = "music.results" }
+local function audioConfig(config: { [string]: any }): { [string]: any }
+	return config.audio
+end
 
 local function makeBus(name: string, parent: Instance): SoundGroup
 	local group = Instance.new("SoundGroup")
@@ -184,7 +75,9 @@ function AudioDirector.new(profile: any, config: { [string]: any }): AudioDirect
 		_oneShots = {},
 		_lastPlayed = {},
 		_pool = {},
-		_manifest = MANIFEST,
+		_manifest = {},
+		_tuning = {},
+		_loops = {},
 		_volumes = { music = 0.7, sfx = 0.85 },
 		_trove = Trove.new(),
 	}, AudioDirector)
@@ -192,10 +85,15 @@ function AudioDirector.new(profile: any, config: { [string]: any }): AudioDirect
 	for _, name in ipairs({ "Music", "Ambience", "SFX", "UI" }) do
 		self._buses[name] = self._trove:add(makeBus(name, SoundService))
 	end
-	for state, role in pairs(MUSIC_STATES) do
+	local audio = audioConfig(config)
+	for role, tuning in pairs(audio.roles) do
+		self._manifest[role] = tuning.id
+		self._tuning[role] = tuning
+	end
+	for state, role in pairs(audio.music) do
 		local sound = Instance.new("Sound")
 		sound.Name = "Music_" .. state
-		sound.SoundId = if self._manifest[role] ~= "" then self._manifest[role] else ""
+		sound.SoundId = self._manifest[role] or ""
 		sound.Looped = true
 		sound.Volume = 0
 		sound.SoundGroup = self._buses.Music
@@ -227,10 +125,12 @@ function AudioDirector.setState(self: AudioDirector, state: MusicState)
 	if state == self._state then
 		return
 	end
-	local fade = TweenInfo.new(Tokens.motion.slow * 3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+	local audio = audioConfig(self._config)
+	local fade = TweenInfo.new(audio.musicFadeSeconds, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 	local previous = self._music[self._state]
 	for name, sound in pairs(self._music) do
-		local target = if name == state then 0.45 else 0
+		-- A state whose role has no id (the lobby) fades to silence: music plays in a round only.
+		local target = if name == state and sound.SoundId ~= "" then audio.musicVolume else 0
 		if target > 0 and not sound.IsPlaying and sound.SoundId ~= "" then
 			-- The same loop carries across states: pick it up where the last stem left off.
 			if previous and previous ~= sound and previous.IsPlaying and previous.SoundId == sound.SoundId then
@@ -274,15 +174,18 @@ function AudioDirector.play(self: AudioDirector, role: string, options: { at: Ba
 		warn("[SFE][Audio] unknown sound role " .. tostring(role))
 		return nil
 	end
-	local tuning = ROLE_TUNING[role]
+	local tuning = self._tuning[role]
 	local now = os.clock()
-	if tuning and tuning.minGap then
-		local last = self._lastPlayed[role]
+	-- Roles in a group share one cooldown, so a refusal that trips both `ui.error` and
+	-- `collect.bagFull` still makes exactly one sound.
+	local gate = (tuning and tuning.group) or role
+	if tuning and tuning.minGap and tuning.minGap > 0 then
+		local last = self._lastPlayed[gate]
 		if last and now - last < tuning.minGap then
 			return nil
 		end
 	end
-	self._lastPlayed[role] = now
+	self._lastPlayed[gate] = now
 	local limit = self._config.polishBudgets.maximumConcurrentOneShotSounds
 	while #self._oneShots >= limit do
 		local oldest = table.remove(self._oneShots, 1) :: Sound
@@ -293,7 +196,7 @@ function AudioDirector.play(self: AudioDirector, role: string, options: { at: Ba
 	sound.SoundId = assetId
 	sound.Volume = if tuning and tuning.volume then tuning.volume else 1
 	local variance = opts.pitchVariance or (tuning and tuning.variance) or 0
-	sound.PlaybackSpeed = ((tuning and tuning.pitch) or 1) + variance * (math.random() * 2 - 1)
+	sound.PlaybackSpeed = ((tuning and tuning.speed) or 1) + variance * (math.random() * 2 - 1)
 	local busName = opts.bus or (if string.sub(role, 1, 3) == "ui." then "UI" else "SFX")
 	sound.SoundGroup = self._buses[busName]
 	sound.Parent = opts.at or self._buses[busName]
@@ -316,32 +219,58 @@ function AudioDirector.play(self: AudioDirector, role: string, options: { at: Ba
 	return sound
 end
 
--- Looped positional ambience (station hums). Bounded by the caller through the quality budget;
--- silent stubs still create the Sound so the loop pipeline is exercised. Returns the Sound.
+-- A role that runs while something is happening (the vac motor, a station hum) rather than firing
+-- once. One sound per role and part: asking twice returns the sound already running instead of
+-- stacking a second copy over it. Fades in, and `stopLoop` fades out, so neither end is a click.
 function AudioDirector.loop(self: AudioDirector, role: string, at: BasePart): Sound?
 	local assetId = self._manifest[role]
 	if assetId == nil then
 		warn("[SFE][Audio] unknown loop role " .. tostring(role))
 		return nil
 	end
+	local tuning = self._tuning[role]
+	local key = role .. "@" .. tostring(at:GetDebugId())
+	local existing = self._loops[key]
+	if existing and existing.sound.Parent then
+		return existing.sound
+	end
+	local audio = audioConfig(self._config)
+	local volume = if tuning and tuning.volume then tuning.volume else 0.35
 	local sound = Instance.new("Sound")
 	sound.Name = "Loop_" .. role
 	sound.SoundId = assetId
 	sound.Looped = true
-	sound.Volume = 0.35
+	sound.Volume = 0
+	sound.PlaybackSpeed = (tuning and tuning.speed) or 1
 	sound.RollOffMaxDistance = 40
 	sound.SoundGroup = self._buses.Ambience
 	sound.Parent = at
+	sound:SetAttribute("SFE_LoopKey", key)
+	sound:SetAttribute("SFE_LoopVolume", volume)
 	if assetId ~= "" then
 		sound:Play()
+		TweenService:Create(sound, TweenInfo.new(audio.loopFadeSeconds, Enum.EasingStyle.Sine), { Volume = volume }):Play()
 	end
+	self._loops[key] = { sound = sound, key = key }
 	self._trove:add(sound)
 	return sound
 end
 
-function AudioDirector.stopLoop(_self: AudioDirector, sound: Sound)
-	sound:Stop()
-	sound:Destroy()
+function AudioDirector.stopLoop(self: AudioDirector, sound: Sound)
+	local key = sound:GetAttribute("SFE_LoopKey")
+	if type(key) == "string" then
+		self._loops[key] = nil
+	end
+	if not sound.IsPlaying then
+		sound:Destroy()
+		return
+	end
+	local fade = TweenService:Create(sound, TweenInfo.new(audioConfig(self._config).loopFadeSeconds, Enum.EasingStyle.Sine), { Volume = 0 })
+	fade:Play()
+	fade.Completed:Once(function()
+		sound:Stop()
+		sound:Destroy()
+	end)
 end
 
 function AudioDirector.activeOneShotCount(self: AudioDirector): number

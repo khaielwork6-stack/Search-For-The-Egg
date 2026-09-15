@@ -1033,6 +1033,56 @@ function Validator.validate(raw: any): Report
 		end
 	end
 
+	-- Audio: every id, mix value, loop flag and cooldown the client plays lives here, so this is the
+	-- only place a wrong role name or an out-of-range volume can be caught before it ships.
+	check(type(raw.audio) == "table", "audio missing")
+	if type(raw.audio) == "table" then
+		local audio = raw.audio
+		check(isNonNegativeNumber(audio.musicVolume) and audio.musicVolume <= 1, "audio.musicVolume must be within [0,1]")
+		check(isPositiveNumber(audio.musicFadeSeconds), "audio.musicFadeSeconds must be > 0")
+		check(isNonNegativeNumber(audio.loopFadeSeconds), "audio.loopFadeSeconds must be >= 0")
+		check(type(audio.roles) == "table", "audio.roles missing")
+		if type(audio.roles) == "table" then
+			for role, tuning in pairs(audio.roles) do
+				local where = "audio.roles." .. tostring(role)
+				if type(tuning) ~= "table" then
+					check(false, where .. " must be a table")
+					continue
+				end
+				-- An empty id is a deliberate silence (a placeholder the owner has not replaced, or a
+				-- sound removed on purpose), not a mistake; anything else must look like an asset.
+				check(
+					type(tuning.id) == "string"
+						and (
+							tuning.id == ""
+							or string.match(tuning.id, "^rbxassetid://%d+$") ~= nil
+							or string.match(tuning.id, "^rbxasset://") ~= nil
+						),
+					where .. '.id must be "", an rbxassetid:// id, or an rbxasset:// path'
+				)
+				check(isNonNegativeNumber(tuning.volume) and tuning.volume <= 1, where .. ".volume must be within [0,1]")
+				check(isPositiveNumber(tuning.speed) and tuning.speed <= 4, where .. ".speed must be within (0,4]")
+				check(isNonNegativeNumber(tuning.variance) and tuning.variance <= 1, where .. ".variance must be within [0,1]")
+				check(isNonNegativeNumber(tuning.minGap) and tuning.minGap <= 10, where .. ".minGap must be within [0,10]")
+				check(tuning.group == nil or type(tuning.group) == "string", where .. ".group must be a string when present")
+				check(tuning.looped == nil or type(tuning.looped) == "boolean", where .. ".looped must be a boolean when present")
+			end
+		end
+		check(type(audio.music) == "table", "audio.music missing")
+		if type(audio.music) == "table" and type(audio.roles) == "table" then
+			for state, role in pairs(audio.music) do
+				check(
+					type(role) == "string" and audio.roles[role] ~= nil,
+					"audio.music." .. tostring(state) .. " must name a role in audio.roles"
+				)
+				check(
+					type(role) ~= "string" or audio.roles[role] == nil or audio.roles[role].looped == true,
+					"audio.music." .. tostring(state) .. " must name a looped role"
+				)
+			end
+		end
+	end
+
 	return { ok = #errors == 0, errors = errors, warnings = warnings, checks = checks }
 end
 

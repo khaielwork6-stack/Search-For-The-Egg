@@ -531,7 +531,9 @@ function UpgradeBookController._flip(self: UpgradeBookController, direction: num
 	end
 	session.flipping = true
 	self.stats.flips += 1
-	self._deps.audio:play(Tokens.sound.uiTab)
+	-- The only page-turn sound. The arrow buttons deliberately carry no click of their own: a press
+	-- that does not change the page (already at an end, or mid-flip) returns above and stays silent.
+	self._deps.audio:play(Tokens.sound.uiPageFlip)
 	local motion = self._deps.accessibility:motionSettings()
 	local seconds = if motion.reducedMotion then 0.02 else 0.16
 	local page = if direction > 0 then session.right else session.left
@@ -752,9 +754,7 @@ function UpgradeBookController.open(self: UpgradeBookController)
 			motion = motion,
 			size = UDim2.fromOffset(tap + Tokens.spacing.md, tap + Tokens.spacing.md),
 			zIndex = 6,
-			sound = function()
-				deps.audio:play(Tokens.sound.uiTap)
-			end,
+			sound = function() end,
 			onActivated = function()
 				self:_flip(direction)
 			end,

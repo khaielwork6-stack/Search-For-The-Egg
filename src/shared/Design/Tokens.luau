@@ -141,6 +141,7 @@ Tokens.sound = table.freeze({
 	uiSelect = "ui.select",
 	uiConfetti = "ui.confetti",
 	uiPop = "ui.pop",
+	uiPageFlip = "ui.pageFlip",
 	purchase = "shop.purchase",
 	rewardTick = "reward.tick",
 	rewardLand = "reward.land",

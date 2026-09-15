@@ -1520,5 +1520,383 @@
       "flapSeconds": 0.55,
       "peckDegrees": 40
     }
+  },
+  "audio": {
+    "musicVolume": 0.32,
+    "musicFadeSeconds": 1.6,
+    "loopFadeSeconds": 0.22,
+    "music": {
+      "Lobby": "music.lobby",
+      "Search": "music.search",
+      "Discovery": "music.discovery",
+      "Victory": "music.victory",
+      "Results": "music.results"
+    },
+    "roles": {
+      "ui.tap": {
+        "id": "rbxassetid://75757588904639",
+        "volume": 0.6,
+        "speed": 1.0,
+        "variance": 0.04,
+        "minGap": 0.05
+      },
+      "ui.hover": {
+        "id": "rbxassetid://136108770017536",
+        "volume": 0.35,
+        "speed": 1.0,
+        "variance": 0.04,
+        "minGap": 0.09
+      },
+      "ui.tab": {
+        "id": "rbxassetid://75757588904639",
+        "volume": 0.5,
+        "speed": 1.08,
+        "variance": 0.03,
+        "minGap": 0.08
+      },
+      "ui.switch": {
+        "id": "rbxasset://sounds/snap.mp3",
+        "volume": 0.5,
+        "speed": 1.2,
+        "variance": 0.05,
+        "minGap": 0.08
+      },
+      "ui.select": {
+        "id": "rbxassetid://75757588904639",
+        "volume": 0.5,
+        "speed": 1.0,
+        "variance": 0.03,
+        "minGap": 0.08
+      },
+      "ui.confirm": {
+        "id": "rbxasset://sounds/electronicpingshort.wav",
+        "volume": 0.5,
+        "speed": 1.25,
+        "variance": 0.03,
+        "minGap": 0.12
+      },
+      "ui.cancel": {
+        "id": "rbxasset://sounds/button.wav",
+        "volume": 0.45,
+        "speed": 0.85,
+        "variance": 0.03,
+        "minGap": 0.12
+      },
+      "ui.open": {
+        "id": "rbxassetid://127877437691780",
+        "volume": 0.55,
+        "speed": 1.0,
+        "variance": 0.02,
+        "minGap": 0.2
+      },
+      "ui.close": {
+        "id": "rbxassetid://75757588904639",
+        "volume": 0.5,
+        "speed": 0.92,
+        "variance": 0.02,
+        "minGap": 0.2
+      },
+      "ui.toast": {
+        "id": "rbxassetid://131661992591924",
+        "volume": 0.5,
+        "speed": 1.0,
+        "variance": 0.02,
+        "minGap": 0.15
+      },
+      "ui.error": {
+        "id": "rbxassetid://133211074702094",
+        "volume": 0.6,
+        "speed": 1.0,
+        "variance": 0.02,
+        "minGap": 0.25,
+        "group": "denial"
+      },
+      "ui.pop": {
+        "id": "rbxasset://sounds/snap.mp3",
+        "volume": 0.45,
+        "speed": 1.5,
+        "variance": 0.08,
+        "minGap": 0.06
+      },
+      "ui.confetti": {
+        "id": "rbxasset://sounds/flashbulb.wav",
+        "volume": 0.35,
+        "speed": 1.4,
+        "variance": 0.05,
+        "minGap": 0.4
+      },
+      "ui.pageFlip": {
+        "id": "rbxassetid://114448027739800",
+        "volume": 0.55,
+        "speed": 1.0,
+        "variance": 0.03,
+        "minGap": 0.12
+      },
+      "shop.purchase": {
+        "id": "rbxassetid://134116566819117",
+        "volume": 0.65,
+        "speed": 1.0,
+        "variance": 0.02,
+        "minGap": 0.3
+      },
+      "reward.tick": {
+        "id": "rbxasset://sounds/clickfast.wav",
+        "volume": 0.3,
+        "speed": 1.7,
+        "variance": 0.12,
+        "minGap": 0.04
+      },
+      "reward.land": {
+        "id": "rbxassetid://134116566819117",
+        "volume": 0.65,
+        "speed": 1.0,
+        "variance": 0.02,
+        "minGap": 0.3
+      },
+      "collect.tug": {
+        "id": "rbxasset://sounds/clickfast.wav",
+        "volume": 0.18,
+        "speed": 1.6,
+        "variance": 0.2,
+        "minGap": 0.025
+      },
+      "collect.release": {
+        "id": "rbxassetid://75757588904639",
+        "volume": 0.55,
+        "speed": 1.0,
+        "variance": 0.08,
+        "minGap": 0.04
+      },
+      "collect.rainbow": {
+        "id": "rbxasset://sounds/electronicpingshort.wav",
+        "volume": 0.7,
+        "speed": 1.6,
+        "variance": 0.04,
+        "minGap": 0.2
+      },
+      "collect.bagFull": {
+        "id": "rbxassetid://133211074702094",
+        "volume": 0.55,
+        "speed": 0.9,
+        "variance": 0.02,
+        "minGap": 0.6,
+        "group": "denial"
+      },
+      "sell.arc": {
+        "id": "rbxasset://sounds/unsheath.wav",
+        "volume": 0.45,
+        "speed": 1.1,
+        "variance": 0.05,
+        "minGap": 0.3
+      },
+      "sell.tick": {
+        "id": "rbxasset://sounds/clickfast.wav",
+        "volume": 0.3,
+        "speed": 1.5,
+        "variance": 0.12,
+        "minGap": 0.04
+      },
+      "sell.burst": {
+        "id": "rbxassetid://100822837900340",
+        "volume": 0.7,
+        "speed": 1.0,
+        "variance": 0.02,
+        "minGap": 0.5
+      },
+      "upgrade.chord": {
+        "id": "rbxassetid://134116566819117",
+        "volume": 0.65,
+        "speed": 1.0,
+        "variance": 0.02,
+        "minGap": 0.3
+      },
+      "egg.chime": {
+        "id": "rbxasset://sounds/electronicpingshort.wav",
+        "volume": 0.6,
+        "speed": 1.4,
+        "variance": 0.02,
+        "minGap": 0.5
+      },
+      "egg.claimHold": {
+        "id": "",
+        "volume": 0.5,
+        "speed": 1.0,
+        "variance": 0.0,
+        "minGap": 0.0
+      },
+      "victory.stem": {
+        "id": "rbxasset://sounds/flashbulb.wav",
+        "volume": 0.6,
+        "speed": 0.9,
+        "variance": 0.02,
+        "minGap": 1.0
+      },
+      "round.countdownTick": {
+        "id": "rbxasset://sounds/clickfast.wav",
+        "volume": 0.5,
+        "speed": 1.0,
+        "variance": 0.02,
+        "minGap": 0.3
+      },
+      "round.countdownGo": {
+        "id": "rbxassetid://72264591133889",
+        "volume": 0.65,
+        "speed": 1.0,
+        "variance": 0.02,
+        "minGap": 0.5
+      },
+      "class.spin": {
+        "id": "",
+        "volume": 0.3,
+        "speed": 1.3,
+        "variance": 0.15,
+        "minGap": 0.04
+      },
+      "class.land": {
+        "id": "rbxassetid://90853027572825",
+        "volume": 0.75,
+        "speed": 1.0,
+        "variance": 0.02,
+        "minGap": 0.45,
+        "group": "classResult"
+      },
+      "station.hum": {
+        "id": "",
+        "volume": 0.35,
+        "speed": 1.0,
+        "variance": 0.0,
+        "minGap": 0.0,
+        "looped": true
+      },
+      "station.chime": {
+        "id": "rbxasset://sounds/button.wav",
+        "volume": 0.35,
+        "speed": 1.1,
+        "variance": 0.05,
+        "minGap": 0.5
+      },
+      "party.ready": {
+        "id": "rbxassetid://72264591133889",
+        "volume": 0.65,
+        "speed": 1.0,
+        "variance": 0.02,
+        "minGap": 0.4
+      },
+      "music.lobby": {
+        "id": "",
+        "volume": 0.0,
+        "speed": 1.0,
+        "variance": 0.0,
+        "minGap": 0.0,
+        "looped": true
+      },
+      "music.search": {
+        "id": "rbxassetid://130867147321580",
+        "volume": 1.0,
+        "speed": 1.0,
+        "variance": 0.0,
+        "minGap": 0.0,
+        "looped": true
+      },
+      "music.discovery": {
+        "id": "rbxassetid://130867147321580",
+        "volume": 1.0,
+        "speed": 1.0,
+        "variance": 0.0,
+        "minGap": 0.0,
+        "looped": true
+      },
+      "music.victory": {
+        "id": "rbxassetid://130867147321580",
+        "volume": 1.0,
+        "speed": 1.0,
+        "variance": 0.0,
+        "minGap": 0.0,
+        "looped": true
+      },
+      "music.results": {
+        "id": "rbxassetid://130867147321580",
+        "volume": 1.0,
+        "speed": 1.0,
+        "variance": 0.0,
+        "minGap": 0.0,
+        "looped": true
+      },
+      "ambience.henhouse": {
+        "id": "",
+        "volume": 0.35,
+        "speed": 1.0,
+        "variance": 0.0,
+        "minGap": 0.0,
+        "looped": true
+      },
+      "tool.rakeSwing": {
+        "id": "",
+        "volume": 0.35,
+        "speed": 1.15,
+        "variance": 0.08,
+        "minGap": 0.08
+      },
+      "tool.rakeImpact": {
+        "id": "rbxassetid://81267530921314",
+        "volume": 0.6,
+        "speed": 1.0,
+        "variance": 0.05,
+        "minGap": 0.07
+      },
+      "tool.fuseLight": {
+        "id": "rbxasset://sounds/snap.mp3",
+        "volume": 0.5,
+        "speed": 1.1,
+        "variance": 0.05,
+        "minGap": 0.2
+      },
+      "tool.fuseHiss": {
+        "id": "",
+        "volume": 0.4,
+        "speed": 1.0,
+        "variance": 0.0,
+        "minGap": 0.0,
+        "looped": true
+      },
+      "tool.throw": {
+        "id": "rbxasset://sounds/unsheath.wav",
+        "volume": 0.4,
+        "speed": 0.9,
+        "variance": 0.08,
+        "minGap": 0.2
+      },
+      "tool.blast": {
+        "id": "rbxassetid://124256466623788",
+        "volume": 0.85,
+        "speed": 1.0,
+        "variance": 0.04,
+        "minGap": 0.12
+      },
+      "tool.vacMotor": {
+        "id": "rbxassetid://91395529514868",
+        "volume": 0.5,
+        "speed": 1.0,
+        "variance": 0.0,
+        "minGap": 0.0,
+        "looped": true
+      },
+      "tool.vacSuck": {
+        "id": "",
+        "volume": 0.3,
+        "speed": 0.7,
+        "variance": 0.05,
+        "minGap": 0.3
+      },
+      "tool.chickChirp": {
+        "id": "rbxasset://sounds/electronicpingshort.wav",
+        "volume": 0.3,
+        "speed": 1.9,
+        "variance": 0.15,
+        "minGap": 0.25
+      }
+    },
+    "assumption": "ASSUMED",
+    "evidence": "OWNER 15 Sep 2026 supplied six ids: nest rake/shovel 81267530921314 at the contact moment, feather vac 91395529514868 as a managed loop while sucking, dynamite 124256466623788 at the explosion, class result 90853027572825 once the spinner lands, in-round music 130867147321580 (lobby silent), and the upgrade book page flip 114448027739800 once per real page change. The spinner's slap (class.spin) is silenced, tool.rakeSwing and tool.vacSuck are silenced so each tool makes exactly one sound, and ui.error shares a denial throttle group with collect.bagFull so one refusal is one sound whatever fires it. Every id, volume, speed, variance, loop flag and cooldown lives here rather than in code."
   }
 }

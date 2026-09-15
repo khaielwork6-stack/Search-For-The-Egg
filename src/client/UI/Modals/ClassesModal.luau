@@ -905,7 +905,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		local landing = byId[result.classId]
 		local started = os.clock()
 		local index = state.selected
-		deps.audio:play(Tokens.sound.rollSpin)
+		-- No sound on the spin itself (owner 15 Sep 2026): the ticks carry the motion and the result
+		-- sound below is the only class sound, fired once the spinner has landed.
 		task.spawn(function()
 			local lastHighlight: Row? = nil
 			while os.clock() - started < scaled and not state.closed do
@@ -966,7 +967,6 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 							container,
 							{ origin = UDim2.fromScale(0.5, 0.3), count = 60, spread = 260, motion = motion, tier = tier, zIndex = z + 9 }
 						)
-						deps.audio:play(Tokens.sound.rollLand)
 					end
 				end)
 			end

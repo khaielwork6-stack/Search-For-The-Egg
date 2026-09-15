@@ -541,8 +541,11 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 		if (player.carriedStandard or 0) + (player.carriedRainbow or 0) >= capacity then
 			if now - (self._bagFullToastAt or 0) > self._deps.config.pile.visual.bagFullToastCooldownSeconds then
 				self._bagFullToastAt = now
-				self._deps.hud.toasts:push("Bag full - trade your feathers", "warning")
+				-- Denial sound first, then the toast. Both roles share the "denial" throttle group, so
+				-- whichever fires first is the one the player hears and the other is dropped; leading
+				-- with the specific one keeps a full bag sounding like a full bag.
 				self._deps.audio:play(Tokens.sound.bagFull)
+				self._deps.hud.toasts:push("Bag full - trade your feathers", "warning")
 				self._deps.haptics:pulse(0.5, 0.1)
 			end
 			self.stats.rejected += 1

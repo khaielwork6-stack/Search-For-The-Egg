@@ -655,11 +655,9 @@ function ToolViewmodelController._setVacRunning(self: ToolViewmodelController, r
 			emitter.Drag = 4
 			emitter.Parent = nozzle
 			self._vacEmitter = emitter
+			-- One managed loop for as long as the vac is sucking: `loop` refuses a second copy on the
+			-- same nozzle, fades in, and `stopLoop` fades out. Volume and speed come from config.
 			self._vacLoop = self._deps.audio:loop(Tokens.sound.vacMotor, nozzle)
-			if self._vacLoop then
-				self._vacLoop.Volume = 0.22
-				self._vacLoop.PlaybackSpeed = 0.9
-			end
 			self._deps.audio:play(Tokens.sound.vacSuck, { pitchVariance = 0.04 })
 		end
 		if not self._streakFolder then
