@@ -353,3 +353,9 @@ Hard difficulty's pile multiplier now shows mostly at the rim because crown cell
 (blast crater), all sized in studs from `tools.*` config. Vac ticks and blasts send a targeted
 `tool_award` ToolEvent so the HUD floats `+N`; blast records animate out of the crater. A fixed
 front skirt of strands (`pile.visual.frontSkirt*`, owner request) covers the mound's front foot.
+
+**Farming feel (14 Sep 2026).** Every accepted record is a rendered feather (per-cell caps per
+sweep / tick), the rake sweeps a narrow fan, batches stream one record at a time with ticks and a
+climbing bag counter, the hand target lifts client-first, revealed records fade in beneath, held
+input is a render-step gate, the rake viewmodel has anticipation and recovery, and the coat lies
+tangent with a softer palette. See docs/STUDIO_VERIFICATION.md "Farming feel rebuild".

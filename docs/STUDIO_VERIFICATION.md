@@ -1321,3 +1321,50 @@ console clean. Infinite bag entitlement set for the long runs so the bag never g
   show the foot covered.
 - **Nothing settles.** Records keep their as-built seats; a removal only reveals the next record in
   that cell. The client feather count stayed at ~20.8k through every test (the top-10 window).
+
+## Farming feel rebuild (14 Sep 2026)
+
+Play Solo (map mode) session after the changes; 300 headless tests; selene / stylua clean; console
+clean. Play captures are blank on this machine, so the coat's look was captured with the edit-mode
+pile probe and every Play claim below is a state readout (feather IDs, transforms, counters).
+
+**Root cause of the batch / swap feel.** A rake sweep validated 27 records and the client
+animated all 27 in the same frame (one `+27`, one deletion); the sweep also took records from a
+disc of cells with a 60 % bias, so up to 16 came out of one cell - more than the ten rendered
+there - and the hidden ones spawned fresh parts at the strike, which read as feathers appearing
+from nowhere. Newly exposed records were created in one frame (a pop), and the coat lay with rolls
+up to 110 degrees, so it read as spikes. Nothing in the pipeline ever moved untouched feathers
+(seats are fixed by slot); the "swap" was the pop-in plus the hidden pulls.
+
+**Changes.** `PileGrid.removeFocused` gained a per-cell cap (`maxPerCellPerSweep 8`,
+`maxPerCellPerTick 6`) so every accepted record is a rendered feather; the rake's contact is a
+narrow fan along the swing line (`sweepHalfWidthStuds 0.9`, `sweepAheadStuds 0.35`). The client
+streams a batch one record every `streamStaggerSeconds` (0.028 s) with a soft tick each and a
+bag counter that climbs through the sweep; the targeted hand feather lifts the instant the pick
+is sent and eases back on a refusal; records revealed beneath a removed one fade in over 0.32 s
+(`revealFadeSeconds`); held input is a render-step gate (no loops or waits); the rake viewmodel
+plays anticipation -> thrust -> impact -> recovery; camera impulses halved; coat tilt 2-9 deg,
+roll +-20 deg, ivory-to-grey palette; recount once per frame.
+
+**Evidence (Play readouts).**
+1. Single hand pick with 1,175 coat feathers tracked within 6 studs: exactly 1 gone, 0 moved,
+   1 revealed beneath, 1 lift.
+2. Six rake sweeps at one point, ID sets compared before and after each: every sweep
+   `awarded 27, rendered gone 27, streamed 27`; over ten sweeps 4,189 tracked neighbours,
+   0 moved.
+3. Culled away (lobby yard) and back: the same 20,739 feather IDs, 0 missing, 0 new.
+4. Ten sweeps at one point (server readout): struck cells `0/32`, neighbours `20-29/32`, ring
+   untouched - a persistent depression where the rake hit.
+5. After 101 accepted rake sweeps plus a blast and vac runs: 702 of 59,521 records removed
+   (1.2 %), 49 cells touched, 8 empty; the client feather count stayed ~20.7k (top-10 window).
+6. Coat probe captures from the front: dense, tangent, no ground or sky; the front skirt covers
+   the foot.
+7. Rake: 101 consecutive accepted uses, full-bag refusals, sell, vac/hand switch and back, all with
+   `inFlight false, nextAllowedIn 0`; hand / vac / dynamite / rake together afterwards:
+   hand 1 = 1 streamed, vac 41 = 41 streamed (six streaks, running), blast 115 = 115 streamed
+   (crater), rake 27.
+8. Frame pacing: RenderStepped 15 fps idle and 15 fps during continuous rake collection on this
+   Studio window (worst frame 68-71 ms both ways), same on the low tier - collection adds no
+   hitches; the absolute rate is Studio's baseline here, not the game's.
+- Not done: no video recording is possible from this machine, and the owner's clips could not be
+  played here; the comparison against Clip 2 at 1:31 / 2:41 is by description only.
