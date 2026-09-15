@@ -86,6 +86,9 @@ AssetManifest.images = table.freeze({
 	["hud.chip"] = "rbxassetid://122352739653232",
 	["hud.gear"] = "rbxassetid://113404553836143",
 	["hud.gem"] = "rbxassetid://111089449734627",
+	-- Owner artwork for the permanent 2x Gems lobby offer (ui/Search_For_The_Egg_2x_Gems_99R.png,
+	-- uploaded 15 Sep 2026). The whole image is the button.
+	["offer.gems2x"] = "rbxassetid://115630060865362",
 	["hud.prompt"] = "rbxassetid://85325970663845",
 	["hud.reticle"] = "rbxassetid://125975322335872",
 	["hud.reticle.locked"] = "rbxassetid://129330331951164",

@@ -13,6 +13,8 @@ local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local Signal = require(Shared.Util.Signal)
 local Trove = require(Shared.Util.Trove)
 local SafeArea = require(script.Parent.Parent.UI.SafeArea)
+local LobbyOffer = require(script.Parent.Parent.UI.LobbyOffer)
+local UpgradeActions = require(script.Parent.Parent.UI.UpgradeActions)
 local Button = require(script.Parent.Parent.UI.Components.Button)
 local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
 local PartyModal = require(script.Parent.Parent.UI.Modals.PartyModal)
@@ -37,6 +39,7 @@ export type LobbyController = typeof(setmetatable(
 		_buttons: { [string]: any },
 		_titles: { [string]: string },
 		_inRound: boolean,
+		_offer: any?,
 		_trove: Trove.Trove,
 		stats: { opened: number, directives: number, prompts: number, rewards: number },
 	},
@@ -73,6 +76,7 @@ function LobbyController.new(deps: any): LobbyController
 
 	local self = setmetatable({
 		_deps = deps,
+		_offer = nil,
 		gui = gui,
 		rail = nil :: any,
 		leaderboards = { snapshot = nil, changed = Signal.new(), request = nil :: any },
@@ -275,10 +279,40 @@ function LobbyController.new(deps: any): LobbyController
 	self._trove:add(function()
 		stopCountdown()
 	end)
+	-- The permanent 2x Gems offer: lobby only, and never prompted to someone who already owns it.
+	local offerConfig = deps.config.lobby.offer
+	local offer = LobbyOffer.create(stage, {
+		config = deps.config,
+		motion = function()
+			return deps.accessibility:motionSettings()
+		end,
+		onActivated = function()
+			UpgradeActions.promptPurchase(
+				{ net = deps.net, audio = deps.audio, toasts = deps.hud.toasts },
+				offerConfig.productKey,
+				"2x Gems"
+			)
+		end,
+	})
+	if offer then
+		self._offer = offer
+		self._trove:add(offer)
+		local function applyOwnership()
+			local projection = deps.profile.projection
+			local entitlements = projection and projection.entitlements
+			offer.setOwned(entitlements ~= nil and entitlements[offerConfig.productKey] == true)
+		end
+		applyOwnership()
+		self._trove:add(deps.profile.changed:Connect(applyOwnership))
+	end
+
 	self._trove:add(deps.round.phaseChanged:Connect(function(phase)
 		local inRound = phase ~= nil and phase ~= "Returning" and phase ~= "Abandoned"
 		self._inRound = inRound
 		rail.Visible = not inRound
+		if offer then
+			offer.setVisible(not inRound)
+		end
 		if inRound then
 			for _, id in ipairs({ "party", "classes", "shop", "daily", "codes", "inventory", "stats", "event" }) do
 				deps.modals:close(id)

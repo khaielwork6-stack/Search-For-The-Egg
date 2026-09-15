@@ -1289,7 +1289,20 @@
     "stationPromptRangeStuds": 10,
     "padFullAutoStartSeconds": 0.5,
     "padZoneHeightStuds": 6,
-    "assumption": "ASSUMED"
+    "assumption": "ASSUMED",
+    "offer": {
+      "productKey": "doubleGems",
+      "widthPx": 168,
+      "floatPx": 6.0,
+      "floatSeconds": 2.1,
+      "shineSeconds": 1.1,
+      "shineGapSeconds": 3.4,
+      "shineTransparency": 0.72,
+      "glowTransparency": 0.86,
+      "hoverScale": 1.05,
+      "pressScale": 0.96,
+      "evidence": "OWNER 15 Sep 2026: the supplied 2x Gems artwork is the whole lobby button, left side, lobby only. Motion is a slow float, a travelling glint and a hover lift; no particles and no light, so nothing it does reaches the world."
+    }
   },
   "codePolicy": {
     "maxLength": 24,

@@ -1061,6 +1061,28 @@ function Validator.validate(raw: any): Report
 
 	-- Audio: every id, mix value, loop flag and cooldown the client plays lives here, so this is the
 	-- only place a wrong role name or an out-of-range volume can be caught before it ships.
+	-- The lobby's permanent offer button (owner artwork; lobby only).
+	local offer = type(raw.lobby) == "table" and raw.lobby.offer or nil
+	check(type(offer) == "table", "lobby.offer missing")
+	if type(offer) == "table" then
+		check(type(offer.productKey) == "string" and #offer.productKey > 0, "lobby.offer.productKey must name a product")
+		for _, key in ipairs({ "widthPx", "floatSeconds", "shineSeconds", "shineGapSeconds" }) do
+			check(isPositiveNumber(offer[key]), "lobby.offer." .. key .. " must be > 0")
+		end
+		check(isNonNegativeNumber(offer.floatPx) and offer.floatPx <= 40, "lobby.offer.floatPx must be within [0, 40]")
+		for _, key in ipairs({ "shineTransparency", "glowTransparency" }) do
+			check(isNonNegativeNumber(offer[key]) and offer[key] <= 1, "lobby.offer." .. key .. " must be 0..1")
+		end
+		check(
+			isPositiveNumber(offer.hoverScale) and offer.hoverScale >= 1 and offer.hoverScale <= 1.3,
+			"lobby.offer.hoverScale must be within [1, 1.3]"
+		)
+		check(
+			isPositiveNumber(offer.pressScale) and offer.pressScale <= 1 and offer.pressScale >= 0.8,
+			"lobby.offer.pressScale must be within [0.8, 1]"
+		)
+	end
+
 	-- Round intro cinematic: the shot list, the subtitle beats and the named camera markers. The
 	-- markers are also built as world parts, so these are the authored defaults, not the only source.
 	local intro = type(raw.round) == "table" and raw.round.intro or nil
