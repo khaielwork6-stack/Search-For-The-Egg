@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Depth = require(script.Parent.Parent.Components.Depth)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
 local Skin = require(script.Parent.Parent.Components.Skin)
@@ -207,7 +208,7 @@ function GemShopModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		local sheen: UIGradient? = nil
 		if popular then
 			-- Animated rainbow border and a travelling sheen: the premium card.
-			local outline = tile:FindFirstChild("Outline") :: UIStroke?
+			local outline = Depth.keylineOf(tile) :: UIStroke?
 			if outline then
 				outline.Thickness = Tokens.stroke.frame + 2
 				outline.Color = Color3.new(1, 1, 1)

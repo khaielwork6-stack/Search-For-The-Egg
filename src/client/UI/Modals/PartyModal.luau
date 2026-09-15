@@ -11,6 +11,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Depth = require(script.Parent.Parent.Components.Depth)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
 local Dialog = require(script.Parent.Parent.Components.Dialog)
@@ -733,7 +734,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			local available = cardChapter.availableDifficulties and cardChapter.availableDifficulties.normal == true
 			local unlocked = projection ~= nil and unlockedFor(deps.profile, key, "normal")
 			local open = available and unlocked
-			local outline = card.tile:FindFirstChild("Outline") :: UIStroke?
+			local outline = Depth.keylineOf(card.tile) :: UIStroke?
 			if outline then
 				outline.Color = if key == chapterKey then Tokens.color.featherWhite else Tokens.color.outline
 				outline.Thickness = if key == chapterKey then Tokens.stroke.frame + 1 else Tokens.stroke.frame

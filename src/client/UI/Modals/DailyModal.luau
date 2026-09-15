@@ -14,6 +14,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Depth = require(script.Parent.Parent.Components.Depth)
 local DailyRewards = require(Shared.Domain.DailyRewards)
 local Tween = require(script.Parent.Parent.Components.Tween)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
@@ -148,7 +149,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		root.LayoutOrder = entry.day
 		local scale = Instance.new("UIScale")
 		scale.Parent = root
-		local stroke = root:FindFirstChild("Outline") :: UIStroke
+		local stroke = Depth.keylineOf(root) :: UIStroke
 
 		-- Header band: the day number, always legible against the card whatever state it is in.
 		-- Bands, measured off the cell height, so the header, amount, artwork and footer occupy four

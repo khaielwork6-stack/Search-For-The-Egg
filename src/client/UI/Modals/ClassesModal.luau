@@ -12,6 +12,7 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Depth = require(script.Parent.Parent.Components.Depth)
 local ClassRoll = require(Shared.Domain.ClassRoll)
 local Tween = require(script.Parent.Parent.Components.Tween)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
@@ -344,7 +345,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			sheenFrame.Parent = face
 			table.insert(sheens, sheen)
 		end
-		local outline = tile:FindFirstChild("Outline") :: UIStroke?
+		local outline = Depth.keylineOf(tile) :: UIStroke?
 		if outline and rarityName == "legendary" then
 			outline.Color = Tokens.color.goldLight
 			table.insert(pulses, { stroke = outline, phase = index })
@@ -814,7 +815,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		storyText.Text = if copy and copy.story ~= "" then copy.story else "A class of its own."
 		storyEffect.Text = describeEffect(entry, weights)
 		for _, other in ipairs(rows) do
-			local outline = other.tile:FindFirstChild("Outline") :: UIStroke?
+			local outline = Depth.keylineOf(other.tile) :: UIStroke?
 			if outline then
 				outline.Color = if other.index == state.selected then Tokens.color.goldLight else Tokens.color.outline
 				outline.Thickness = if other.index == state.selected then Tokens.stroke.frame else Tokens.stroke.bold

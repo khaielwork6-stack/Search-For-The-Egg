@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Depth = require(script.Parent.Parent.Components.Depth)
 local Perks = require(Shared.Domain.Perks)
 local Tween = require(script.Parent.Parent.Components.Tween)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
@@ -466,7 +467,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps): () ->
 			if firstBundle then
 				firstBundle.scale.Scale = 1.08
 				Tween.scale(firstBundle.scale, "release", motion, 1)
-				local stroke = firstBundle.tile:FindFirstChild("Outline") :: UIStroke?
+				local stroke = Depth.keylineOf(firstBundle.tile) :: UIStroke?
 				if stroke then
 					stroke.Color = Tokens.color.goldLight
 					TweenService:Create(stroke, TweenInfo.new(0.8), { Color = Tokens.color.outline }):Play()

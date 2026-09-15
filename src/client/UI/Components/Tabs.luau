@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Depth = require(script.Parent.Depth)
 local Motion = require(Shared.Design.Motion)
 local Button = require(script.Parent.Button)
 
@@ -80,7 +81,7 @@ function Tabs.build(parent: Instance, options: Options): Handle
 			if face then
 				face.Size = UDim2.fromScale(1, 1)
 			end
-			local outline = handle.button:FindFirstChild("Outline") :: UIStroke?
+			local outline = Depth.keylineOf(handle.button) :: UIStroke?
 			if outline then
 				outline.Transparency = if on then 0 else 1
 				outline.Color = if on then Tokens.color.tealDeep else Tokens.color.strawDeep
@@ -119,7 +120,7 @@ function Tabs.build(parent: Instance, options: Options): Handle
 		})
 		handle.button.LayoutOrder = index
 		handle.button.Name = "Tab_" .. item.id
-		local outline = handle.button:FindFirstChild("Outline") :: UIStroke?
+		local outline = Depth.keylineOf(handle.button) :: UIStroke?
 		if outline then
 			outline.Transparency = 1
 		end

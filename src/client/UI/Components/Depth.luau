@@ -87,6 +87,17 @@ function Depth.keyline(object: GuiObject, thickness: number?, color: Color3?): U
 	return stroke
 end
 
+-- The keyline on a control, if it has one. Callers that re-tint a border (a selected tile, an
+-- affordable bundle, the active tab) look it up through here rather than by name, so the name stays
+-- an implementation detail of this module.
+function Depth.keylineOf(object: GuiObject): UIStroke?
+	local found = object:FindFirstChild("SFE_Keyline")
+	if found and found:IsA("UIStroke") then
+		return found
+	end
+	return nil
+end
+
 -- The bright rim just inside a face. Derived from the face unless the caller has a better colour.
 function Depth.rim(object: GuiObject, face: Color3, color: Color3?): UIStroke
 	local existing = object:FindFirstChild("SFE_Rim")
