@@ -65,6 +65,20 @@ local function probe(lines: { string })
 	end
 	table.insert(lines, string.format("coat %d feathers %d filler  y %.2f..%.2f", feathers, filler, minY, maxY))
 
+	-- The mound body is drawn but excluded from spatial queries, so a ray would pass through it and
+	-- report whatever lies behind. Make it queryable for the length of the probe so the report
+	-- matches what is actually on screen, then put it back exactly as it was.
+	local body = workspace:FindFirstChild("SFE_PileCollision")
+	local restore: { BasePart } = {}
+	if body then
+		for _, part in ipairs(body:GetChildren()) do
+			if part:IsA("BasePart") and not part.CanQuery then
+				part.CanQuery = true
+				table.insert(restore, part)
+			end
+		end
+	end
+
 	local viewport = camera.ViewportSize
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -89,10 +103,13 @@ local function probe(lines: { string })
 			local glyph = " "
 			if hit then
 				local inPile = hit.Instance:IsDescendantOf(folder)
+				local inBody = body ~= nil and hit.Instance:IsDescendantOf(body)
 				if inPile and hit.Instance.Name == "Feather" then
 					glyph = "#"
 				elseif inPile then
 					glyph = "+"
+				elseif inBody then
+					glyph = "o"
 				else
 					glyph = "."
 					local key = hit.Instance:GetFullName()
@@ -109,7 +126,10 @@ local function probe(lines: { string })
 		end
 		table.insert(lines, "|" .. table.concat(line) .. "|")
 	end
-	table.insert(lines, "# feather  + filler  . not the pile  blank sky")
+	for _, part in ipairs(restore) do
+		part.CanQuery = false
+	end
+	table.insert(lines, "# feather  + filler  o mound body  . SEE-THROUGH  blank sky")
 	if next(holes) == nil then
 		table.insert(lines, "no holes: every ray inside the silhouette met the coat")
 	else
