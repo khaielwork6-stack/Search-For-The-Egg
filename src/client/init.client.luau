@@ -26,6 +26,7 @@ local HapticsController = require(Controllers.HapticsController)
 local HUDController = require(Controllers.HUDController)
 local LobbyShellController = require(Controllers.LobbyShellController)
 local RoundController = require(Controllers.RoundController)
+local IntroCinematicController = require(script.Controllers.IntroCinematicController)
 local PileVisualController = require(Controllers.PileVisualController)
 local CrateController = require(Controllers.CrateController)
 local ToolController = require(Controllers.ToolController)
@@ -182,6 +183,19 @@ local victory = trove:add(VictoryController.new({
 	config = config,
 }))
 hud:bindRound(round, interaction)
+-- The round intro. It owns the intro phase: camera, HUD, input and the avatar on screen, and it
+-- reports ready to the server when it is done so the round starts for everyone at once.
+local intro = trove:add(IntroCinematicController.new({
+	config = config,
+	round = round,
+	net = net,
+	input = input,
+	modals = modals,
+	hud = hud,
+	audio = audio,
+	accessibility = accessibility,
+}))
+intro:bindRound()
 -- Player nameplates: display name and record time over every character.
 local nameplates = trove:add(NameplateController.new(round))
 -- The upgrade book: Tab, the book button, or the supplies counter opens it during a search.
@@ -369,6 +383,7 @@ local container = {
 	tools = tools,
 	toolVisuals = toolVisuals,
 	interaction = interaction,
+	intro = intro,
 	objectives = objectives,
 	victory = victory,
 	party = party,
@@ -940,6 +955,35 @@ if RunService:IsStudio() then
 				end
 			end
 			return { moved = moved, page = page(), flips = book.stats.flips }
+		end,
+		-- Round intro: drive and inspect it, and prove the takeover was handed back.
+		introStatus = function()
+			local camera = workspace.CurrentCamera
+			local overlay = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("SFE_RoundIntro")
+			local subtitle = overlay and overlay:FindFirstChild("Stage") and overlay.Stage:FindFirstChild("SubtitlePlate")
+			local label = subtitle and subtitle:FindFirstChild("Subtitle")
+			local topBar = overlay and overlay:FindFirstChild("TopBar")
+			return {
+				playing = intro:isPlaying(),
+				stats = intro.stats,
+				phase = round:phase(),
+				overlay = overlay ~= nil,
+				subtitle = label and label.Text or "",
+				letterbox = topBar and topBar.Size.Y.Scale or 0,
+				cameraType = tostring(camera and camera.CameraType),
+				cameraPosition = tostring(camera and camera.CFrame.Position),
+				fieldOfView = camera and camera.FieldOfView or 0,
+				hudEnabled = hud.gui.Enabled,
+				promptsEnabled = game:GetService("ProximityPromptService").Enabled,
+				actor = workspace:FindFirstChild("SFE_IntroActor") ~= nil,
+				heldParchment = workspace:FindFirstChild("SFE_IntroHeldParchment") ~= nil,
+				mouseBehaviour = tostring(game:GetService("UserInputService").MouseBehavior),
+				cameraMode = tostring(player.CameraMode),
+			}
+		end,
+		introSkip = function()
+			intro:skip()
+			return { playing = intro:isPlaying() }
 		end,
 		closeBook = function()
 			book:close()

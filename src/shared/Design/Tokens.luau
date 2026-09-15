@@ -142,6 +142,13 @@ Tokens.sound = table.freeze({
 	uiConfetti = "ui.confetti",
 	uiPop = "ui.pop",
 	uiPageFlip = "ui.pageFlip",
+	-- Round intro. Every one but the tick is a silent placeholder until the owner supplies ids.
+	introAmbience = "intro.ambience",
+	introWind = "intro.wind",
+	introFootstep = "intro.footstep",
+	introPaper = "intro.paper",
+	introSting = "intro.sting",
+	introType = "intro.type",
 	purchase = "shop.purchase",
 	rewardTick = "reward.tick",
 	rewardLand = "reward.land",

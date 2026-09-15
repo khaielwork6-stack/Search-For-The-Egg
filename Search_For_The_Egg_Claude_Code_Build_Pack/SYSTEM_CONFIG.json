@@ -2086,9 +2086,54 @@
         "speed": 1.9,
         "variance": 0.15,
         "minGap": 0.25
+      },
+      "intro.ambience": {
+        "id": "",
+        "volume": 0.3,
+        "speed": 1.0,
+        "variance": 0.0,
+        "minGap": 0.0,
+        "looped": true
+      },
+      "intro.wind": {
+        "id": "",
+        "volume": 0.26,
+        "speed": 1.0,
+        "variance": 0.0,
+        "minGap": 0.0,
+        "looped": true
+      },
+      "intro.footstep": {
+        "id": "",
+        "volume": 0.35,
+        "speed": 1.0,
+        "variance": 0.1,
+        "minGap": 0.12
+      },
+      "intro.paper": {
+        "id": "",
+        "volume": 0.55,
+        "speed": 1.0,
+        "variance": 0.05,
+        "minGap": 0.2
+      },
+      "intro.sting": {
+        "id": "",
+        "volume": 0.65,
+        "speed": 1.0,
+        "variance": 0.02,
+        "minGap": 0.5
+      },
+      "intro.type": {
+        "id": "rbxasset://sounds/clickfast.wav",
+        "volume": 0.16,
+        "speed": 1.9,
+        "variance": 0.14,
+        "minGap": 0.02
       }
     },
     "assumption": "ASSUMED",
-    "evidence": "OWNER 15 Sep 2026 supplied six ids: nest rake/shovel 81267530921314 at the contact moment, feather vac 91395529514868 as a managed loop while sucking, dynamite 124256466623788 at the explosion, class result 90853027572825 once the spinner lands, in-round music 130867147321580 (lobby silent), and the upgrade book page flip 114448027739800 once per real page change. The spinner's slap (class.spin) is silenced, tool.rakeSwing and tool.vacSuck are silenced so each tool makes exactly one sound, and ui.error shares a denial throttle group with collect.bagFull so one refusal is one sound whatever fires it. Every id, volume, speed, variance, loop flag and cooldown lives here rather than in code."
+    "evidence": "OWNER 15 Sep 2026 supplied six ids: nest rake/shovel 81267530921314 at the contact moment, feather vac 91395529514868 as a managed loop while sucking, dynamite 124256466623788 at the explosion, class result 90853027572825 once the spinner lands, in-round music 130867147321580 (lobby silent), and the upgrade book page flip 114448027739800 once per real page change. The spinner's slap (class.spin) is silenced, tool.rakeSwing and tool.vacSuck are silenced so each tool makes exactly one sound, and ui.error shares a denial throttle group with collect.bagFull so one refusal is one sound whatever fires it. Every id, volume, speed, variance, loop flag and cooldown lives here rather than in code.",
+    "introEvidence": "PLACEHOLDER 15 Sep 2026: the owner supplied no ids for the round intro's farm ambience, wind, footsteps, paper rustle or decision sting, so intro.ambience/wind/footstep/paper/sting are silent here rather than guessed. intro.type uses a bundled Roblox click so the subtitle reveal is not silent. Fill these five ids in and the intro picks them up with no code change."
   }
 }

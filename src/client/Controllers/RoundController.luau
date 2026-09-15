@@ -5,13 +5,11 @@
 -- first-person camera for rounds. Other controllers subscribe to its signals.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Signal = require(Shared.Util.Signal)
 local Trove = require(Shared.Util.Trove)
 local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
-local CutsceneOverlay = require(script.Parent.Parent.UI.CutsceneOverlay)
 
 local RoundController = {}
 RoundController.__index = RoundController
@@ -30,7 +28,6 @@ export type RoundController = typeof(setmetatable(
 		previews: { any }?,
 		eggPosition: Vector3?,
 		_receivedAt: number,
-		_overlay: any?,
 		_countdownShown: number,
 		phaseChanged: any,
 		snapshot: any,
@@ -63,7 +60,6 @@ function RoundController.new(
 		previews = nil,
 		eggPosition = nil,
 		_receivedAt = 0,
-		_overlay = nil,
 		_countdownShown = -1,
 		phaseChanged = Signal.new(),
 		snapshot = Signal.new(),
@@ -147,16 +143,17 @@ function RoundController._applyPhase(self: RoundController, phase: string, previ
 	-- keep a free camera and cursor (owner requirement, 13 Sep 2026).
 	self._modals:setFirstPerson(phase == "Countdown" or phase == "Searching" or phase == "EggRevealed")
 	if phase == "Cutscene" then
+		-- The round intro owns this phase: it takes the camera, the HUD and the cursor itself, and it
+		-- starts the round music when it hands back. Starting the music here would put it under the
+		-- cinematic instead of behind the round.
 		self.eggPosition = nil
-		self._audio:setState("Search")
-		self:_showCutscene()
-		self._modals:setExternalUnlock(true)
 	elseif phase == "Countdown" then
-		self:_hideCutscene()
 		self._modals:setExternalUnlock(false)
+		-- The intro normally restores this itself; setting it again here covers a round that left the
+		-- intro phase while a client was still mid-shot.
+		self._audio:setState("Search")
 		self._countdownShown = -1
 	elseif phase == "Searching" then
-		self:_hideCutscene()
 		self._modals:setExternalUnlock(false)
 		if previous == "Countdown" then
 			self._audio:play(Tokens.sound.countdownGo)
@@ -168,7 +165,6 @@ function RoundController._applyPhase(self: RoundController, phase: string, previ
 	elseif phase == "Results" then
 		self._audio:setState("Results")
 	elseif phase == "Returning" or phase == "Abandoned" then
-		self:_hideCutscene()
 		self._modals:setExternalUnlock(false)
 		self._audio:setState("Lobby")
 		self.round = nil
@@ -176,31 +172,6 @@ function RoundController._applyPhase(self: RoundController, phase: string, previ
 		self.player = nil
 		self.previews = nil
 		self.eggPosition = nil
-	end
-end
-
-function RoundController._showCutscene(self: RoundController)
-	if self._overlay then
-		return
-	end
-	local overlay = CutsceneOverlay.create(Players.LocalPlayer:WaitForChild("PlayerGui"), {
-		seconds = self._config.round.cutsceneSeconds,
-		motion = self._accessibility:motionSettings(),
-		onSkip = function()
-			local session = self._profile.session
-			if session and session.sessionToken then
-				self._net:request("RoundSkipVote", { sessionToken = session.sessionToken })
-			end
-		end,
-	})
-	self._overlay = overlay
-	self._audio:play(Tokens.sound.uiOpen)
-end
-
-function RoundController._hideCutscene(self: RoundController)
-	if self._overlay then
-		self._overlay.destroy()
-		self._overlay = nil
 	end
 end
 
@@ -247,7 +218,6 @@ function RoundController.sessionToken(self: RoundController): string?
 end
 
 function RoundController.destroy(self: RoundController)
-	self:_hideCutscene()
 	self._trove:destroy()
 	for _, signal in ipairs({
 		self.phaseChanged,
