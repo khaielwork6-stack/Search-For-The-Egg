@@ -37,11 +37,26 @@ export type Options = {
 function IntroOverlay.create(parent: Instance, options: Options): Overlay
 	local intro = options.config.round.intro
 	local motion = options.motion
+	-- Two layers on purpose.
+	--
+	-- `SafeArea.applyScale` sets `ScreenInsets = CoreUISafeInsets`, which wins over `IgnoreGuiInset`
+	-- and pushes the whole ScreenGui below Roblox's own top bar. Subtitles and the Skip control want
+	-- that, and the black does not: an inset fade leaves a strip of live game above the top bar and an
+	-- inset letterbox draws its bar part-way down the screen. So the black gets its own gui that
+	-- covers the entire display, and the readable content gets the safe-area one.
+	local frameGui = Instance.new("ScreenGui")
+	frameGui.Name = "SFE_RoundIntroFrame"
+	frameGui.ResetOnSpawn = false
+	frameGui.IgnoreGuiInset = true
+	frameGui.ScreenInsets = Enum.ScreenInsets.None
+	frameGui.DisplayOrder = Tokens.zIndex.blocking + 5
+	frameGui.Parent = parent
+
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "SFE_RoundIntro"
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = true
-	gui.DisplayOrder = Tokens.zIndex.blocking + 5
+	gui.DisplayOrder = Tokens.zIndex.blocking + 6
 	gui.Parent = parent
 
 	-- Bars and fade sit outside the safe area on purpose: they are the frame of the picture.
@@ -54,7 +69,7 @@ function IntroOverlay.create(parent: Instance, options: Options): Overlay
 		frame.BackgroundColor3 = Color3.new(0, 0, 0)
 		frame.BorderSizePixel = 0
 		frame.ZIndex = 4
-		frame.Parent = gui
+		frame.Parent = frameGui
 		return frame
 	end
 	local topBar, bottomBar = bar("TopBar", 0), bar("BottomBar", 1)
@@ -66,7 +81,7 @@ function IntroOverlay.create(parent: Instance, options: Options): Overlay
 	fade.BackgroundTransparency = 0
 	fade.BorderSizePixel = 0
 	fade.ZIndex = 8
-	fade.Parent = gui
+	fade.Parent = frameGui
 
 	local _, releaseScale, stage = SafeArea.applyScale(gui, options.config)
 	stage.ZIndex = 5
@@ -246,6 +261,7 @@ function IntroOverlay.create(parent: Instance, options: Options): Overlay
 			end
 			releaseScale()
 			gui:Destroy()
+			frameGui:Destroy()
 		end,
 	}
 	return overlay

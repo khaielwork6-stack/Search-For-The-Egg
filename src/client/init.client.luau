@@ -962,7 +962,8 @@ if RunService:IsStudio() then
 			local overlay = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("SFE_RoundIntro")
 			local subtitle = overlay and overlay:FindFirstChild("Stage") and overlay.Stage:FindFirstChild("SubtitlePlate")
 			local label = subtitle and subtitle:FindFirstChild("Subtitle")
-			local topBar = overlay and overlay:FindFirstChild("TopBar")
+			local frameGui = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("SFE_RoundIntroFrame")
+			local topBar = frameGui and frameGui:FindFirstChild("TopBar")
 			return {
 				playing = intro:isPlaying(),
 				stage = intro.stats.stage,
