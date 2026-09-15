@@ -29,6 +29,11 @@ local RoundIntro = require(Shared.Domain.RoundIntro)
 local Signal = require(Shared.Util.Signal)
 local IntroOverlay = require(script.Parent.Parent.UI.IntroOverlay)
 
+-- How long past the end of the cinematic the watchdog waits before assuming the run is stuck. Long
+-- enough that a slow frame or a loading hitch never trips it, short enough that a player who does
+-- hit it is not standing still for long.
+local STALL_GRACE_SECONDS = 3
+
 local IntroCinematicController = {}
 IntroCinematicController.__index = IntroCinematicController
 
@@ -50,7 +55,17 @@ export type IntroCinematicController = typeof(setmetatable(
 		_session: any?,
 		_playedRounds: { [string]: boolean },
 		finished: Signal.Signal<string>,
-		stats: { plays: number, skips: number, failures: number, missing: { string }, ticks: number, stage: string, lastT: number },
+		stats: {
+			plays: number,
+			skips: number,
+			failures: number,
+			frameFailures: number,
+			stalls: number,
+			missing: { string },
+			ticks: number,
+			stage: string,
+			lastT: number,
+		},
 	},
 	IntroCinematicController
 ))
@@ -73,7 +88,7 @@ function IntroCinematicController.new(deps: Deps): IntroCinematicController
 		_session = nil,
 		_playedRounds = {},
 		finished = Signal.new(),
-		stats = { plays = 0, skips = 0, failures = 0, missing = {}, ticks = 0, stage = "idle", lastT = 0 },
+		stats = { plays = 0, skips = 0, failures = 0, frameFailures = 0, stalls = 0, missing = {}, ticks = 0, stage = "idle", lastT = 0 },
 	}, IntroCinematicController)
 	return self
 end
@@ -265,7 +280,15 @@ end
 -- Ends the run exactly once, restores everything, and reports ready.
 function IntroCinematicController.finish(self: IntroCinematicController, reason: string)
 	local session = self._session
-	if not session or session.finishing then
+	if not session then
+		return
+	end
+	if session.finishing then
+		-- A second call used to return here and do nothing. That made `finishing` a latch: if the
+		-- first call ever failed to reach the teardown, the watchdog, the phase change and the skip
+		-- button all hit this line and gave up, and the player stayed in a scriptable camera forever.
+		-- A repeat call now completes the teardown instead of trusting that the first one did.
+		self:_teardown(session, reason)
 		return
 	end
 	session.finishing = true
@@ -279,28 +302,50 @@ function IntroCinematicController.finish(self: IntroCinematicController, reason:
 		overlay.setSkipEnabled(false)
 	end
 	task.delay(if reason == "skip" then 0.2 else intro.fadeOutSeconds, function()
-		-- Restore the world before the black lifts.
-		pcall(function()
-			session.trove:destroy()
-		end)
+		self:_teardown(session, reason)
+	end)
+	-- Report immediately, not after the fade: the server should not wait on our animation.
+	self:_reportReady()
+end
+
+-- Puts the world back exactly once per session: camera, character, HUD and prompts come back with
+-- the trove, the frame comes off behind the black, and the round is told we are done. Safe to call
+-- more than once and from anywhere - the watchdog, a phase change and the fade timer all land here,
+-- and whichever arrives first is the one that does the work.
+function IntroCinematicController._teardown(self: IntroCinematicController, session: any, reason: string)
+	if session.tornDown then
+		return
+	end
+	session.tornDown = true
+	local deps = self._deps
+	local intro = deps.config.round.intro
+	local overlay = session.overlay
+	-- Restore the world before the black lifts. Every step is wrapped: a failure in one must not
+	-- strand the rest, because between them they own the camera and the HUD.
+	pcall(function()
+		session.trove:destroy()
+	end)
+	if self._session == session then
 		self._session = nil
-		if overlay then
+	end
+	if overlay then
+		pcall(function()
 			-- Instant, behind the black: the viewer never sees the frame open back up.
 			overlay.setLetterbox(false, 0)
 			overlay.showObjective(intro.objectiveLabel, intro.objectiveSeconds)
 			overlay.setFade(0, 0.35)
-			-- The round music starts with the round, not under the cinematic.
-			pcall(function()
-				deps.audio:setState("Search")
-			end)
-			task.delay(intro.objectiveSeconds + 1.2, function()
-				overlay.destroy()
-			end)
-		end
+		end)
+		-- The round music starts with the round, not under the cinematic.
+		pcall(function()
+			deps.audio:setState("Search")
+		end)
+		task.delay(intro.objectiveSeconds + 1.2, function()
+			pcall(overlay.destroy)
+		end)
+	end
+	pcall(function()
 		self.finished:Fire(reason)
 	end)
-	-- Report immediately, not after the fade: the server should not wait on our animation.
-	self:_reportReady()
 end
 
 function IntroCinematicController._reportReady(self: IntroCinematicController)
@@ -547,7 +592,12 @@ function IntroCinematicController._run(self: IntroCinematicController, session: 
 	local lastTyped = ""
 	self.stats.stage = "binding"
 	local frame = "SFE_RoundIntroCamera"
-	RunService:BindToRenderStep(frame, Enum.RenderPriority.Camera.Value + 6, function()
+	-- The body runs inside a pcall on purpose. A render-step callback that raises is torn off its
+	-- binding by the engine, and this loop is the only thing moving the camera, the actor and the
+	-- subtitles - so a single bad frame used to stop the cinematic dead with the camera still
+	-- scriptable, the HUD still hidden and prompts still off, and nothing left running to undo any of
+	-- it. Now a bad frame is counted and skipped, and the next frame carries on.
+	local function step()
 		if not self._session or session.finishing then
 			return
 		end
@@ -621,6 +671,16 @@ function IntroCinematicController._run(self: IntroCinematicController, session: 
 		if t >= duration then
 			self:finish("played")
 		end
+	end
+	RunService:BindToRenderStep(frame, Enum.RenderPriority.Camera.Value + 6, function()
+		local ok, err = pcall(step)
+		if not ok then
+			self.stats.frameFailures += 1
+			if self.stats.frameFailures == 1 then
+				-- Once, not once a frame: a broken frame usually breaks every frame after it.
+				warn("[SFE][Intro] frame failed, cinematic continues: " .. tostring(err))
+			end
+		end
 	end)
 	self.stats.stage = "bound"
 	trove:add(function()
@@ -628,6 +688,35 @@ function IntroCinematicController._run(self: IntroCinematicController, session: 
 		if boardParchment and boardParchment.Parent then
 			boardParchment.LocalTransparencyModifier = 0
 		end
+	end)
+
+	-- The backstop, and the only part of this that does not depend on the render loop still running.
+	--
+	-- Everything above ends the cinematic from inside the per-frame callback. If that callback ever
+	-- stops being called - the engine tears a raising one off its binding, and a render step is not a
+	-- promise the way a thread is - then nothing ends it, and the player is left holding a scriptable
+	-- camera with no HUD and no prompts in a round the server has already started. This timer does
+	-- not care why the loop stopped. It waits the length of the cinematic plus a little slack, and if
+	-- the session is still standing it takes it down.
+	task.delay(duration + STALL_GRACE_SECONDS, function()
+		if self._session ~= session or session.tornDown then
+			return
+		end
+		self.stats.stalls += 1
+		warn(
+			string.format(
+				"[SFE][Intro] cinematic stalled at t=%.2f of %.2f after %d frames; ending it",
+				self.stats.lastT,
+				duration,
+				self.stats.ticks
+			)
+		)
+		self:finish("stalled")
+		-- `finish` fades before it restores. If the loop is gone the fade is all that is left running,
+		-- so make sure the restore still lands even if that path is the broken one.
+		task.delay(intro.fadeOutSeconds + 0.5, function()
+			self:_teardown(session, "stalled")
+		end)
 	end)
 end
 
@@ -641,13 +730,24 @@ function IntroCinematicController.bindRound(self: IntroCinematicController)
 			local roundId = (snapshot and snapshot.roundId) or "round"
 			self:play(roundId)
 		elseif self._session then
+			-- The round has moved on without us. There is nothing left to watch, so this does not wait
+			-- on a fade: it ends the run and then makes certain the world actually came back, because
+			-- a client still in a scriptable camera here is a client locked out of a live round.
+			local session = self._session
 			self:finish("phase")
+			task.delay(self._deps.config.round.intro.fadeOutSeconds + 0.5, function()
+				self:_teardown(session, "phase")
+			end)
 		end
 	end))
 	-- A respawn mid-intro must not leave a hidden character or a scripted camera behind.
 	self._trove:add(Players.LocalPlayer.CharacterAdded:Connect(function()
 		if self._session then
+			local session = self._session
 			self:finish("respawn")
+			task.delay(0.6, function()
+				self:_teardown(session, "respawn")
+			end)
 		end
 	end))
 end
