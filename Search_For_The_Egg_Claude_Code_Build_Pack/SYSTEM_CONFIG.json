@@ -145,8 +145,8 @@
       "partBudgetDesktop": 26000,
       "partBudgetMobile": 8500,
       "featherLengthRange": [
-        0.95,
-        1.4
+        1.15,
+        1.65
       ],
       "tiltRangeDegrees": [
         3,
@@ -154,44 +154,39 @@
       ],
       "palette": [
         [
-          252,
+          254,
+          251,
+          245
+        ],
+        [
           248,
-          240
-        ],
-        [
           243,
-          236,
-          221
+          232
         ],
         [
-          231,
-          221,
+          240,
+          233,
+          217
+        ],
+        [
+          229,
+          220,
           199
         ],
         [
-          214,
+          212,
           201,
-          173
+          177
         ],
         [
-          190,
-          175,
-          143
+          189,
+          177,
+          152
         ],
         [
-          161,
-          146,
-          115
-        ],
-        [
-          131,
-          118,
-          92
-        ],
-        [
-          104,
-          93,
-          72
+          163,
+          151,
+          127
         ]
       ],
       "cullDistanceDesktopStuds": 220,
@@ -210,20 +205,20 @@
       "visibleSlotsPerCell": 10,
       "visibleSlotsPerCellMobile": 3,
       "featherWidthRange": [
-        0.5,
-        0.72
+        0.42,
+        0.6
       ],
       "featherSpreadFraction": 0.95,
       "rollRangeDegrees": 58,
       "layerStepStuds": 0.35,
       "surfaceLiftStuds": 0.12,
       "fluffLengthRange": [
-        0.7,
-        1.05
+        0.85,
+        1.25
       ],
       "fluffWidthRange": [
-        0.4,
-        0.6
+        0.34,
+        0.5
       ],
       "fluffTiltRangeDegrees": [
         3,
@@ -285,18 +280,18 @@
         0,
         7
       ],
-      "frontSkirtStrandsDesktop": 1100,
-      "frontSkirtStrandsMobile": 320,
+      "frontSkirtStrandsDesktop": 620,
+      "frontSkirtStrandsMobile": 200,
       "frontSkirtArcDegrees": 140,
-      "frontSkirtDepthStuds": 5.0,
+      "frontSkirtDepthStuds": 3.6,
       "frontSkirtEvidence": "OWNER 14 Sep 2026: fixed overlapping strands cover the small gap at the mound's front rim (spawn side); not records, never picked",
       "revealFadeSeconds": 0.32,
       "liftPreviewStuds": 0.22,
       "layEvidence": "OWNER 14 Sep 2026: surface feathers lie tangent with overlapping tips (tilt 2-9 deg, roll +-20 deg), ivory-to-grey palette for depth, newly exposed records fade in beneath the removed one instead of popping",
       "depthEvidence": "ASSUMED 14 Sep 2026: a sweep or suction tick never takes more than maxPerCell records from one cell, so every accepted record is one of the rendered (top 10) feathers and the excavation spreads along the tool's contact area instead of tunnelling one cell",
       "scaleEvidence": "OWNER 14 Sep 2026 (clip review): feathers were 2.4-3.4 studs, about half a character, so the mound read as pillows and every pickup was a visible chunk. A feather is now ~1.2 studs; the same record count reads as thousands of small pieces.",
-      "depthTintWeight": 0.62,
-      "depthTintSlots": 14,
+      "depthTintWeight": 0.34,
+      "depthTintSlots": 22,
       "shadingEvidence": "OWNER 14 Sep 2026 (clip review): the mound was uniformly white with no depth cue. Records now tint down the palette with their depth in the column (depthTintWeight of the colour comes from depth over depthTintSlots records).",
       "rimCurlDegrees": 26,
       "rimEvidence": "OWNER 14 Sep 2026 (clip review): the rim read as a spiky ball. Rim feathers taper to rimMinScale over rimTaperStuds and pitch down by rimCurlDegrees so the edge curls under.",
