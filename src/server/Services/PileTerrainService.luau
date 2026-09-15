@@ -314,6 +314,20 @@ end
 -- (minus the inset), overlapping its neighbours so there are no seams. Players stand and walk on
 -- it; nothing of it is ever visible, and it never blocks a pick raycast. Re-writes move the boxes
 -- of the touched region only. Any leftover terrain under the nest is cleared on the first write.
+local function collisionVisible(config): boolean
+	return config.pile.collision.visible ~= false
+end
+
+local function shellColor(config): Color3
+	local rgb = config.pile.collision.color
+	return Color3.fromRGB(rgb[1], rgb[2], rgb[3])
+end
+
+local function shellMaterial(config): Enum.Material
+	local name = config.pile.collision.material
+	return (Enum.Material :: any)[name] or Enum.Material.SmoothPlastic
+end
+
 function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): Adapter
 	local adapter = { kind = "parts" }
 	local folder: Folder? = nil
@@ -333,11 +347,23 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 		boxes = {}
 		return created
 	end
+	-- How deep the client's rendered coat reaches below the surface of a column. The coat only draws
+	-- the top `visibleSlotsPerCell` records, so away from the crown it is a thin shell sitting well
+	-- above the ground; the mound body has to start just under it or a low angle sees straight
+	-- underneath the rim and out the other side.
+	local function coatSpan(config, field, x: number, z: number): number
+		local visual = config.pile.visual
+		local full = PileSurface.columnFullHeight(config, field.width, field.depth, field.cellSize, x, z)
+		local records = math.clamp(math.floor(math.max(config.pile.minRecordsPerColumn or 1, full / config.pile.recordSpacingStuds)), 1, 32)
+		local step = math.max(full / records, visual.minSeatStepStuds or 0)
+		return (visual.visibleSlotsPerCell - 1) * step + (visual.coatSpanMarginStuds or 0.35)
+	end
+
 	local function seat(field, config, dentAt: DentAt, index: number, x: number, z: number): (CFrame, Vector3)
 		local collision = config.pile.collision
 		local cx = field.minX + (x + 0.5) * field.cellSize
 		local cz = field.minZ + (z + 0.5) * field.cellSize
-		local height = PileSurface.heightAt(field, cx, cz) - dentAt(cx, cz) - collision.surfaceInsetStuds
+		local height = PileSurface.heightAt(field, cx, cz) - dentAt(cx, cz) - collision.surfaceInsetStuds - coatSpan(config, field, x, z)
 		local top = field.baseY + math.max(0, height)
 		local normal = PileSurface.normalAt(field, cx, cz)
 		local size = field.cellSize * collision.shellOverlap
@@ -374,8 +400,11 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 					box.CanQuery = false
 					box.CanTouch = false
 					box.CastShadow = false
-					box.Transparency = 1
-					box.Material = Enum.Material.SmoothPlastic
+					-- Visible: this is the packed body of the mound under the loose coat, so a gap
+					-- between feathers shows compressed feather mass instead of the ground.
+					box.Transparency = if collisionVisible(config) then 0 else 1
+					box.Color = shellColor(config)
+					box.Material = shellMaterial(config)
 					box.Parent = container
 					boxes[index] = box
 				end

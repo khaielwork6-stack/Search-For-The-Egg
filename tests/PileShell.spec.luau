@@ -19,7 +19,7 @@ return function(describe, it, expect)
 	end
 
 	describe("Shell", function()
-		it("writes one invisible collidable box per cell with its top on the surface, then clears", function()
+		it("writes one collidable box per cell forming the visible mound body just under the coat, then clears", function()
 			local parent = Instance.new("Folder")
 			local grid = PileGrid.create(cfg.pile, 1, {}, function()
 				return 0.5
@@ -36,10 +36,17 @@ return function(describe, it, expect)
 			expect(box.Anchored).toBe(true)
 			expect(box.CanCollide).toBe(true)
 			expect(box.CanQuery).toBe(false)
-			expect(box.Transparency).toBe(1)
+			-- The body is drawn: a gap between coat feathers must show packed mass, not the ground.
+			expect(box.Transparency).toBe(0)
 			local cx = field.minX + 8.5 * field.cellSize
 			local cz = field.minZ + 8.5 * field.cellSize
-			local expectedTop = field.baseY + PileSurface.heightAt(field, cx, cz) - cfg.pile.collision.surfaceInsetStuds
+			-- It seats a whole rendered stack below the surface so it never buries the coat.
+			local visual = cfg.pile.visual
+			local full = PileSurface.columnFullHeight(cfg, grid.width, grid.depth, grid.cellSize, 8, 8)
+			local records = math.clamp(math.floor(math.max(cfg.pile.minRecordsPerColumn or 1, full / cfg.pile.recordSpacingStuds)), 1, 32)
+			local step = math.max(full / records, visual.minSeatStepStuds or 0)
+			local coatSpan = (visual.visibleSlotsPerCell - 1) * step + visual.coatSpanMarginStuds
+			local expectedTop = field.baseY + PileSurface.heightAt(field, cx, cz) - cfg.pile.collision.surfaceInsetStuds - coatSpan
 			local top = (box.CFrame * CFrame.new(0, box.Size.Y / 2, 0)).Position
 			expect(math.abs(top.Y - expectedTop)).toBeLessThan(0.05)
 			expect(math.abs(box.Size.X - field.cellSize * cfg.pile.collision.shellOverlap)).toBeLessThan(0.01)
