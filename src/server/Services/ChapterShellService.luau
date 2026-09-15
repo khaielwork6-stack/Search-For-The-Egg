@@ -507,13 +507,21 @@ local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, sc
 		cframe = CFrame.new(-60.4, 58.4, 310) * CFrame.Angles(0, math.rad(90), 0) * CFrame.Angles(0, 0, math.rad(-8)),
 		name = "Confetti Charge",
 	},
-	-- The Feather Vac had a pass, a product, a price and a viewmodel, but no display: its model sat
-	-- parked below the world and was never placed. It hangs on the same wall as the other tools, on a
-	-- backboard of its own because the map only authored two board slots.
+	-- The Feather Vac, on the right-hand wall as you come through the door.
+	--
+	-- It used to hang at (-60.2, 59.4, 293.4): the far left wall, past the counter line at z=299, which
+	-- is the one corner of the shop a player walking in never looks at. The most expensive tool in the
+	-- game was the hardest one to find. The shop runs x -61.5..-28.5 with the door at z=322, so a player
+	-- enters facing -z and the right wall is the SideWall whose inner face is x=-28.5; this sits 1.3
+	-- studs off it, the same standoff the rake and the charge use on the left, at z=313 - between the
+	-- door and the Scout Chick's crate, in an otherwise empty bay, square in view on the way in.
+	--
+	-- Mounted level. The old -6 degrees of roll read as something knocked askew rather than something
+	-- put on display, and this is a 249 R$ unlock.
 	{
 		key = "featherVac",
 		model = "Vacuum",
-		cframe = CFrame.new(-60.2, 59.4, 293.4) * CFrame.Angles(0, math.rad(90), 0) * CFrame.Angles(0, 0, math.rad(-6)),
+		cframe = CFrame.new(-29.8, 59.0, 313.0) * CFrame.Angles(0, math.rad(-90), 0),
 		name = "Feather Vac",
 		scale = 0.9,
 		backboard = true,
