@@ -226,7 +226,9 @@ local function acquirePart(self: PileVisualController): BasePart
 		part = fallback
 	end
 	part.Name = "Feather"
-	part.Material = Enum.Material.Fabric
+	-- SmoothPlastic keeps the coat bright and clean; the depth tint supplies the shading that a
+	-- rough material would otherwise drain out of the whole mound.
+	part.Material = Enum.Material.SmoothPlastic
 	part.Anchored = true
 	part.CanCollide = false
 	part.CanQuery = true
@@ -810,7 +812,7 @@ function PileVisualController._buildRimBed(self: PileVisualController, folder: F
 			-- Front arc centred on +Z, packed inward from the mound's real foot. Past the grid there
 			-- is no surface to sit on, so anything seeded out there lands on bare sand as litter.
 			angle = math.pi / 2 + (h(1) - 0.5) * skirtArc
-			r = math.min(foot, field.radius * 0.99) - h(2) * skirtDepth
+			r = math.min(foot, field.radius * 1.08) - h(2) * skirtDepth
 		else
 			angle = h(1) * math.pi * 2
 			r = foot - h(2) * h(2) * 3.2

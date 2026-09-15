@@ -154,39 +154,39 @@
       ],
       "palette": [
         [
-          254,
-          251,
-          245
+          255,
+          253,
+          248
         ],
         [
-          248,
-          243,
-          232
+          250,
+          245,
+          235
         ],
         [
-          240,
-          233,
-          217
+          242,
+          235,
+          220
         ],
         [
-          229,
-          220,
-          199
+          230,
+          221,
+          201
         ],
         [
-          212,
-          201,
-          177
+          211,
+          200,
+          176
         ],
         [
-          189,
-          177,
-          152
+          184,
+          172,
+          146
         ],
         [
-          163,
-          151,
-          127
+          150,
+          138,
+          114
         ]
       ],
       "cullDistanceDesktopStuds": 220,
@@ -255,7 +255,7 @@
       "wallLevelSpacingStuds": 0.5,
       "floorStrandsPerLevel": 0,
       "floorLevelSpacingStuds": 0.5,
-      "rimMinScale": 0.42,
+      "rimMinScale": 0.6,
       "underlayerGridDesktop": [
         0,
         0
@@ -280,22 +280,22 @@
         0,
         7
       ],
-      "frontSkirtStrandsDesktop": 620,
-      "frontSkirtStrandsMobile": 200,
+      "frontSkirtStrandsDesktop": 820,
+      "frontSkirtStrandsMobile": 260,
       "frontSkirtArcDegrees": 140,
-      "frontSkirtDepthStuds": 3.6,
+      "frontSkirtDepthStuds": 4.2,
       "frontSkirtEvidence": "OWNER 14 Sep 2026: fixed overlapping strands cover the small gap at the mound's front rim (spawn side); not records, never picked",
       "revealFadeSeconds": 0.32,
       "liftPreviewStuds": 0.22,
       "layEvidence": "OWNER 14 Sep 2026: surface feathers lie tangent with overlapping tips (tilt 2-9 deg, roll +-20 deg), ivory-to-grey palette for depth, newly exposed records fade in beneath the removed one instead of popping",
       "depthEvidence": "ASSUMED 14 Sep 2026: a sweep or suction tick never takes more than maxPerCell records from one cell, so every accepted record is one of the rendered (top 10) feathers and the excavation spreads along the tool's contact area instead of tunnelling one cell",
       "scaleEvidence": "OWNER 14 Sep 2026 (clip review): feathers were 2.4-3.4 studs, about half a character, so the mound read as pillows and every pickup was a visible chunk. A feather is now ~1.2 studs; the same record count reads as thousands of small pieces.",
-      "depthTintWeight": 0.34,
-      "depthTintSlots": 22,
+      "depthTintWeight": 0.55,
+      "depthTintSlots": 16,
       "shadingEvidence": "OWNER 14 Sep 2026 (clip review): the mound was uniformly white with no depth cue. Records now tint down the palette with their depth in the column (depthTintWeight of the colour comes from depth over depthTintSlots records).",
       "rimCurlDegrees": 26,
       "rimEvidence": "OWNER 14 Sep 2026 (clip review): the rim read as a spiky ball. Rim feathers taper to rimMinScale over rimTaperStuds and pitch down by rimCurlDegrees so the edge curls under.",
-      "seatLumpStuds": 0.78,
+      "seatLumpStuds": 0.55,
       "lumpEvidence": "OWNER 14 Sep 2026 (clip review): the dome is a perfect mathematical profile until it is dug, so it read as a smooth blob. Rendered feathers are seated along a smooth deterministic undulation of this amplitude; the logical surface, aim and collision are untouched."
     },
     "assumption": "ASSUMED",
