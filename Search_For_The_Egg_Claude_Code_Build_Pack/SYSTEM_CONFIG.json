@@ -235,7 +235,7 @@
       "selectionFillTransparency": 0.42,
       "downslopeYawJitterDegrees": 42,
       "rimInsetStuds": -1.2,
-      "rimTaperStuds": 3.4,
+      "rimTaperStuds": 1.8,
       "liftSeconds": 0.09,
       "liftStuds": 0.5,
       "pickScale": 1.25,
@@ -255,7 +255,7 @@
       "wallLevelSpacingStuds": 0.5,
       "floorStrandsPerLevel": 0,
       "floorLevelSpacingStuds": 0.5,
-      "rimMinScale": 0.6,
+      "rimMinScale": 0.72,
       "underlayerGridDesktop": [
         0,
         0
@@ -296,7 +296,9 @@
       "rimCurlDegrees": 26,
       "rimEvidence": "OWNER 14 Sep 2026 (clip review): the rim read as a spiky ball. Rim feathers taper to rimMinScale over rimTaperStuds and pitch down by rimCurlDegrees so the edge curls under.",
       "seatLumpStuds": 0.55,
-      "lumpEvidence": "OWNER 14 Sep 2026 (clip review): the dome is a perfect mathematical profile until it is dug, so it read as a smooth blob. Rendered feathers are seated along a smooth deterministic undulation of this amplitude; the logical surface, aim and collision are untouched."
+      "lumpEvidence": "OWNER 14 Sep 2026 (clip review): the dome is a perfect mathematical profile until it is dug, so it read as a smooth blob. Rendered feathers are seated along a smooth deterministic undulation of this amplitude; the logical surface, aim and collision are untouched.",
+      "seatLumpFadeStuds": 3.0,
+      "gapEvidence": "OWNER 14 Sep 2026: bare sand showed through near the foot. The undulation was sinking thin-coat feathers below ground and the rim taper thinned the cover over too wide a band; the lump now fades with coat height, nothing seats below the floor, and the taper is narrower."
     },
     "assumption": "ASSUMED",
     "recordSpacingStuds": 0.15,

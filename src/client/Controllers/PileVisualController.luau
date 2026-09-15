@@ -392,7 +392,13 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 		local y, normal = self:_surfaceAt(wx, wz)
 		-- Seat by slot, never by rank: a record's place is fixed for the round whatever gets taken
 		-- above or beside it (the server resolves the same point for its aim check).
-		local seatY = y + FeatherLayout.seatOffset(visual, column.base, slot, column.step) + seatLump(visual, wx, wz) * scale
+		-- The undulation fades out where the coat is thin: at the foot the surface is a fraction of a
+		-- stud tall, so a dip of the full amplitude buried whole feathers under the sand and opened
+		-- bare patches. Nothing may seat below the nest floor either.
+		local height = y - field.baseY
+		local lumpFade = math.clamp(height / math.max(0.01, visual.seatLumpFadeStuds or 3), 0, 1)
+		local seatY = y + FeatherLayout.seatOffset(visual, column.base, slot, column.step) + seatLump(visual, wx, wz) * scale * lumpFade
+		seatY = math.max(seatY, field.baseY + 0.04)
 		-- Rim factor: 0 well inside the coat, 1 at the outermost strands, used to curl the edge under
 		-- instead of letting it radiate outward as blades.
 		local rimMin = visual.rimMinScale
