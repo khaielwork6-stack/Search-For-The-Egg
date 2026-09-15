@@ -121,9 +121,9 @@
       "kind": "parts",
       "material": "SmoothPlastic",
       "color": [
-        214,
-        203,
-        180
+        196,
+        187,
+        170
       ],
       "voxelResolution": 4,
       "digRadiusStuds": 2.2,
@@ -138,12 +138,14 @@
       "assumption": "ASSUMED",
       "rewriteEveryRecords": 6,
       "shellOverlap": 1.3,
-      "shellThicknessStuds": 3.0,
+      "bodyBuryStuds": 2.0,
+      "bodyEvidence": "OWNER 15 Sep 2026 (screenshots of the mound foot): the body was a 3-stud slab tilted to the surface normal, so on the steep rim neighbouring slabs rotated apart and their lower edges hung above the sand; a low sight line went between them, under the coat and out the far side. The body is now one solid axis-aligned column per cell, buried bodyBuryStuds below the nest floor, so no camera angle can see under it.",
       "shellFolderName": "SFE_PileCollision",
       "visible": true,
       "visibleEvidence": "OWNER 14 Sep 2026 (measured with the in-game probe): rays through the lower face of the mound passed under the coat and hit Ground.TanClearing, because the coat renders only the top records of each column and the dome surface stands studs above the sand. The collision shell is now the visible packed body under the loose coat, seated just below the rendered records.",
       "lipSurfaceStuds": 0.1,
-      "lipHeightStuds": 0.25
+      "lipHeightStuds": 0.25,
+      "bodyShadeJitter": 0.07
     },
     "visual": {
       "partBudgetDesktop": 26000,

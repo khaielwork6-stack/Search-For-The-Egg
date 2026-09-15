@@ -577,9 +577,9 @@ function Validator.validate(raw: any): Report
 			check(collision.kind == "terrain" or collision.kind == "parts", 'pile.collision.kind must be "terrain" or "parts"')
 			check(
 				isPositiveNumber(collision.shellOverlap)
-					and isPositiveNumber(collision.shellThicknessStuds)
+					and isPositiveNumber(collision.bodyBuryStuds)
 					and type(collision.shellFolderName) == "string",
-				"pile.collision shell overlap/thickness/folder name are required"
+				"pile.collision shell overlap/bury depth/folder name are required"
 			)
 			check(type(collision.material) == "string" and #collision.material > 0, "pile.collision.material must name a terrain material")
 			check(

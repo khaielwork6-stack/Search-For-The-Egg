@@ -50,6 +50,11 @@ return function(describe, it, expect)
 			local top = (box.CFrame * CFrame.new(0, box.Size.Y / 2, 0)).Position
 			expect(math.abs(top.Y - expectedTop)).toBeLessThan(0.05)
 			expect(math.abs(box.Size.X - field.cellSize * cfg.pile.collision.shellOverlap)).toBeLessThan(0.01)
+			-- Solid, not a slab: it is axis-aligned and reaches from below the nest floor up to the top,
+			-- so no sight line can pass under the body at any angle.
+			expect(box.CFrame.UpVector.Y).toBe(1)
+			local bottom = (box.CFrame * CFrame.new(0, -box.Size.Y / 2, 0)).Position
+			expect(bottom.Y <= math.min(field.groundY, field.baseY) - cfg.pile.collision.bodyBuryStuds + 0.01).toBe(true)
 			-- A rewrite of a small region moves only boxes inside it.
 			local cell = grid.cells[centreIndex]
 			for _ = 1, cell.remaining do

@@ -318,9 +318,18 @@ local function collisionVisible(config): boolean
 	return config.pile.collision.visible ~= false
 end
 
-local function shellColor(config): Color3
+-- Body shade for one cell. A single flat colour over 2300 boxes reads as a plastic wall wherever
+-- the coat thins; a small deterministic jitter per cell reads as compressed feather mass instead.
+local function shellColor(config, index: number): Color3
 	local rgb = config.pile.collision.color
-	return Color3.fromRGB(rgb[1], rgb[2], rgb[3])
+	local base = Color3.fromRGB(rgb[1], rgb[2], rgb[3])
+	local jitter = config.pile.collision.bodyShadeJitter or 0
+	if jitter <= 0 then
+		return base
+	end
+	local n = math.sin(index * 12.9898) * 43758.5453
+	local t = 1 + ((n - math.floor(n)) - 0.5) * 2 * jitter
+	return Color3.new(math.clamp(base.R * t, 0, 1), math.clamp(base.G * t, 0, 1), math.clamp(base.B * t, 0, 1))
 end
 
 local function shellMaterial(config): Enum.Material
@@ -359,32 +368,33 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 		return (visual.visibleSlotsPerCell - 1) * step + (visual.coatSpanMarginStuds or 0.35)
 	end
 
+	-- One solid, axis-aligned, ground-anchored column per cell.
+	--
+	-- This used to be a thin slab tilted to the local surface normal. Wherever the dome is steep the
+	-- neighbouring slabs rotate away from each other, the overlap opens, and the slab's lower edge
+	-- hangs studs above the sand: a low sight line then goes between two slabs, under the coat, and
+	-- straight out the far side of the mound. That is the see-through band the owner kept seeing at
+	-- the foot of the pile, and no amount of coat density can close it, because the hole is behind
+	-- the coat. A vertical box that starts below the sand and ends just under the rendered records
+	-- cannot open a gap at any camera angle: its sides are parallel, it overlaps its neighbours by
+	-- `shellOverlap`, and there is nothing underneath it to look into.
 	local function seat(field, config, dentAt: DentAt, index: number, x: number, z: number): (CFrame, Vector3)
 		local collision = config.pile.collision
 		local cx = field.minX + (x + 0.5) * field.cellSize
 		local cz = field.minZ + (z + 0.5) * field.cellSize
+		local ground = field.groundY or field.baseY
 		local surface = PileSurface.heightAt(field, cx, cz) - dentAt(cx, cz)
-		local height = surface - collision.surfaceInsetStuds - coatSpan(config, field, x, z)
-		local top = field.baseY + math.max(0, height)
-		-- At the lip the coat is barely a stud tall, so subtracting a coat span drops the body below
-		-- the sand and a low sight line passes over it, under the coat and straight out the far side.
-		-- Wherever there is mound above the floor the body keeps a face above the ground.
+		local top = field.baseY + math.max(0, surface - collision.surfaceInsetStuds - coatSpan(config, field, x, z))
+		-- At the lip the coat is barely a stud tall, so subtracting a whole coat span drops the body
+		-- under the sand. Wherever there is any mound above the floor the body keeps a face above it.
 		if surface > (collision.lipSurfaceStuds or 0.1) then
-			top = math.max(top, (field.groundY or field.baseY) + (collision.lipHeightStuds or 0.2))
+			top = math.max(top, ground + (collision.lipHeightStuds or 0.25))
 		end
-		local normal = PileSurface.normalAt(field, cx, cz)
+		local floor = math.min(ground, field.baseY) - (collision.bodyBuryStuds or 2)
+		local height = math.max(top - floor, 0.05)
 		local size = field.cellSize * collision.shellOverlap
-		local thickness = collision.shellThicknessStuds
-		local right = Vector3.new(1, 0, 0)
-		local tangent = (right - normal * right:Dot(normal))
-		if tangent.Magnitude < 0.01 then
-			tangent = Vector3.new(0, 0, 1)
-		end
-		tangent = tangent.Unit
-		local binormal = normal:Cross(tangent)
-		local frame = CFrame.fromMatrix(Vector3.new(cx, top, cz), tangent, normal, -binormal) * CFrame.new(0, -thickness / 2, 0)
 		local _ = index
-		return frame, Vector3.new(size, thickness, size)
+		return CFrame.new(cx, floor + height / 2, cz), Vector3.new(size, height, size)
 	end
 	local function write(field, config, dentAt: DentAt, minX: number?, minZ: number?, maxX: number?, maxZ: number?): number
 		local container = ensureFolder(config)
@@ -410,7 +420,7 @@ function PileTerrainService.partsAdapter(parent: Instance, terrain: Terrain?): A
 					-- Visible: this is the packed body of the mound under the loose coat, so a gap
 					-- between feathers shows compressed feather mass instead of the ground.
 					box.Transparency = if collisionVisible(config) then 0 else 1
-					box.Color = shellColor(config)
+					box.Color = shellColor(config, index)
 					box.Material = shellMaterial(config)
 					box.Parent = container
 					boxes[index] = box
