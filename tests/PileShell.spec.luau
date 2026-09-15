@@ -47,11 +47,7 @@ return function(describe, it, expect)
 			-- which is what the renderer draws - not the 3x3-smoothed surface, which on a dug column
 			-- stands above the highest feather left and on its neighbours sits below feathers that
 			-- never moved.
-			local visual = cfg.pile.visual
-			local full = PileSurface.columnFullHeight(cfg, grid.width, grid.depth, grid.cellSize, mid, mid)
-			local records = math.clamp(math.floor(math.max(cfg.pile.minRecordsPerColumn or 1, full / cfg.pile.recordSpacingStuds)), 1, 32)
-			local step = math.max(full / records, visual.minSeatStepStuds or 0)
-			local expectedTop = field.baseY + PileSurface.columnTop(field, mid, mid, step) - cfg.pile.collision.surfaceInsetStuds
+			local expectedTop = field.baseY + PileSurface.columnTop(cfg, field, mid, mid) - cfg.pile.collision.surfaceInsetStuds
 			local top = (box.CFrame * CFrame.new(0, box.Size.Y / 2, 0)).Position
 			expect(math.abs(top.Y - expectedTop)).toBeLessThan(0.05)
 			expect(math.abs(box.Size.X - field.cellSize * cfg.pile.collision.shellOverlap)).toBeLessThan(0.01)

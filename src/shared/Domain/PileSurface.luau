@@ -36,6 +36,7 @@ export type Field = {
 	-- - has to use these two instead.
 	seatHeights: { number }, -- the mound as first built, before anything was dug
 	removed: { number }, -- records taken from each cell
+	bases: { number }, -- records each column started with
 }
 
 PileSurface.RIM_STRETCH = 1.0 -- the mound reaches the floor at the edge of the grid
@@ -92,7 +93,7 @@ function PileSurface.buildField(cfg: { [string]: any }, grid: { [string]: any },
 	local apex = cfg.pile.maxVisualHeightStuds
 	local radius = math.min(halfW, halfD)
 	local heights, fractions, depths = table.create(width * depth, 0), table.create(width * depth, 0), table.create(width * depth, 0)
-	local seatHeights, removed = table.create(width * depth, 0), table.create(width * depth, 0)
+	local seatHeights, removed, bases = table.create(width * depth, 0), table.create(width * depth, 0), table.create(width * depth, 1)
 	for z = 0, depth - 1 do
 		for x = 0, width - 1 do
 			local index = z * width + x + 1
@@ -109,6 +110,7 @@ function PileSurface.buildField(cfg: { [string]: any }, grid: { [string]: any },
 			-- simply the dome. This is the surface the renderer placed the stacks on and never revises.
 			seatHeights[index] = full
 			local cellBase = math.max(1, grid.base[index] or 1)
+			bases[index] = cellBase
 			removed[index] = math.max(0, cellBase - (grid.remaining[index] or cellBase))
 		end
 	end
@@ -129,15 +131,23 @@ function PileSurface.buildField(cfg: { [string]: any }, grid: { [string]: any },
 		depths = depths,
 		seatHeights = seatHeights,
 		removed = removed,
+		bases = bases,
 	}
 end
 
 -- The Y offset (above baseY) of a column's topmost remaining record: where the renderer drew it.
-function PileSurface.columnTop(field: Field, x: number, z: number, step: number): number
+--
+-- The step comes from the column's own `base`, which is the number the grid actually dealt it. Working
+-- it out again from the config instead lands a fraction of a stud off, and that fraction is multiplied
+-- by every record taken - studs of disagreement by the time a column has been dug out.
+function PileSurface.columnTop(cfg: { [string]: any }, field: Field, x: number, z: number): number
 	if x < 0 or z < 0 or x >= field.width or z >= field.depth then
 		return 0
 	end
 	local index = z * field.width + x + 1
+	local base = math.max(1, field.bases[index] or 1)
+	local full = PileSurface.columnFullHeight(cfg, field.width, field.depth, field.cellSize, x, z)
+	local step = math.max(full / base, cfg.pile.visual.minSeatStepStuds or 0)
 	return math.max(0, (field.seatHeights[index] or 0) - (field.removed[index] or 0) * step)
 end
 
@@ -173,6 +183,7 @@ function PileSurface.refreshWindow(field: Field, cells: { any }, minCellX: numbe
 			field.heights[index] = full * fraction
 			local cell = cells[index]
 			if cell then
+				field.bases[index] = math.max(1, cell.base)
 				field.removed[index] = math.max(0, cell.base - cell.remaining)
 			end
 		end
