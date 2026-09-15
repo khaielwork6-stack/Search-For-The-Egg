@@ -47,12 +47,14 @@ type Cell = {
 	face: Frame,
 	scale: UIScale,
 	stroke: UIStroke,
+	header: Frame,
 	title: TextLabel,
 	amount: TextLabel,
-	state: TextLabel,
+	footer: TextButton,
+	gems: { Frame },
 	check: Frame,
 	lock: Frame,
-	star: Frame?,
+	ribbon: TextLabel?,
 	stopPulse: (() -> ())?,
 }
 
@@ -125,99 +127,142 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	grid.LayoutOrder = 3
 	grid.ZIndex = z
 	local layout = Instance.new("UIGridLayout")
-	layout.CellSize = UDim2.new(1 / COLUMNS, -Tokens.spacing.sm, 0, tap + Tokens.spacing.xl)
+	layout.CellSize = UDim2.new(1 / COLUMNS, -Tokens.spacing.sm, 0, math.floor(tap * 2.9))
 	layout.CellPadding = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = grid
 	grid.Parent = container
 
-	-- One tile. `wide` is the final day: taller, gold, starred, and on its own row.
-	local function buildCell(parent: Instance, entry: any, wide: boolean): Cell
+	-- One reward card, laid out in bands so nothing can overlap: a day header, the amount, a block of
+	-- artwork, then a footer that carries the state. The previous version centred the gem icon and the
+	-- amount on the same point, which drew the icon straight through the number.
+	local function buildCell(parent: Instance, entry: any, grand: boolean): Cell
 		local root, face = FrameKit.tile(parent, "Day" .. entry.day, {
 			fill = Tokens.color.surface,
 			deep = Tokens.color.creamDeep,
 			zIndex = z + 1,
-			radius = if wide then Tokens.radius.lg else Tokens.radius.md,
-			lip = if wide then 6 else 4,
-			size = if wide then UDim2.new(1, 0, 0, tap + Tokens.spacing.xxl) else nil,
+			radius = Tokens.radius.md,
+			lip = 5,
 		})
 		root.LayoutOrder = entry.day
 		local scale = Instance.new("UIScale")
 		scale.Parent = root
 		local stroke = root:FindFirstChild("Outline") :: UIStroke
-		local title = FrameKit.text(face, "Title", "Day " .. entry.day, "caption", {
+
+		-- Header band: the day number, always legible against the card whatever state it is in.
+		local header = Instance.new("Frame")
+		header.Name = "Header"
+		header.Size = UDim2.new(1, 0, 0, Tokens.typography.label.size + Tokens.spacing.sm)
+		header.BackgroundColor3 = Tokens.color.strawDeep
+		header.BorderSizePixel = 0
+		header.ZIndex = z + 2
+		header.Parent = face
+		local headerCorner = Instance.new("UICorner")
+		headerCorner.CornerRadius = UDim.new(0, Tokens.radius.sm)
+		headerCorner.Parent = header
+		local title = FrameKit.text(header, "Title", "DAY " .. entry.day, "label", {
 			align = Enum.TextXAlignment.Center,
 			zIndex = z + 3,
-			color = Tokens.color.inkMuted,
+			color = Tokens.color.featherWhite,
 		})
-		title.Position = UDim2.fromOffset(0, Tokens.spacing.xs)
-		local icon = Icons.gem(face, if wide then Tokens.icon.lg else Tokens.icon.md, { zIndex = z + 3 })
-		icon.AnchorPoint = Vector2.new(0.5, 0)
-		icon.Position = UDim2.new(0.5, 0, 0, Tokens.typography.caption.size + Tokens.spacing.sm)
-		local amount = FrameKit.text(face, "Amount", "", if wide then "display" else "numeral", {
+		title.Size = UDim2.fromScale(1, 1)
+
+		local amount = FrameKit.text(face, "Amount", "", "heading", {
 			align = Enum.TextXAlignment.Center,
 			zIndex = z + 3,
 			color = Tokens.color.goldDeep,
 		})
-		amount.AnchorPoint = Vector2.new(0.5, 1)
-		amount.Position = UDim2.new(0.5, 0, 1, -(Tokens.typography.caption.size + Tokens.spacing.sm))
-		amount.Size = UDim2.new(1, 0, 0, (if wide then Tokens.typography.display.size else Tokens.typography.numeral.size) + 2)
-		local state = FrameKit.text(face, "State", "", "caption", {
-			align = Enum.TextXAlignment.Center,
-			zIndex = z + 3,
-			color = Tokens.color.inkMuted,
-		})
-		state.AnchorPoint = Vector2.new(0.5, 1)
-		state.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.xs)
-		local check = Icons.check(face, Tokens.icon.md, { zIndex = z + 4, color = Tokens.color.leafDeep })
+		amount.AnchorPoint = Vector2.new(0.5, 0)
+		amount.Position = UDim2.new(0.5, 0, 0, header.Size.Y.Offset + Tokens.spacing.xs)
+		amount.Size = UDim2.new(1, 0, 0, Tokens.typography.heading.size + 2)
+
+		-- Artwork band. The grand prize gets a cluster rather than a single stone, so "a lot" reads
+		-- without writing the word.
+		local art = Instance.new("Frame")
+		art.Name = "Art"
+		art.BackgroundTransparency = 1
+		art.AnchorPoint = Vector2.new(0.5, 0.5)
+		art.Position = UDim2.fromScale(0.5, 0.56)
+		art.Size = UDim2.new(1, -Tokens.spacing.sm, 0.44, 0)
+		art.ZIndex = z + 3
+		art.Parent = face
+		local gems: { Frame } = {}
+		local cluster = if grand then 5 else 1
+		for index = 1, cluster do
+			local px = if grand then Tokens.icon.md else Tokens.icon.lg
+			local gem = Icons.gem(art, px, { zIndex = z + 4 })
+			gem.AnchorPoint = Vector2.new(0.5, 0.5)
+			if grand then
+				local ring = (index - 1) / cluster * math.pi * 2
+				gem.Position = UDim2.fromScale(0.5 + math.cos(ring) * 0.2, 0.5 + math.sin(ring) * 0.26)
+			else
+				gem.Position = UDim2.fromScale(0.5, 0.5)
+			end
+			table.insert(gems, gem)
+		end
+
+		-- Footer: the state, and the only place a card can be pressed.
+		local footer = Instance.new("TextButton")
+		footer.Name = "Footer"
+		footer.AnchorPoint = Vector2.new(0.5, 1)
+		footer.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.xs)
+		footer.Size = UDim2.new(1, -Tokens.spacing.sm, 0, Tokens.typography.caption.size + Tokens.spacing.sm)
+		footer.BackgroundColor3 = Tokens.color.creamDeep
+		footer.BorderSizePixel = 0
+		footer.AutoButtonColor = false
+		footer.Font = Tokens.typography.label.font
+		footer.TextSize = Tokens.typography.caption.size
+		footer.TextColor3 = Tokens.color.ink
+		footer.Text = ""
+		footer.Active = false
+		footer.ZIndex = z + 4
+		footer.Parent = face
+		local footerCorner = Instance.new("UICorner")
+		footerCorner.CornerRadius = UDim.new(0, Tokens.radius.sm)
+		footerCorner.Parent = footer
+		local footerStroke = Instance.new("UIStroke")
+		footerStroke.Thickness = Tokens.stroke.hairline
+		footerStroke.Color = Tokens.color.outline
+		footerStroke.Transparency = 0.4
+		footerStroke.Parent = footer
+
+		local check = Icons.check(face, Tokens.icon.sm, { zIndex = z + 5, color = Tokens.color.featherWhite })
 		check.AnchorPoint = Vector2.new(1, 0)
 		check.Position = UDim2.new(1, -Tokens.spacing.xs, 0, Tokens.spacing.xs)
 		check.Visible = false
-		local lock = Icons.lock(face, Tokens.icon.sm, { zIndex = z + 4, color = Tokens.color.inkMuted })
+		local lock = Icons.lock(face, Tokens.icon.sm, { zIndex = z + 5, color = Tokens.color.inkMuted })
 		lock.AnchorPoint = Vector2.new(1, 0)
 		lock.Position = UDim2.new(1, -Tokens.spacing.xs, 0, Tokens.spacing.xs)
 		lock.Visible = false
-		local star: Frame? = nil
-		if wide then
-			star = Icons.star(face, Tokens.icon.md, { zIndex = z + 4, color = Tokens.color.goldLight });
-			(star :: Frame).AnchorPoint = Vector2.new(0, 0);
-			(star :: Frame).Position = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.xs)
+		local ribbon: TextLabel? = nil
+		if grand then
+			ribbon = FrameKit.badge(face, "Ribbon", "GRAND PRIZE", Tokens.color.ember, z + 6);
+			(ribbon :: TextLabel).AnchorPoint = Vector2.new(0.5, 0);
+			(ribbon :: TextLabel).Position = UDim2.new(0.5, 0, 0, header.Size.Y.Offset + Tokens.spacing.xs)
 		end
 		return {
 			root = root,
 			face = face,
 			scale = scale,
 			stroke = stroke,
+			header = header,
 			title = title,
 			amount = amount,
-			state = state,
+			footer = footer,
+			gems = gems,
 			check = check,
 			lock = lock,
-			star = star,
+			ribbon = ribbon,
 			stopPulse = nil,
 		}
 	end
 
+	-- All eight days in one 4x2 grid, the way the reference reads: the grand prize is a card in the
+	-- run, not a separate banner under it.
 	local cells: { Cell } = {}
 	for _, entry in ipairs(rewards) do
-		if entry.day < finalDay then
-			table.insert(cells, buildCell(grid, entry, false))
-		end
+		table.insert(cells, buildCell(grid, entry, entry.day == finalDay))
 	end
-
-	-- The final day gets its own row: the streak needs somewhere to arrive.
-	local finale = Instance.new("Frame")
-	finale.Name = "Finale"
-	finale.BackgroundTransparency = 1
-	finale.Size = UDim2.new(1, 0, 0, tap + Tokens.spacing.xxl)
-	finale.LayoutOrder = 4
-	finale.ZIndex = z
-	finale.Parent = container
-	local finaleCell = buildCell(finale, rewards[finalDay], true)
-	table.insert(cells, finaleCell)
-	local ribbon = FrameKit.badge(finaleCell.face, "Ribbon", "GRAND PRIZE", Tokens.color.ember, z + 5)
-	ribbon.AnchorPoint = Vector2.new(1, 1)
-	ribbon.Position = UDim2.new(1, -Tokens.spacing.sm, 1, -Tokens.spacing.sm)
 
 	local grace = FrameKit.text(container, "Grace", "", "caption", { zIndex = z, color = Tokens.color.inkMuted, wrap = true })
 	grace.LayoutOrder = 5
@@ -242,6 +287,8 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	table.insert(cleanups, claim.destroy)
 	api.setInitialFocus(claim.button)
 
+	local doClaim: () -> ()
+
 	local function evaluation(): any?
 		local projection = deps.profile.projection
 		return projection and projection.rewards.daily or nil
@@ -257,45 +304,71 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		local ready = daily.status == "ready" or daily.status == "reset"
 		for index, cell in ipairs(cells) do
 			local info = calendar[index]
-			local wide = index == finalDay
-			cell.amount.Text = string.format("x%d", info.gems)
-			cell.title.Text = "Day " .. info.day
+			local grand = index == finalDay
+			cell.amount.Text = string.format("+%d Gems", info.gems)
+			cell.title.Text = "DAY " .. info.day
 			cell.check.Visible = info.claimed
 			cell.lock.Visible = not info.claimed and not info.current
+			cell.footer.Active = false
+			cell.footer.AutoButtonColor = false
+			for _, gem in ipairs(cell.gems) do
+				gem.Visible = true
+			end
 			if info.claimed then
+				-- Done: cool, quiet, and unmistakably finished.
 				cell.face.BackgroundColor3 = Tokens.color.tealTint
+				cell.header.BackgroundColor3 = Tokens.color.leafDeep
 				cell.stroke.Color = Tokens.color.leafDeep
 				cell.stroke.Thickness = Tokens.stroke.standard
 				cell.amount.TextColor3 = Tokens.color.leafDeep
-				cell.title.TextColor3 = Tokens.color.leafDeep
-				cell.state.Text = "Claimed"
-				cell.state.TextColor3 = Tokens.color.leafDeep
-			elseif info.current then
-				cell.face.BackgroundColor3 = if ready then Tokens.color.creamPill else Tokens.color.surfaceAlt
+				cell.footer.BackgroundColor3 = Tokens.color.leafBright
+				cell.footer.TextColor3 = Tokens.color.featherWhite
+				cell.footer.Text = "CLAIMED"
+			elseif info.current and ready then
+				-- The one card that wants to be pressed: bright face, gold frame, green Claim.
+				cell.face.BackgroundColor3 = Tokens.color.creamPill
+				cell.header.BackgroundColor3 = Tokens.color.goldDeep
 				cell.stroke.Color = Tokens.color.gold
 				cell.stroke.Thickness = Tokens.stroke.frame
 				cell.amount.TextColor3 = Tokens.color.goldDeep
-				cell.title.TextColor3 = Tokens.color.inkStrong
-				cell.state.Text = if ready then "Ready now" else "Today"
-				cell.state.TextColor3 = if ready then Tokens.color.goldDeep else Tokens.color.inkMuted
+				cell.footer.BackgroundColor3 = Tokens.color.success
+				cell.footer.TextColor3 = Tokens.color.featherWhite
+				cell.footer.Text = "CLAIM"
+				cell.footer.Active = true
+				cell.footer.AutoButtonColor = true
+			elseif info.current then
+				-- Today, but the nest has not opened yet: the footer becomes the countdown.
+				cell.face.BackgroundColor3 = Tokens.color.surfaceAlt
+				cell.header.BackgroundColor3 = Tokens.color.strawDeep
+				cell.stroke.Color = Tokens.color.gold
+				cell.stroke.Thickness = Tokens.stroke.bold
+				cell.amount.TextColor3 = Tokens.color.goldDeep
+				cell.footer.BackgroundColor3 = Tokens.color.tealPanel
+				cell.footer.TextColor3 = Tokens.color.featherWhite
+				cell.footer.Text = "--:--:--"
 			else
 				cell.face.BackgroundColor3 = Tokens.color.surface
+				cell.header.BackgroundColor3 = Tokens.color.inkMuted
 				cell.stroke.Color = Tokens.color.strawDeep
 				cell.stroke.Thickness = Tokens.stroke.standard
 				cell.amount.TextColor3 = Tokens.color.inkMuted
-				cell.title.TextColor3 = Tokens.color.inkMuted
-				cell.state.Text = "Locked"
-				cell.state.TextColor3 = Tokens.color.inkMuted
+				cell.footer.BackgroundColor3 = Tokens.color.creamDeep
+				cell.footer.TextColor3 = Tokens.color.inkMuted
+				cell.footer.Text = "LOCKED"
+				for _, gem in ipairs(cell.gems) do
+					gem.Visible = true
+				end
 			end
-			if wide and not info.claimed then
-				-- The finale keeps its gold face even while locked, so the run has a visible prize.
+			if grand and not info.claimed then
+				-- The grand prize keeps a gold face even while locked, so the run has a visible end.
 				cell.face.BackgroundColor3 = if info.current and ready then Tokens.color.goldLight else Tokens.color.creamPill
+				cell.header.BackgroundColor3 = Tokens.color.goldDeep
 				cell.stroke.Color = Tokens.color.goldDeep
 				cell.stroke.Thickness = Tokens.stroke.frame
 				cell.amount.TextColor3 = Tokens.color.goldDeep
 			end
-			if cell.star then
-				cell.star.Visible = not info.claimed
+			if cell.ribbon then
+				cell.ribbon.Visible = not info.claimed
 			end
 			-- Only the claimable day breathes; everything else stays still.
 			local shouldPulse = info.current and ready
@@ -337,7 +410,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		end
 	end
 
-	local function doClaim()
+	function doClaim()
 		claim.setPending(true, "Opening...")
 		local result = deps.net:request("DailyClaim", nil)
 		claim.setPending(false)
@@ -376,6 +449,18 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	end
 
 	table.insert(cleanups, claim.button.Activated:Connect(doClaim))
+	-- A card is pressable only in the state that set Active, so Locked, Claimed and countdown cards
+	-- swallow the press instead of firing a request the server would only refuse.
+	for _, cell in ipairs(cells) do
+		table.insert(
+			cleanups,
+			cell.footer.Activated:Connect(function()
+				if cell.footer.Active then
+					doClaim()
+				end
+			end)
+		)
+	end
 	if api.registerDebug then
 		api.registerDebug({
 			claim = doClaim,
@@ -411,7 +496,13 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			local daily = evaluation()
 			if daily and daily.status == "early" then
 				local remaining = daily.nextClaimInSeconds - (os.clock() - receivedAt)
-				timer.Text = string.format("Next nest opens in %s", clock(remaining))
+				local formatted = clock(remaining)
+				timer.Text = string.format("Next nest opens in %s", formatted)
+				-- The waiting day counts down on its own card, which is where the eye already is.
+				local cell = cells[daily.dayIndex]
+				if cell and not cell.footer.Active then
+					cell.footer.Text = formatted
+				end
 			end
 		end)
 	)
