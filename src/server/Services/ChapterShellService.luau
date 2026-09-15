@@ -475,75 +475,77 @@ end
 -- The owner's item models become shop displays inside the supplies barn: two bags on the counter,
 -- the pitchfork and the dynamite on the rear wall boards. Each carries a Buy prompt; the client
 -- draws the price card from the round previews. Missing models are skipped, never rebuilt.
-local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, scale: number?, stand: CFrame?, backboard: boolean? } } = {
+local DISPLAYS: { { key: string, model: string, cframe: CFrame, name: string, scale: number?, stand: CFrame?, backboard: boolean?, board: CFrame? } } =
 	{
-		key = "bag",
-		model = "FeatherBag",
-		-- Turned to face the counter the player stands at, not the wall behind it.
-		cframe = CFrame.new(-47, 58.75, 299),
-		name = "Upgrade Bag",
-		scale = 0.8,
-	},
-	{
-		key = "infiniteBag",
-		model = "InfiniteBag",
-		cframe = CFrame.new(-36.5, 58.75, 299),
-		name = "Infinite Bag",
-		scale = 0.8,
-	},
-	-- Tools hang on the left wall (x -62) on the boards moved there, leaving the counter to the bags.
-	{
-		key = "nestRake",
-		model = "Pitchfork",
-		cframe = CFrame.new(-60.3, 60.2, 299.5)
-			* CFrame.Angles(0, math.rad(90), 0)
-			* CFrame.Angles(0, 0, math.rad(-62))
-			* CFrame.new(0, -4.2, 0),
-		name = "Nest Rake",
-	},
-	{
-		key = "confettiCharge",
-		model = "Dynamite",
-		cframe = CFrame.new(-60.4, 58.4, 310) * CFrame.Angles(0, math.rad(90), 0) * CFrame.Angles(0, 0, math.rad(-8)),
-		name = "Confetti Charge",
-	},
-	-- The Feather Vac, on the right-hand wall as you come through the door.
-	--
-	-- It used to hang at (-60.2, 59.4, 293.4): the far left wall, past the counter line at z=299, which
-	-- is the one corner of the shop a player walking in never looks at. The most expensive tool in the
-	-- game was the hardest one to find. The shop runs x -61.5..-28.5 with the door at z=322, so a player
-	-- enters facing -z and the right wall is the SideWall whose inner face is x=-28.5; this sits 1.3
-	-- studs off it, the same standoff the rake and the charge use on the left, at z=313 - between the
-	-- door and the Scout Chick's crate, in an otherwise empty bay, square in view on the way in.
-	--
-	-- Mounted level and lying along the wall.
-	--
-	-- Measured: the model is 5.66 studs along its own Z, 1.84 across its X. At yaw -90 that long axis
-	-- pointed down world X - straight out of the wall, like a cannon aimed into the shop, with the
-	-- board it was supposed to be hanging on edge-on behind it. The left wall had the same fault before
-	-- the move; nobody had looked at that corner. At yaw 180 the length runs along world Z (along the
-	-- wall) and the thin face turns into the room, which is also the direction the board faces.
-	--
-	-- Level, too: the old -6 degrees of roll read as knocked askew rather than put on display, and this
-	-- is a 249 R$ unlock.
-	{
-		key = "featherVac",
-		model = "Vacuum",
-		cframe = CFrame.new(-29.8, 59.0, 313.0) * CFrame.Angles(0, math.rad(180), 0),
-		name = "Feather Vac",
-		scale = 0.9,
-		backboard = true,
-	},
-	-- The Scout Chick (owner's Bird) perches on a rope-tied crate beside the counter.
-	{
-		key = "scoutChick",
-		model = "Bird",
-		cframe = CFrame.new(-31.5, 58.15, 303.5) * CFrame.Angles(0, math.rad(35), 0),
-		name = "Scout Chick",
-		scale = 0.38,
-		stand = CFrame.new(-31.5, 55.3, 303.5),
-	},
-}
+		{
+			key = "bag",
+			model = "FeatherBag",
+			-- Turned to face the counter the player stands at, not the wall behind it.
+			cframe = CFrame.new(-47, 58.75, 299),
+			name = "Upgrade Bag",
+			scale = 0.8,
+		},
+		{
+			key = "infiniteBag",
+			model = "InfiniteBag",
+			cframe = CFrame.new(-36.5, 58.75, 299),
+			name = "Infinite Bag",
+			scale = 0.8,
+		},
+		-- Tools hang on the left wall (x -62) on the boards moved there, leaving the counter to the bags.
+		{
+			key = "nestRake",
+			model = "Pitchfork",
+			cframe = CFrame.new(-60.3, 60.2, 299.5)
+				* CFrame.Angles(0, math.rad(90), 0)
+				* CFrame.Angles(0, 0, math.rad(-62))
+				* CFrame.new(0, -4.2, 0),
+			name = "Nest Rake",
+		},
+		{
+			key = "confettiCharge",
+			model = "Dynamite",
+			cframe = CFrame.new(-60.4, 58.4, 310) * CFrame.Angles(0, math.rad(90), 0) * CFrame.Angles(0, 0, math.rad(-8)),
+			name = "Confetti Charge",
+		},
+		-- The Feather Vac, on the right-hand wall as you come through the door.
+		--
+		-- It used to hang at (-60.2, 59.4, 293.4): the far left wall, past the counter line at z=299, which
+		-- is the one corner of the shop a player walking in never looks at. The most expensive tool in the
+		-- game was the hardest one to find. The shop runs x -61.5..-28.5 with the door at z=322, so a player
+		-- enters facing -z and the right wall is the SideWall whose inner face is x=-28.5; this sits 1.3
+		-- studs off it, the same standoff the rake and the charge use on the left, at z=313 - between the
+		-- door and the Scout Chick's crate, in an otherwise empty bay, square in view on the way in.
+		--
+		-- Mounted level, lying along the wall, on a board that faces the room.
+		--
+		-- The tool and its board want different headings, which is why this carries both. The Vacuum is
+		-- 5.66 studs along its own X, so it only lies flat against a wall running down world Z at a yaw of
+		-- plus or minus ninety. The board's forward is its own +X (that is what buildBackboard's face
+		-- plate, brackets and lamp are all measured off), and for that to face into the room off the
+		-- x = -28.5 wall it has to be at a yaw of one eighty. One CFrame cannot be both.
+		--
+		-- Level, too: the old -6 degrees of roll read as knocked askew rather than put on display, and this
+		-- is a 249 R$ unlock.
+		{
+			key = "featherVac",
+			model = "Vacuum",
+			cframe = CFrame.new(-29.8, 59.0, 313.0) * CFrame.Angles(0, math.rad(-90), 0),
+			board = CFrame.new(-29.8, 59.0, 313.0) * CFrame.Angles(0, math.rad(180), 0),
+			name = "Feather Vac",
+			scale = 0.9,
+			backboard = true,
+		},
+		-- The Scout Chick (owner's Bird) perches on a rope-tied crate beside the counter.
+		{
+			key = "scoutChick",
+			model = "Bird",
+			cframe = CFrame.new(-31.5, 58.15, 303.5) * CFrame.Angles(0, math.rad(35), 0),
+			name = "Scout Chick",
+			scale = 0.38,
+			stand = CFrame.new(-31.5, 55.3, 303.5),
+		},
+	}
 
 -- A wall mount for a display that has no authored board: a tan backboard with a cocoa frame, two
 -- brackets under the tool, a warm light and a name plate. Built in the display's own frame, so moving
@@ -712,7 +714,7 @@ function ChapterShellService.placeDisplays(workspaceService: Workspace, config: 
 		model:PivotTo(spec.cframe)
 		if spec.backboard then
 			local _, extent = model:GetBoundingBox()
-			buildBackboard(model.Parent or workspaceService, spec.key, spec.cframe, spec.name, extent)
+			buildBackboard(model.Parent or workspaceService, spec.key, spec.board or spec.cframe, spec.name, extent)
 		end
 		model:SetAttribute("SFE_Display", spec.key)
 		if not model.PrimaryPart then
