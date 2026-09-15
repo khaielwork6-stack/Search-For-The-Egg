@@ -28,7 +28,13 @@ export type Field = {
 	depths: { number }, -- smoothed removed-record depth (studs) per cell
 }
 
-PileSurface.RIM_STRETCH = 1.15 -- the mound reaches the floor at the edge of the nest base cylinder
+PileSurface.RIM_STRETCH = 1.0 -- the mound reaches the floor at the edge of the grid
+-- This was 1.15, so the profile only reached zero at 1.15x the grid radius while the grid (and so
+-- every rendered record and every body box) stopped at 1.0x. The mound was a truncated dome: its
+-- edge was a vertical cliff a stud and a half to three studs tall all the way round, which read as
+-- a see-through gap while the body was a gapped slab and as a bare wall once the body was solid.
+-- The grid was widened to 54x54 at 0.54 studs so the same footprint, the same silhouette and the
+-- same record total now fit inside a dome that actually lands on the sand.
 PileSurface.PROFILE_POWER = 1.5 -- rounded-cone haystack silhouette: soft crown, straight steep flanks
 
 -- Dome profile in [0,1] for a normalised radius; 1 at the centre, 0 outside the rim stretch.

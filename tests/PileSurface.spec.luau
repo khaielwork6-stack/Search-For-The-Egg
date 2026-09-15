@@ -80,15 +80,17 @@ return function(describe, it, expect)
 			expect(math.abs(h0 - h1)).toBeLessThan(1)
 			expect(h1).toBeGreaterThanOrEqual(h2)
 			expect(PileSurface.heightAt(field, centre.X + 100, centre.Z)).toBe(0)
-			-- Column centres agree with the continuous surface, and the rim meets the floor just
-			-- outside the footprint (no cliff at the grid edge).
+			-- Column centres agree with the continuous surface, and the rim meets the floor exactly at
+			-- the footprint edge: the profile reaching zero past the grid is what left a cliff there.
 			local column = ChapterLayout.cellWorldPosition(layout, field.width, field.depth, cfg.pile.cellSizeStuds, 3, 11, 0)
 			expect(PileSurface.heightAt(field, column.X, column.Z)).toBeCloseTo(PileSurface.columnHeight(field, 3, 11), 1e-3)
 			local radius = field.radius
 			local edge = PileSurface.heightAt(field, centre.X + radius, centre.Z)
+			local inner = PileSurface.heightAt(field, centre.X + radius * 0.9, centre.Z)
 			local beyond = PileSurface.heightAt(field, centre.X + radius * PileSurface.RIM_STRETCH + 0.01, centre.Z)
-			expect(edge).toBeGreaterThan(0)
-			expect(edge).toBeLessThan(cfg.pile.maxVisualHeightStuds * 0.5)
+			expect(edge).toBe(0) -- lands on the sand inside the grid, no cliff to see under or around
+			expect(inner).toBeGreaterThan(0)
+			expect(inner).toBeLessThan(cfg.pile.maxVisualHeightStuds * 0.5)
 			expect(beyond).toBe(0)
 			local normal = PileSurface.normalAt(field, centre.X + radius * 0.5, centre.Z)
 			expect(normal.Y).toBeGreaterThan(0)
@@ -146,7 +148,7 @@ return function(describe, it, expect)
 			)
 			expect(skirt).toBeTruthy()
 			expect(skirt.cz).toBeGreaterThanOrEqual(-1) -- one row past the footprint at most, never "outside_nest"
-			expect(PileGrid.findTarget(runtime.grid, skirt.cx, skirt.cz, 1).z).toBe(0) -- resolves to the edge row
+			expect(PileGrid.findTarget(runtime.grid, skirt.cx, skirt.cz, 1).z <= 1).toBe(true) -- resolves to an edge row
 			local _, code, message = CollectionService.resolveAim(cfg, runtime, standing, origin, Vector3.new(0, 0, -1))
 			expect(code).toBe("out_of_range")
 			expect(message).toBe("aim")

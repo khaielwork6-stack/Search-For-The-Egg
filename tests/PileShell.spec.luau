@@ -31,21 +31,22 @@ return function(describe, it, expect)
 			expect(folder).toBeTruthy()
 			expect(#folder:GetChildren()).toBe(grid.width * grid.depth)
 			local field = PileSurface.buildField(cfg, PileGrid.snapshot(grid), layout)
-			local centreIndex = 8 * grid.width + 8 + 1
+			local mid = math.floor(grid.width / 2)
+			local centreIndex = mid * grid.width + mid + 1
 			local box = folder:FindFirstChild("Shell" .. centreIndex)
 			expect(box.Anchored).toBe(true)
 			expect(box.CanCollide).toBe(true)
 			expect(box.CanQuery).toBe(false)
 			-- The body is drawn: a gap between coat feathers must show packed mass, not the ground.
 			expect(box.Transparency).toBe(0)
-			local cx = field.minX + 8.5 * field.cellSize
-			local cz = field.minZ + 8.5 * field.cellSize
+			local cx = field.minX + (mid + 0.5) * field.cellSize
+			local cz = field.minZ + (mid + 0.5) * field.cellSize
 			-- It seats a whole rendered stack below the surface so it never buries the coat.
 			local visual = cfg.pile.visual
-			local full = PileSurface.columnFullHeight(cfg, grid.width, grid.depth, grid.cellSize, 8, 8)
+			local full = PileSurface.columnFullHeight(cfg, grid.width, grid.depth, grid.cellSize, mid, mid)
 			local records = math.clamp(math.floor(math.max(cfg.pile.minRecordsPerColumn or 1, full / cfg.pile.recordSpacingStuds)), 1, 32)
 			local step = math.max(full / records, visual.minSeatStepStuds or 0)
-			local slots = PileSurface.coatSlots(cfg, grid.width, grid.depth, grid.cellSize, 8, 8, records, visual.visibleSlotsPerCell)
+			local slots = PileSurface.coatSlots(cfg, grid.width, grid.depth, grid.cellSize, mid, mid, records, visual.visibleSlotsPerCell)
 			local coatSpan = (slots - 1) * step + visual.coatSpanMarginStuds
 			local expectedTop = field.baseY + PileSurface.heightAt(field, cx, cz) - cfg.pile.collision.surfaceInsetStuds - coatSpan
 			local top = (box.CFrame * CFrame.new(0, box.Size.Y / 2, 0)).Position

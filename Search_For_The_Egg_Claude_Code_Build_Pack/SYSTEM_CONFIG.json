@@ -97,7 +97,7 @@
     "personalBag": true,
     "personalCash": true,
     "pileRepresentation": {
-      "serverGridCells": 2304,
+      "serverGridCells": 2916,
       "clientVisualStrandPoolDesktop": 9000,
       "clientVisualStrandPoolMobile": 3200,
       "replicationHz": 8,
@@ -106,9 +106,9 @@
     }
   },
   "pile": {
-    "gridWidth": 48,
-    "gridDepth": 48,
-    "cellSizeStuds": 0.6,
+    "gridWidth": 54,
+    "gridDepth": 54,
+    "cellSizeStuds": 0.54,
     "baseFeathersPerCell": 6,
     "surfaceVariance": 0.25,
     "coverDepthMultiplier": 2.0,
@@ -318,7 +318,8 @@
     "recordSpacingStuds": 0.15,
     "depthEvidence": "ASSUMED 14 Sep 2026: 48x48 cells of 0.6 studs (same 28.8-stud footprint), records every 0.15 studs of column height capped at 32 per cell (~55k records) so the mound reads ~20-25 min of tool digging to the egg at minimumRemovalFraction; visible coat is the top 10 records per cell",
     "minRecordsPerColumn": 7,
-    "minRecordsEvidence": "OWNER 14 Sep 2026 (clip review): rim columns held one or two records, so a rake sweep at the edge paid +1 while the same swing on the slope paid +27 and the reward felt random. Every column now holds at least this many records; the mound's height is unchanged because height is remaining/base."
+    "minRecordsEvidence": "OWNER 14 Sep 2026 (clip review): rim columns held one or two records, so a rake sweep at the edge paid +1 while the same swing on the slope paid +27 and the reward felt random. Every column now holds at least this many records; the mound's height is unchanged because height is remaining/base.",
+    "gridEvidence": "OWNER 15 Sep 2026 (screenshots of the mound foot): the dome profile reached zero at 1.15x the grid radius but the grid stopped at 1.0x, so the mound ended in a 1.5-3 stud cliff around its whole foot. RIM_STRETCH is now 1.0 and the grid is 54x54 at 0.54 studs: the footprint (14.6 studs) and silhouette are unchanged and the record total is 59,864 against the previous 59,936, so digging pacing is preserved while the mound lands on the sand."
   },
   "eggSpawn": {
     "spawnNodeCountTarget": 24,
