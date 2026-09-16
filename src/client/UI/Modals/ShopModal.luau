@@ -402,16 +402,34 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 		displayedLevel: number?,
 	}
 	local perkCards: { PerkRecord } = {}
+	-- Desktop: a 2x2 grid that fits. Phone: one row of taller cards the player swipes through.
+	local grid: GuiObject = perksPage
+	local span = 0.48 * #Perks.IDS + 0.02
+	if phone then
+		local scroller = Instance.new("ScrollingFrame")
+		scroller.Name = "Grid"
+		scroller.BackgroundTransparency = 1
+		scroller.BorderSizePixel = 0
+		scroller.Size = UDim2.fromScale(1, 0.8)
+		scroller.CanvasSize = UDim2.fromScale(span, 1)
+		scroller.ScrollingDirection = Enum.ScrollingDirection.X
+		scroller.ScrollBarThickness = 4
+		scroller.ScrollBarImageColor3 = Tokens.color.goldDeep
+		scroller.ElasticBehavior = Enum.ElasticBehavior.Never
+		scroller.ZIndex = 2
+		scroller.Parent = perksPage
+		grid = scroller
+	end
 	for index, perkId in ipairs(Perks.IDS) do
 		local copy = COPY[perkId]
 			or { title = perkId, icon = "star", art = "icon.egg", fill = Tokens.color.gold, deep = Tokens.color.goldDeep, word = "" }
 		local col = (index - 1) % 2
 		local row = math.floor((index - 1) / 2)
 		local card = paper(
-			perksPage,
+			grid,
 			"Perk_" .. perkId,
-			UDim2.fromScale(col * 0.505, row * 0.405),
-			UDim2.fromScale(0.495, 0.385),
+			if phone then UDim2.fromScale((index - 1) * 0.48 / span, 0.02) else UDim2.fromScale(col * 0.505, row * 0.405),
+			if phone then UDim2.fromScale(0.46 / span, 0.96) else UDim2.fromScale(0.495, 0.385),
 			2,
 			PAPER,
 			copy.deep
