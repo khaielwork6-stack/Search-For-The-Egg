@@ -1048,14 +1048,23 @@ function MollyController._beginSelection(self: MollyController, _line: string): 
 		local region = hit and hit.Instance:GetAttribute("SFE_Region")
 		return if type(region) == "string" then region else nil
 	end
+	-- Hover only counts while the pointer is actually moving: a D-pad or keyboard pick must not be
+	-- overruled by whatever tile happens to sit under a parked cursor.
+	local lastPointer = UserInputService:GetMouseLocation()
+	local pointerMovedAt = 0
 	selection.trove:add(RunService.RenderStepped:Connect(function()
-		if deps.input:mode() == "mouse" then
-			local location = UserInputService:GetMouseLocation()
-			local region = tileAt(location)
-			if region ~= selection.hovered then
-				selection.hovered = region
-				self:_refreshSelectionVisuals()
-			end
+		if deps.input:mode() ~= "mouse" then
+			return
+		end
+		local location = UserInputService:GetMouseLocation()
+		if (location - lastPointer).Magnitude > 1 then
+			lastPointer = location
+			pointerMovedAt = os.clock()
+		end
+		local region = if os.clock() - pointerMovedAt < 1.5 then tileAt(location) else nil
+		if region ~= selection.hovered then
+			selection.hovered = region
+			self:_refreshSelectionVisuals()
 		end
 	end))
 	selection.trove:add(UserInputService.InputBegan:Connect(function(input, processed)
