@@ -1159,6 +1159,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	end
 
 	-- The result: the card cracks out of a golden egg and takes the frame ---------------------------
+	local currentResult: { finish: () -> (), keep: () -> () }? = nil
 	local function showResult(result: any, previousClassId: string?, onDone: () -> ())
 		local landing = byId[result.classId]
 		local entry = weights[landing.index]
@@ -1183,6 +1184,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 				return
 			end
 			done = true
+			currentResult = nil
 			overlay:Destroy()
 			onDone()
 		end
@@ -1360,6 +1362,16 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		})
 		equipNow.button.LayoutOrder = 1
 		equipNow.pulse(true)
+		local function keepCurrent()
+			if canKeep and previousEntry then
+				local back = deps.net:request("ClassEquip", { classId = previousEntry.id, slot = result.slot })
+				if not back.ok then
+					deps.toasts:push("Could not restore " .. previousEntry.displayName, "warning")
+				end
+			end
+			finish()
+		end
+		currentResult = { finish = finish, keep = keepCurrent }
 		local keep = Button.build(row, {
 			text = "KEEP CURRENT",
 			variant = "secondary",
@@ -1371,15 +1383,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTap)
 			end,
-			onActivated = function()
-				if canKeep and previousEntry then
-					local back = deps.net:request("ClassEquip", { classId = previousEntry.id, slot = result.slot })
-					if not back.ok then
-						deps.toasts:push("Could not restore " .. previousEntry.displayName, "warning")
-					end
-				end
-				finish()
-			end,
+			onActivated = keepCurrent,
 		})
 		keep.button.LayoutOrder = 2
 		keep.button.Visible = canKeep
@@ -1607,6 +1611,19 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			select = function(index: number)
 				selectClass(index)
 				return { selected = state.selected }
+			end,
+			-- The result screen's two buttons, for the probe.
+			dismiss = function()
+				if currentResult then
+					currentResult.finish()
+				end
+				return { open = currentResult ~= nil }
+			end,
+			keep = function()
+				if currentResult then
+					currentResult.keep()
+				end
+				return { open = currentResult ~= nil }
 			end,
 		})
 	end

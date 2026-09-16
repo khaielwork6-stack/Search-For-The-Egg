@@ -58,11 +58,11 @@ local SIDE_MENU: { { id: string, title: string, short: string, image: string } }
 }
 -- Titles for the modals that open from the world rather than the side menu.
 local WORLD_TITLES: { [string]: string } = {
-	gems = "Gem Shop",
+	gems = "Plume's Market",
 	party = "Sunlit Henhouse",
 	daily = "Daily Nest",
-	classes = "Class Cards",
-	shop = "Perk Shop",
+	classes = "Class Forge",
+	shop = "Plume's Market",
 	event = "Moonlit Chest",
 }
 
