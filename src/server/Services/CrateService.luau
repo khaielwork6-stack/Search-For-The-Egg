@@ -106,7 +106,10 @@ function CrateService.start(
 	local total = self:totalSeconds(chapter)
 	self._runId += 1
 	local runId = self._runId
-	self._busyUntil = self._clock:monotonic() + total
+	-- The gate closes for the sell cooldown only (owner: one second), not the crate's whole ride:
+	-- a sale during the ride starts a fresh run and every client restarts the animation for it.
+	local cooldown = self._config.selling.crate.sellCooldownSeconds or total
+	self._busyUntil = self._clock:monotonic() + math.min(total, cooldown)
 	self.stats.runs += 1
 	local payload = {
 		runId = runId,

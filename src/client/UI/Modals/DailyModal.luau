@@ -153,7 +153,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	-- Tall enough for the artwork to be the biggest thing on the card. At 2.9 the four bands added up
 	-- to more than the cell, so the art band collapsed to its 18px floor and the gems came out smaller
 	-- than the vector lozenges they replaced.
-	local CELL_HEIGHT = math.floor(tap * 3.4)
+	local CELL_HEIGHT = math.floor(tap * 2.8)
 	layout.CellSize = UDim2.new(1 / COLUMNS, -Tokens.spacing.sm, 0, CELL_HEIGHT)
 	layout.CellPadding = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -450,7 +450,10 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				cell.footer.TextColor3 = Tokens.color.featherWhite
 				cell.footer.Text = "CLAIMED"
 			elseif info.current and ready then
-				-- The one card that wants to be pressed: bright face, gold frame, green Claim.
+				-- The one card that wants to be pressed: bright face, gold frame, green Claim, breathing.
+				if not cell.stopPulse then
+					cell.stopPulse = Tween.pulseLoop(cell.scale, motion, 0.035)
+				end
 				cell.face.BackgroundColor3 = Tokens.color.creamPill
 				cell.header.BackgroundColor3 = Tokens.color.goldDeep
 				cell.stroke.Color = Tokens.color.gold
@@ -518,6 +521,11 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				cell.stopPulse()
 				cell.stopPulse = nil
 			end
+			if not (info.current and ready) and cell.stopPulse then
+				cell.stopPulse()
+				cell.stopPulse = nil
+				cell.scale.Scale = 1
+			end
 			local notch = notches[index]
 			if notch then
 				notch.BackgroundColor3 = if info.claimed
@@ -533,10 +541,12 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			timer.Text = "Nest open"
 			claim.setEnabled(true)
 			claim.setText(string.format("Claim %d Gems", daily.gems))
+			claim.pulse(true)
 		else
 			status.Text = string.format("Day %d of %d", daily.dayIndex, finalDay)
 			claim.setEnabled(false)
 			claim.setText("Come back soon")
+			claim.pulse(false)
 		end
 		if daily.graceRemainingSeconds and daily.graceRemainingSeconds > 0 and daily.status == "early" then
 			grace.Text = string.format(
@@ -633,8 +643,27 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	table.insert(cleanups, deps.profile.changed:Connect(render))
 	table.insert(
 		cleanups,
-		RunService.RenderStepped:Connect(function()
+		RunService.RenderStepped:Connect(function(dt)
 			local daily = evaluation()
+			if not motion.reducedMotion and daily then
+				local now = os.clock()
+				for index, cell in ipairs(cells) do
+					local lively = (index == daily.dayIndex and (daily.status == "ready" or daily.status == "reset")) or index == finalDay
+					if lively then
+						if cell.rays then
+							cell.rays.Rotation = (cell.rays.Rotation + dt * 12) % 360
+						end
+						for gemIndex, gem in ipairs(cell.gems) do
+							local base = gem:GetAttribute("SFE_BaseRotation")
+							if typeof(base) ~= "number" then
+								base = gem.Rotation
+								gem:SetAttribute("SFE_BaseRotation", base)
+							end
+							gem.Rotation = base + math.sin(now * 2.2 + gemIndex) * 6
+						end
+					end
+				end
+			end
 			if daily and daily.status == "early" then
 				local remaining = daily.nextClaimInSeconds - (os.clock() - receivedAt)
 				local formatted = clock(remaining)

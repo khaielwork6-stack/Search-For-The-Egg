@@ -44,15 +44,22 @@ function NpcPlate.build(adornee: BasePart, name: string, role: string, heightStu
 	nameLabel.Size = UDim2.new(1, 0, 0, Tokens.typography.title.size + 6)
 	nameLabel.TextSize = Tokens.typography.title.size - 2
 	FrameKit.outline(nameLabel, 2.4)
+	-- Role pill: cocoa plank with white outlined lettering. Gold-on-gold caption text was unreadable
+	-- against the sky and the barn.
 	local pill = FrameKit.pill(plate, "Role", role, {
-		size = UDim2.fromOffset(0, Tokens.typography.caption.size + Tokens.spacing.md),
-		textSize = Tokens.typography.caption.size,
+		size = UDim2.fromOffset(0, Tokens.typography.label.size + Tokens.spacing.md),
+		textSize = Tokens.typography.label.size - 2,
 		zIndex = 2,
-		fill = Tokens.color.gold,
-		textColor = Tokens.color.inkStrong,
+		fill = Tokens.color.cocoa,
+		textColor = Tokens.color.featherWhite,
 		fitText = true,
 		outline = true,
 	})
+	pill.Font = Tokens.typography.label.font
+	local roleOutline = pill:FindFirstChild("TextOutline")
+	if roleOutline and roleOutline:IsA("UIStroke") then
+		roleOutline.Thickness = 2
+	end
 	pill.AnchorPoint = Vector2.new(0.5, 1)
 	pill.Position = UDim2.fromScale(0.5, 1)
 

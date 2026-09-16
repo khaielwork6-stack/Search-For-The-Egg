@@ -156,6 +156,8 @@ function Validator.validate(raw: any): Report
 			check(isPositiveNumber(crate[key]), "selling.crate." .. key .. " must be > 0")
 		end
 		check(isNonNegativeNumber(crate.resetDelaySeconds), "selling.crate.resetDelaySeconds must be >= 0")
+		-- OWNER 16 Sep 2026: the crate only refuses a second sale for this long, not for its whole ride.
+		check(isNonNegativeNumber(crate.sellCooldownSeconds), "selling.crate.sellCooldownSeconds must be >= 0")
 		check(
 			isPositiveNumber(crate.featherVisualMax) and crate.featherVisualMax % 1 == 0 and crate.featherVisualMax <= 64,
 			"selling.crate.featherVisualMax must be an integer 1..64"

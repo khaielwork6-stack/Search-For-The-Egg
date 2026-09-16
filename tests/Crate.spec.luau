@@ -68,11 +68,13 @@ return function(describe, it, expect)
 			expect(refused.ok).toBe(false)
 			expect(refused.message).toBe("crate_busy")
 			expect(fired.seconds).toBeCloseTo(crate:totalSeconds("chapter1"), 1e-9)
-			-- Time passes but the schedule has not fired: still busy.
-			clock.advance(fired.seconds - 0.01)
+			-- The gate holds for the sell cooldown, not the whole ride: the schedule has not fired.
+			local cooldown = cfg.selling.crate.sellCooldownSeconds
+			clock.advance(cooldown - 0.01)
 			expect(crate:isBusy()).toBe(true)
 			clock.advance(0.02)
 			expect(crate:isBusy()).toBe(false) -- the clock guard alone frees it
+			expect(cooldown).toBeLessThan(fired.seconds)
 			local finished = 0
 			crate.runFinished:Connect(function()
 				finished += 1
@@ -125,18 +127,21 @@ return function(describe, it, expect)
 			expect(sale.ok).toBe(true)
 			expect(sale.data.standardCount).toBe(6)
 			expect(state.carriedStandard).toBe(0)
-			crate:start(runtime.state.roundId, "chapter1", sale.data.standardCount, 1)
-			-- Gather one more and try again mid-run: refused, nothing changes.
+			-- Gather one more, start the ride, and try again inside the sell cooldown: refused, nothing
+			-- changes. (Gathering moves the harness clock, so the ride starts after it.)
 			expect(h.collectAt(1, runtime, mx + 8, mz).ok).toBe(true)
 			h.standAt(1, layout.sellStation + Vector3.new(0, 3, 4))
+			crate:start(runtime.state.roundId, "chapter1", sale.data.standardCount, 1)
 			local cashBefore = state.cashCents
 			local again = h.selling:sell(1, h.token(1), { gate = gate })
 			expect(again.ok).toBe(false)
 			expect(again.message).toBe("crate_busy")
 			expect(state.carriedStandard).toBe(1)
 			expect(state.cashCents).toBe(cashBefore)
+			-- One second later the crate takes the next sale even though its ride is still going.
 			-- A trusted (click detector) sale needs no token but obeys the same gate and empty-bag rule.
-			h.clock:advance(crate:totalSeconds("chapter1") + 1)
+			h.clock:advance(cfg.selling.crate.sellCooldownSeconds + 0.05)
+			expect(crate:isBusy()).toBe(false)
 			local clicked = h.selling:sell(1, nil, { trusted = true, gate = gate })
 			expect(clicked.ok).toBe(true)
 			expect(state.carriedStandard).toBe(0)
