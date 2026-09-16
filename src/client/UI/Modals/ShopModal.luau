@@ -411,7 +411,8 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 		scroller.BackgroundTransparency = 1
 		scroller.BorderSizePixel = 0
 		scroller.Size = UDim2.fromScale(1, 0.8)
-		scroller.CanvasSize = UDim2.fromScale(span, 1)
+		-- Canvas Scale is measured against the page, not the scroller, so it copies the 0.78 height.
+		scroller.CanvasSize = UDim2.fromScale(span, 0.78)
 		scroller.ScrollingDirection = Enum.ScrollingDirection.X
 		scroller.ScrollBarThickness = 4
 		scroller.ScrollBarImageColor3 = Tokens.color.goldDeep

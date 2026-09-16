@@ -579,6 +579,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		local minSize = Instance.new("UISizeConstraint")
 		minSize.MinSize = Vector2.new(tap, tap)
 		minSize.Parent = button
+		relax(button)
 		Fit.corner(button, 0.5)
 		Depth.keyline(button)
 		local face = Instance.new("Frame")
