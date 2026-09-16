@@ -276,9 +276,9 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 	-- every pixel of the frame).
 	if not phone then
 		local mascot = Fit.image(shell.card, "shop.mascot", {
-			size = UDim2.fromScale(0, 0.46),
-			position = UDim2.fromScale(0.005, 1.02),
-			anchor = Vector2.new(0.5, 1),
+			size = UDim2.fromScale(0, 0.5),
+			position = UDim2.fromScale(0.035, 1.01),
+			anchor = Vector2.new(1, 1),
 			zIndex = 9,
 			name = "Mascot",
 		})
