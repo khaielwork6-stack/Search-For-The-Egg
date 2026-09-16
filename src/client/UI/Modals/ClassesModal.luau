@@ -377,28 +377,10 @@ local function buildCard(parent: GuiObject, entry: any, tier: string, z: number)
 	sheen.Parent = shine
 	shine.Parent = face
 
-	local frameRole = "class." .. (if tier == "mythic" then "legendary" else tier) .. ".owned"
-	local packFrame = Skin.overlay(root, frameRole, { zIndex = 4, name = "PackFrame", sliceScale = 0.5 })
+	-- No painted rarity frame: the face keyline is the card's edge (rainbow for mythic). The pack's
+	-- card frames were tried and rejected - a second thick ring around the painted face.
 	local rainbow: UIGradient? = nil
-	if packFrame then
-		-- The rarity frame's corners scale with the card so small reel cards keep a thin, even rim.
-		local frameImage = packFrame :: ImageLabel
-		local sourceHeight = frameImage.SliceCenter.Max.Y + frameImage.SliceCenter.Min.Y
-		local function fitFrame()
-			local height = root.AbsoluteSize.Y
-			if height > 0 and sourceHeight > 0 then
-				frameImage.SliceScale = math.clamp(height / sourceHeight, 0.15, 1)
-			end
-		end
-		fitFrame()
-		root:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitFrame)
-		if tier == "mythic" then
-			local gradient = Instance.new("UIGradient")
-			gradient.Color = RAINBOW
-			gradient.Parent = packFrame
-			rainbow = gradient
-		end
-	elseif tier == "mythic" then
+	if tier == "mythic" then
 		local gradient = Instance.new("UIGradient")
 		gradient.Color = RAINBOW
 		gradient.Parent = edge
