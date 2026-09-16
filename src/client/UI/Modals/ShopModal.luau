@@ -779,7 +779,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 			-- On the left side, a little down, so it never meets BEST VALUE on a narrow card.
 			local ribbon = FrameKit.badge(card, "Popular", "POPULAR", Tokens.color.goldDeep, z + 6)
 			ribbon.AnchorPoint = Vector2.new(0, 0.5)
-			ribbon.Position = UDim2.new(0, -Tokens.spacing.md, 0, if isBest then 34 else 2)
+			ribbon.Position = UDim2.fromOffset(-Tokens.spacing.md, if isBest then 34 else 2)
 			ribbon.Rotation = -8
 		end
 		if isBest and not motion.reducedMotion then
