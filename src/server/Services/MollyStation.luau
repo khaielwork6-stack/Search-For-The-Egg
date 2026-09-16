@@ -21,8 +21,8 @@ MollyStation.STATION_NAME = "SurveyStation"
 MollyStation.PROMPT_NAME = "SFE_MollySurvey"
 MollyStation.PLACEHOLDER_TAG = "SFE_ChapterShell"
 MollyStation.RIG_SCALE = 0.62
-MollyStation.TILE_PITCH = 1.34 -- tile size plus gap
-MollyStation.TILE_SIZE = 1.22
+MollyStation.TILE_PITCH = 1.5 -- tile size plus gap
+MollyStation.TILE_SIZE = 1.36
 
 local IRON = Color3.fromRGB(70, 72, 78)
 local IRON_DARK = Color3.fromRGB(44, 46, 50)
@@ -32,6 +32,8 @@ local OAK = Color3.fromRGB(150, 112, 66)
 local OAK_DEEP = Color3.fromRGB(104, 74, 42)
 local STRAW = Color3.fromRGB(226, 196, 132)
 local STRAW_DEEP = Color3.fromRGB(196, 164, 100)
+local PARCHMENT_TILE = Color3.fromRGB(240, 226, 190)
+local SELECT = Color3.fromRGB(255, 150, 40)
 local PAPER = Color3.fromRGB(244, 238, 222)
 local INK = Color3.fromRGB(60, 44, 32)
 local RED = Color3.fromRGB(196, 52, 44)
@@ -226,18 +228,20 @@ local function buildBench(station: Model, base: CFrame): number
 	return topY + 0.15
 end
 
--- The miniature Nest Map: a round plinth and nine tiles laid in WORLD axes, so BARN is always the
--- yard's west and BACK its north whatever way the bench faces. Tiles are query-able for hovering.
+-- The miniature Nest Map: a round plinth and nine flat parchment tiles laid in WORLD axes, so BARN
+-- is always the yard's west and BACK its north whatever way the bench faces. Each tile carries its
+-- name in big letters and a small arrow pointing BACK, like the signs; tiles are query-able so the
+-- player can point at them. A neon ring and four sparks (hidden at rest) mark the chosen tile.
 local function buildMap(station: Model, base: CFrame, tableTop: number): (Vector3, { [string]: Part })
 	local centre = (base * CFrame.new(-1.9, tableTop, -0.1)).Position
 	local plinth =
-		cylinder(station, "MapPlinth", 2.45, 0.24, upright(CFrame.new(centre + Vector3.new(0, 0.12, 0))), IRON_DARK, Enum.Material.Metal)
+		cylinder(station, "MapPlinth", 2.85, 0.24, upright(CFrame.new(centre + Vector3.new(0, 0.12, 0))), IRON_DARK, Enum.Material.Metal)
 	plinth.CanQuery = false
-	cylinder(station, "MapRing", 2.5, 0.08, upright(CFrame.new(centre + Vector3.new(0, 0.26, 0))), BRASS, Enum.Material.Metal)
+	cylinder(station, "MapRing", 2.9, 0.08, upright(CFrame.new(centre + Vector3.new(0, 0.26, 0))), BRASS, Enum.Material.Metal)
 	cylinder(
 		station,
 		"MapSand",
-		2.2,
+		2.62,
 		0.06,
 		upright(CFrame.new(centre + Vector3.new(0, 0.3, 0))),
 		Color3.fromRGB(214, 196, 158),
@@ -249,59 +253,121 @@ local function buildMap(station: Model, base: CFrame, tableTop: number): (Vector
 		local row, col = NestSurvey.rowCol(region)
 		-- col 1 = west (-X), row 1 (A) = north (-Z).
 		local dx, dz = (col - 2) * pitch, (row - 2) * pitch
-		local ring = math.max(math.abs(col - 2), math.abs(row - 2))
-		local height = if ring == 0 then 0.62 elseif math.abs(col - 2) + math.abs(row - 2) == 1 then 0.46 else 0.34
+		local height = 0.3
 		local tile = part(
 			station,
 			"Tile_" .. region,
 			Vector3.new(MollyStation.TILE_SIZE, height, MollyStation.TILE_SIZE),
 			CFrame.new(centre + Vector3.new(dx, 0.33 + height / 2, dz)),
-			if ring == 0 then STRAW else (if ring == 1 and math.abs(col - 2) + math.abs(row - 2) == 1 then STRAW else STRAW_DEEP),
-			Enum.Material.Sand
+			PARCHMENT_TILE,
+			Enum.Material.SmoothPlastic
 		)
 		tile.CanQuery = true
 		tile:SetAttribute("SFE_Region", region)
 		tile:SetAttribute("SFE_RestY", tile.Position.Y)
-		local gui = surface(tile, Enum.NormalId.Top, 60)
-		label(gui, "Id", region, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Enum.Font.FredokaOne, 30, INK)
-		-- A few straw tufts so each tile reads as a piece of the mound.
-		for t = 1, 3 do
-			local a = (t / 3) * math.pi * 2 + (row * 3 + col)
-			local tuft = wedge(
-				station,
-				"Tuft",
-				Vector3.new(0.06, 0.26, 0.18),
-				CFrame.new(centre + Vector3.new(dx + math.cos(a) * 0.38, 0.33 + height + 0.1, dz + math.sin(a) * 0.38))
-					* CFrame.Angles(0, a, math.rad(18)),
-				STRAW_DEEP,
-				Enum.Material.Sand
-			)
-			tuft.CanQuery = false
-			tuft:SetAttribute("SFE_TuftOf", region)
-		end
+		-- Worn edges: a darker underlay a touch larger than the tile.
+		local edge = part(
+			station,
+			"TileEdge",
+			Vector3.new(MollyStation.TILE_SIZE + 0.08, 0.06, MollyStation.TILE_SIZE + 0.08),
+			CFrame.new(centre + Vector3.new(dx, 0.34, dz)),
+			STRAW_DEEP,
+			Enum.Material.SmoothPlastic
+		)
+		edge.CanQuery = false
+		edge:SetAttribute("SFE_TuftOf", region) -- rides with the tile when it lifts
+		local gui = surface(tile, Enum.NormalId.Top, 80)
+		-- The face reads from the FRONT (world +Z): rotate the gui contents so the letters are upright
+		-- for a viewer standing south of the map looking north.
+		local face = Instance.new("Frame")
+		face.Name = "Face"
+		face.BackgroundTransparency = 1
+		face.Size = UDim2.fromScale(1, 1)
+		face.Rotation = 180
+		face.Parent = gui
+		label(face, "Id", region, UDim2.fromScale(1, 0.6), UDim2.fromScale(0, 0.3), Enum.Font.FredokaOne, 46, INK)
+		local arrow = label(
+			face,
+			"Arrow",
+			"^",
+			UDim2.fromScale(1, 0.3),
+			UDim2.fromScale(0, 0.02),
+			Enum.Font.FredokaOne,
+			26,
+			Color3.fromRGB(150, 130, 100)
+		)
+		arrow.Name = "Arrow"
 		tiles[region] = tile
 	end
-	-- Landmark plates on the plinth's rim, in world directions.
-	local plates = {
-		{ NestSurvey.LANDMARKS.left, Vector3.new(-2.35, 0.34, 0), 90 },
-		{ NestSurvey.LANDMARKS.right, Vector3.new(2.35, 0.34, 0), -90 },
-		{ NestSurvey.LANDMARKS.top, Vector3.new(0, 0.34, -2.35), 180 },
-		{ NestSurvey.LANDMARKS.bottom, Vector3.new(0, 0.34, 2.35), 0 },
-	}
-	for _, spec in ipairs(plates) do
-		local plate = part(
-			station,
-			"Landmark_" .. spec[1],
-			Vector3.new(1.2, 0.05, 0.36),
-			CFrame.new(centre + spec[2]) * CFrame.Angles(0, math.rad(spec[3]), 0),
-			BRASS,
-			Enum.Material.Metal
+	-- The selection ring: four neon bars and four sparks, parked under the plinth until a pick.
+	local ring = Instance.new("Model")
+	ring.Name = "TileRing"
+	local half = MollyStation.TILE_SIZE / 2 + 0.06
+	for i, spec in ipairs({ { 0, half, 1 }, { 0, -half, 1 }, { half, 0, 0 }, { -half, 0, 0 } }) do
+		local size = if spec[3] == 1
+			then Vector3.new(MollyStation.TILE_SIZE + 0.2, 0.06, 0.08)
+			else Vector3.new(0.08, 0.06, MollyStation.TILE_SIZE + 0.2)
+		local bar = part(ring, "RingBar" .. i, size, CFrame.new(centre + Vector3.new(spec[1], -1, spec[2])), SELECT, Enum.Material.Neon)
+		bar.Transparency = 1
+	end
+	for i = 1, 4 do
+		local spark = wedge(
+			ring,
+			"Spark" .. i,
+			Vector3.new(0.12, 0.28, 0.12),
+			CFrame.new(centre + Vector3.new(0, -1, 0)),
+			Color3.fromRGB(255, 226, 120),
+			Enum.Material.Neon
 		)
-		local gui = surface(plate, Enum.NormalId.Top, 100)
-		label(gui, "Text", spec[1], UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Enum.Font.FredokaOne, 24, IRON_DARK)
+		spark.Transparency = 1
+	end
+	local hub = part(ring, "RingHub", Vector3.new(0.1, 0.1, 0.1), CFrame.new(centre + Vector3.new(0, -1, 0)), SELECT, Enum.Material.Neon)
+	hub.Transparency = 1
+	ring.PrimaryPart = hub
+	tag(ring)
+	ring.Parent = station
+	-- Landmark signs: upright planks on posts at the rim, all facing the players' side, with a wooden
+	-- arrow pointing the way the sign names.
+	local signs = {
+		{ NestSurvey.LANDMARKS.top, Vector3.new(0, 0, -3.15), Vector3.new(0, 0, -1) },
+		{ NestSurvey.LANDMARKS.bottom, Vector3.new(0, 0, 3.15), Vector3.new(0, 0, 1) },
+		{ NestSurvey.LANDMARKS.left, Vector3.new(-3.15, 0, 0), Vector3.new(-1, 0, 0) },
+		{ NestSurvey.LANDMARKS.right, Vector3.new(3.15, 0, 0), Vector3.new(1, 0, 0) },
+	}
+	for _, spec in ipairs(signs) do
+		local at = centre + spec[2]
+		part(
+			station,
+			"SignPost_" .. spec[1],
+			Vector3.new(0.12, 0.9, 0.12),
+			CFrame.new(at + Vector3.new(0, 0.45, 0)),
+			OAK_DEEP,
+			Enum.Material.Wood
+		)
+		local board = part(
+			station,
+			"Sign_" .. spec[1],
+			Vector3.new(1.7, 0.56, 0.08),
+			CFrame.new(at + Vector3.new(0, 1.1, 0)) * base.Rotation,
+			OAK,
+			Enum.Material.WoodPlanks
+		)
+		local gui = surface(board, Enum.NormalId.Front, 100)
+		label(gui, "Text", spec[1], UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Enum.Font.FredokaOne, 34, PAPER)
+		-- The arrow: a wedge on the sign's top edge pointing along the landmark direction.
+		local dir = spec[3]
+		local arrowAt = at + Vector3.new(0, 1.5, 0) + dir * 0.05
+		wedge(
+			station,
+			"SignArrow_" .. spec[1],
+			Vector3.new(0.5, 0.3, 0.3),
+			CFrame.lookAt(arrowAt, arrowAt + dir) * CFrame.Angles(math.rad(-90), 0, 0),
+			HELMET,
+			Enum.Material.SmoothPlastic
+		)
 	end
 	-- Brass compass at the north-west corner, needle to north.
-	local compassAt = centre + Vector3.new(-1.95, 0.36, -1.95)
+	local compassAt = centre + Vector3.new(-2.35, 0.36, -2.35)
 	cylinder(station, "CompassDisc", 0.42, 0.06, upright(CFrame.new(compassAt)), BRASS, Enum.Material.Metal)
 	cylinder(
 		station,
@@ -328,16 +394,6 @@ local function buildMap(station: Model, base: CFrame, tableTop: number): (Vector
 		IRON_DARK,
 		Enum.Material.SmoothPlastic
 	)
-	local nPlate = part(
-		station,
-		"CompassN",
-		Vector3.new(0.22, 0.02, 0.22),
-		CFrame.new(compassAt + Vector3.new(0, 0.1, -0.42)),
-		BRASS,
-		Enum.Material.Metal
-	)
-	local nGui = surface(nPlate, Enum.NormalId.Top, 120)
-	label(nGui, "N", "N", UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Enum.Font.FredokaOne, 22, IRON_DARK)
 	return centre, tiles
 end
 
@@ -666,7 +722,7 @@ end
 
 -- The result board: the same nine cells with the landmarks, stamped by the client after a scan.
 local function buildBoard(station: Model, base: CFrame)
-	local origin = base * CFrame.new(0.4, 0, 2.7)
+	local origin = base * CFrame.new(4.6, 0, 4.0) * CFrame.Angles(0, math.rad(22), 0)
 	local lean = CFrame.Angles(math.rad(-6), 0, 0)
 	for _, x in ipairs({ -2.0, 2.0 }) do
 		part(station, "BoardLeg", Vector3.new(0.18, 6.8, 0.18), origin * CFrame.new(x, 3.4, 0) * lean, IRON_DARK, Enum.Material.Metal)
@@ -761,7 +817,7 @@ end
 
 -- Molly's tripod and theodolite beside the bench.
 local function buildTripod(station: Model, base: CFrame)
-	local origin = base * CFrame.new(-5.4, 0, -0.9)
+	local origin = base * CFrame.new(-6.2, 0, 2.4)
 	for i = 1, 3 do
 		local a = i / 3 * math.pi * 2
 		local foot = origin * CFrame.new(math.cos(a) * 0.9, 0, math.sin(a) * 0.9)
@@ -1132,8 +1188,12 @@ function MollyStation.build(workspaceService: Workspace, folder: Instance, layou
 	station.PrimaryPart = anchor
 	tag(station)
 	station.Parent = folder
-	-- Molly stands behind the map end of the bench, facing the players' side.
-	MollyStation.spawnMolly(workspaceService, folder, base * CFrame.new(-1.9, 0, 1.9))
+	-- Molly stands on a step box behind the bench, between the map and the machine, chest above the
+	-- bench top so she reads from the players' side.
+	local stepAt = base * CFrame.new(0.3, 0, 3.3)
+	part(station, "StepBox", Vector3.new(1.8, 1.2, 1.8), stepAt * CFrame.new(0, 0.6, 0), OAK_DEEP, Enum.Material.WoodPlanks, true)
+	part(station, "StepBoxBand", Vector3.new(1.86, 0.12, 1.86), stepAt * CFrame.new(0, 0.55, 0), IRON, Enum.Material.Metal)
+	MollyStation.spawnMolly(workspaceService, folder, stepAt * CFrame.new(0, 1.2, 0))
 	return station
 end
 

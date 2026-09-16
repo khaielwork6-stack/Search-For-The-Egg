@@ -20,7 +20,7 @@ local FrameKit = require(script.Parent.Frame)
 
 local Button = {}
 
-export type Variant = "primary" | "secondary" | "ghost" | "gold" | "pill" | "danger" | "teal" | "gem" | "success"
+export type Variant = "primary" | "secondary" | "ghost" | "gold" | "pill" | "danger" | "teal" | "gem" | "success" | "ember"
 
 export type Options = {
 	text: string,
@@ -110,6 +110,16 @@ local STYLES: { [string]: Style } = {
 		font = Tokens.typography.label.font,
 		radius = Tokens.radius.pill,
 		outlined = false,
+	},
+	-- The big warm call-to-action of the NPC cards: orange face, cream lettering.
+	ember = {
+		face = Tokens.color.ember,
+		faceLight = Color3.fromRGB(255, 168, 96),
+		lip = Tokens.color.emberDeep,
+		text = Tokens.color.featherWhite,
+		font = Tokens.typography.label.font,
+		radius = Tokens.radius.lg,
+		outlined = true,
 	},
 	danger = {
 		face = Tokens.color.ember,

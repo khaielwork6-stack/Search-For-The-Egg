@@ -22,7 +22,7 @@ local AssetManifest = require(Shared.Design.AssetManifest)
 local Trove = require(Shared.Util.Trove)
 local NestClues = require(Shared.Domain.NestClues)
 local NpcPlate = require(script.Parent.Parent.UI.NpcPlate)
-local ClueModal = require(script.Parent.Parent.UI.Modals.ClueModal)
+local PlumeCard = require(script.Parent.Parent.UI.PlumeCard)
 local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
 local Depth = require(script.Parent.Parent.UI.Components.Depth)
 local Confetti = require(script.Parent.Parent.UI.Components.Confetti)
@@ -62,6 +62,7 @@ export type PlumeController = typeof(setmetatable(
 		_pitch: number,
 		_sequence: { trove: Trove.Trove, done: boolean }?,
 		_modalOpen: boolean,
+		_card: { trove: Trove.Trove, handle: any, selected: string? }?,
 		_pendingAnalyze: boolean,
 		_deferredUnlock: any?,
 		stats: {
@@ -108,6 +109,7 @@ function PlumeController.new(deps: {
 		_pitch = 0,
 		_sequence = nil,
 		_modalOpen = false,
+		_card = nil,
 		_pendingAnalyze = false,
 		_deferredUnlock = nil,
 		stats = { opens = 0, refused = 0, analyses = 0, sequences = 0, banners = 0, boardUpdates = 0, restored = 0, feathersFlown = 0 },
@@ -425,6 +427,14 @@ function PlumeController.isBusy(self: PlumeController): boolean
 	return self._sequence ~= nil or self._modalOpen or self._pendingAnalyze
 end
 
+-- Plume's short lines go over his head, never into a panel.
+local function say(rig: Model?, line: string)
+	local root = rig and rig:FindFirstChild("HumanoidRootPart")
+	if root then
+		NpcPlate.sayOn(root, line, 3.2)
+	end
+end
+
 -- The prompt press. One card at a time; while the machine runs, nothing.
 function PlumeController.interact(self: PlumeController): boolean
 	local deps = self._deps
@@ -435,8 +445,8 @@ function PlumeController.interact(self: PlumeController): boolean
 	local rig = self._rig
 	local phase = deps.round:phase()
 	if phase ~= "Searching" then
-		if phase == "EggRevealed" and rig and deps.dialogue then
-			deps.dialogue:open(rig, NestClues.LINES.found, { seconds = 2.6, name = PlumeController.NPC_NAME })
+		if phase == "EggRevealed" then
+			say(rig, NestClues.LINES.found)
 		end
 		self.stats.refused += 1
 		return false
@@ -445,30 +455,115 @@ function PlumeController.interact(self: PlumeController): boolean
 	local clues = round and round.clues
 	local count = clues and clues.count or 0
 	local carried = deps.round.player and deps.round.player.carriedRainbow or 0
-	local line = NestClues.lineFor(deps.config, count, carried, false)
 	self.stats.opens += 1
 	deps.audio:play(Tokens.sound.uiOpen)
-	self._modalOpen = true
-	local opened = ClueModal.open({
-		modals = deps.modals,
-		round = deps.round,
-		audio = deps.audio,
-		haptics = deps.haptics,
-		accessibility = deps.accessibility,
-		config = deps.config,
-	}, {
-		line = line,
-		onAnalyze = function(category)
-			return self:analyze(category)
-		end,
-		onClosed = function()
-			self._modalOpen = false
-		end,
-	})
-	if not opened then
-		self._modalOpen = false
+	say(rig, NestClues.lineFor(deps.config, count, carried, false))
+	return self:_openCard()
+end
+
+function PlumeController._cardState(self: PlumeController): PlumeCard.State
+	local deps = self._deps
+	local card = self._card
+	local round = deps.round.round
+	local clues = round and round.clues
+	local count = clues and clues.count or 0
+	local unlocked = clues and clues.unlocked or {}
+	local cost = NestClues.nextCost(deps.config, count)
+	local carried = deps.round.player and deps.round.player.carriedRainbow or 0
+	local selected = card and card.selected or nil
+	if selected and unlocked[selected] then
+		selected = nil
 	end
-	return opened
+	if not selected then
+		for _, category in ipairs(NestClues.CATEGORIES) do
+			if not unlocked[category] then
+				selected = category
+				break
+			end
+		end
+	end
+	if card then
+		card.selected = selected
+	end
+	return {
+		carried = carried,
+		cost = cost,
+		unlocked = unlocked,
+		selected = selected,
+		canGet = cost ~= nil and selected ~= nil and carried >= cost and deps.round:phase() == "Searching",
+	}
+end
+
+-- The card owns the screen while it is up: cursor free, gameplay input paused, HUD down.
+function PlumeController._openCard(self: PlumeController): boolean
+	local deps = self._deps
+	local player = Players.LocalPlayer
+	if not player or self._card then
+		return false
+	end
+	local session = { trove = Trove.new(), handle = nil, selected = nil }
+	self._card = session
+	self._modalOpen = true
+	deps.input:setSuspended(true)
+	deps.modals:setExternalUnlock(true)
+	local hudGui = deps.hud.gui
+	local hudWasEnabled = hudGui.Enabled
+	hudGui.Enabled = false
+	session.trove:add(function()
+		hudGui.Enabled = hudWasEnabled
+		deps.modals:setExternalUnlock(false)
+		deps.input:setSuspended(deps.modals:isBlocking())
+		self._modalOpen = false
+		if self._card == session then
+			self._card = nil
+		end
+	end)
+	local handle = PlumeCard.create(
+		player:WaitForChild("PlayerGui"),
+		{ audio = deps.audio, accessibility = deps.accessibility, config = deps.config },
+		{
+			onGetClue = function(category)
+				self:analyze(category)
+			end,
+			onSelect = function(category)
+				local state = self:_cardState()
+				if state.unlocked[category] then
+					return
+				end
+				deps.audio:play(Tokens.sound.uiSelect)
+				session.selected = category
+				if session.handle then
+					session.handle.setState(self:_cardState())
+				end
+			end,
+			onClose = function()
+				self:_closeCard()
+			end,
+		}
+	)
+	session.handle = handle
+	session.trove:add(handle.destroy)
+	session.trove:add(deps.round.playerChanged:Connect(function()
+		if session.handle then
+			session.handle.setState(self:_cardState())
+		end
+	end))
+	session.trove:add(deps.round.snapshot:Connect(function()
+		if session.handle then
+			session.handle.setState(self:_cardState())
+		end
+	end))
+	handle.setState(self:_cardState())
+	return true
+end
+
+function PlumeController._closeCard(self: PlumeController)
+	local session = self._card
+	if not session then
+		return
+	end
+	self._card = nil
+	session.trove:destroy()
 end
 
 -- The trade request. Returns the envelope; a success starts the sequence once the card closes.
@@ -489,8 +584,8 @@ function PlumeController.analyze(self: PlumeController, category: string): any
 		deps.audio:play(Tokens.sound.uiError)
 		local message = result.message
 		local rig = self._rig
-		if message == "egg_found" and rig and deps.dialogue then
-			deps.dialogue:open(rig, NestClues.LINES.found, { seconds = 2.6, name = PlumeController.NPC_NAME })
+		if message == "egg_found" then
+			say(rig, NestClues.LINES.found)
 		else
 			deps.hud.toasts:push(
 				if message == "insufficient"
@@ -519,9 +614,7 @@ function PlumeController.analyze(self: PlumeController, category: string): any
 		deps.round.playerChanged:Fire(data.player)
 	end
 	-- The card gives way to the sequence; nothing else may own the screen while the machine runs.
-	if deps.modals:isOpen(ClueModal.ID) then
-		deps.modals:close(ClueModal.ID)
-	end
+	self:_closeCard()
 	-- `_pendingAnalyze` holds until the sequence has taken over, so the party event that lands in
 	-- the frame between the response and the deferred start is kept for the sequence to read out.
 	task.defer(function()
@@ -1013,6 +1106,7 @@ function PlumeController.status(self: PlumeController): { [string]: any }
 end
 
 function PlumeController.destroy(self: PlumeController)
+	self:_closeCard()
 	self:_finishSequence("destroy")
 	if self._bound then
 		self._bound:destroy()

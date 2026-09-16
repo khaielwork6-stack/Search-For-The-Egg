@@ -23,7 +23,6 @@ local Trove = require(Shared.Util.Trove)
 local NestSurvey = require(Shared.Domain.NestSurvey)
 local NpcPlate = require(script.Parent.Parent.UI.NpcPlate)
 local SurveyPanel = require(script.Parent.Parent.UI.SurveyPanel)
-local Dialog = require(script.Parent.Parent.UI.Components.Dialog)
 local Confetti = require(script.Parent.Parent.UI.Components.Confetti)
 
 local MollyController = {}
@@ -108,6 +107,7 @@ export type MollyController = typeof(setmetatable(
 		_pending: boolean,
 		_remoteSelection: string?,
 		_lamps: { [string]: { part: BasePart, light: PointLight, level: number } },
+		_ring: { bars: { BasePart }, sparks: { BasePart }, hub: BasePart, region: string?, restY: number }?,
 		_gaugeLevel: number,
 		_seismoLevel: number,
 		_gearSpeed: number,
@@ -169,6 +169,7 @@ function MollyController.new(deps: {
 		_pending = false,
 		_remoteSelection = nil,
 		_lamps = {},
+		_ring = nil,
 		_gaugeLevel = 0,
 		_seismoLevel = 0,
 		_gearSpeed = 0,
@@ -439,6 +440,22 @@ function MollyController._bindReady(self: MollyController, rig: Model, station: 
 			current = head:GetPivot().Position,
 		}
 	end
+	-- The selection ring and its sparks.
+	local ringModel = station:FindFirstChild("TileRing")
+	if ringModel and ringModel:IsA("Model") and ringModel.PrimaryPart then
+		local bars, sparks = {}, {}
+		for _, child in ipairs(ringModel:GetChildren()) do
+			if child:IsA("BasePart") and string.find(child.Name, "RingBar", 1, true) then
+				table.insert(bars, child)
+			elseif child:IsA("BasePart") and string.find(child.Name, "Spark", 1, true) then
+				table.insert(sparks, child)
+			end
+		end
+		table.sort(bars, function(a, b)
+			return a.Name < b.Name
+		end)
+		self._ring = { bars = bars, sparks = sparks, hub = ringModel.PrimaryPart, region = nil, restY = ringModel.PrimaryPart.Position.Y }
+	end
 	-- Lamps.
 	self._lamps = {}
 	for _, spec in ipairs({ { "none", "LampNone" }, { "weak", "LampWeak" }, { "strong", "LampStrong" } }) do
@@ -473,6 +490,7 @@ function MollyController._bindReady(self: MollyController, rig: Model, station: 
 		self._crank = nil
 		self._pivots = {}
 		self._lamps = {}
+		self._ring = nil
 	end)
 	self:_applyResult()
 end
@@ -481,6 +499,34 @@ function MollyController._setHighlighted(self: MollyController, on: boolean)
 	for _, highlight in ipairs(self._highlights) do
 		highlight.Enabled = on
 	end
+end
+
+-- Puts the neon ring around a tile (nil hides it under the plinth).
+function MollyController._setRing(self: MollyController, region: string?)
+	local ring = self._ring
+	if not ring then
+		return
+	end
+	ring.region = region
+	local tile = region and self._tiles[region]
+	if not tile then
+		for _, bar in ipairs(ring.bars) do
+			bar.Transparency = 1
+		end
+		for _, spark in ipairs(ring.sparks) do
+			spark.Transparency = 1
+		end
+		return
+	end
+	local half = tile.part.Size.X / 2 + 0.06
+	local y = tile.part.Position.Y + tile.part.Size.Y / 2 + 0.03
+	local c = tile.part.Position
+	local spots = { Vector3.new(0, 0, half), Vector3.new(0, 0, -half), Vector3.new(half, 0, 0), Vector3.new(-half, 0, 0) }
+	for i, bar in ipairs(ring.bars) do
+		bar.CFrame = CFrame.new(c.X + spots[i].X, y, c.Z + spots[i].Z)
+		bar.Transparency = 0.1
+	end
+	ring.hub.CFrame = CFrame.new(c.X, y, c.Z)
 end
 
 -- World position over a tile (at gantry height for the drill, at the tile for a look).
@@ -775,6 +821,29 @@ function MollyController._stepMachine(self: MollyController, dt: number, t: numb
 			first.Size = UDim2.new(first.Size.X.Scale, 0, 0, math.floor(h))
 		end
 	end
+	-- The ring breathes and its sparks circle the chosen tile.
+	local ring = self._ring
+	if ring and ring.region then
+		local tile = self._tiles[ring.region]
+		if tile then
+			local pulse = if reduced then 0.15 else 0.15 + 0.25 * (0.5 + 0.5 * math.sin(t * 5))
+			local y = tile.part.Position.Y + tile.part.Size.Y / 2 + 0.03
+			for _, bar in ipairs(ring.bars) do
+				bar.Transparency = pulse
+				bar.CFrame = CFrame.new(bar.Position.X, y, bar.Position.Z)
+			end
+			for i, spark in ipairs(ring.sparks) do
+				local a = t * 2.2 + i * math.pi / 2
+				local r = tile.part.Size.X / 2 + 0.3
+				spark.CFrame = CFrame.new(
+					tile.part.Position.X + math.cos(a) * r,
+					y + 0.25 + math.sin(t * 6 + i) * 0.06,
+					tile.part.Position.Z + math.sin(a) * r
+				) * CFrame.Angles(0, -a, 0)
+				spark.Transparency = if reduced then 0.3 else 0.2 + 0.4 * (0.5 + 0.5 * math.sin(t * 7 + i))
+			end
+		end
+	end
 	-- Lamps glow to their level.
 	for _, lamp in pairs(self._lamps) do
 		local target = lamp.level
@@ -808,6 +877,7 @@ function MollyController._applyResult(self: MollyController)
 		elseif not survey and existingStamp then
 			existingStamp:Destroy()
 		end
+		self:_setRing(if survey then survey.region else nil)
 		for key, lamp in pairs(self._lamps) do
 			lamp.level = if survey and survey.signal == key then 0.6 else 0
 		end
@@ -952,26 +1022,25 @@ function MollyController._selectionState(self: MollyController): SurveyPanel.Sta
 	local carried = player and player.carriedStandard or 0
 	local cost = NestSurvey.crateCost(deps.config)
 	local region = selection and selection.region or nil
-	local mode = deps.input:mode()
-	local hint = if region
-		then (if mode == "gamepad"
-			then "A to survey  -  B to cancel"
-			elseif mode == "touch" then "Tap another tile to change"
-			else "Click another tile to change  -  Enter to survey")
-		else (if mode == "gamepad" then "D-pad to choose a region" elseif mode == "touch" then "Tap a map tile" else "Click a map tile")
 	local canSurvey = region ~= nil and carried >= cost and deps.round:phase() == "Searching"
 	if selection then
 		selection.canSurvey = canSurvey
 	end
+	local mode = deps.input:mode()
+	local caption = if carried < cost
+		then string.format("BRING %d NORMAL FEATHERS", cost)
+		elseif region then NestSurvey.describe(region)
+		else (if mode == "gamepad" then "D-PAD TO CHOOSE" elseif mode == "touch" then "TAP A TILE" else "CLICK A TILE")
 	return {
-		line = NestSurvey.lineFor(deps.config, { active = true, exposed = false, used = false, carriedStandard = carried }),
+		title = if region then "SCAN " .. region .. "?" else "PICK ONE AREA",
+		caption = caption,
 		carried = carried,
 		cost = cost,
-		region = region,
-		regionText = if region then NestSurvey.describe(region) else nil,
-		canSurvey = canSurvey,
-		hint = hint,
-		mode = "select",
+		primary = if region then "SCAN " .. region else "PICK AN AREA",
+		primaryEnabled = canSurvey,
+		back = true,
+		skip = false,
+		tone = "plain",
 	}
 end
 
@@ -990,19 +1059,27 @@ function MollyController._beginSelection(self: MollyController, _line: string): 
 	local reduced = motion.reducedMotion
 	deps.input:setSuspended(true)
 	deps.modals:setExternalUnlock(true)
+	local hudGui = deps.hud.gui
+	local hudWasEnabled = hudGui.Enabled
+	hudGui.Enabled = false -- the map is the screen; nothing else competes with it
 	selection.trove:add(function()
+		if not self._sequence then
+			hudGui.Enabled = hudWasEnabled
+		end
 		deps.modals:setExternalUnlock(false)
 		deps.input:setSuspended(deps.modals:isBlocking())
 	end)
-	-- Camera: over the players' side of the map, looking down at it.
+	-- Camera: from the players' side, a little high, with Molly and the machine on the left of the
+	-- map, the way the bench is meant to be read.
 	local anchor = station.PrimaryPart or station:FindFirstChild("MollyAnchor")
 	local base = if anchor and anchor:IsA("BasePart") then anchor.CFrame else rig:GetPivot()
 	local mapCentre = self._mapCentre
-	local eye = mapCentre + base.RightVector * -0.6 + base.LookVector * 6.2 + Vector3.new(0, 5.6, 0)
+	local focus = mapCentre + base.RightVector * 1.3 + Vector3.new(0, 1.0, 0)
+	local eye = focus + base.LookVector * 9.4 + Vector3.new(0, 4.6, 0)
 	local baseline = { type = camera.CameraType, cframe = camera.CFrame }
 	camera.CameraType = Enum.CameraType.Scriptable
 	TweenService:Create(camera, TweenInfo.new(if reduced then 0.05 else 0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		CFrame = CFrame.lookAt(eye, mapCentre + Vector3.new(0, 0.4, 0)),
+		CFrame = CFrame.lookAt(eye, focus),
 	}):Play()
 	selection.trove:add(function()
 		-- Only hand the camera back if the sequence is not taking over from here.
@@ -1017,10 +1094,10 @@ function MollyController._beginSelection(self: MollyController, _line: string): 
 		player:WaitForChild("PlayerGui"),
 		{ audio = deps.audio, accessibility = deps.accessibility, config = deps.config },
 		{
-			onSurvey = function()
+			onPrimary = function()
 				self:_confirmSurvey()
 			end,
-			onCancel = function()
+			onBack = function()
 				self:_endSelection("cancel")
 			end,
 			onSkip = function() end,
@@ -1134,7 +1211,9 @@ function MollyController._beginSelection(self: MollyController, _line: string): 
 			self:navigate(if p.Y > 0 then -1 else 1, 0)
 		end
 	end))
-	-- Molly watches the map while a player picks.
+	-- Molly says her piece over her head and watches the map while a player picks.
+	local carriedNow = deps.round.player and deps.round.player.carriedStandard or 0
+	sayOn(rig, NestSurvey.lineFor(deps.config, { active = true, exposed = false, used = false, carriedStandard = carriedNow }))
 	self._look = { yaw = 0.3, pitch = -0.6, until_ = math.huge }
 	selection.trove:add(function()
 		self._look = nil
@@ -1207,6 +1286,7 @@ function MollyController._refreshSelectionVisuals(self: MollyController)
 			tile.part.Color = tile.color
 		end
 	end
+	self:_setRing(selection.region)
 	if focus then
 		local pos = self:_tilePosition(focus)
 		if pos then
@@ -1271,7 +1351,7 @@ function MollyController._restoreCamera(self: MollyController, baseline: { type:
 	task.delay(1.2, release)
 end
 
--- The confirmation, then the request. Only a valid, affordable pick gets this far.
+-- The SCAN button is the decision; the sign already said this is the only scan of the round.
 function MollyController._confirmSurvey(self: MollyController)
 	local deps = self._deps
 	local selection = self._selection
@@ -1279,29 +1359,7 @@ function MollyController._confirmSurvey(self: MollyController)
 		deps.audio:play(Tokens.sound.uiError)
 		return
 	end
-	local region = selection.region
-	local cost = NestSurvey.crateCost(deps.config)
-	Dialog.open(deps.modals, {
-		id = "surveyTrade",
-		title = "Survey the Nest",
-		message = string.format(
-			"%s\n\nTrade %d normal feathers to survey %s?",
-			NestSurvey.LINES.warning,
-			cost,
-			NestSurvey.describe(region)
-		),
-		confirmText = "Survey",
-		cancelText = "Not yet",
-		tone = "warning",
-		audio = deps.audio,
-		accessibility = deps.accessibility,
-		config = deps.config,
-		onConfirm = function()
-			if self._selection == selection then
-				self:survey(region)
-			end
-		end,
-	})
+	self:survey(selection.region)
 end
 
 -- The request. Returns the envelope; a success hands the screen from the selection to the sequence.
@@ -1440,16 +1498,19 @@ function MollyController._runSequence(self: MollyController, data: any)
 
 	deps.input:setSuspended(true)
 	deps.modals:setExternalUnlock(true)
+	local hudGui = deps.hud.gui
+	hudGui.Enabled = false
 	session.trove:add(function()
+		hudGui.Enabled = true
 		deps.modals:setExternalUnlock(false)
 		deps.input:setSuspended(deps.modals:isBlocking())
 		self:_restoreCamera(baseline)
 	end)
-	-- Camera: the whole station from the players' side, a little high.
+	-- Camera: the whole bench from the players' side, a little high, machine on the left.
 	local anchor = station.PrimaryPart or station:FindFirstChild("MollyAnchor")
 	local base = if anchor and anchor:IsA("BasePart") then anchor.CFrame else rig:GetPivot()
-	local focus = base.Position + Vector3.new(0, 0.4, 0)
-	local eye = (base * CFrame.new(1.8, 3.6, -9.4)).Position
+	local focus = base.Position + Vector3.new(0, 0.6, 0)
+	local eye = (base * CFrame.new(1.2, 3.8, -10.2)).Position
 	camera.CameraType = Enum.CameraType.Scriptable
 	TweenService:Create(
 		camera,
@@ -1461,8 +1522,8 @@ function MollyController._runSequence(self: MollyController, data: any)
 		player:WaitForChild("PlayerGui"),
 		{ audio = deps.audio, accessibility = deps.accessibility, config = deps.config },
 		{
-			onSurvey = function() end,
-			onCancel = function() end,
+			onPrimary = function() end,
+			onBack = function() end,
 			onSkip = function()
 				self.stats.skips += 1
 				self:_finishSequence("skip")
@@ -1473,15 +1534,15 @@ function MollyController._runSequence(self: MollyController, data: any)
 	session.trove:add(panel.destroy)
 	local playerState = deps.round.player
 	panel.setState({
-		line = "Crate's in. Stand back - the Mole-o-Matic is warming up.",
+		title = "SCANNING " .. region .. "...",
+		caption = NestSurvey.describe(region),
 		carried = playerState and playerState.carriedStandard or 0,
 		cost = NestSurvey.crateCost(deps.config),
-		region = region,
-		regionText = NestSurvey.describe(region),
-		canSurvey = false,
-		hint = "Surveying...",
-		mode = "sequence",
-		skippable = true,
+		primary = nil,
+		primaryEnabled = false,
+		back = false,
+		skip = true,
+		tone = "plain",
 	})
 	session.trove:add(UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then
@@ -1586,6 +1647,7 @@ function MollyController._runSequence(self: MollyController, data: any)
 			t.lift = if r == region then TILE_RAISE + 0.08 else 0
 			t.part.Color = if r == region then STRAW_LIT else t.color
 		end
+		self:_setRing(region)
 	end)
 	-- 4. Molly pulls the goggles down and hauls the lever; gears wind up.
 	after(at(1.3), function()
@@ -1733,15 +1795,15 @@ function MollyController._runSequence(self: MollyController, data: any)
 		end
 		if session.panel then
 			session.panel.setState({
-				line = words.text,
+				title = (if signal == "strong" then words.title .. "!" else words.title),
+				caption = region .. "  -  " .. words.text,
 				carried = deps.round.player and deps.round.player.carriedStandard or 0,
 				cost = NestSurvey.crateCost(deps.config),
-				region = region,
-				regionText = string.format("%s: %s", region, words.title),
-				canSurvey = false,
-				hint = "",
-				mode = "sequence",
-				skippable = true,
+				primary = nil,
+				primaryEnabled = false,
+				back = false,
+				skip = true,
+				tone = if signal == "none" then "bad" else "good",
 			})
 		end
 		sayOn(rig, words.text)
