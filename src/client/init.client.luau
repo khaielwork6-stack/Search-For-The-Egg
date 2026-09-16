@@ -753,6 +753,7 @@ if RunService:IsStudio() then
 					report.pooledButVisible += 1
 				end
 			end
+			-- A decorative strand is an error too: it looks like a feather and cannot be collected.
 			report.errors = report.visibleNoId
 				+ report.visibleInactiveRecord
 				+ report.activeRenderedNoInstance
@@ -760,6 +761,7 @@ if RunService:IsStudio() then
 				+ report.wrongCanQuery
 				+ report.pooledButVisible
 				+ report.columnMapMismatch
+				+ report.decorativeVisible
 			return report
 		end,
 		-- What the pile's interior filling is actually doing, which is invisible from outside: the two

@@ -580,7 +580,15 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 		result = { ok = false, code = "unavailable", message = "request_failed" }
 	end
 	if self._liftedId and (not result.ok or not result.data or result.data.featherId ~= self._liftedId) then
-		if self._deps.pile.cancelLift then
+		-- Two kinds of refusal. "Someone else has it" or "that record is buried" means the thing under
+		-- the reticle is stale on this client: the server no longer holds it as collectible, so it
+		-- must leave the screen now rather than settle back into its seat and be aimed at again. Any
+		-- other refusal - range, cooldown, a full bag - leaves a live record where it was.
+		local stale = not result.ok
+			and (result.message == "already_collected" or result.message == "not_exposed" or result.message == "no_feather")
+		if stale and self._deps.pile.dropFeather then
+			self._deps.pile:dropFeather(self._liftedId)
+		elseif self._deps.pile.cancelLift then
 			self._deps.pile:cancelLift(self._liftedId)
 		end
 	end
