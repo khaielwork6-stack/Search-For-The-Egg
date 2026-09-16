@@ -7,6 +7,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ChapterLayout = require(ReplicatedStorage.Shared.Domain.ChapterLayout)
+local PlumeStation = require(script.Parent.PlumeStation)
 local RoundIntro = require(ReplicatedStorage.Shared.Domain.RoundIntro)
 
 local ChapterShellService = {}
@@ -376,6 +377,7 @@ function ChapterShellService.buildFromMap(workspaceService: Workspace, mapModel:
 	end
 	ChapterShellService.placeDisplays(workspaceService, config)
 	ChapterShellService.spawnFarmer(workspaceService, folder, layout, config)
+	PlumeStation.build(workspaceService, folder, layout, config)
 
 	folder:SetAttribute("SFE_ChildCount", #folder:GetChildren())
 	folder.Parent = workspaceService

@@ -24,6 +24,7 @@ local Confetti = require(script.Parent.Parent.UI.Components.Confetti)
 local UpgradeActions = require(script.Parent.Parent.UI.UpgradeActions)
 local UpgradeCopy = require(script.Parent.Parent.UI.UpgradeCopy)
 local Depth = require(script.Parent.Parent.UI.Components.Depth)
+local NestClues = require(Shared.Domain.NestClues)
 
 local UpgradeBookController = {}
 UpgradeBookController.__index = UpgradeBookController
@@ -572,8 +573,55 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 		}
 	)
 	story.Position = UDim2.fromOffset(0, Tokens.typography.display.size + Tokens.spacing.md)
-	story.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size * 6)
+	story.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size * 5)
 	story.TextYAlignment = Enum.TextYAlignment.Top
+	-- NEST CLUES: what Professor Plume has read from the feathers this round. Two rows, UNKNOWN in
+	-- fog until a clue is bought, then the stamped band. The data is the round snapshot's `clues`,
+	-- so a member who paid nothing and a member who joined late read the same rows.
+	local round = deps.round.round
+	local clues = round and round.clues
+	local unlocked = clues and clues.unlocked or {}
+	local cluesTop = Tokens.typography.display.size + Tokens.spacing.md + Tokens.typography.body.size * 5 + Tokens.spacing.md
+	local cluesTitle = FrameKit.text(right, "CluesTitle", "NEST CLUES", "title", { zIndex = z, color = PAGE_BLUE })
+	cluesTitle.Position = UDim2.fromOffset(0, cluesTop)
+	cluesTitle.Size = UDim2.new(1, 0, 0, Tokens.typography.title.size + 2)
+	local rowHeight = tap - 4
+	for index, category in ipairs(NestClues.CATEGORIES) do
+		local entry = unlocked[category]
+		local row = Instance.new("Frame")
+		row.Name = "Clue_" .. category
+		row.Position =
+			UDim2.fromOffset(0, cluesTop + Tokens.typography.title.size + Tokens.spacing.sm + (index - 1) * (rowHeight + Tokens.spacing.xs))
+		row.Size = UDim2.new(1, 0, 0, rowHeight)
+		row.BackgroundColor3 = if entry then Tokens.color.creamPill else Tokens.color.creamDeep
+		row.BackgroundTransparency = if entry then 0 else 0.35
+		row.BorderSizePixel = 0
+		row.ZIndex = z
+		local rowCorner = Instance.new("UICorner")
+		rowCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
+		rowCorner.Parent = row
+		Depth.keyline(row, Tokens.stroke.hairline + 0.5, if entry then Tokens.color.gold else Tokens.color.strawDeep)
+		row.Parent = right
+		local label = FrameKit.text(row, "Label", NestClues.LABELS[category], "heading", { zIndex = z + 1, color = Tokens.color.inkStrong })
+		label.AnchorPoint = Vector2.new(0, 0.5)
+		label.Position = UDim2.new(0, Tokens.spacing.md, 0.5, 0)
+		label.Size = UDim2.new(0.45, 0, 0, Tokens.typography.heading.size + 2)
+		local value = FrameKit.text(row, "Value", if entry then tostring(entry.title) else "UNKNOWN", "heading", {
+			zIndex = z + 1,
+			color = if entry then PAGE_BLUE else Tokens.color.inkMuted,
+			align = Enum.TextXAlignment.Right,
+		})
+		value.AnchorPoint = Vector2.new(1, 0.5)
+		value.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, 0)
+		value.Size = UDim2.new(0.55, -Tokens.spacing.md, 0, Tokens.typography.heading.size + 2)
+		if entry then
+			local stamp = FrameKit.badge(row, "Stamp", "ANALYZED", Color3.fromRGB(196, 52, 44), z + 2)
+			stamp.AnchorPoint = Vector2.new(0.5, 0.5)
+			stamp.Position = UDim2.fromScale(0.5, 0.5)
+			stamp.Rotation = -8
+			stamp.TextSize = Tokens.typography.caption.size - 2
+		end
+	end
 	local found = 1 + (if rainbowCarried > 0 or session.rainbowSeen then 1 else 0)
 	local count = FrameKit.text(right, "Found", string.format("FEATHERS FOUND:\n%d/%d", found, #entries), "display", {
 		zIndex = z,

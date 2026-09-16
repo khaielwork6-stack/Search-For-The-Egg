@@ -38,6 +38,7 @@ local DisplayController = require(Controllers.DisplayController)
 local NameplateController = require(Controllers.NameplateController)
 local InspectController = require(Controllers.InspectController)
 local UpgradeBookController = require(Controllers.UpgradeBookController)
+local PlumeController = require(Controllers.PlumeController)
 local PromptController = require(Controllers.PromptController)
 local ObjectiveController = require(Controllers.ObjectiveController)
 local VictoryController = require(Controllers.VictoryController)
@@ -198,6 +199,22 @@ local intro = trove:add(IntroCinematicController.new({
 intro:bindRound()
 -- Player nameplates: display name and record time over every character.
 local nameplates = trove:add(NameplateController.new(round))
+-- Professor Plume: the clue NPC. Nameplate, outline, idle, the board, the trade and its sequence.
+local plume = trove:add(PlumeController.new({
+	net = net,
+	round = round,
+	modals = modals,
+	hud = hud,
+	input = input,
+	audio = audio,
+	haptics = haptics,
+	accessibility = accessibility,
+	quality = quality,
+	camera = camera,
+	config = config,
+	dialogue = dialogue,
+	interaction = interaction,
+}))
 -- The upgrade book: Tab, the book button, or the supplies counter opens it during a search.
 local book = trove:add(UpgradeBookController.new({
 	net = net,
@@ -1154,6 +1171,29 @@ if RunService:IsStudio() then
 		dialogueClose = function()
 			dialogue:close()
 			return { open = dialogue:isOpen() }
+		end,
+		-- Professor Plume: drive the prompt, the trade and the sequence, and read what the player sees.
+		plumeStatus = function()
+			local status = plume:status()
+			status.top = modals:topId()
+			status.inputSuspended = (input :: any)._suspended
+			status.hudEnabled = hud.gui.Enabled
+			status.mouseBehaviour = tostring(game:GetService("UserInputService").MouseBehavior)
+			status.promptsEnabled = game:GetService("ProximityPromptService").Enabled
+			status.roundClues = round.round and round.round.clues or nil
+			status.carriedRainbow = round.player and round.player.carriedRainbow or nil
+			status.carriedStandard = round.player and round.player.carriedStandard or nil
+			return status
+		end,
+		plumeOpen = function()
+			return { opened = plume:interact(), top = modals:topId() }
+		end,
+		plumeAnalyze = function(category)
+			return plume:analyze(tostring(category or "direction"))
+		end,
+		plumeSkip = function()
+			plume:skip()
+			return plume:status()
 		end,
 		introSkip = function()
 			intro:skip()
