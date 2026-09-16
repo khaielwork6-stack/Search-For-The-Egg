@@ -388,7 +388,7 @@ function LobbyController.open(self: LobbyController, id: string): boolean
 		end,
 		self._titles[id] or id,
 		{
-			wide = id == "classes" or id == "stats" or id == "party" or id == "gems",
+			wide = id == "classes" or id == "stats" or id == "party" or id == "gems" or id == "shop",
 			icon = "header." .. (if id == "gems" then "shop" else id),
 		}
 	)

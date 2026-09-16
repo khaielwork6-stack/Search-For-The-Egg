@@ -123,11 +123,12 @@ function ModalShell.create(
 	plaque.Name = "Header"
 	plaque.AnchorPoint = Vector2.new(0.5, 0.5)
 	plaque.Position = UDim2.new(0.5, 0, 0, 6)
-	plaque.Size = UDim2.new(if options.compact then 0.8 else 0.58, 0, 0, plaqueHeight)
+	-- Narrow enough that a chip and the knob fit to its right on a wide frame.
+	plaque.Size = UDim2.new(if options.compact then 0.8 else 0.44, 0, 0, plaqueHeight)
 	plaque.BackgroundTransparency = 1
 	plaque.ZIndex = card.ZIndex + 6
 	local plaqueCap = Instance.new("UISizeConstraint")
-	plaqueCap.MaxSize = Vector2.new(640, plaqueHeight)
+	plaqueCap.MaxSize = Vector2.new(480, plaqueHeight)
 	plaqueCap.MinSize = Vector2.new(240, plaqueHeight)
 	plaqueCap.Parent = plaque
 	local sign = Skin.overlay(plaque, "world.stationSign", { zIndex = plaque.ZIndex, sliceScale = 0.42, name = "Sign" })
@@ -181,8 +182,8 @@ function ModalShell.create(
 	local headerRight = Instance.new("Frame")
 	headerRight.Name = "HeaderRight"
 	headerRight.AnchorPoint = Vector2.new(1, 0.5)
-	headerRight.Position = UDim2.new(1, -(tap + 34), 0, 8)
-	headerRight.Size = UDim2.fromOffset(280, tap + 8)
+	headerRight.Position = UDim2.new(1, -(tap + 30), 0, 8)
+	headerRight.Size = UDim2.fromOffset(210, tap + 8)
 	headerRight.BackgroundTransparency = 1
 	headerRight.ZIndex = card.ZIndex + 6
 	headerRight.Parent = card
