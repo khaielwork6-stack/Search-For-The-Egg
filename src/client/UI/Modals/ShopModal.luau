@@ -643,7 +643,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 	table.insert(cleanups, viewForever.destroy)
 
 	-- GEMS: the bundles, side by side.
-	local bundleH = if compact then tap * 5.2 else tap * 6
+	local bundleH = if compact then tap * 4.8 else tap * 5.2
 	local gemsPage = page("gems", bundleH + Tokens.spacing.md + Tokens.typography.caption.size + 8 + Tokens.spacing.md + tap)
 	local bundlesRow = Instance.new("Frame")
 	bundlesRow.Name = "Bundles"
@@ -769,17 +769,18 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 		buy.button.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.md)
 		table.insert(cleanups, buy.destroy)
 		-- Ribbons hang over the top corners, never over the amount: POPULAR left, BEST VALUE right.
-		if isPopular then
-			local ribbon = FrameKit.badge(card, "Popular", "POPULAR", Tokens.color.goldDeep, z + 6)
-			ribbon.AnchorPoint = Vector2.new(0, 0.5)
-			ribbon.Position = UDim2.fromOffset(-Tokens.spacing.sm, 2)
-			ribbon.Rotation = -8
-		end
 		if isBest then
 			local ribbon = FrameKit.badge(card, "Best", "BEST VALUE", Tokens.color.danger, z + 6)
 			ribbon.AnchorPoint = Vector2.new(1, 0.5)
 			ribbon.Position = UDim2.new(1, Tokens.spacing.sm, 0, 2)
 			ribbon.Rotation = 8
+		end
+		if isPopular then
+			-- On the left side, a little down, so it never meets BEST VALUE on a narrow card.
+			local ribbon = FrameKit.badge(card, "Popular", "POPULAR", Tokens.color.goldDeep, z + 6)
+			ribbon.AnchorPoint = Vector2.new(0, 0.5)
+			ribbon.Position = UDim2.new(0, -Tokens.spacing.md, 0, if isBest then 34 else 2)
+			ribbon.Rotation = -8
 		end
 		if isBest and not motion.reducedMotion then
 			table.insert(cleanups, Tween.pulseLoop(scale, motion, 0.015))
