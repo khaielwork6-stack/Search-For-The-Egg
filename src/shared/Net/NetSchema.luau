@@ -28,6 +28,8 @@ local DIFFICULTY = Schema.enum({ "normal", "hard" })
 local TOKEN = Schema.string({ min = 8, max = 64, pattern = "^[%w%-{}]+$" })
 -- Upgrade ids: "bag", "handGrasp", "<tool>.<path>", "tool:<tool>" (dots and colons are structural).
 local UPGRADE_ID = Schema.string({ max = 48, min = 1, pattern = "^[%w_%-%.:]+$" })
+-- Molly's map: nine regions, A1..C3.
+local REGION = Schema.enum({ "A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3" })
 
 local function request(
 	name: string,
@@ -151,6 +153,8 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		request("EggClaim", Schema.object({ sessionToken = TOKEN }), slowRate, 2),
 		request("EggDeliver", Schema.object({ sessionToken = TOKEN }), slowRate, 2),
 		request("ClueAnalyze", Schema.object({ sessionToken = TOKEN, category = Schema.enum({ "direction", "depth" }) }), slowRate, 2),
+		request("SurveyRequest", Schema.object({ sessionToken = TOKEN, region = REGION }), slowRate, 2),
+		request("SurveySelect", Schema.object({ sessionToken = TOKEN, region = Schema.optional(REGION) }), uiRate, 2),
 		-- Meta ---------------------------------------------------------------------------------
 		request(
 			"ClassRoll",
@@ -228,6 +232,8 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		serverEvent("UpgradeResult", Schema.object({}), 2),
 		serverEvent("EggRevealed", Schema.object({}), 2),
 		serverEvent("ClueUnlocked", Schema.object({}), 2),
+		serverEvent("SurveyCompleted", Schema.object({}), 2),
+		serverEvent("SurveySelection", Schema.object({}), 2),
 		serverEvent("EggCarried", Schema.object({}), 2),
 		serverEvent("EggDropped", Schema.object({}), 2),
 		serverEvent("VictoryStarted", Schema.object({}), 2),

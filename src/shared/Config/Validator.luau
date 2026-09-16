@@ -961,6 +961,22 @@ function Validator.validate(raw: any): Report
 		)
 	end
 
+	-- Survey (Molly the Mole)
+	check(type(raw.survey) == "table", "survey missing")
+	if type(raw.survey) == "table" then
+		local survey = raw.survey
+		check(
+			isPositiveNumber(survey.SurveyCrateCost) and survey.SurveyCrateCost == math.floor(survey.SurveyCrateCost),
+			"survey.SurveyCrateCost must be a positive integer"
+		)
+		check(isPositiveNumber(survey.stationRangeStuds), "survey.stationRangeStuds must be > 0")
+		check(isPositiveNumber(survey.sequenceSeconds), "survey.sequenceSeconds must be > 0")
+		check(
+			isPositiveNumber(survey.weakManhattanDistance) and survey.weakManhattanDistance == math.floor(survey.weakManhattanDistance),
+			"survey.weakManhattanDistance must be a positive integer"
+		)
+	end
+
 	-- Victory
 	check(type(raw.victory) == "table" and isNonNegativeNumber(raw.victory.finderBonusGems), "victory.finderBonusGems must be >= 0")
 	check(type(raw.victory) == "table" and raw.victory.saveBeforeTeleport == true, "victory.saveBeforeTeleport must be true")

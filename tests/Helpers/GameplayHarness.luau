@@ -31,6 +31,7 @@ local ToolService = require(Server.Services.ToolService)
 local PileTerrainService = require(Server.Services.PileTerrainService)
 local EggService = require(Server.Services.EggService)
 local ClueService = require(Server.Services.ClueService)
+local SurveyService = require(Server.Services.SurveyService)
 local VictoryService = require(Server.Services.VictoryService)
 local ObjectiveService = require(Server.Services.ObjectiveService)
 local ClassService = require(Server.Services.ClassService)
@@ -189,6 +190,13 @@ function GameplayHarness.new(cfg, options)
 		getCharacterPosition = getCharacterPosition,
 		analytics = analytics,
 	})
+	local surveys = SurveyService.new({
+		config = cfg,
+		rounds = rounds,
+		sessions = sessions,
+		getCharacterPosition = getCharacterPosition,
+		analytics = analytics,
+	})
 	local saveShouldFail = false
 	local victory = VictoryService.new({
 		config = cfg,
@@ -324,6 +332,10 @@ function GameplayHarness.new(cfg, options)
 		classes, perks, rewards, inventory, leaderboards, leaderboardStore, group, classRng
 	h.entitlements = entitlements
 	h.clues = clues
+	h.surveys = surveys
+	function h.survey(userId, region)
+		return surveys:survey(userId, { sessionToken = h.token(userId), region = region })
+	end
 	function h.analyze(userId, category)
 		return clues:analyze(userId, { sessionToken = h.token(userId), category = category })
 	end

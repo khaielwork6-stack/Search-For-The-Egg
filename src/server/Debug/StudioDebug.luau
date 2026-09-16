@@ -426,6 +426,61 @@ function StudioDebug.install(container: any): any?
 		return result
 	end
 
+	-- Molly the Mole. `surveyState` is what the party sees; `eggRegion` is the server's own answer
+	-- for the live Egg; `surveyAs` runs the scan for a member with no character or token.
+	function hooks.surveyState(userId: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return { error = "no_round" }
+		end
+		local state = runtime.players[userId]
+		return {
+			survey = container.surveys:project(runtime),
+			carriedStandard = state and state.carriedStandard or 0,
+			carriedRainbow = state and state.carriedRainbow or 0,
+			phase = runtime.state.phase,
+			stats = table.clone(container.surveys.stats),
+		}
+	end
+
+	function hooks.eggRegion(userId: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return { error = "no_round" }
+		end
+		local NestSurvey = require(game:GetService("ReplicatedStorage").Shared.Domain.NestSurvey)
+		local region = container.surveys:eggRegion(runtime)
+		local expected = {}
+		for _, candidate in ipairs(NestSurvey.REGIONS) do
+			expected[candidate] = NestSurvey.signal(container.config, candidate, region)
+		end
+		return { region = region, cellX = runtime.eggNode.x, cellZ = runtime.eggNode.z, expected = expected }
+	end
+
+	function hooks.surveyAs(userId: number, region: string)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local ChapterLayout = require(game:GetService("ReplicatedStorage").Shared.Domain.ChapterLayout)
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return { error = "no_round" }
+		end
+		local layout = ChapterLayout[runtime.state.chapter]
+		local result = container.surveys:survey(userId, { region = region }, { trusted = true, characterPosition = layout.surveyStation })
+		local player = container.playerData:playerOf(userId)
+		if result.ok and player and typeof(player) == "Instance" and container.pushPreviews then
+			container.pushPreviews(player)
+		end
+		return result
+	end
+
 	function hooks.setCarried(userId: number, standard: number, rainbow: number)
 		if not StudioDebug.isUserAllowed(userId) then
 			return nil

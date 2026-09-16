@@ -183,6 +183,10 @@ ChapterLayout.chapter1 = table.freeze({
 	clueStationFacing = Vector3.new(0, 52.1, 372),
 	-- The barn door: the DIRECTION clue's axis runs from the mound's centre to here.
 	clueBarn = Vector3.new(-45, 52.1, 322),
+	-- Molly the Mole's surveying station: the mirror of Plume's bay on the east side (measured
+	-- 16 Sep 2026: TanClearing at 52.1, nothing built in x 18..36, z 344..366). Faces the mound.
+	surveyStation = Vector3.new(21, 52.1, 353),
+	surveyStationFacing = Vector3.new(0, 52.1, 372),
 	chickPathY = 52.1, -- scout chicks walk at ground level between the mound and the crate
 	-- Perches the chick flies between while the crate is away (measured 14 Sep 2026 from the map:
 	-- crate rear rim top 55.6, crate corner post top 55.4, conveyor end roller top 56.4). Feet height.

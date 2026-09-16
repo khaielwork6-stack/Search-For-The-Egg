@@ -51,6 +51,7 @@ local UpgradeService = require(script.Services.UpgradeService)
 local ToolService = require(script.Services.ToolService)
 local EggService = require(script.Services.EggService)
 local ClueService = require(script.Services.ClueService)
+local SurveyService = require(script.Services.SurveyService)
 local VictoryService = require(script.Services.VictoryService)
 local ObjectiveService = require(script.Services.ObjectiveService)
 local ClassService = require(script.Services.ClassService)
@@ -377,6 +378,14 @@ local egg =
 	EggService.new({ config = config, rounds = rounds, clock = clock, getCharacterPosition = getCharacterPosition, analytics = analytics })
 -- Professor Plume: Rainbow Feathers for a clue, shared by the round.
 local clues = ClueService.new({
+	config = config,
+	rounds = rounds,
+	sessions = sessions,
+	getCharacterPosition = getCharacterPosition,
+	analytics = analytics,
+})
+-- Molly the Mole: one crate of normal feathers for the party's single survey of the round.
+local surveys = SurveyService.new({
 	config = config,
 	rounds = rounds,
 	sessions = sessions,
@@ -1145,6 +1154,44 @@ registry:onRequest("ClueAnalyze", function(player, payload)
 	end
 	return result
 end)
+registry:onRequest("SurveyRequest", function(player, payload)
+	local result = surveys:survey(player.UserId, payload)
+	local runtime = rounds:roundOf(player.UserId)
+	if result.ok and runtime then
+		local data = result.data :: any
+		data.player = projectPlayerFor(runtime.state.roundId, player.UserId)
+		pushPreviews(player)
+	end
+	return result
+end)
+registry:onRequest("SurveySelect", function(player, payload)
+	return surveys:select(player.UserId, payload)
+end)
+-- The reading belongs to the party; the live pick is shown to the other members at the station.
+surveys.completed:Connect(function(runtime, userId, _state, projection)
+	local payer = playerData:playerOf(userId)
+	local payerName = if payer and typeof(payer) == "Instance" then (payer :: Player).DisplayName else "A forager"
+	for _, member in ipairs(memberPlayers(runtime.state.members)) do
+		send(member, "SurveyCompleted", {
+			roundId = runtime.state.roundId,
+			region = projection.region,
+			signal = projection.signal,
+			title = projection.title,
+			short = projection.short,
+			text = projection.text,
+			byUserId = userId,
+			byName = payerName,
+			survey = projection,
+		})
+	end
+end)
+surveys.selected:Connect(function(runtime, userId, region)
+	for _, member in ipairs(memberPlayers(runtime.state.members)) do
+		if member.UserId ~= userId then
+			send(member, "SurveySelection", { roundId = runtime.state.roundId, byUserId = userId, region = region })
+		end
+	end
+end)
 -- A clue belongs to the whole party: everyone hears the discovery and the words, with the payer's
 -- name for the banner. The payer's own client sequences the reveal after its machine has run.
 clues.unlocked:Connect(function(runtime, userId, entry, projection)
@@ -1377,6 +1424,7 @@ local container = {
 	upgrades = upgrades,
 	egg = egg,
 	clues = clues,
+	surveys = surveys,
 	tools = tools,
 	entitlements = entitlements,
 	commerce = commerce,

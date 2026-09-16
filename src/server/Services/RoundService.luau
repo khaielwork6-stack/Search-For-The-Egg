@@ -12,6 +12,7 @@ local SessionReducer = require(Shared.Reducers.SessionReducer)
 local WeightedRandom = require(Shared.WeightedRandom)
 local PileGrid = require(Shared.Domain.PileGrid)
 local NestClues = require(Shared.Domain.NestClues)
+local NestSurvey = require(Shared.Domain.NestSurvey)
 local PileSurface = require(Shared.Domain.PileSurface)
 local EggNodes = require(Shared.Domain.EggNodes)
 local ToolSpecs = require(Shared.Domain.ToolSpecs)
@@ -60,6 +61,7 @@ export type Runtime = {
 	resultsShownAt: number?,
 	returnVotes: { [number]: string },
 	clues: NestClues.State?, -- Professor Plume's unlocked clues; owned by ClueService, reset with the round
+	survey: NestSurvey.State?, -- Molly's one reading; owned by SurveyService, reset with the round
 }
 
 export type RoundService = typeof(setmetatable(
@@ -552,6 +554,7 @@ function RoundService.project(self: RoundService, roundId: string, includePile: 
 	projection.removedFraction = PileGrid.removedFraction(runtime.grid)
 	-- Clues are broad bands and fixed words only; the projection never carries the Egg's place.
 	projection.clues = NestClues.project(self._config, runtime.clues)
+	projection.survey = NestSurvey.project(runtime.survey) -- region + category only; nil until the party scans
 	if includePile then
 		projection.pile = PileGrid.snapshot(runtime.grid)
 		projection.pile.rainbowSeed = runtime.rainbowSeed or 0
