@@ -156,8 +156,9 @@ function Icons.clock(parent: Instance, px: number, options: Options?): Frame
 	stroke.Thickness = math.max(1.5, px * 0.09)
 	stroke.Color = opts.color or Tokens.color.outline
 	stroke.Parent = ring
-	shape(ring, "Hour", UDim2.fromScale(0.12, 0.32), UDim2.fromScale(0.5, 0.36), opts.color or Tokens.color.outline, z + 1, nil, 0)
-	shape(ring, "Minute", UDim2.fromScale(0.12, 0.3), UDim2.fromScale(0.62, 0.52), opts.color or Tokens.color.outline, z + 1, nil, -60)
+	-- Hands stay dark whatever colour the caller picks: a light caller colour used to hide them.
+	shape(ring, "Hour", UDim2.fromScale(0.12, 0.32), UDim2.fromScale(0.5, 0.36), Tokens.color.outline, z + 1, nil, 0)
+	shape(ring, "Minute", UDim2.fromScale(0.12, 0.3), UDim2.fromScale(0.62, 0.52), Tokens.color.outline, z + 1, nil, -60)
 	return frame
 end
 

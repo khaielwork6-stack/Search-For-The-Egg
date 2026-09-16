@@ -50,6 +50,9 @@ local GEOMETRY = {
 local HEADER = 0.145
 -- Widest card a row-based builder (Party, Daily, Codes...) gets; their rows were drawn for it.
 local LIST_MAX_WIDTH = 1040
+-- Header and bottom rail in pixels for row-based cards (their height follows their rows).
+local HEADER_PX = 76
+local BOTTOM_PX = 18
 
 function ModalShell.create(
 	gui: Instance,
@@ -371,16 +374,23 @@ function ModalShell.create(
 		end
 		-- Row builders were drawn for the old 1040 px card; wider only stretches their tiles.
 		maxSize.MaxSize = Vector2.new(math.min(geometry.maxWidth, LIST_MAX_WIDTH), 10000)
+		-- Their header keeps a pixel height so a short card (Codes, an empty quest list) never
+		-- squashes the plaque and close knob.
+		header.Size = UDim2.new(1, 0, 0, HEADER_PX)
+		rail.Size = UDim2.new(1, 0, 0, HEADER_PX)
+		plaque.Size = UDim2.new(if options.compact then 0.78 else 0.62, 0, 0, HEADER_PX - 8)
+		headerRight.Size = UDim2.new(0.36, 0, 0, HEADER_PX - 24)
+		panel.Position = UDim2.new(0.028, 0, 0, HEADER_PX)
+		panel.Size = UDim2.new(0.944, 0, 1, -(HEADER_PX + BOTTOM_PX))
 		local holderHeight = holder.AbsoluteSize.Y
 		if holderHeight <= 0 then
 			return
 		end
+		local scale = SafeArea.scaleOf(card)
 		local chrome = card.AbsoluteSize.Y - content.AbsoluteWindowSize.Y
-		local rows = contentLayout.AbsoluteContentSize.Y
-			+ contentPadding.PaddingTop.Offset
-			+ contentPadding.PaddingBottom.Offset
-			+ Tokens.spacing.sm
-		local wanted = math.clamp((rows + chrome) / holderHeight, 0.3, boxHeight)
+		local rows = contentLayout.AbsoluteContentSize.Y + (contentPadding.PaddingTop.Offset + contentPadding.PaddingBottom.Offset) * scale
+		local floor = (chrome + 48 * scale) / holderHeight
+		local wanted = math.clamp((rows + chrome) / holderHeight, math.min(floor, boxHeight), boxHeight)
 		card.Size = UDim2.fromScale(boxWidth, wanted)
 	end
 	contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(relayout)

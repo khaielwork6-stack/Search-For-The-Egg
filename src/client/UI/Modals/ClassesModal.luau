@@ -440,7 +440,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	})
 	Fit.image(top, "modal.leaf.left", { size = UDim2.fromScale(0.03, 0.7), position = UDim2.fromScale(0.03, 0.5), zIndex = 3 })
 	Fit.image(top, "modal.leaf.right", { size = UDim2.fromScale(0.03, 0.7), position = UDim2.fromScale(0.97, 0.5), zIndex = 3 })
-	local pointer = Fit.frame(root, "Pointer", UDim2.fromScale(REEL_CX, 0.0), UDim2.fromScale(0, 0.15), 9, Vector2.new(0.5, 0))
+	local pointer = Fit.frame(root, "Pointer", UDim2.fromScale(REEL_CX, 0.0), UDim2.fromScale(0, 0.17), 9, Vector2.new(0.5, 0))
 	Fit.aspect(pointer, 0.7, Enum.DominantAxis.Height)
 	local pointerGlow = Instance.new("Frame")
 	pointerGlow.Name = "Glow"
@@ -453,7 +453,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	pointerGlow.ZIndex = 1
 	Fit.corner(pointerGlow, 0.5)
 	pointerGlow.Parent = pointer
-	local eggBox = { size = UDim2.fromScale(1, 0.62), position = UDim2.fromScale(0.5, 0.33), zIndex = 2, name = "Egg" }
+	local eggBox = { size = UDim2.fromScale(1.1, 0.68), position = UDim2.fromScale(0.5, 0.34), zIndex = 2, name = "Egg" }
 	local egg = Fit.image(pointer, "forge.egg", eggBox) or Fit.image(pointer, "icon.egg", eggBox)
 	if not egg then
 		local glyph = Icons.egg(pointer, 10, { zIndex = 2, color = Tokens.color.gold })
