@@ -153,7 +153,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	-- Tall enough for the artwork to be the biggest thing on the card. At 2.9 the four bands added up
 	-- to more than the cell, so the art band collapsed to its 18px floor and the gems came out smaller
 	-- than the vector lozenges they replaced.
-	local CELL_HEIGHT = math.floor(tap * 2.8)
+	local CELL_HEIGHT = math.floor(tap * 3.0)
 	layout.CellSize = UDim2.new(1 / COLUMNS, -Tokens.spacing.sm, 0, CELL_HEIGHT)
 	layout.CellPadding = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -179,13 +179,13 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		-- Header band: the day number, always legible against the card whatever state it is in.
 		-- Bands, measured off the cell height, so the header, amount, artwork and footer occupy four
 		-- strips that cannot intersect whatever the viewport scale does.
-		local headerHeight = Tokens.typography.label.size + Tokens.spacing.sm
+		local headerHeight = Tokens.typography.label.size + Tokens.spacing.xs
 		-- Big, but not so big it starves the picture underneath: display type at full size took 36px of
 		-- a 127px card and left the art 18. This is the number's own size, set once here.
 		local amountHeight = Tokens.typography.title.size + 6
 		-- Tall enough to read as a button rather than a printed strip. The card itself carries the tap
 		-- target (see the hit layer below), so this is about weight, not reach.
-		local footerHeight = Tokens.typography.label.size + Tokens.spacing.md
+		local footerHeight = Tokens.typography.label.size + Tokens.spacing.sm
 		local artTop = headerHeight + amountHeight + Tokens.spacing.xs
 		local artHeight = math.max(18, CELL_HEIGHT - artTop - footerHeight - Tokens.spacing.sm * 2)
 
