@@ -278,6 +278,7 @@ local function buildCard(parent: GuiObject, entry: any, tier: string, z: number)
 		color = Tokens.color.featherWhite,
 		max = 26,
 		min = 4,
+		wrap = false,
 		outline = 2,
 		outlineColor = colors.deep,
 		zIndex = 5,
