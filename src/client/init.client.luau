@@ -1294,6 +1294,9 @@ if RunService:IsStudio() then
 			intro:skip()
 			return { playing = intro:isPlaying() }
 		end,
+		bookTab = function(tab)
+			return { switched = book:setTab(tostring(tab)), open = book:isOpen() }
+		end,
 		closeBook = function()
 			book:close()
 			return { open = book:isOpen() }

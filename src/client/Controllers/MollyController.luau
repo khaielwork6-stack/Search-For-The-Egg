@@ -1762,15 +1762,15 @@ function MollyController._runSequence(self: MollyController, data: any)
 		deps.haptics:pulse(0.4, 0.06)
 		self:_applyBoardOnly()
 	end)
-	-- 8. The party hears; then everything is handed back.
-	local finishAt = searchEnd + at(1.7)
+	-- 8. The party hears; then everything is handed back. About five and a half seconds in all.
+	local finishAt = searchEnd + at(1.1)
 	after(finishAt, function()
 		self:_banner(data)
 	end)
-	task.delay(finishAt + 0.3, function()
+	task.delay(finishAt + 0.2, function()
 		self:_finishSequence("complete")
 	end)
-	task.delay(finishAt + 0.3 + WATCHDOG_GRACE, function()
+	task.delay(finishAt + 0.2 + WATCHDOG_GRACE, function()
 		if self._sequence == session then
 			self:_finishSequence("watchdog")
 		end

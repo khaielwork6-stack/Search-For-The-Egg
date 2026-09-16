@@ -1104,6 +1104,17 @@ function UpgradeBookController.open(self: UpgradeBookController)
 	end))
 end
 
+-- Switches the open book to a tab ("upgrades" | "index"); what the tab buttons do.
+function UpgradeBookController.setTab(self: UpgradeBookController, tab: string): boolean
+	local session = self._session
+	if not session or (tab ~= "upgrades" and tab ~= "index") or session.tab == tab then
+		return false
+	end
+	session.tab = tab
+	self:_renderSpread()
+	return true
+end
+
 function UpgradeBookController.close(self: UpgradeBookController)
 	local session = self._session
 	if not session then
