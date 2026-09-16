@@ -48,6 +48,8 @@ local GEOMETRY = {
 }
 -- Header band height as a fraction of the card; the parchment starts under it.
 local HEADER = 0.145
+-- Widest card a row-based builder (Party, Daily, Codes...) gets; their rows were drawn for it.
+local LIST_MAX_WIDTH = 1040
 
 function ModalShell.create(
 	gui: Instance,
@@ -360,12 +362,15 @@ function ModalShell.create(
 			if aspect.Parent ~= card then
 				aspect.Parent = card
 			end
+			maxSize.MaxSize = Vector2.new(geometry.maxWidth, geometry.maxWidth / geometry.aspect)
 			card.Size = UDim2.fromScale(boxWidth, boxHeight)
 			return
 		end
 		if aspect.Parent then
 			aspect.Parent = nil
 		end
+		-- Row builders were drawn for the old 1040 px card; wider only stretches their tiles.
+		maxSize.MaxSize = Vector2.new(math.min(geometry.maxWidth, LIST_MAX_WIDTH), 10000)
 		local holderHeight = holder.AbsoluteSize.Y
 		if holderHeight <= 0 then
 			return
