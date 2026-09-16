@@ -1122,7 +1122,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			variant = "primary",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromScale(0.88, 0.42),
+			size = UDim2.fromScale(0.88, if phone then 0.5 else 0.42),
 			zIndex = 5,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTap)
