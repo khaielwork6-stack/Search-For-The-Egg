@@ -56,13 +56,12 @@ function NpcPlate.build(adornee: BasePart, name: string, role: string, heightStu
 		outline = true,
 	})
 	pill.Font = Tokens.typography.label.font
+	-- A UIGradient on a TextLabel tints the lettering too, so the pill is a flat cocoa plank.
 	local pillShade = pill:FindFirstChildOfClass("UIGradient")
 	if pillShade then
-		pillShade.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Tokens.color.cocoa),
-			ColorSequenceKeypoint.new(1, Tokens.color.outline),
-		})
+		pillShade:Destroy()
 	end
+	pill.BackgroundColor3 = Tokens.color.cocoa
 	local roleOutline = pill:FindFirstChild("TextOutline")
 	if roleOutline and roleOutline:IsA("UIStroke") then
 		roleOutline.Thickness = 2
