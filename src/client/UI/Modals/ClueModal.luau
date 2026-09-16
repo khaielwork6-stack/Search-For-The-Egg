@@ -277,10 +277,9 @@ function ClueModal.open(deps: Deps, options: Options): boolean
 				config = deps.config,
 				onConfirm = function()
 					analyze.setPending(true, "ANALYZING")
+					-- A success closes this card from the controller (the sequence takes the screen).
 					local result = options.onAnalyze(category :: string)
-					if result and result.ok then
-						api.close()
-					else
+					if not (result and result.ok) and analyze.button.Parent then
 						analyze.setPending(false)
 						refresh()
 					end

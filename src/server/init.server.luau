@@ -1137,9 +1137,11 @@ registry:onRequest("ClueAnalyze", function(player, payload)
 	local result = clues:analyze(player.UserId, payload)
 	local runtime = rounds:roundOf(player.UserId)
 	if result.ok and runtime then
-		-- The payer's bag changed; the same snapshot shape the HUD already binds to carries it.
+		-- The payer's bag changed; the same snapshot shape the HUD already binds to carries it, and
+		-- the previews push covers a client that reached the remote by some path other than the card.
 		local data = result.data :: any
 		data.player = projectPlayerFor(runtime.state.roundId, player.UserId)
+		pushPreviews(player)
 	end
 	return result
 end)

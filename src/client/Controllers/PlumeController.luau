@@ -189,6 +189,19 @@ function PlumeController._watchArena(self: PlumeController)
 	end))
 end
 
+-- Replication delivers a Model before its children: the first look at Plume can find an empty rig.
+-- Everything that reads his parts waits for the ones it needs, and parts that arrive after the
+-- limbs were freed are freed as they land.
+local RIG_PARTS = { "HumanoidRootPart", "Head", "UpperTorso", "RightUpperArm", "RightLowerArm", "LeftUpperArm", "LeftLowerArm" }
+local RIG_MOTORS = {
+	Neck = "Head",
+	Waist = "UpperTorso",
+	RightShoulder = "RightUpperArm",
+	RightElbow = "RightLowerArm",
+	LeftShoulder = "LeftUpperArm",
+	LeftElbow = "LeftLowerArm",
+}
+
 function PlumeController._bind(self: PlumeController, rig: Model, station: Model)
 	if self._bound then
 		self._bound:destroy()
@@ -198,6 +211,28 @@ function PlumeController._bind(self: PlumeController, rig: Model, station: Model
 	self._rig = rig
 	self._station = station
 	self._highlights = {}
+	local alive = true
+	bound:add(function()
+		alive = false
+	end)
+	task.spawn(function()
+		for _, name in ipairs(RIG_PARTS) do
+			rig:WaitForChild(name, 10)
+		end
+		for motorName, parentName in pairs(RIG_MOTORS) do
+			local parent = rig:FindFirstChild(parentName)
+			if parent then
+				parent:WaitForChild(motorName, 10)
+			end
+		end
+		station:WaitForChild("ClueBoard", 10)
+		if alive and self._bound == bound then
+			self:_bindReady(rig, station, bound)
+		end
+	end)
+end
+
+function PlumeController._bindReady(self: PlumeController, rig: Model, station: Model, bound: Trove.Trove)
 	-- Nameplate over the hat.
 	local root = rig:FindFirstChild("HumanoidRootPart")
 	if root and root:IsA("BasePart") then
@@ -219,15 +254,20 @@ function PlumeController._bind(self: PlumeController, rig: Model, station: Model
 		bound:add(highlight)
 		table.insert(self._highlights, highlight)
 	end
-	-- The idle: limbs free locally, joints driven from here.
+	-- The idle: limbs free locally, joints driven from here. Anything that streams in later (a lens,
+	-- a tuft) is freed on arrival, or it would hang in the air where the head used to be.
 	self._motors = {}
-	for _, descendant in ipairs(rig:GetDescendants()) do
+	local function adopt(descendant: Instance)
 		if descendant:IsA("Motor6D") then
 			self._motors[descendant.Name] = { motor = descendant, base = descendant.C0 }
 		elseif descendant:IsA("BasePart") and descendant.Name ~= "HumanoidRootPart" then
 			descendant.Anchored = false
 		end
 	end
+	for _, descendant in ipairs(rig:GetDescendants()) do
+		adopt(descendant)
+	end
+	bound:add(rig.DescendantAdded:Connect(adopt))
 	local accumulator = 0
 	local started = os.clock()
 	bound:add(RunService.Heartbeat:Connect(function(dt)
@@ -444,8 +484,8 @@ function PlumeController.analyze(self: PlumeController, category: string): any
 	end
 	self._pendingAnalyze = true
 	local result = deps.net:request("ClueAnalyze", { sessionToken = token, category = category })
-	self._pendingAnalyze = false
 	if not result.ok then
+		self._pendingAnalyze = false
 		deps.audio:play(Tokens.sound.uiError)
 		local message = result.message
 		local rig = self._rig
@@ -467,8 +507,26 @@ function PlumeController.analyze(self: PlumeController, category: string): any
 	self.stats.analyses += 1
 	deps.haptics:pulse(0.4, 0.12)
 	local data = result.data
+	-- The response carries the round's clue table; the Book, the board and the card read it from
+	-- the round state, so it lands there now rather than with the next snapshot.
+	if deps.round.round and data and data.clues then
+		deps.round.round.clues = data.clues
+	end
+	-- The response carries the payer's projection with the feathers already gone; the HUD binds to
+	-- playerChanged, so the bundle thins now, before the first feather has left it.
+	if data and data.player then
+		deps.round.player = data.player
+		deps.round.playerChanged:Fire(data.player)
+	end
+	-- The card gives way to the sequence; nothing else may own the screen while the machine runs.
+	if deps.modals:isOpen(ClueModal.ID) then
+		deps.modals:close(ClueModal.ID)
+	end
+	-- `_pendingAnalyze` holds until the sequence has taken over, so the party event that lands in
+	-- the frame between the response and the deferred start is kept for the sequence to read out.
 	task.defer(function()
 		self:_runSequence(data)
+		self._pendingAnalyze = false
 	end)
 	return result
 end
@@ -887,6 +945,10 @@ end
 
 function PlumeController._onUnlocked(self: PlumeController, payload: any)
 	local me = Players.LocalPlayer and Players.LocalPlayer.UserId
+	local round = self._deps.round.round
+	if round and payload.clues and round.roundId == payload.roundId then
+		round.clues = payload.clues
+	end
 	-- The payer's own sequence reads the clue out at its end; the event arrives before the
 	-- response does, so it is held rather than shown twice.
 	if payload.byUserId == me and (self._pendingAnalyze or self._sequence) then
