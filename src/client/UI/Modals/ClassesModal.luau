@@ -315,6 +315,7 @@ local function buildCard(parent: GuiObject, entry: any, tier: string, z: number)
 		font = Tokens.typography.label.font,
 		color = Tokens.color.featherWhite,
 		max = 16,
+		min = 4,
 		zIndex = 6,
 		size = UDim2.fromScale(0.9, 0.78),
 		position = UDim2.fromScale(0.5, 0.5),
@@ -1081,6 +1082,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		overlay.BackgroundTransparency = 0.25
 		overlay.BorderSizePixel = 0
 		overlay.ZIndex = 5
+		overlay.ClipsDescendants = true
 		Fit.corner(overlay, 0.03)
 		overlay.Parent = shell.card
 		shell.plaque.Visible = false
@@ -1125,8 +1127,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			outline = 3,
 			outlineColor = WOOD_DEEP,
 			zIndex = 4,
-			size = UDim2.fromScale(0.46, 0.13),
-			position = UDim2.fromScale(0.5, 0.08),
+			size = UDim2.fromScale(0.42, 0.13),
+			position = UDim2.fromScale(0.47, 0.08),
 			anchor = Vector2.new(0.5, 0.5),
 		})
 		local titleGradient = Instance.new("UIGradient")
