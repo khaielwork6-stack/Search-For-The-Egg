@@ -1,36 +1,27 @@
 --!strict
--- Modal shell: dim overlay, a cookie panel (cocoa outline, bottom lip, cream body with a faint
--- weave), a gold header band with a rays backdrop and chunky outlined title, the station glyph on
--- the band, a round ember close button, a scrolling content area sized to its content, an
--- optional footer, and leaf accents. Opens with a lift and Back-out scale, closes with an ease.
--- The card is a controller selection group so focus never escapes an open modal.
+-- Modal shell: one centred root card sized in Scale with a locked aspect, a wooden board with a
+-- parchment face, the painted station-sign plaque over the top rail, a header-right slot for the
+-- builder's chips, a round ember close knob inside the header, and a content frame that fills the
+-- parchment. Nothing is placed in screen offsets; every child is Scale relative to the card.
+-- Opens with a lift and Back-out scale, closes with an ease.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
-local FrameKit = require(script.Parent.Frame)
 local Depth = require(script.Parent.Depth)
-local Icons = require(script.Parent.Icons)
-local Tween = require(script.Parent.Tween)
 local Skin = require(script.Parent.Skin)
-local SafeArea = require(script.Parent.Parent.SafeArea)
-
--- The barn's woodwork and paper.
-local WOOD = Color3.fromRGB(150, 112, 66)
-local WOOD_DEEP = Color3.fromRGB(104, 74, 42)
-local WOOD_LIGHT = Color3.fromRGB(196, 150, 96)
-local PAPER = Color3.fromRGB(248, 238, 214)
-local FRAME_SCALE = 0.4 -- the crate painting's slice scale
-local FRAME = math.floor(130 * FRAME_SCALE) + 4 -- the wooden edge around the panel at that scale
-local TOP_ROOM = 44 -- room above the frame for the plaque to hang over
+local Icons = require(script.Parent.Icons)
+local Fit = require(script.Parent.Fit)
 
 local ModalShell = {}
 
 export type Shell = {
 	root: Frame,
 	headerRight: Frame,
+	header: Frame,
+	plaque: Frame,
 	card: Frame,
 	panel: Frame,
 	content: ScrollingFrame,
@@ -41,6 +32,21 @@ export type Shell = {
 	close: (onClosed: (() -> ())?) -> (),
 	setTitle: (text: string) -> (),
 }
+
+local WOOD = Color3.fromRGB(150, 108, 60)
+local WOOD_DEEP = Color3.fromRGB(96, 64, 34)
+local WOOD_LIGHT = Color3.fromRGB(204, 158, 100)
+local PAPER = Color3.fromRGB(250, 241, 220)
+local PAPER_DEEP = Color3.fromRGB(226, 208, 170)
+
+-- Card geometry per size class: the Scale box it may fill and the aspect it keeps inside it.
+local GEOMETRY = {
+	wide = { box = Vector2.new(0.94, 0.9), aspect = 1.72, maxWidth = 1560 },
+	regular = { box = Vector2.new(0.62, 0.88), aspect = 1.18, maxWidth = 760 },
+	compact = { box = Vector2.new(0.5, 0.72), aspect = 1.0, maxWidth = 520 },
+}
+-- Header band height as a fraction of the card; the parchment starts under it.
+local HEADER = 0.145
 
 function ModalShell.create(
 	gui: Instance,
@@ -57,237 +63,112 @@ function ModalShell.create(
 	}
 ): Shell
 	local tap = options.minimumTapTarget or Tokens.layout.minimumTapTargetPx
+	local geometry = if options.wide then GEOMETRY.wide elseif options.compact then GEOMETRY.compact else GEOMETRY.regular
+	local z = Tokens.zIndex.modal
+
 	local root = Instance.new("Frame")
 	root.Name = "Modal_" .. (options.id or options.title)
 	root.Size = UDim2.fromScale(1, 1)
 	root.BackgroundColor3 = Tokens.color.overlay
 	root.BackgroundTransparency = 1
-	root.ZIndex = if options.blocking then Tokens.zIndex.blocking else Tokens.zIndex.modal
-	root.Active = options.blocking
+	root.BorderSizePixel = 0
+	root.ZIndex = z
+	root.Parent = gui
 
-	-- The frame: the barn's crate painting, sliced, so the panel is real wood with a gold inner rim
-	-- and parchment inside (the feather rides the bottom-right corner). The title hangs over the top
-	-- edge on the station sign; the close is a red knob on the corner; the top-right of the frame
-	-- keeps a slot for a currency chip.
+	-- The one centred root container. Scale box + aspect lock; a max width keeps 4K sane.
 	local card = Instance.new("Frame")
 	card.Name = "Card"
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
-	card.Position = UDim2.new(0.5, 0, 0.5, TOP_ROOM / 2)
-	card.Size = UDim2.fromScale(if options.compact then 0.8 elseif options.wide then 0.92 else 0.88, Tokens.layout.cardMaxHeightFraction)
+	card.Position = UDim2.fromScale(0.5, 0.5)
+	card.Size = UDim2.fromScale(geometry.box.X, geometry.box.Y)
 	card.BackgroundTransparency = 1
-	card.ZIndex = root.ZIndex + 1
+	card.BorderSizePixel = 0
+	card.ZIndex = z + 1
 	card.SelectionGroup = true
 	card.SelectionBehaviorUp = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorDown = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorLeft = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorRight = Enum.SelectionBehavior.Stop
+	Fit.aspect(card, geometry.aspect)
 	local maxSize = Instance.new("UISizeConstraint")
-	maxSize.MaxSize = Vector2.new(if options.compact then 440 elseif options.wide then 1040 else Tokens.layout.cardMaxWidthPx + 40, 900)
+	maxSize.MaxSize = Vector2.new(geometry.maxWidth, geometry.maxWidth / geometry.aspect)
 	maxSize.Parent = card
 	local cardScale = Instance.new("UIScale")
 	cardScale.Parent = card
 	card.Parent = root
-	local crate = Skin.overlay(card, "world.tradeTop", { zIndex = card.ZIndex, sliceScale = FRAME_SCALE, name = "Crate" })
-	if not crate then
-		-- No painting: a vector wood frame stands in.
-		card.BackgroundTransparency = 0
-		Depth.panel(card, WOOD, { radius = Tokens.radius.xl, rim = WOOD_LIGHT })
-	end
 
+	-- Board: wood face, dark keyline, light rim, banded sheen; the top rail is a lighter plank.
+	local board = Instance.new("Frame")
+	board.Name = "Board"
+	board.Size = UDim2.fromScale(1, 1)
+	board.BorderSizePixel = 0
+	board.ZIndex = 1
+	Depth.panel(board, WOOD, { radius = Tokens.radius.xl, rim = WOOD_LIGHT })
+	board.Parent = card
+	local rail = Instance.new("Frame")
+	rail.Name = "Rail"
+	rail.Size = UDim2.fromScale(1, HEADER)
+	rail.BackgroundColor3 = WOOD_LIGHT
+	rail.BackgroundTransparency = 0.55
+	rail.BorderSizePixel = 0
+	rail.ZIndex = 2
+	local railCorner = Instance.new("UICorner")
+	railCorner.CornerRadius = UDim.new(0, Tokens.radius.xl)
+	railCorner.Parent = rail
+	rail.Parent = board
+	-- Faint grain: three long streaks across the rails.
+	for index = 1, 3 do
+		local streak = Instance.new("Frame")
+		streak.Name = "Grain" .. index
+		streak.Size = UDim2.fromScale(0.86, 0.004)
+		streak.Position = UDim2.fromScale(0.07, 0.03 + index * 0.028)
+		streak.BackgroundColor3 = WOOD_DEEP
+		streak.BackgroundTransparency = 0.7
+		streak.BorderSizePixel = 0
+		streak.ZIndex = 3
+		streak.Parent = board
+	end
+	local shadow = Instance.new("Frame")
+	shadow.Name = "Shadow"
+	shadow.Size = UDim2.fromScale(1, 0.05)
+	shadow.Position = UDim2.fromScale(0, 0.96)
+	shadow.BackgroundColor3 = WOOD_DEEP
+	shadow.BackgroundTransparency = 0.5
+	shadow.BorderSizePixel = 0
+	shadow.ZIndex = 2
+	local shadowCorner = Instance.new("UICorner")
+	shadowCorner.CornerRadius = UDim.new(0, Tokens.radius.xl)
+	shadowCorner.Parent = shadow
+	shadow.Parent = board
+
+	-- Parchment: the panel every builder fills. Gold rim, warm inner shade.
 	local panel = Instance.new("Frame")
 	panel.Name = "Panel"
-	panel.AnchorPoint = Vector2.new(0.5, 0.5)
-	panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.Size = UDim2.new(1, -FRAME * 2, 1, -FRAME * 2)
-	panel.BackgroundColor3 = PAPER
-	panel.BackgroundTransparency = if crate then 1 else 0
+	panel.Position = UDim2.fromScale(0.028, HEADER)
+	panel.Size = UDim2.fromScale(0.944, 0.965 - HEADER)
 	panel.BorderSizePixel = 0
-	panel.ZIndex = card.ZIndex + 1
-	local panelCorner = Instance.new("UICorner")
-	panelCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
-	panelCorner.Parent = panel
-	if not crate then
-		Depth.keyline(panel, Tokens.stroke.standard, WOOD_DEEP)
+	panel.ZIndex = 4
+	Depth.panel(panel, PAPER, { radius = Tokens.radius.lg, rim = Color3.new(1, 1, 1) })
+	local panelLine = Depth.keylineOf(panel)
+	if panelLine then
+		panelLine.Color = Tokens.color.goldDeep
+		panelLine.Thickness = 2.5
 	end
-	local panelPadding = Instance.new("UIPadding")
-	panelPadding.PaddingLeft = UDim.new(0, Tokens.spacing.sm)
-	panelPadding.PaddingRight = UDim.new(0, Tokens.spacing.sm)
-	panelPadding.PaddingTop = UDim.new(0, Tokens.spacing.sm)
-	panelPadding.PaddingBottom = UDim.new(0, Tokens.spacing.sm)
-	panelPadding.Parent = panel
 	panel.Parent = card
-
-	-- The plaque: the station sign, hung over the top edge, the title in gold on its parchment.
-	local plaqueHeight = tap + 28
-	local plaque = Instance.new("Frame")
-	plaque.Name = "Header"
-	plaque.AnchorPoint = Vector2.new(0.5, 0.5)
-	plaque.Position = UDim2.new(0.5, 0, 0, 6)
-	-- Narrow enough that a chip and the knob fit to its right on a wide frame.
-	plaque.Size = UDim2.new(if options.compact then 0.8 else 0.44, 0, 0, plaqueHeight)
-	plaque.BackgroundTransparency = 1
-	plaque.ZIndex = card.ZIndex + 6
-	local plaqueCap = Instance.new("UISizeConstraint")
-	plaqueCap.MaxSize = Vector2.new(480, plaqueHeight)
-	plaqueCap.MinSize = Vector2.new(240, plaqueHeight)
-	plaqueCap.Parent = plaque
-	local sign = Skin.overlay(plaque, "world.stationSign", { zIndex = plaque.ZIndex, sliceScale = 0.42, name = "Sign" })
-	if not sign then
-		Depth.panel(plaque, WOOD_DEEP, { radius = Tokens.radius.lg, rim = WOOD_LIGHT })
+	local weave = Skin.texture(panel, "texture.studs", { transparency = 0.94, tile = 96, name = "Weave", zIndex = 1 })
+	if weave then
+		weave.ImageColor3 = PAPER_DEEP
 	end
-	local title = Instance.new("TextLabel")
-	title.Name = "Title"
-	title.BackgroundTransparency = 1
-	title.AnchorPoint = Vector2.new(0.5, 0.5)
-	title.Position = UDim2.new(0.5, 0, 0.5, -1)
-	title.Size = UDim2.new(1, -Tokens.spacing.xxl * 2, 0.74, 0)
-	title.Font = Tokens.typography.display.font
-	title.TextScaled = true
-	title.Text = string.upper(options.title)
-	title.TextColor3 = Tokens.color.gold
-	title.ZIndex = plaque.ZIndex + 3
-	local titleGradient = Instance.new("UIGradient")
-	titleGradient.Rotation = 90
-	titleGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 232, 150)),
-		ColorSequenceKeypoint.new(0.5, Tokens.color.gold),
-		ColorSequenceKeypoint.new(1, Tokens.color.goldDeep),
-	})
-	titleGradient.Parent = title
-	FrameKit.outline(title, 3.5, WOOD_DEEP)
-	local titleCap = Instance.new("UITextSizeConstraint")
-	titleCap.MaxTextSize = 44
-	titleCap.MinTextSize = 16
-	titleCap.Parent = title
-	title.Parent = plaque
-	-- Leaves at both ends of the sign.
-	for index, role in ipairs({ "modal.leaf.left", "modal.leaf.right" }) do
-		local leaf = Skin.icon(plaque, role, 40, plaque.ZIndex + 4)
-		if leaf then
-			leaf.Size = UDim2.fromOffset(58, 34)
-			leaf.AnchorPoint = Vector2.new(if index == 1 then 1 else 0, 0.5)
-			leaf.Position = UDim2.new(if index == 1 then 0 else 1, if index == 1 then 12 else -12, 1, -8)
-		end
-	end
-	if options.icon then
-		local glyph = Skin.icon(plaque, options.icon, plaqueHeight - Tokens.spacing.md, plaque.ZIndex + 4)
-		if glyph then
-			glyph.AnchorPoint = Vector2.new(1, 0.5)
-			glyph.Position = UDim2.new(0, -Tokens.spacing.xs, 0.5, 0)
-		end
-	end
-	plaque.Parent = card
-
-	-- The slot for a currency chip, on the frame's top edge left of the close knob.
-	local headerRight = Instance.new("Frame")
-	headerRight.Name = "HeaderRight"
-	headerRight.AnchorPoint = Vector2.new(1, 0.5)
-	headerRight.Position = UDim2.new(1, -(tap + 30), 0, 8)
-	headerRight.Size = UDim2.fromOffset(210, tap + 8)
-	headerRight.BackgroundTransparency = 1
-	headerRight.ZIndex = card.ZIndex + 6
-	headerRight.Parent = card
-
-	-- Close: the red knob on the corner.
-	local closeButton = Instance.new("TextButton")
-	closeButton.Name = "Close"
-	closeButton.AnchorPoint = Vector2.new(1, 0)
-	closeButton.Position = UDim2.new(1, 14, 0, -14)
-	closeButton.Size = UDim2.fromOffset(tap + 8, tap + 8)
-	closeButton.BackgroundColor3 = Color3.fromRGB(176, 40, 32)
-	closeButton.Text = ""
-	closeButton.AutoButtonColor = false
-	closeButton.ZIndex = card.ZIndex + 7
-	local closeCorner = Instance.new("UICorner")
-	closeCorner.CornerRadius = UDim.new(1, 0)
-	closeCorner.Parent = closeButton
-	local closeStroke = Instance.new("UIStroke")
-	closeStroke.Thickness = Tokens.stroke.bold
-	closeStroke.Color = WOOD_DEEP
-	closeStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	closeStroke.Parent = closeButton
-	local closeFace = Instance.new("Frame")
-	closeFace.Name = "Face"
-	closeFace.Size = UDim2.new(1, 0, 1, -5)
-	closeFace.BackgroundColor3 = Color3.fromRGB(226, 66, 54)
-	closeFace.BorderSizePixel = 0
-	closeFace.ZIndex = closeButton.ZIndex + 1
-	local closeFaceCorner = Instance.new("UICorner")
-	closeFaceCorner.CornerRadius = UDim.new(1, 0)
-	closeFaceCorner.Parent = closeFace
-	local closeGradient = Instance.new("UIGradient")
-	closeGradient.Rotation = 90
-	closeGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 130, 110)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(214, 56, 44)),
-	})
-	closeGradient.Parent = closeFace
-	closeFace.Parent = closeButton
-	local closeIcon = Icons.close(closeFace, Tokens.icon.md + 2, { zIndex = closeFace.ZIndex + 1, color = Tokens.color.featherWhite })
-	closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-	closeIcon.Position = UDim2.fromScale(0.5, 0.5)
-	local closeScale = Instance.new("UIScale")
-	closeScale.Parent = closeButton
-	closeButton.MouseEnter:Connect(function()
-		Tween.scale(closeScale, "hover", options.motion)
-	end)
-	closeButton.MouseLeave:Connect(function()
-		Tween.scale(closeScale, "release", options.motion, 1)
-		closeFace.Position = UDim2.fromOffset(0, 0)
-	end)
-	closeButton.MouseButton1Down:Connect(function()
-		closeFace.Position = UDim2.fromOffset(0, 5)
-	end)
-	closeButton.MouseButton1Up:Connect(function()
-		closeFace.Position = UDim2.fromOffset(0, 0)
-	end)
-	closeButton.SelectionGained:Connect(function()
-		closeStroke.Color = Tokens.color.goldLight
-		closeStroke.Thickness = Tokens.stroke.frame
-		Tween.scale(closeScale, "hover", options.motion)
-	end)
-	closeButton.SelectionLost:Connect(function()
-		closeStroke.Color = WOOD_DEEP
-		closeStroke.Thickness = Tokens.stroke.bold
-		Tween.scale(closeScale, "release", options.motion, 1)
-	end)
-	closeButton.Parent = card
-
-	local layout = Instance.new("UIListLayout")
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, Tokens.spacing.md)
-	layout.Parent = panel
-	-- Spacer keeps the list layout below the plaque's lower half.
-	local spacer = Instance.new("Frame")
-	spacer.Name = "HeaderSpace"
-	spacer.BackgroundTransparency = 1
-	spacer.Size = UDim2.new(1, 0, 0, math.max(0, plaqueHeight / 2 + 6 - FRAME) + Tokens.spacing.sm)
-	spacer.LayoutOrder = 1
-	spacer.Parent = panel
-
-	local footer = Instance.new("Frame")
-	footer.Name = "Footer"
-	footer.BackgroundTransparency = 1
-	footer.Size = UDim2.new(1, 0, 0, tap)
-	footer.AutomaticSize = Enum.AutomaticSize.Y
-	footer.LayoutOrder = 3
-	footer.Visible = false
-	footer.ZIndex = panel.ZIndex
-	local footerLayout = Instance.new("UIListLayout")
-	footerLayout.FillDirection = Enum.FillDirection.Horizontal
-	footerLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-	footerLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	footerLayout.Padding = UDim.new(0, Tokens.spacing.sm)
-	footerLayout.Parent = footer
-	footer.Parent = panel
+	local inner = Depth.innerShadow(panel, 10, 2)
+	inner.BackgroundTransparency = 0.88
 
 	local content = Instance.new("ScrollingFrame")
 	content.Name = "Content"
 	content.BackgroundTransparency = 1
 	content.BorderSizePixel = 0
-	content.Size = UDim2.new(1, 0, 1, -(spacer.Size.Y.Offset + Tokens.spacing.md))
-	content.LayoutOrder = 2
-	content.ZIndex = panel.ZIndex + 1
+	content.Position = UDim2.fromScale(0.02, 0.03)
+	content.Size = UDim2.fromScale(0.96, 0.94)
+	content.ZIndex = 3
 	content.ScrollBarThickness = 6
 	content.ScrollBarImageColor3 = Tokens.color.goldDeep
 	content.CanvasSize = UDim2.fromScale(0, 0)
@@ -295,83 +176,176 @@ function ModalShell.create(
 	content.ScrollingDirection = Enum.ScrollingDirection.Y
 	content.ElasticBehavior = Enum.ElasticBehavior.Never
 	content.SelectionGroup = false
-	if options.compact then
-		content.ScrollingEnabled = false
-	end
-	local contentLayout = Instance.new("UIListLayout")
-	contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	contentLayout.Padding = UDim.new(0, Tokens.spacing.sm + 2)
-	contentLayout.Parent = content
-	local contentPadding = Instance.new("UIPadding")
-	contentPadding.PaddingRight = UDim.new(0, Tokens.spacing.sm)
-	contentPadding.PaddingTop = UDim.new(0, Tokens.spacing.xs)
-	contentPadding.PaddingBottom = UDim.new(0, Tokens.spacing.sm)
-	contentPadding.Parent = content
 	content.Parent = panel
 
-	local function relayout()
-		local footerHeight = if footer.Visible then footer.AbsoluteSize.Y + Tokens.spacing.md else 0
-		content.Size = UDim2.new(1, 0, 1, -(spacer.Size.Y.Offset + Tokens.spacing.md + footerHeight))
-		local host = gui :: GuiBase2d
-		local stageHeight = host.AbsoluteSize.Y / SafeArea.scaleOf(gui)
-		local maxHeight = math.min(stageHeight * Tokens.layout.cardMaxHeightFraction, stageHeight - TOP_ROOM - Tokens.spacing.lg)
-		local chrome = spacer.Size.Y.Offset + Tokens.spacing.md + footerHeight + FRAME * 2 + Tokens.spacing.sm * 2 + 5
-		local inner = contentLayout.AbsoluteContentSize.Y / SafeArea.scaleOf(gui) + Tokens.spacing.sm * 2
-		local wanted = math.clamp(inner + chrome, 220, maxHeight)
-		card.Size = UDim2.new(card.Size.X.Scale, 0, 0, math.floor(wanted))
-	end
-	footer:GetPropertyChangedSignal("Visible"):Connect(relayout)
-	footer:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
-	contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(relayout)
-	local host = gui :: GuiBase2d
-	host:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+	local footer = Instance.new("Frame")
+	footer.Name = "Footer"
+	footer.BackgroundTransparency = 1
+	footer.AnchorPoint = Vector2.new(0, 1)
+	footer.Position = UDim2.fromScale(0, 1)
+	footer.Size = UDim2.fromScale(1, 0)
+	footer.Visible = false
+	footer.ZIndex = 4
+	footer.Parent = panel
 
-	root.Parent = gui
+	-- Header: plaque centred over the rail; chips and the close knob on the right, inside the card.
+	local header = Instance.new("Frame")
+	header.Name = "Header"
+	header.Size = UDim2.fromScale(1, HEADER)
+	header.BackgroundTransparency = 1
+	header.ZIndex = 6
+	header.Parent = card
+
+	local plaque = Instance.new("Frame")
+	plaque.Name = "Plaque"
+	plaque.AnchorPoint = Vector2.new(0.5, 0.5)
+	plaque.Position = UDim2.fromScale(0.5, 0.56)
+	plaque.Size = UDim2.fromScale(if options.wide then 0.4 elseif options.compact then 0.78 else 0.62, 1.08)
+	plaque.BackgroundTransparency = 1
+	plaque.ZIndex = 2
+	plaque.Parent = header
+	local sign = Skin.overlay(plaque, "world.stationSign", { sliceScale = 0.42, name = "Sign", zIndex = 1 })
+	if not sign then
+		local fallback = Instance.new("Frame")
+		fallback.Name = "Sign"
+		fallback.Size = UDim2.fromScale(1, 1)
+		fallback.BorderSizePixel = 0
+		fallback.ZIndex = 1
+		Depth.panel(fallback, WOOD_DEEP, { radius = Tokens.radius.md, rim = Tokens.color.gold })
+		fallback.Parent = plaque
+	end
+	local title = Fit.text(plaque, "Title", string.upper(options.title), {
+		font = Tokens.typography.display.font,
+		color = Tokens.color.goldLight,
+		max = 46,
+		min = 12,
+		outline = 2.5,
+		outlineColor = WOOD_DEEP,
+		zIndex = 3,
+		size = UDim2.fromScale(0.78, 0.6),
+		position = UDim2.fromScale(0.5, 0.5),
+		anchor = Vector2.new(0.5, 0.5),
+	})
+	local titleGradient = Instance.new("UIGradient")
+	titleGradient.Rotation = 90
+	titleGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 244, 200)),
+		ColorSequenceKeypoint.new(0.55, Tokens.color.goldLight),
+		ColorSequenceKeypoint.new(1, Tokens.color.gold),
+	})
+	titleGradient.Parent = title
+	Fit.image(plaque, "modal.leaf.left", {
+		size = UDim2.fromScale(0.1, 0.62),
+		position = UDim2.fromScale(0.06, 0.5),
+		zIndex = 4,
+		name = "LeafLeft",
+	})
+	Fit.image(plaque, "modal.leaf.right", {
+		size = UDim2.fromScale(0.1, 0.62),
+		position = UDim2.fromScale(0.94, 0.5),
+		zIndex = 4,
+		name = "LeafRight",
+	})
+	if options.icon then
+		Fit.image(plaque, options.icon, {
+			size = UDim2.fromScale(0.14, 0.9),
+			position = UDim2.fromScale(0.08, 0.5),
+			zIndex = 5,
+			name = "Glyph",
+		})
+	end
+
+	local headerRight = Instance.new("Frame")
+	headerRight.Name = "HeaderRight"
+	headerRight.AnchorPoint = Vector2.new(1, 0.5)
+	headerRight.Position = UDim2.fromScale(0.985, 0.5)
+	headerRight.Size = UDim2.fromScale(0.36, 0.66)
+	headerRight.BackgroundTransparency = 1
+	headerRight.ZIndex = 3
+	headerRight.Parent = header
+	Fit.row(headerRight, { gap = 0.03, halign = Enum.HorizontalAlignment.Right })
+
+	local closeButton = Instance.new("TextButton")
+	closeButton.Name = "Close"
+	closeButton.Text = ""
+	closeButton.AutoButtonColor = false
+	closeButton.LayoutOrder = 100
+	closeButton.Size = UDim2.fromScale(0, 1)
+	closeButton.BackgroundColor3 = Tokens.color.emberDeep
+	closeButton.BorderSizePixel = 0
+	closeButton.ZIndex = 2
+	closeButton.Selectable = true
+	Fit.aspect(closeButton, 1, Enum.DominantAxis.Height)
+	local closeMin = Instance.new("UISizeConstraint")
+	closeMin.MinSize = Vector2.new(tap, tap)
+	closeMin.Parent = closeButton
+	Fit.corner(closeButton, 0.5)
+	Depth.keyline(closeButton)
+	local closeFace = Instance.new("Frame")
+	closeFace.Name = "Face"
+	closeFace.Size = UDim2.fromScale(1, 0.9)
+	closeFace.BackgroundColor3 = Tokens.color.ember
+	closeFace.BorderSizePixel = 0
+	closeFace.ZIndex = 2
+	Fit.corner(closeFace, 0.5)
+	Depth.applySheen(closeFace, Tokens.color.ember)
+	Depth.rim(closeFace, Tokens.color.ember)
+	closeFace.Parent = closeButton
+	local cross = Icons.close(closeFace, 10, { color = Tokens.color.featherWhite, zIndex = 3 })
+	cross.AnchorPoint = Vector2.new(0.5, 0.5)
+	cross.Position = UDim2.fromScale(0.5, 0.5)
+	cross.Size = UDim2.fromScale(0.46, 0.46)
+	local closeScale = Instance.new("UIScale")
+	closeScale.Parent = closeButton
+	closeButton.MouseEnter:Connect(function()
+		TweenService:Create(closeScale, TweenInfo.new(0.12), { Scale = 1.08 }):Play()
+	end)
+	closeButton.MouseLeave:Connect(function()
+		TweenService:Create(closeScale, TweenInfo.new(0.12), { Scale = 1 }):Play()
+	end)
+	closeButton.Parent = headerRight
 
 	local motion = options.motion
-	local shell: Shell =
-		{
-			root = root,
-			card = card,
-			panel = panel,
-			content = content,
-			footer = footer,
-			headerRight = headerRight,
-			closeButton = closeButton,
-			titleLabel = title,
-			open = function()
-				local openRecipe = Motion.recipe("panelOpen", motion)
-				local fadeRecipe = Motion.recipe("panelFadeIn", motion)
-				cardScale.Scale = openRecipe.fromScale or 0.82
-				card.Position = UDim2.new(0.5, 0, 0.5, TOP_ROOM / 2 + Motion.amplitude(18, motion))
-				TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = if options.blocking then 0.5 else 0.72 })
-					:Play()
-				TweenService:Create(cardScale, Motion.tweenInfo(openRecipe), { Scale = 1 }):Play()
-				TweenService:Create(card, Motion.tweenInfo(openRecipe), { Position = UDim2.new(0.5, 0, 0.5, TOP_ROOM / 2) }):Play()
-				relayout()
-			end,
-			close = function(onClosed)
-				local closeRecipe = Motion.recipe("panelClose", motion)
-				local fadeRecipe = Motion.recipe("panelFadeOut", motion)
-				local fade = TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = 1 })
-				fade:Play()
-				TweenService:Create(cardScale, Motion.tweenInfo(closeRecipe), { Scale = closeRecipe.toScale or 0.86 }):Play()
-				TweenService:Create(
-					card,
-					Motion.tweenInfo(closeRecipe),
-					{ Position = UDim2.new(0.5, 0, 0.5, TOP_ROOM / 2 + Motion.amplitude(12, motion)) }
-				):Play()
-				fade.Completed:Once(function()
-					root:Destroy()
-					if onClosed then
-						onClosed()
-					end
-				end)
-			end,
-			setTitle = function(text)
-				title.Text = string.upper(text)
-			end,
-		}
+	local shell: Shell = {
+		root = root,
+		card = card,
+		panel = panel,
+		content = content,
+		footer = footer,
+		header = header,
+		plaque = plaque,
+		headerRight = headerRight,
+		closeButton = closeButton,
+		titleLabel = title,
+		open = function()
+			local openRecipe = Motion.recipe("panelOpen", motion)
+			local fadeRecipe = Motion.recipe("panelFadeIn", motion)
+			cardScale.Scale = openRecipe.fromScale or 0.82
+			card.Position = UDim2.new(0.5, 0, 0.5, Motion.amplitude(18, motion))
+			TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = if options.blocking then 0.45 else 0.7 })
+				:Play()
+			TweenService:Create(cardScale, Motion.tweenInfo(openRecipe), { Scale = 1 }):Play()
+			TweenService:Create(card, Motion.tweenInfo(openRecipe), { Position = UDim2.fromScale(0.5, 0.5) }):Play()
+		end,
+		close = function(onClosed)
+			local closeRecipe = Motion.recipe("panelClose", motion)
+			local fadeRecipe = Motion.recipe("panelFadeOut", motion)
+			local fade = TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = 1 })
+			fade:Play()
+			TweenService:Create(cardScale, Motion.tweenInfo(closeRecipe), { Scale = closeRecipe.toScale or 0.86 }):Play()
+			TweenService:Create(card, Motion.tweenInfo(closeRecipe), { Position = UDim2.new(0.5, 0, 0.5, Motion.amplitude(12, motion)) })
+				:Play()
+			fade.Completed:Once(function()
+				root:Destroy()
+				if onClosed then
+					onClosed()
+				end
+			end)
+		end,
+		setTitle = function(text)
+			title.Text = string.upper(text)
+		end,
+	}
 	return shell
 end
 

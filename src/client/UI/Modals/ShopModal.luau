@@ -1,25 +1,26 @@
 --!strict
--- Plume's Market. One wooden frame, three tabs: PERKS (the four permanent Gem perks as big cards
--- with level pips, what the next level gives, and a green Gem price), GEMS (the bundles, the popular
--- one and the best value called out) and FOREVER (the two permanent passes). The Gem balance sits on
--- the frame's top-right with a "+" that jumps to the GEMS tab. Every price is the live config price;
--- every purchase goes through the server (Gems: PerkPurchase; Robux: PurchasePromptRequest).
+-- Plume's Market: one centred frame with PERKS / GEMS / FOREVER tabs. Perks is a 2x2 card grid
+-- (art panel, level, pips, before/after strip, one green gem button) with the two permanent
+-- products as minis under it; Gems is its own three-bundle page; Forever holds only the two
+-- permanent products. The gem balance sits in the header next to the close knob. Every element
+-- is Scale relative to the content frame: nothing crops, scrolls or leaves the frame.
+-- Prices come from config, ownership from the profile, and purchases go through the same remotes.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Depth = require(script.Parent.Parent.Components.Depth)
 local Perks = require(Shared.Domain.Perks)
 local Tween = require(script.Parent.Parent.Components.Tween)
-local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
 local Icons = require(script.Parent.Parent.Components.Icons)
 local Skin = require(script.Parent.Parent.Components.Skin)
 local Confetti = require(script.Parent.Parent.Components.Confetti)
+local Fit = require(script.Parent.Parent.Components.Fit)
+local GemChip = require(script.Parent.Parent.Components.GemChip)
 local UpgradeActions = require(script.Parent.Parent.UpgradeActions)
-local SafeArea = require(script.Parent.Parent.SafeArea)
 
 local ShopModal = {}
 
@@ -34,100 +35,91 @@ export type Deps = {
 	toasts: any,
 	quality: any?,
 	entitlements: (() -> { [string]: boolean })?,
+	openGemShop: (() -> ())?,
 }
 
-local COPY: { [string]: { title: string, what: string, icon: string, art: string, fill: Color3, deep: Color3 } } = {
+local COPY: { [string]: { title: string, icon: string, art: string, fill: Color3, deep: Color3, word: string } } = {
 	bagSize = {
 		title = "Bag Size",
-		what = "bag capacity",
 		icon = "feather",
 		art = "icon.feather",
-		fill = Tokens.color.leaf,
-		deep = Tokens.color.leafDeep,
+		fill = Color3.fromRGB(104, 178, 76),
+		deep = Color3.fromRGB(52, 116, 40),
+		word = "CAPACITY",
 	},
 	handGrab = {
 		title = "Hand Grab",
-		what = "Hand grasp",
 		icon = "star",
 		art = "tool.hand.normal",
-		fill = Tokens.color.gold,
-		deep = Tokens.color.goldDeep,
+		fill = Color3.fromRGB(248, 176, 48),
+		deep = Color3.fromRGB(196, 118, 14),
+		word = "RANGE",
 	},
 	gemValue = {
 		title = "Gem Value",
-		what = "Gem rewards",
 		icon = "gem",
 		art = "hud.gem",
-		fill = Tokens.color.tealAccent,
-		deep = Tokens.color.tealDeep,
+		fill = Color3.fromRGB(154, 92, 224),
+		deep = Color3.fromRGB(96, 44, 160),
+		word = "VALUE",
 	},
 	featherValue = {
 		title = "Feather Value",
-		what = "sale value",
 		icon = "coin",
 		art = "hud.token",
-		fill = Tokens.color.sky,
-		deep = Tokens.color.skyDeep,
+		fill = Color3.fromRGB(96, 178, 236),
+		deep = Color3.fromRGB(40, 110, 176),
+		word = "VALUE",
 	},
 }
 
--- Robux column: gem bundles first, then the two permanent passes sold here.
-type Offer = { key: string, name: string, caption: string, art: string, icon: string, robux: number?, pass: string?, popular: boolean? }
-
-local function offers(cfg: { [string]: any }): { Offer }
-	local list: { Offer } = {}
-	local bundles = cfg.monetization and cfg.monetization.gemBundles or {}
-	for index, bundle in ipairs(bundles) do
-		table.insert(list, {
-			key = "gemBundle" .. tostring(bundle.gems),
-			name = string.format("%s Gems", (tostring(bundle.gems):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", ""))),
-			caption = "Added at once",
-			art = "hud.gem",
-			icon = "gem",
-			robux = bundle.robux,
-			popular = bundle.popular == true or (index == #bundles and not bundle.popular),
-		})
-	end
-	local passes = cfg.monetization and cfg.monetization.passes or {}
-	if passes.doubleGems then
+-- The two permanent products sold here (prices from config, ownership from entitlements).
+type Pass = { key: string, name: string, blurb: string, art: string, icon: string, robux: number }
+local function passes(cfg: { [string]: any }): { Pass }
+	local list: { Pass } = {}
+	local config = cfg.monetization and cfg.monetization.passes or {}
+	if config.doubleGems then
 		table.insert(list, {
 			key = "doubleGems",
-			name = "2x Gems",
-			caption = "Permanent",
-			art = "hud.gem",
+			name = "2× GEMS",
+			blurb = "Every Gem you earn is doubled. Forever.",
+			art = "offer.gems2x",
 			icon = "gem",
-			robux = passes.doubleGems.robux,
-			pass = "doubleGems",
+			robux = config.doubleGems.robux,
 		})
 	end
-	if passes.infiniteBag then
+	if config.infiniteBag then
 		table.insert(list, {
 			key = "infiniteBag",
-			name = "Infinite Bag",
-			caption = "Permanent",
+			name = "INFINITE BAG",
+			blurb = "Your bag never fills. Gather without a trip to the crate.",
 			art = "icon.feather",
 			icon = "feather",
-			robux = passes.infiniteBag.robux,
-			pass = "infiniteBag",
+			robux = config.infiniteBag.robux,
 		})
 	end
 	return list
 end
 
-local WOOD = Color3.fromRGB(150, 112, 66)
-local WOOD_DEEP = Color3.fromRGB(104, 74, 42)
-local WOOD_LIGHT = Color3.fromRGB(196, 150, 96)
-local PAPER = Color3.fromRGB(248, 238, 214)
+local WOOD = Color3.fromRGB(150, 108, 60)
+local WOOD_DEEP = Color3.fromRGB(96, 64, 34)
+local WOOD_LIGHT = Color3.fromRGB(204, 158, 100)
+local PAPER = Color3.fromRGB(250, 241, 220)
 local PARCHMENT = Color3.fromRGB(238, 224, 190)
+local INK = Color3.fromRGB(70, 46, 24)
 local RAINBOW = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 96, 96)),
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 80, 80)),
 	ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 190, 60)),
 	ColorSequenceKeypoint.new(0.4, Color3.fromRGB(120, 230, 90)),
 	ColorSequenceKeypoint.new(0.6, Color3.fromRGB(80, 210, 255)),
-	ColorSequenceKeypoint.new(0.8, Color3.fromRGB(180, 110, 255)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 96, 96)),
+	ColorSequenceKeypoint.new(0.8, Color3.fromRGB(200, 110, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 80, 80)),
 })
-local NEXT_WORD = { bagSize = "CAPACITY", handGrab = "RANGE", gemValue = "VALUE", featherValue = "VALUE" }
+local BUNDLE_FACES = {
+	{ fill = Color3.fromRGB(96, 178, 236), deep = Color3.fromRGB(40, 110, 176) },
+	{ fill = Color3.fromRGB(154, 92, 224), deep = Color3.fromRGB(96, 44, 160) },
+	{ fill = Color3.fromRGB(246, 196, 84), deep = Color3.fromRGB(196, 132, 12) },
+}
 
 local function withCommas(n: number): string
 	local text = tostring(n)
@@ -135,40 +127,116 @@ local function withCommas(n: number): string
 end
 
 -- Painted art if the owner supplied it (role given), else the icon the item has always used.
-local function itemArt(parent: GuiObject, painted: string, art: string, icon: string, px: number, z: number): GuiObject
-	local glyph = Skin.icon(parent, painted, px, z) or Skin.icon(parent, art, px, z) or Icons.build(icon, parent, px, { zIndex = z })
+local function itemArt(parent: GuiObject, painted: string, art: string, icon: string, z: number): GuiObject
+	local image = Fit.image(parent, painted, { zIndex = z, name = "Art" }) or Fit.image(parent, art, { zIndex = z, name = "Art" })
+	if image then
+		return image
+	end
+	local glyph = Icons.build(icon, parent, 10, { zIndex = z })
+	glyph.Name = "Art"
 	glyph.AnchorPoint = Vector2.new(0.5, 0.5)
 	glyph.Position = UDim2.fromScale(0.5, 0.5)
+	glyph.Size = UDim2.fromScale(1, 1)
 	return glyph
 end
 
-local function paperNote(parent: GuiObject, name: string, text: string, z: number, size: UDim2): Frame
-	local note = Instance.new("Frame")
-	note.Name = name
-	note.Size = size
-	note.BackgroundColor3 = PARCHMENT
-	note.ZIndex = z
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, Tokens.radius.sm)
-	corner.Parent = note
-	Depth.keyline(note, Tokens.stroke.standard, WOOD_DEEP)
-	local label = FrameKit.text(
-		note,
-		"Text",
-		text,
-		"caption",
-		{ zIndex = z + 1, color = Tokens.color.inkStrong, align = Enum.TextXAlignment.Center, wrap = true }
-	)
-	label.Font = Tokens.typography.label.font
-	label.Size = UDim2.new(1, -Tokens.spacing.sm, 1, 0)
-	label.Position = UDim2.fromOffset(Tokens.spacing.xs, 0)
-	label.TextScaled = true
-	local cap = Instance.new("UITextSizeConstraint")
-	cap.MaxTextSize = Tokens.typography.caption.size + 2
-	cap.MinTextSize = 10
-	cap.Parent = label
-	note.Parent = parent
-	return note
+local function paper(parent: GuiObject, name: string, position: UDim2, size: UDim2, z: number, face: Color3?, rim: Color3?): Frame
+	local frame = Instance.new("Frame")
+	frame.Name = name
+	frame.Position = position
+	frame.Size = size
+	frame.BorderSizePixel = 0
+	frame.ZIndex = z
+	Depth.panel(frame, face or PAPER, { radius = Tokens.radius.md, rim = Color3.new(1, 1, 1) })
+	Fit.corner(frame, 0.08)
+	local line = Depth.keylineOf(frame)
+	if line then
+		line.Color = rim or WOOD
+		line.Thickness = 2
+	end
+	frame.Parent = parent
+	return frame
+end
+
+local function plank(parent: GuiObject, name: string, position: UDim2, size: UDim2, z: number): Frame
+	local frame = Instance.new("Frame")
+	frame.Name = name
+	frame.Position = position
+	frame.Size = size
+	frame.BorderSizePixel = 0
+	frame.ZIndex = z
+	Depth.panel(frame, WOOD, { radius = Tokens.radius.md, rim = WOOD_LIGHT })
+	Fit.corner(frame, 0.22)
+	frame.Parent = parent
+	return frame
+end
+
+-- A green price button with a leading gem or the Robux mark. Returns the handle.
+local function priceButton(parent: GuiObject, name: string, text: string, options: any, gem: boolean): any
+	local handle = Button.build(parent, {
+		text = text,
+		variant = "success",
+		minimumTapTarget = options.tap,
+		motion = options.motion,
+		size = options.size,
+		zIndex = options.zIndex or 5,
+		sound = function()
+			options.audio:play(Tokens.sound.uiTap)
+		end,
+		hoverSound = function()
+			options.audio:play(Tokens.sound.uiHover)
+		end,
+		onActivated = options.onActivated,
+	})
+	handle.button.Name = name
+	handle.button.Position = options.position or handle.button.Position
+	handle.button.AnchorPoint = options.anchor or handle.button.AnchorPoint
+	local label = Fit.buttonText(handle, options.max or 28)
+	if gem and label then
+		local pad = label:FindFirstChildOfClass("UIPadding")
+		if pad then
+			pad.PaddingLeft = UDim.new(0.24, 0)
+			pad.PaddingRight = UDim.new(0.04, 0)
+		end
+		local face = handle.button:FindFirstChild("Face")
+		if face then
+			local icon = Fit.image(
+				face,
+				"hud.gem",
+				{ size = UDim2.fromScale(0, 0.7), position = UDim2.fromScale(0.14, 0.5), zIndex = 6, name = "Gem" }
+			)
+			if icon then
+				Fit.aspect(icon, 1, Enum.DominantAxis.Height)
+			end
+		end
+	end
+	return handle
+end
+
+local function ownedBadge(parent: GuiObject, position: UDim2, size: UDim2, anchor: Vector2?, z: number): Frame
+	local badge = Instance.new("Frame")
+	badge.Name = "Owned"
+	badge.Position = position
+	badge.Size = size
+	badge.AnchorPoint = anchor or Vector2.new(0, 0)
+	badge.BorderSizePixel = 0
+	badge.ZIndex = z
+	badge.Visible = false
+	Depth.panel(badge, Tokens.color.gold, { radius = Tokens.radius.md, rim = Tokens.color.goldLight })
+	Fit.corner(badge, 0.3)
+	Fit.text(badge, "Label", "OWNED", {
+		font = Tokens.typography.label.font,
+		color = Tokens.color.featherWhite,
+		max = 24,
+		outline = 1.5,
+		outlineColor = Tokens.color.goldDeep,
+		zIndex = z + 1,
+		size = UDim2.fromScale(0.9, 0.7),
+		position = UDim2.fromScale(0.5, 0.5),
+		anchor = Vector2.new(0.5, 0.5),
+	})
+	badge.Parent = parent
+	return badge
 end
 
 function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initialTab: string?): () -> ()
@@ -176,326 +244,280 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 	local cfg = deps.config
 	local motion = deps.accessibility:motionSettings()
 	local tap = deps.minimumTapTarget
-	local z = container.ZIndex + 1
 	local tier = deps.quality and deps.quality:tier() or nil
-	local compact = SafeArea.classOf(container) == "phone"
+	local shell = api.shell
 	local promptDeps = { net = deps.net, audio = deps.audio, toasts = deps.toasts }
 	local function entitlements(): { [string]: boolean }
 		return deps.entitlements and deps.entitlements() or {}
 	end
-	local animated: { UIGradient } = {}
+	local render: () -> ()
+
+	container.AutomaticCanvasSize = Enum.AutomaticSize.None
+	container.CanvasSize = UDim2.fromScale(0, 0)
+	container.ScrollingEnabled = false
+	container.ScrollBarThickness = 0
+	local root = Fit.frame(container, "Market", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), 1)
 	local tab = initialTab or "perks"
-	local setTab -- forward
+	local setTab: (name: string) -> ()
 
-	-- Gem balance and "+" on the frame.
-	do
-		local shell = api.shell
-		if shell and shell.headerRight then
-			local chip, chipLabel, chipIcon =
-				FrameKit.chip(shell.headerRight, "Gems", { zIndex = shell.headerRight.ZIndex + 1, height = tap })
-			chipIcon.Visible = true
-			if not Skin.icon(chipIcon, "hud.gem", Tokens.icon.md, chipIcon.ZIndex + 1) then
-				Icons.gem(chipIcon, Tokens.icon.md, { zIndex = chipIcon.ZIndex + 1 })
+	-- Header chip ----------------------------------------------------------------------------------
+	local chip = GemChip.build(shell.headerRight, {
+		count = (deps.profile.projection and deps.profile.projection.currencies.gems) or 0,
+		zIndex = 1,
+		minimumTapTarget = tap,
+		sound = function()
+			deps.audio:play(Tokens.sound.uiTap)
+		end,
+		onPlus = function()
+			setTab("gems")
+		end,
+	})
+	chip.root.LayoutOrder = 1
+	table.insert(cleanups, chip.destroy)
+
+	-- Tabs -------------------------------------------------------------------------------------------
+	local tabsRow = Fit.frame(root, "Tabs", UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.105), 2)
+	Fit.row(tabsRow, { gap = 0.015, halign = Enum.HorizontalAlignment.Left })
+	type TabView = { name: string, button: TextButton, face: Frame, label: TextLabel, glyph: GuiObject? }
+	local tabViews: { TabView } = {}
+	local function buildTab(name: string, text: string, order: number, art: string?, glyphText: string?)
+		local button = Instance.new("TextButton")
+		button.Name = "Tab_" .. name
+		button.Text = ""
+		button.AutoButtonColor = false
+		button.LayoutOrder = order
+		button.Size = UDim2.fromScale(0.21, 1)
+		button.BackgroundColor3 = WOOD_DEEP
+		button.BorderSizePixel = 0
+		button.ZIndex = 2
+		button.Selectable = true
+		Fit.corner(button, 0.28)
+		Depth.keyline(button)
+		local minSize = Instance.new("UISizeConstraint")
+		minSize.MinSize = Vector2.new(tap, tap)
+		minSize.Parent = button
+		local face = Instance.new("Frame")
+		face.Name = "Face"
+		face.Size = UDim2.fromScale(1, 0.9)
+		face.BackgroundColor3 = PARCHMENT
+		face.BorderSizePixel = 0
+		face.ZIndex = 2
+		Fit.corner(face, 0.28)
+		Depth.applySheen(face, PARCHMENT)
+		Depth.rim(face, PARCHMENT)
+		face.Parent = button
+		local glyph: GuiObject? = nil
+		if art then
+			glyph =
+				Fit.image(face, art, { size = UDim2.fromScale(0, 0.66), position = UDim2.fromScale(0.16, 0.5), zIndex = 4, name = "Glyph" })
+			if glyph then
+				Fit.aspect(glyph :: GuiObject, 1, Enum.DominantAxis.Height)
 			end
-			chip.AnchorPoint = Vector2.new(1, 0.5)
-			chip.Position = UDim2.new(1, -(tap + Tokens.spacing.md), 0.5, 0)
-			local plus = Button.build(shell.headerRight, {
-				text = "+",
-				variant = "success",
-				round = true,
-				minimumTapTarget = tap,
-				motion = motion,
-				size = UDim2.fromOffset(tap, tap),
-				zIndex = shell.headerRight.ZIndex + 1,
-				textSize = Tokens.typography.title.size,
-				sound = function()
-					deps.audio:play(Tokens.sound.uiTap)
-				end,
-				onActivated = function()
-					setTab("gems")
-				end,
+		end
+		if not glyph then
+			glyph = Fit.text(face, "Glyph", glyphText or "•", {
+				font = Tokens.typography.display.font,
+				color = INK,
+				max = 30,
+				zIndex = 4,
+				size = UDim2.fromScale(0.18, 0.7),
+				position = UDim2.fromScale(0.16, 0.5),
+				anchor = Vector2.new(0.5, 0.5),
 			})
-			plus.button.AnchorPoint = Vector2.new(1, 0.5)
-			plus.button.Position = UDim2.fromScale(1, 0.5)
-			table.insert(cleanups, plus.destroy)
-			local function refreshChip()
-				local projection = deps.profile.projection
-				chipLabel.Text = tostring(projection and projection.currencies.gems or 0)
-			end
-			refreshChip()
-			table.insert(cleanups, deps.profile.changed:Connect(refreshChip))
 		end
-	end
-
-	-- Tabs -----------------------------------------------------------------------------------------
-	local tabsRow = Instance.new("Frame")
-	tabsRow.Name = "Tabs"
-	tabsRow.BackgroundTransparency = 1
-	tabsRow.Size = UDim2.new(1, 0, 0, tap + 8)
-	tabsRow.LayoutOrder = 1
-	tabsRow.ZIndex = z
-	tabsRow.Parent = container
-	local tabsLayout = Instance.new("UIListLayout")
-	tabsLayout.FillDirection = Enum.FillDirection.Horizontal
-	tabsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-	tabsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	tabsLayout.Padding = UDim.new(0, Tokens.spacing.sm)
-	tabsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	tabsLayout.Parent = tabsRow
-	local tabHandles: { [string]: any } = {}
-	for index, spec in ipairs({
-		{ "perks", "PERKS", "icon.feather", "feather" },
-		{ "gems", "GEMS", "hud.gem", "gem" },
-		{ "forever", "FOREVER", "", "star" },
-	}) do
-		local handle = Button.build(tabsRow, {
-			text = "    " .. spec[2],
-			variant = "secondary",
-			minimumTapTarget = tap,
-			motion = motion,
-			size = UDim2.fromOffset(if compact then 118 else 190, tap + 6),
-			zIndex = z + 1,
-			textSize = Tokens.typography.label.size,
-			sound = function()
-				deps.audio:play(Tokens.sound.uiTab)
-			end,
-			hoverSound = function()
-				deps.audio:play(Tokens.sound.uiHover)
-			end,
-			onActivated = function()
-				setTab(spec[1])
-			end,
+		local label = Fit.text(face, "Label", text, {
+			font = Tokens.typography.title.font,
+			color = INK,
+			max = 26,
+			zIndex = 4,
+			size = UDim2.fromScale(0.62, 0.7),
+			position = UDim2.fromScale(0.3, 0.15),
+			align = Enum.TextXAlignment.Left,
 		})
-		handle.button.LayoutOrder = index
-		local face = handle.button:FindFirstChild("Face")
-		if face then
-			local glyph = if spec[3] ~= "" then Skin.icon(face, spec[3], Tokens.icon.md, z + 4) else nil
-			glyph = glyph or Icons.build(spec[4], face, Tokens.icon.md, { zIndex = z + 4, color = Tokens.color.goldDeep })
-			glyph.AnchorPoint = Vector2.new(0, 0.5)
-			glyph.Position = UDim2.new(0, Tokens.spacing.md, 0.5, 0)
-		end
-		tabHandles[spec[1]] = handle
-		table.insert(cleanups, handle.destroy)
+		local scale = Instance.new("UIScale")
+		scale.Parent = button
+		table.insert(
+			cleanups,
+			button.MouseEnter:Connect(function()
+				deps.audio:play(Tokens.sound.uiHover)
+				Tween.scale(scale, "hover", motion, 1.03)
+			end)
+		)
+		table.insert(
+			cleanups,
+			button.MouseLeave:Connect(function()
+				Tween.scale(scale, "release", motion, 1)
+			end)
+		)
+		table.insert(
+			cleanups,
+			button.Activated:Connect(function()
+				deps.audio:play(Tokens.sound.uiTab)
+				setTab(name)
+			end)
+		)
+		button.Parent = tabsRow
+		table.insert(tabViews, { name = name, button = button, face = face, label = label, glyph = glyph })
 	end
+	buildTab("perks", "PERKS", 1, "icon.feather", nil)
+	buildTab("gems", "GEMS", 2, "hud.gem", nil)
+	buildTab("forever", "FOREVER", 3, nil, "∞")
 
-	-- Pages ----------------------------------------------------------------------------------------
-	local pages: { [string]: Frame } = {}
-	local function page(name: string, height: number): Frame
-		local frame = Instance.new("Frame")
-		frame.Name = "Page_" .. name
-		frame.BackgroundTransparency = 1
-		frame.Size = UDim2.new(1, 0, 0, height)
-		frame.LayoutOrder = 2
-		frame.ZIndex = z
+	local pages = Fit.frame(root, "Pages", UDim2.fromScale(0, 0.125), UDim2.fromScale(1, 0.875), 2)
+	local pageViews: { [string]: Frame } = {}
+	local function page(name: string): Frame
+		local frame = Fit.frame(pages, "Page_" .. name, UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), 1)
 		frame.Visible = false
-		frame.Parent = container
-		pages[name] = frame
+		pageViews[name] = frame
 		return frame
 	end
 
-	-- PERKS: four cards, two by two, with the passes strip under them.
-	local perkCardH = if compact then tap * 4.6 else tap * 4.2
-	local stripH = tap + Tokens.spacing.lg
-	local perksPage = page("perks", perkCardH * 2 + Tokens.spacing.sm + Tokens.spacing.md + stripH)
-	local grid = Instance.new("Frame")
-	grid.Name = "Grid"
-	grid.BackgroundTransparency = 1
-	grid.Size = UDim2.new(1, 0, 0, perkCardH * 2 + Tokens.spacing.sm)
-	grid.ZIndex = z
-	grid.Parent = perksPage
-	local gridLayout = Instance.new("UIGridLayout")
-	gridLayout.CellSize = UDim2.new(0.5, -Tokens.spacing.xs, 0, perkCardH)
-	gridLayout.CellPadding = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
-	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	gridLayout.Parent = grid
-	type PerkCard = {
+	-- PERKS ------------------------------------------------------------------------------------------
+	local perksPage = page("perks")
+	type PerkRecord = {
 		perkId: string,
 		root: Frame,
 		scale: UIScale,
-		pips: { Frame },
-		buy: any,
 		level: TextLabel,
+		pips: { Frame },
 		nextLine: TextLabel,
-		maxBadge: TextLabel,
-		displayedLevel: number?,
+		buy: any,
+		maxBadge: Frame,
 		afterArt: GuiObject,
+		displayedLevel: number?,
 	}
-	local perkCards: { PerkCard } = {}
+	local perkCards: { PerkRecord } = {}
 	for index, perkId in ipairs(Perks.IDS) do
 		local copy = COPY[perkId]
-		local root = Instance.new("Frame")
-		root.Name = "Perk_" .. perkId
-		root.BackgroundColor3 = PAPER
-		root.LayoutOrder = index
-		root.ZIndex = z + 1
-		local rootCorner = Instance.new("UICorner")
-		rootCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
-		rootCorner.Parent = root
-		Depth.keyline(root, Tokens.stroke.bold, WOOD_DEEP)
-		Depth.rim(root, PAPER)
+			or { title = perkId, icon = "star", art = "icon.egg", fill = Tokens.color.gold, deep = Tokens.color.goldDeep, word = "" }
+		local col = (index - 1) % 2
+		local row = math.floor((index - 1) / 2)
+		local card = paper(
+			perksPage,
+			"Perk_" .. perkId,
+			UDim2.fromScale(col * 0.505, row * 0.405),
+			UDim2.fromScale(0.495, 0.385),
+			2,
+			PAPER,
+			copy.deep
+		)
 		local scale = Instance.new("UIScale")
-		scale.Parent = root
-		root.Parent = grid
-		-- Art panel: the perk's colour, a sunburst, the item.
+		scale.Parent = card
 		local artPanel = Instance.new("Frame")
 		artPanel.Name = "ArtPanel"
-		artPanel.Position = UDim2.fromOffset(4, 4)
-		artPanel.Size = UDim2.new(0.42, -4, 1, -8)
-		artPanel.BackgroundColor3 = copy.fill
-		artPanel.ZIndex = z + 2
+		artPanel.Position = UDim2.fromScale(0.02, 0.045)
+		artPanel.Size = UDim2.fromScale(0.42, 0.66)
+		artPanel.BorderSizePixel = 0
+		artPanel.ZIndex = 3
 		artPanel.ClipsDescendants = true
-		local artCorner = Instance.new("UICorner")
-		artCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
-		artCorner.Parent = artPanel
-		Depth.applySheen(artPanel, copy.fill)
-		artPanel.Parent = root
-		local burst = Skin.texture(artPanel, "texture.sunburst", { zIndex = z + 2, transparency = 0.6, color = Tokens.color.featherWhite })
-		local artHolder = Instance.new("Frame")
-		artHolder.Name = "Art"
-		artHolder.AnchorPoint = Vector2.new(0.5, 0.5)
-		artHolder.Position = UDim2.fromScale(0.5, 0.42)
-		artHolder.Size = UDim2.fromScale(0.78, 0.6)
-		artHolder.BackgroundTransparency = 1
-		artHolder.ZIndex = z + 3
-		local artRatio = Instance.new("UIAspectRatioConstraint")
-		artRatio.Parent = artHolder
-		artHolder.Parent = artPanel
-		local art = itemArt(artHolder, "perk." .. perkId, copy.art, copy.icon, 160, z + 4)
-		art.Size = UDim2.fromScale(1, 1)
-		local nextLine = FrameKit.text(
-			artPanel,
-			"Next",
-			"",
-			"caption",
-			{ zIndex = z + 4, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Center }
-		)
-		nextLine.Font = Tokens.typography.label.font
-		nextLine.AnchorPoint = Vector2.new(0.5, 1)
-		nextLine.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.sm)
-		nextLine.Size = UDim2.new(1, -Tokens.spacing.sm, 0, Tokens.typography.caption.size + 6)
-		nextLine.TextScaled = true
-		FrameKit.outline(nextLine, 2, WOOD_DEEP)
-		-- Right side: title, level pill, pips, before -> after, price.
-		local body = Instance.new("Frame")
-		body.Name = "Body"
-		body.Position = UDim2.new(0.42, Tokens.spacing.sm, 0, Tokens.spacing.sm)
-		body.Size = UDim2.new(0.58, -Tokens.spacing.sm * 2, 1, -Tokens.spacing.sm * 2)
-		body.BackgroundTransparency = 1
-		body.ZIndex = z + 2
-		body.Parent = root
-		local title = FrameKit.text(body, "Title", string.upper(copy.title), "title", { zIndex = z + 3, color = Tokens.color.inkStrong })
-		title.Size = UDim2.new(1, 0, 0, Tokens.typography.title.size + 2)
-		title.TextScaled = true
-		local titleCap = Instance.new("UITextSizeConstraint")
-		titleCap.MaxTextSize = Tokens.typography.title.size
-		titleCap.MinTextSize = 14
-		titleCap.Parent = title
-		local level = FrameKit.badge(body, "Level", "LV 0", WOOD_DEEP, z + 4)
-		level.Position = UDim2.fromOffset(0, Tokens.typography.title.size + 6)
-		local pipsRow = Instance.new("Frame")
-		pipsRow.Name = "Pips"
-		pipsRow.Position = UDim2.fromOffset(0, Tokens.typography.title.size + 6 + Tokens.typography.caption.size + 16)
-		pipsRow.Size = UDim2.new(1, 0, 0, 12)
-		pipsRow.BackgroundTransparency = 1
-		pipsRow.ZIndex = z + 3
-		local pipLayout = Instance.new("UIListLayout")
-		pipLayout.FillDirection = Enum.FillDirection.Horizontal
-		pipLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-		pipLayout.Padding = UDim.new(0, 4)
-		pipLayout.SortOrder = Enum.SortOrder.LayoutOrder
-		pipLayout.Parent = pipsRow
-		pipsRow.Parent = body
+		Depth.panel(artPanel, copy.fill, { radius = Tokens.radius.md, rim = Color3.new(1, 1, 1) })
+		Fit.corner(artPanel, 0.1)
+		artPanel.Parent = card
+		local burst = Skin.texture(artPanel, "texture.sunburst", { transparency = 0.7, name = "Burst", zIndex = 1 })
+		if burst then
+			burst.AnchorPoint = Vector2.new(0.5, 0.5)
+			burst.Position = UDim2.fromScale(0.5, 0.5)
+			burst.Size = UDim2.fromScale(1.8, 1.8)
+		end
+		local artBox = Fit.frame(artPanel, "ArtBox", UDim2.fromScale(0.5, 0.5), UDim2.fromScale(0.7, 0.72), 3, Vector2.new(0.5, 0.5))
+		itemArt(artBox, "perk." .. perkId, copy.art, copy.icon, 3)
+		local nextLine = Fit.text(card, "Next", "NEXT: +10% " .. copy.word, {
+			font = Tokens.typography.label.font,
+			color = INK,
+			max = 18,
+			zIndex = 3,
+			size = UDim2.fromScale(0.42, 0.2),
+			position = UDim2.fromScale(0.02, 0.74),
+			align = Enum.TextXAlignment.Left,
+		})
+		Fit.text(card, "Title", string.upper(copy.title), {
+			font = Tokens.typography.title.font,
+			color = INK,
+			max = 30,
+			zIndex = 3,
+			size = UDim2.fromScale(0.5, 0.17),
+			position = UDim2.fromScale(0.47, 0.05),
+			align = Enum.TextXAlignment.Left,
+		})
+		local levelBadge = Instance.new("Frame")
+		levelBadge.Name = "Level"
+		levelBadge.Position = UDim2.fromScale(0.47, 0.25)
+		levelBadge.Size = UDim2.fromScale(0.16, 0.14)
+		levelBadge.BackgroundColor3 = copy.deep
+		levelBadge.BorderSizePixel = 0
+		levelBadge.ZIndex = 3
+		Fit.corner(levelBadge, 0.4)
+		levelBadge.Parent = card
+		local level = Fit.text(levelBadge, "Text", "LV 0", {
+			font = Tokens.typography.label.font,
+			color = Tokens.color.featherWhite,
+			max = 16,
+			zIndex = 4,
+			size = UDim2.fromScale(0.9, 0.76),
+			position = UDim2.fromScale(0.5, 0.5),
+			anchor = Vector2.new(0.5, 0.5),
+		})
+		local pipRow = Fit.frame(card, "Pips", UDim2.fromScale(0.47, 0.42), UDim2.fromScale(0.5, 0.09), 3)
+		Fit.row(pipRow, { gap = 0.012, halign = Enum.HorizontalAlignment.Left })
 		local pips: { Frame } = {}
-		for lv = 1, cfg.permanentPerks[perkId].maxLevel do
+		local maxLevel = cfg.permanentPerks[perkId].maxLevel
+		for lv = 1, maxLevel do
 			local dot = Instance.new("Frame")
 			dot.Name = "Pip" .. lv
-			dot.Size = UDim2.fromOffset(12, 12)
-			dot.BackgroundColor3 = WOOD_DEEP
-			dot.BackgroundTransparency = 0.25
-			dot.BorderSizePixel = 0
 			dot.LayoutOrder = lv
-			dot.ZIndex = z + 3
-			local dotCorner = Instance.new("UICorner")
-			dotCorner.CornerRadius = UDim.new(1, 0)
-			dotCorner.Parent = dot
-			dot.Parent = pipsRow
+			dot.Size = UDim2.fromScale(0, 0.8)
+			dot.BackgroundColor3 = WOOD_DEEP
+			dot.BackgroundTransparency = 0.3
+			dot.BorderSizePixel = 0
+			dot.ZIndex = 4
+			Fit.aspect(dot, 1, Enum.DominantAxis.Height)
+			Fit.corner(dot, 0.5)
+			dot.Parent = pipRow
 			table.insert(pips, dot)
 		end
-		-- Before -> after: two small arts and an arrow on a paper strip.
-		local strip = Instance.new("Frame")
-		strip.Name = "Preview"
-		strip.Position = UDim2.fromOffset(0, Tokens.typography.title.size + Tokens.typography.caption.size + 40)
-		strip.Size = UDim2.new(1, 0, 0, tap + 4)
-		strip.BackgroundColor3 = PARCHMENT
-		strip.ZIndex = z + 3
-		local stripCorner = Instance.new("UICorner")
-		stripCorner.CornerRadius = UDim.new(0, Tokens.radius.sm)
-		stripCorner.Parent = strip
-		Depth.keyline(strip, Tokens.stroke.hairline + 0.5, WOOD_DEEP)
-		strip.Parent = body
-		local before = Instance.new("Frame")
-		before.Name = "Before"
-		before.AnchorPoint = Vector2.new(0.5, 0.5)
-		before.Position = UDim2.fromScale(0.28, 0.5)
-		before.Size = UDim2.fromOffset(tap - 14, tap - 14)
-		before.BackgroundTransparency = 1
-		before.ZIndex = z + 4
-		before.Parent = strip
-		itemArt(before, "perk." .. perkId, copy.art, copy.icon, tap - 14, z + 5).Size = UDim2.fromScale(1, 1)
-		local arrowGlyph = Icons.chevron(strip, Tokens.icon.md, { zIndex = z + 5, color = Tokens.color.success })
-		arrowGlyph.AnchorPoint = Vector2.new(0.5, 0.5)
-		arrowGlyph.Position = UDim2.fromScale(0.5, 0.5)
-		local after = Instance.new("Frame")
-		after.Name = "After"
-		after.AnchorPoint = Vector2.new(0.5, 0.5)
-		after.Position = UDim2.fromScale(0.72, 0.5)
-		after.Size = UDim2.fromOffset(tap - 6, tap - 6)
-		after.BackgroundTransparency = 1
-		after.ZIndex = z + 4
-		after.Parent = strip
-		local afterArt = itemArt(after, "perk." .. perkId, copy.art, copy.icon, tap - 6, z + 5)
-		afterArt.Size = UDim2.fromScale(1, 1)
-		local buy = Button.build(body, {
-			text = "",
-			variant = "success",
-			minimumTapTarget = tap,
-			motion = motion,
-			size = UDim2.new(1, 0, 0, tap + 4),
-			zIndex = z + 3,
-			textSize = Tokens.typography.title.size - 2,
-			sound = function()
-				deps.audio:play(Tokens.sound.uiTap)
-			end,
-			hoverSound = function()
-				deps.audio:play(Tokens.sound.uiHover)
-			end,
+		local preview = paper(card, "Preview", UDim2.fromScale(0.47, 0.55), UDim2.fromScale(0.5, 0.17), 3, PARCHMENT, WOOD_LIGHT)
+		local beforeBox = Fit.frame(preview, "Before", UDim2.fromScale(0.28, 0.5), UDim2.fromScale(0, 0.62), 4, Vector2.new(0.5, 0.5))
+		Fit.aspect(beforeBox, 1, Enum.DominantAxis.Height)
+		itemArt(beforeBox, "perk." .. perkId, copy.art, copy.icon, 4)
+		Fit.text(preview, "Arrow", "→", {
+			font = Tokens.typography.display.font,
+			color = Tokens.color.leafBright,
+			max = 30,
+			outline = 1.5,
+			outlineColor = Tokens.color.leafDeep,
+			zIndex = 4,
+			size = UDim2.fromScale(0.2, 0.8),
+			position = UDim2.fromScale(0.5, 0.5),
+			anchor = Vector2.new(0.5, 0.5),
 		})
-		buy.button.AnchorPoint = Vector2.new(0.5, 1)
-		buy.button.Position = UDim2.fromScale(0.5, 1)
-		do
-			local face = buy.button:FindFirstChild("Face")
-			local gem = if face then (Skin.icon(face, "hud.gem", tap - 18, z + 6) or Icons.gem(face, tap - 20, { zIndex = z + 6 })) else nil
-			if gem then
-				gem.AnchorPoint = Vector2.new(0, 0.5)
-				gem.Position = UDim2.new(0, Tokens.spacing.md, 0.5, 0)
-			end
-		end
+		local afterBox = Fit.frame(preview, "After", UDim2.fromScale(0.74, 0.5), UDim2.fromScale(0, 0.86), 4, Vector2.new(0.5, 0.5))
+		Fit.aspect(afterBox, 1, Enum.DominantAxis.Height)
+		local afterArt = itemArt(afterBox, "perk." .. perkId, copy.art, copy.icon, 4)
+		local buy = priceButton(card, "Buy", "25 GEMS", {
+			tap = tap,
+			motion = motion,
+			audio = deps.audio,
+			size = UDim2.fromScale(0.5, 0.2),
+			position = UDim2.fromScale(0.47, 0.76),
+			zIndex = 4,
+			max = 26,
+		}, true)
 		table.insert(cleanups, buy.destroy)
-		local maxBadge = FrameKit.badge(body, "Max", "MAXED", Tokens.color.success, z + 4)
-		maxBadge.AnchorPoint = Vector2.new(0.5, 1)
-		maxBadge.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.sm)
-		maxBadge.Visible = false
-		local record: PerkCard = {
+		local maxBadge = ownedBadge(card, UDim2.fromScale(0.47, 0.76), UDim2.fromScale(0.5, 0.2), nil, 4)
+		maxBadge.Name = "Maxed"
+		local maxLabel = maxBadge:FindFirstChild("Label") :: TextLabel
+		maxLabel.Text = "MAXED"
+		local record: PerkRecord = {
 			perkId = perkId,
-			root = root,
+			root = card,
 			scale = scale,
-			pips = pips,
-			buy = buy,
 			level = level,
+			pips = pips,
 			nextLine = nextLine,
+			buy = buy,
 			maxBadge = maxBadge,
-			displayedLevel = nil,
 			afterArt = afterArt,
+			displayedLevel = nil,
 		}
 		table.insert(perkCards, record)
 		table.insert(
@@ -512,17 +534,17 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 				if result.ok then
 					deps.audio:play(Tokens.sound.purchase)
 					deps.haptics:pulse(0.5, 0.1)
-					scale.Scale = 1.05
+					scale.Scale = 1.04
 					Tween.scale(scale, "release", motion, 1)
 					Confetti.burst(
-						root,
-						{ origin = UDim2.fromScale(0.5, 0.45), count = 22, spread = 140, motion = motion, tier = tier, zIndex = z + 8 }
+						card,
+						{ origin = UDim2.fromScale(0.5, 0.45), count = 22, spread = 140, motion = motion, tier = tier, zIndex = 9 }
 					)
 					deps.audio:play(Tokens.sound.uiConfetti)
 					deps.toasts:push(string.format("%s reached level %d", copy.title, result.data.level), "success")
 				else
 					deps.audio:play(Tokens.sound.uiError)
-					Tween.shake(root, motion)
+					Tween.shake(card, motion)
 					local message = if result.code == "insufficient_funds"
 						then "Not enough Gems"
 						elseif result.code == "stale_token" then "Levels changed - try again"
@@ -533,105 +555,78 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 				end
 			end)
 		)
-		if burst and not motion.reducedMotion then
-			table.insert(
-				cleanups,
-				RunService.RenderStepped:Connect(function(dt)
-					if burst.Parent then
-						burst.Rotation = (burst.Rotation + dt * 6 * (if index % 2 == 0 then -1 else 1)) % 360
-					end
-				end)
-			)
-		end
 	end
-	-- The passes strip under the perks: a note, the two passes, a link to FOREVER.
-	local strip = Instance.new("Frame")
-	strip.Name = "Strip"
-	strip.AnchorPoint = Vector2.new(0, 1)
-	strip.Position = UDim2.fromScale(0, 1)
-	strip.Size = UDim2.new(1, 0, 0, stripH)
-	strip.ZIndex = z
-	Depth.panel(strip, WOOD, { radius = Tokens.radius.md, rim = WOOD_LIGHT })
-	strip.Parent = perksPage
-	local stripLayout = Instance.new("UIListLayout")
-	stripLayout.FillDirection = Enum.FillDirection.Horizontal
-	stripLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	stripLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	stripLayout.Padding = UDim.new(0, Tokens.spacing.md)
-	stripLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	stripLayout.Parent = strip
-	local note = paperNote(strip, "Note", "Premium Upgrades\nLast Forever!", z + 1, UDim2.fromOffset(170, tap))
-	note.LayoutOrder = 1
-	note.Rotation = -2
-	note.Visible = not compact
-	type PassMini = { key: string, buy: any, owned: TextLabel }
-	local passMinis: { PassMini } = {}
-	local allOffers = offers(cfg)
-	local order = 2
-	for _, offer in ipairs(allOffers) do
-		if offer.pass then
-			local mini = Instance.new("Frame")
-			mini.Name = "Mini_" .. offer.key
-			mini.Size = UDim2.fromOffset(if compact then 150 else 210, tap + 2)
-			mini.BackgroundColor3 = PARCHMENT
-			mini.LayoutOrder = order
-			mini.ZIndex = z + 1
-			local miniCorner = Instance.new("UICorner")
-			miniCorner.CornerRadius = UDim.new(0, Tokens.radius.sm)
-			miniCorner.Parent = mini
-			Depth.keyline(mini, Tokens.stroke.standard, WOOD_DEEP)
-			mini.Parent = strip
-			local artHolder = Instance.new("Frame")
-			artHolder.AnchorPoint = Vector2.new(0, 0.5)
-			artHolder.Position = UDim2.new(0, 4, 0.5, 0)
-			artHolder.Size = UDim2.fromOffset(tap - 12, tap - 12)
-			artHolder.BackgroundTransparency = 1
-			artHolder.ZIndex = z + 2
-			artHolder.Parent = mini
-			itemArt(artHolder, "pass." .. offer.key, offer.art, offer.icon, tap - 12, z + 3).Size = UDim2.fromScale(1, 1)
-			local name =
-				FrameKit.text(mini, "Name", string.upper(offer.name), "caption", { zIndex = z + 2, color = Tokens.color.inkStrong })
-			name.Font = Tokens.typography.label.font
-			name.Position = UDim2.fromOffset(tap - 4, 2)
-			name.Size = UDim2.new(1, -(tap + 4), 0, Tokens.typography.caption.size + 2)
-			local forever = FrameKit.text(mini, "Forever", "FOREVER", "caption", { zIndex = z + 2, color = Tokens.color.inkMuted })
-			forever.Position = UDim2.fromOffset(tap - 4, Tokens.typography.caption.size + 2)
-			forever.Size = UDim2.new(0.4, 0, 0, Tokens.typography.caption.size)
-			forever.TextSize = 10
-			local buy = Button.build(mini, {
-				text = string.format("R$ %d", offer.robux or 0),
-				variant = "success",
-				minimumTapTarget = tap,
-				motion = motion,
-				size = UDim2.fromOffset(74, tap - 16),
-				zIndex = z + 3,
-				textSize = Tokens.typography.caption.size + 1,
-				sound = function()
-					deps.audio:play(Tokens.sound.uiTap)
-				end,
-				onActivated = function()
-					UpgradeActions.promptPurchase(promptDeps, offer.key, offer.name)
-				end,
-			})
-			buy.button.AnchorPoint = Vector2.new(1, 1)
-			buy.button.Position = UDim2.new(1, -4, 1, -3)
-			table.insert(cleanups, buy.destroy)
-			local owned = FrameKit.badge(mini, "Owned", "OWNED", Tokens.color.success, z + 4)
-			owned.AnchorPoint = Vector2.new(1, 0.5)
-			owned.Position = UDim2.new(1, -6, 0.5, 0)
-			owned.Visible = false
-			table.insert(passMinis, { key = offer.pass, buy = buy, owned = owned })
-			order += 1
-		end
+
+	-- Perks strip: note, the two permanent products as minis, and the link to the Forever tab.
+	local passList = passes(cfg)
+	type MiniView = { key: string, buy: any, owned: Frame }
+	local passMinis: { MiniView } = {}
+	local note = paper(perksPage, "Note", UDim2.fromScale(0.005, 0.835), UDim2.fromScale(0.17, 0.16), 2, PARCHMENT, WOOD_LIGHT)
+	note.Rotation = -2.5
+	Fit.text(note, "Text", "Premium Upgrades\nLast Forever!", {
+		font = Tokens.typography.title.font,
+		color = INK,
+		max = 18,
+		zIndex = 3,
+		size = UDim2.fromScale(0.9, 0.8),
+		position = UDim2.fromScale(0.5, 0.5),
+		anchor = Vector2.new(0.5, 0.5),
+	})
+	for index, pass in ipairs(passList) do
+		local mini = paper(
+			perksPage,
+			"Mini_" .. pass.key,
+			UDim2.fromScale(0.195 + (index - 1) * 0.225, 0.835),
+			UDim2.fromScale(0.215, 0.16),
+			2,
+			PAPER,
+			WOOD
+		)
+		local artBox = Fit.frame(mini, "ArtBox", UDim2.fromScale(0.15, 0.5), UDim2.fromScale(0, 0.74), 3, Vector2.new(0.5, 0.5))
+		Fit.aspect(artBox, 1, Enum.DominantAxis.Height)
+		itemArt(artBox, "pass." .. pass.key, pass.art, pass.icon, 3)
+		Fit.text(mini, "Name", pass.name, {
+			font = Tokens.typography.title.font,
+			color = INK,
+			max = 20,
+			zIndex = 3,
+			size = UDim2.fromScale(0.36, 0.42),
+			position = UDim2.fromScale(0.3, 0.1),
+			align = Enum.TextXAlignment.Left,
+		})
+		Fit.text(mini, "Forever", "FOREVER", {
+			font = Tokens.typography.caption.font,
+			color = WOOD,
+			max = 12,
+			zIndex = 3,
+			size = UDim2.fromScale(0.36, 0.3),
+			position = UDim2.fromScale(0.3, 0.56),
+			align = Enum.TextXAlignment.Left,
+		})
+		local buy = priceButton(mini, "Buy", "R$ " .. tostring(pass.robux), {
+			tap = tap,
+			motion = motion,
+			audio = deps.audio,
+			size = UDim2.fromScale(0.3, 0.58),
+			position = UDim2.fromScale(0.97, 0.5),
+			anchor = Vector2.new(1, 0.5),
+			zIndex = 4,
+			max = 20,
+			onActivated = function()
+				UpgradeActions.promptPurchase(promptDeps, pass.key, pass.name)
+			end,
+		}, false)
+		table.insert(cleanups, buy.destroy)
+		local owned = ownedBadge(mini, UDim2.fromScale(0.97, 0.5), UDim2.fromScale(0.3, 0.58), Vector2.new(1, 0.5), 4)
+		table.insert(passMinis, { key = pass.key, buy = buy, owned = owned })
 	end
-	local viewForever = Button.build(strip, {
+	local viewForever = Button.build(perksPage, {
 		text = "VIEW FOREVER PERKS  >",
-		variant = "pill",
+		variant = "primary",
 		minimumTapTarget = tap,
 		motion = motion,
-		size = UDim2.fromOffset(if compact then 160 else 250, tap - 4),
-		zIndex = z + 1,
-		textSize = Tokens.typography.caption.size + 1,
+		size = UDim2.fromScale(0.3, 0.14),
+		zIndex = 3,
 		sound = function()
 			deps.audio:play(Tokens.sound.uiTab)
 		end,
@@ -639,314 +634,290 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 			setTab("forever")
 		end,
 	})
-	viewForever.button.LayoutOrder = order
+	viewForever.button.Name = "ViewForever"
+	viewForever.button.AnchorPoint = Vector2.new(1, 0.5)
+	viewForever.button.Position = UDim2.fromScale(0.995, 0.915)
+	Fit.buttonText(viewForever, 20)
 	table.insert(cleanups, viewForever.destroy)
 
-	-- GEMS: the bundles, side by side.
-	local bundleH = if compact then tap * 4.8 else tap * 5.2
-	local gemsPage = page("gems", bundleH + Tokens.spacing.md + Tokens.typography.caption.size + 8 + Tokens.spacing.md + tap)
-	local bundlesRow = Instance.new("Frame")
-	bundlesRow.Name = "Bundles"
-	bundlesRow.BackgroundTransparency = 1
-	bundlesRow.Size = UDim2.new(1, 0, 0, bundleH)
-	bundlesRow.ZIndex = z
-	bundlesRow.Parent = gemsPage
-	local bundlesLayout = Instance.new("UIListLayout")
-	bundlesLayout.FillDirection = Enum.FillDirection.Horizontal
-	bundlesLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	bundlesLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-	bundlesLayout.Padding = UDim.new(0, Tokens.spacing.md)
-	bundlesLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	bundlesLayout.Parent = bundlesRow
+	-- GEMS -------------------------------------------------------------------------------------------
+	local gemsPage = page("gems")
 	local bundles = cfg.monetization and cfg.monetization.gemBundles or {}
-	local bestIndex, bestRatio = 0, 0
+	local bestIndex = 1
+	local bestRate = 0
 	for index, bundle in ipairs(bundles) do
-		local ratio = bundle.gems / math.max(1, bundle.robux)
-		if ratio > bestRatio then
-			bestIndex, bestRatio = index, ratio
+		local rate = bundle.gems / math.max(1, bundle.robux)
+		if rate > bestRate then
+			bestRate = rate
+			bestIndex = index
 		end
 	end
-	local bundleFills = { Tokens.color.sky, Tokens.color.gem, Color3.fromRGB(226, 214, 255) }
-	local bundleDeeps = { Tokens.color.skyDeep, Tokens.color.gemDeep, Color3.fromRGB(150, 110, 220) }
+	local animated: { UIGradient } = {}
+	local bundleWidth = 0.32
+	local bundleGap = (1 - bundleWidth * #bundles) / math.max(1, #bundles - 1)
 	for index, bundle in ipairs(bundles) do
-		local isBest = index == bestIndex
-		local isPopular = bundle.popular == true
-		local fill = bundleFills[math.min(index, #bundleFills)]
-		local deep = bundleDeeps[math.min(index, #bundleDeeps)]
-		local card = Instance.new("Frame")
-		card.Name = "Bundle_" .. tostring(bundle.gems)
-		card.Size = UDim2.fromScale(if compact then 0.31 else 0.27, if isBest then 1 else 0.92)
-		card.BackgroundColor3 = deep
-		card.LayoutOrder = index
-		card.ZIndex = z + 1
-		local cardCorner = Instance.new("UICorner")
-		cardCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
-		cardCorner.Parent = card
-		local outline = Depth.keyline(card, Tokens.stroke.bold, WOOD_DEEP)
-		if isBest then
-			outline.Thickness = Tokens.stroke.frame + 1
-			outline.Color = Color3.new(1, 1, 1)
-			local gradient = Instance.new("UIGradient")
-			gradient.Color = RAINBOW
-			gradient.Parent = outline
-			table.insert(animated, gradient)
-		end
-		local scale = Instance.new("UIScale")
-		scale.Parent = card
-		card.Parent = bundlesRow
-		local face = Instance.new("Frame")
-		face.Name = "Face"
-		face.AnchorPoint = Vector2.new(0.5, 0)
-		face.Position = UDim2.new(0.5, 0, 0, 5)
-		face.Size = UDim2.new(1, -10, 1, -12)
-		face.BackgroundColor3 = fill
-		face.BorderSizePixel = 0
-		face.ZIndex = z + 2
-		local faceCorner = Instance.new("UICorner")
-		faceCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
-		faceCorner.Parent = face
-		Depth.applySheen(face, fill)
-		face.Parent = card
-		local amount = FrameKit.text(face, "Amount", withCommas(bundle.gems) .. " GEMS", "display", {
-			zIndex = z + 4,
-			color = if isBest then Tokens.color.goldDeep else Tokens.color.featherWhite,
-			align = Enum.TextXAlignment.Center,
-		})
-		amount.Position = UDim2.fromScale(0, 0.08)
-		amount.Size = UDim2.fromScale(1, 0.14)
-		amount.TextScaled = true
-		FrameKit.outline(amount, 3, if isBest then Tokens.color.featherWhite else deep)
-		local artHolder = Instance.new("Frame")
-		artHolder.Name = "Art"
-		artHolder.AnchorPoint = Vector2.new(0.5, 0.5)
-		artHolder.Position = UDim2.fromScale(0.5, 0.5)
-		artHolder.Size = UDim2.fromScale(0.7, 0.5)
-		artHolder.BackgroundTransparency = 1
-		artHolder.ZIndex = z + 3
-		local artRatio = Instance.new("UIAspectRatioConstraint")
-		artRatio.Parent = artHolder
-		artHolder.Parent = face
-		local burst = Skin.texture(
-			artHolder,
-			"texture.sunburst",
-			{ zIndex = z + 3, transparency = if isBest then 0.35 else 0.55, color = Tokens.color.featherWhite }
+		local face = BUNDLE_FACES[math.min(index, #BUNDLE_FACES)]
+		local best = index == bestIndex
+		local card = paper(
+			gemsPage,
+			"Bundle_" .. tostring(bundle.gems),
+			UDim2.fromScale((index - 1) * (bundleWidth + bundleGap), 0.0),
+			UDim2.fromScale(bundleWidth, 0.8),
+			2,
+			face.fill,
+			face.deep
 		)
-		if burst and not motion.reducedMotion then
-			table.insert(
-				cleanups,
-				RunService.RenderStepped:Connect(function(dt)
-					if burst.Parent then
-						burst.Rotation = (burst.Rotation + dt * 10) % 360
-					end
-				end)
-			)
+		card.ClipsDescendants = false
+		local line = Depth.keylineOf(card)
+		if line then
+			line.Thickness = if best then 4 else 2.5
+			if best then
+				local gradient = Instance.new("UIGradient")
+				gradient.Color = RAINBOW
+				gradient.Parent = line
+				table.insert(animated, gradient)
+			end
 		end
-		itemArt(artHolder, "bundle.gems" .. tostring(bundle.gems), "hud.gem", "gem", 200, z + 4).Size = UDim2.fromScale(0.8, 0.8)
-		local buy = Button.build(face, {
-			text = string.format("R$%d", bundle.robux),
-			variant = "success",
-			minimumTapTarget = tap,
-			motion = motion,
-			size = UDim2.new(1, -Tokens.spacing.lg, 0, tap + 8),
-			zIndex = z + 4,
-			textSize = Tokens.typography.title.size,
-			sound = function()
-				deps.audio:play(Tokens.sound.uiTap)
-			end,
-			hoverSound = function()
-				deps.audio:play(Tokens.sound.uiHover)
-			end,
-			onActivated = function()
-				local result =
-					UpgradeActions.promptPurchase(promptDeps, "gemBundle" .. tostring(bundle.gems), withCommas(bundle.gems) .. " Gems")
-				if result.ok then
-					scale.Scale = 1.05
-					Tween.scale(scale, "release", motion, 1)
-				end
-			end,
+		local burst = Skin.texture(card, "texture.sunburst", { transparency = 0.72, name = "Burst", zIndex = 1 })
+		if burst then
+			burst.AnchorPoint = Vector2.new(0.5, 0.5)
+			burst.Position = UDim2.fromScale(0.5, 0.5)
+			burst.Size = UDim2.fromScale(1.6, 1.6)
+		end
+		Fit.text(card, "Title", withCommas(bundle.gems) .. " GEMS", {
+			font = Tokens.typography.display.font,
+			color = Tokens.color.featherWhite,
+			max = 44,
+			outline = 2.5,
+			outlineColor = face.deep,
+			zIndex = 3,
+			size = UDim2.fromScale(0.9, 0.16),
+			position = UDim2.fromScale(0.5, 0.12),
+			anchor = Vector2.new(0.5, 0.5),
 		})
-		buy.button.AnchorPoint = Vector2.new(0.5, 1)
-		buy.button.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.md)
-		table.insert(cleanups, buy.destroy)
-		-- Ribbons hang over the top corners, never over the amount: POPULAR left, BEST VALUE right.
-		if isBest then
-			local ribbon = FrameKit.badge(card, "Best", "BEST VALUE", Tokens.color.danger, z + 6)
-			ribbon.AnchorPoint = Vector2.new(1, 0.5)
-			ribbon.Position = UDim2.new(1, Tokens.spacing.sm, 0, 2)
-			ribbon.Rotation = 8
-		end
-		if isPopular then
-			-- On the left side, a little down, so it never meets BEST VALUE on a narrow card.
-			local ribbon = FrameKit.badge(card, "Popular", "POPULAR", Tokens.color.goldDeep, z + 6)
-			ribbon.AnchorPoint = Vector2.new(0, 0.5)
-			ribbon.Position = UDim2.fromOffset(-Tokens.spacing.md, if isBest then 34 else 2)
-			ribbon.Rotation = -8
-		end
-		if isBest and not motion.reducedMotion then
-			table.insert(cleanups, Tween.pulseLoop(scale, motion, 0.015))
-		end
-	end
-	local arrive = FrameKit.text(
-		gemsPage,
-		"Arrive",
-		">  GEMS ARRIVE INSTANTLY  <",
-		"caption",
-		{ zIndex = z + 1, color = Tokens.color.inkStrong, align = Enum.TextXAlignment.Center }
-	)
-	arrive.Font = Tokens.typography.label.font
-	arrive.Position = UDim2.fromOffset(0, bundleH + Tokens.spacing.md)
-	arrive.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 8)
-	local useNote = Instance.new("Frame")
-	useNote.Name = "Use"
-	useNote.AnchorPoint = Vector2.new(0.5, 1)
-	useNote.Position = UDim2.fromScale(0.5, 1)
-	useNote.Size = UDim2.new(0.86, 0, 0, tap)
-	useNote.ZIndex = z
-	Depth.panel(useNote, Tokens.color.gold, { radius = Tokens.radius.md, rim = Tokens.color.goldLight })
-	useNote.Parent = gemsPage
-	local useText = FrameKit.text(
-		useNote,
-		"Text",
-		"USE GEMS FOR PERKS & CLASS SPINS",
-		"label",
-		{ zIndex = z + 1, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Center, size = UDim2.fromScale(1, 1) }
-	)
-	useText.TextScaled = true
-	FrameKit.outline(useText, 2, Tokens.color.goldDeep)
-
-	-- FOREVER: the two permanent passes, large.
-	local passH = if compact then tap * 4.4 else tap * 5
-	local foreverPage = page("forever", passH + Tokens.spacing.md + tap)
-	local passesRow = Instance.new("Frame")
-	passesRow.Name = "Passes"
-	passesRow.BackgroundTransparency = 1
-	passesRow.Size = UDim2.new(1, 0, 0, passH)
-	passesRow.ZIndex = z
-	passesRow.Parent = foreverPage
-	local passesLayout = Instance.new("UIListLayout")
-	passesLayout.FillDirection = Enum.FillDirection.Horizontal
-	passesLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	passesLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	passesLayout.Padding = UDim.new(0, Tokens.spacing.lg)
-	passesLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	passesLayout.Parent = passesRow
-	type PassCard = { key: string, buy: any, owned: TextLabel }
-	local passCards: { PassCard } = {}
-	local passOrder = 1
-	for _, offer in ipairs(allOffers) do
-		if offer.pass then
-			local card = Instance.new("Frame")
-			card.Name = "Pass_" .. offer.key
-			card.Size = UDim2.fromScale(if compact then 0.46 else 0.38, 1)
-			card.BackgroundColor3 = Tokens.color.goldDeep
-			card.LayoutOrder = passOrder
-			card.ZIndex = z + 1
-			local cardCorner = Instance.new("UICorner")
-			cardCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
-			cardCorner.Parent = card
-			Depth.keyline(card, Tokens.stroke.bold, WOOD_DEEP)
-			card.Parent = passesRow
-			local face = Instance.new("Frame")
-			face.AnchorPoint = Vector2.new(0.5, 0)
-			face.Position = UDim2.new(0.5, 0, 0, 5)
-			face.Size = UDim2.new(1, -10, 1, -12)
-			face.BackgroundColor3 = Tokens.color.gold
-			face.BorderSizePixel = 0
-			face.ZIndex = z + 2
-			local faceCorner = Instance.new("UICorner")
-			faceCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
-			faceCorner.Parent = face
-			Depth.applySheen(face, Tokens.color.gold, Tokens.color.goldLight)
-			face.Parent = card
-			local name = FrameKit.text(
-				face,
-				"Name",
-				string.upper(offer.name),
-				"display",
-				{ zIndex = z + 4, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Center }
-			)
-			name.Position = UDim2.fromScale(0, 0.05)
-			name.Size = UDim2.fromScale(1, 0.14)
-			name.TextScaled = true
-			FrameKit.outline(name, 3, Tokens.color.goldDeep)
-			local tag = FrameKit.badge(card, "Forever", "FOREVER", Tokens.color.gemDeep, z + 6)
-			tag.AnchorPoint = Vector2.new(1, 0)
-			tag.Position = UDim2.new(1, Tokens.spacing.xs, 0, -Tokens.spacing.sm)
-			tag.Rotation = 8
-			local artHolder = Instance.new("Frame")
-			artHolder.AnchorPoint = Vector2.new(0.5, 0.5)
-			artHolder.Position = UDim2.fromScale(0.5, 0.5)
-			artHolder.Size = UDim2.fromScale(0.6, 0.48)
-			artHolder.BackgroundTransparency = 1
-			artHolder.ZIndex = z + 3
-			local artRatio = Instance.new("UIAspectRatioConstraint")
-			artRatio.Parent = artHolder
-			artHolder.Parent = face
-			Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 3, transparency = 0.45, color = Tokens.color.featherWhite })
-			itemArt(artHolder, "pass." .. offer.key, offer.art, offer.icon, 200, z + 4).Size = UDim2.fromScale(0.8, 0.8)
-			local buy = Button.build(face, {
-				text = string.format("R$%d", offer.robux or 0),
-				variant = "success",
-				minimumTapTarget = tap,
-				motion = motion,
-				size = UDim2.new(1, -Tokens.spacing.lg, 0, tap + 8),
-				zIndex = z + 4,
-				textSize = Tokens.typography.title.size,
-				sound = function()
-					deps.audio:play(Tokens.sound.uiTap)
-				end,
-				onActivated = function()
-					UpgradeActions.promptPurchase(promptDeps, offer.key, offer.name)
-				end,
+		local artSize = 0.42 + index * 0.1
+		local artBox =
+			Fit.frame(card, "ArtBox", UDim2.fromScale(0.5, 0.5), UDim2.fromScale(artSize, artSize * 0.8), 3, Vector2.new(0.5, 0.5))
+		itemArt(artBox, "bundle.gems" .. tostring(bundle.gems), "hud.gem", "gem", 3)
+		if best then
+			local badge = Instance.new("Frame")
+			badge.Name = "BestValue"
+			badge.AnchorPoint = Vector2.new(0.5, 0.5)
+			badge.Position = UDim2.fromScale(0.86, 0.32)
+			badge.Size = UDim2.fromScale(0.34, 0.17)
+			badge.BorderSizePixel = 0
+			badge.ZIndex = 5
+			badge.Rotation = 6
+			Depth.panel(badge, Tokens.color.emberDeep, { radius = Tokens.radius.md, rim = Tokens.color.goldLight })
+			Fit.corner(badge, 0.2)
+			Fit.text(badge, "Text", "BEST\nVALUE", {
+				font = Tokens.typography.title.font,
+				color = Tokens.color.goldLight,
+				max = 18,
+				outline = 1.5,
+				outlineColor = Tokens.color.emberDeep,
+				zIndex = 6,
+				size = UDim2.fromScale(0.9, 0.84),
+				position = UDim2.fromScale(0.5, 0.5),
+				anchor = Vector2.new(0.5, 0.5),
 			})
-			buy.button.AnchorPoint = Vector2.new(0.5, 1)
-			buy.button.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.md)
-			table.insert(cleanups, buy.destroy)
-			local owned = FrameKit.badge(face, "Owned", "OWNED", Tokens.color.success, z + 5)
-			owned.AnchorPoint = Vector2.new(0.5, 1)
-			owned.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.lg)
-			owned.Visible = false
-			table.insert(passCards, { key = offer.pass, buy = buy, owned = owned })
-			passOrder += 1
+			badge.Parent = card
 		end
+		if bundle.popular == true then
+			local ribbon = paper(
+				card,
+				"Popular",
+				UDim2.fromScale(0.86, if best then 0.52 else 0.32),
+				UDim2.fromScale(0.36, 0.11),
+				5,
+				PARCHMENT,
+				Tokens.color.goldDeep
+			)
+			ribbon.AnchorPoint = Vector2.new(0.5, 0.5)
+			ribbon.Rotation = -4
+			Fit.text(ribbon, "Text", "POPULAR", {
+				font = Tokens.typography.label.font,
+				color = INK,
+				max = 16,
+				zIndex = 6,
+				size = UDim2.fromScale(0.9, 0.7),
+				position = UDim2.fromScale(0.5, 0.5),
+				anchor = Vector2.new(0.5, 0.5),
+			})
+		end
+		local buy = priceButton(card, "Buy", "R$" .. tostring(bundle.robux), {
+			tap = tap,
+			motion = motion,
+			audio = deps.audio,
+			size = UDim2.fromScale(0.84, 0.16),
+			position = UDim2.fromScale(0.5, 0.88),
+			anchor = Vector2.new(0.5, 0.5),
+			zIndex = 4,
+			max = 34,
+			onActivated = function()
+				UpgradeActions.promptPurchase(promptDeps, "gemBundle" .. tostring(bundle.gems), withCommas(bundle.gems) .. " Gems")
+			end,
+		}, false)
+		table.insert(cleanups, buy.destroy)
 	end
-	local foreverNote =
-		paperNote(foreverPage, "Note", "Premium upgrades last forever - buy once, keep every round.", z, UDim2.new(0.7, 0, 0, tap - 6))
-	foreverNote.AnchorPoint = Vector2.new(0.5, 1)
-	foreverNote.Position = UDim2.fromScale(0.5, 1)
+	Fit.text(gemsPage, "Instant", "—  GEMS ARRIVE INSTANTLY  —", {
+		font = Tokens.typography.label.font,
+		color = WOOD,
+		max = 20,
+		zIndex = 3,
+		size = UDim2.fromScale(0.7, 0.06),
+		position = UDim2.fromScale(0.5, 0.845),
+		anchor = Vector2.new(0.5, 0.5),
+	})
+	local banner = plank(gemsPage, "Banner", UDim2.fromScale(0.5, 0.945), UDim2.fromScale(0.96, 0.1), 3)
+	banner.AnchorPoint = Vector2.new(0.5, 0.5)
+	local bannerGem = Fit.image(banner, "hud.gem", { size = UDim2.fromScale(0, 0.8), position = UDim2.fromScale(0.05, 0.5), zIndex = 4 })
+	if bannerGem then
+		Fit.aspect(bannerGem, 1, Enum.DominantAxis.Height)
+	end
+	Fit.text(banner, "Text", "USE GEMS FOR PERKS & CLASS SPINS", {
+		font = Tokens.typography.title.font,
+		color = PAPER,
+		max = 24,
+		outline = 1.5,
+		outlineColor = WOOD_DEEP,
+		zIndex = 4,
+		size = UDim2.fromScale(0.7, 0.7),
+		position = UDim2.fromScale(0.5, 0.5),
+		anchor = Vector2.new(0.5, 0.5),
+	})
+	local bannerFeather =
+		Fit.image(banner, "icon.feather", { size = UDim2.fromScale(0, 0.8), position = UDim2.fromScale(0.91, 0.5), zIndex = 4 })
+	if bannerFeather then
+		Fit.aspect(bannerFeather, 1, Enum.DominantAxis.Height)
+	end
+	local bannerEgg = Fit.image(banner, "icon.egg", { size = UDim2.fromScale(0, 0.8), position = UDim2.fromScale(0.96, 0.5), zIndex = 4 })
+	if bannerEgg then
+		Fit.aspect(bannerEgg, 1, Enum.DominantAxis.Height)
+	end
 
-	-- Tab switching ---------------------------------------------------------------------------------
+	-- FOREVER ----------------------------------------------------------------------------------------
+	local foreverPage = page("forever")
+	type PassView = { key: string, buy: any, owned: Frame }
+	local passCards: { PassView } = {}
+	local passWidth = 0.36
+	local passStart = (1 - (passWidth * #passList + 0.06 * math.max(0, #passList - 1))) / 2
+	for index, pass in ipairs(passList) do
+		local card = paper(
+			foreverPage,
+			"Pass_" .. pass.key,
+			UDim2.fromScale(passStart + (index - 1) * (passWidth + 0.06), 0.03),
+			UDim2.fromScale(passWidth, 0.9),
+			2,
+			Tokens.color.gold,
+			Tokens.color.goldDeep
+		)
+		local burst = Skin.texture(card, "texture.sunburst", { transparency = 0.7, name = "Burst", zIndex = 1 })
+		if burst then
+			burst.AnchorPoint = Vector2.new(0.5, 0.5)
+			burst.Position = UDim2.fromScale(0.5, 0.42)
+			burst.Size = UDim2.fromScale(1.6, 1.4)
+		end
+		Fit.text(card, "Name", pass.name, {
+			font = Tokens.typography.display.font,
+			color = Tokens.color.featherWhite,
+			max = 42,
+			outline = 2.5,
+			outlineColor = Tokens.color.goldDeep,
+			zIndex = 3,
+			size = UDim2.fromScale(0.9, 0.14),
+			position = UDim2.fromScale(0.5, 0.1),
+			anchor = Vector2.new(0.5, 0.5),
+		})
+		local foreverTag = plank(card, "ForeverTag", UDim2.fromScale(0.5, 0.21), UDim2.fromScale(0.36, 0.08), 3)
+		foreverTag.AnchorPoint = Vector2.new(0.5, 0.5)
+		Fit.text(foreverTag, "Text", "FOREVER", {
+			font = Tokens.typography.label.font,
+			color = PAPER,
+			max = 16,
+			zIndex = 4,
+			size = UDim2.fromScale(0.9, 0.7),
+			position = UDim2.fromScale(0.5, 0.5),
+			anchor = Vector2.new(0.5, 0.5),
+		})
+		local artBox = Fit.frame(card, "ArtBox", UDim2.fromScale(0.5, 0.5), UDim2.fromScale(0.5, 0.36), 3, Vector2.new(0.5, 0.5))
+		itemArt(artBox, "pass." .. pass.key, pass.art, pass.icon, 3)
+		Fit.text(card, "Blurb", pass.blurb, {
+			font = Tokens.typography.body.font,
+			color = INK,
+			max = 18,
+			zIndex = 3,
+			size = UDim2.fromScale(0.84, 0.12),
+			position = UDim2.fromScale(0.5, 0.75),
+			anchor = Vector2.new(0.5, 0.5),
+		})
+		local buy = priceButton(card, "Buy", "R$" .. tostring(pass.robux), {
+			tap = tap,
+			motion = motion,
+			audio = deps.audio,
+			size = UDim2.fromScale(0.7, 0.14),
+			position = UDim2.fromScale(0.5, 0.9),
+			anchor = Vector2.new(0.5, 0.5),
+			zIndex = 4,
+			max = 32,
+			onActivated = function()
+				UpgradeActions.promptPurchase(promptDeps, pass.key, pass.name)
+			end,
+		}, false)
+		table.insert(cleanups, buy.destroy)
+		local owned = ownedBadge(card, UDim2.fromScale(0.5, 0.9), UDim2.fromScale(0.7, 0.14), Vector2.new(0.5, 0.5), 4)
+		table.insert(passCards, { key = pass.key, buy = buy, owned = owned })
+	end
+
+	-- Tabs and rendering -------------------------------------------------------------------------
 	setTab = function(name: string)
-		if not pages[name] then
+		if not pageViews[name] then
 			return
 		end
 		tab = name
-		for key, frame in pairs(pages) do
-			frame.Visible = key == name
+		for pageName, frame in pairs(pageViews) do
+			frame.Visible = pageName == name
 		end
-		for key, handle in ipairs({ "perks", "gems", "forever" }) do
-			local h = tabHandles[handle]
-			h.setVariant(if handle == name then "primary" else "secondary")
-			h.setSelected(handle == name)
-			local _ = key
+		for _, view in ipairs(tabViews) do
+			local selected = view.name == name
+			view.face.BackgroundColor3 = if selected then Tokens.color.gold else PARCHMENT
+			view.label.TextColor3 = if selected then Tokens.color.featherWhite else INK
+			local sheen = view.face:FindFirstChildOfClass("UIGradient")
+			if sheen then
+				sheen.Color = Depth.sheen(if selected then Tokens.color.gold else PARCHMENT)
+			end
+			local outline = view.label:FindFirstChild("TextOutline") :: UIStroke?
+			if selected and not outline then
+				local stroke = Instance.new("UIStroke")
+				stroke.Name = "TextOutline"
+				stroke.Thickness = 1.6
+				stroke.Color = Tokens.color.goldDeep
+				stroke.Parent = view.label
+			elseif outline then
+				outline.Enabled = selected
+			end
+			if view.glyph and view.glyph:IsA("TextLabel") then
+				view.glyph.TextColor3 = if selected then Tokens.color.featherWhite else INK
+			end
 		end
 		container:SetAttribute("SFE_ShopTab", name)
 	end
 
-	-- Rendering ------------------------------------------------------------------------------------
-	local function render()
+	render = function()
 		local projection = deps.profile.projection
 		if not projection then
 			return
 		end
+		chip.setCount(projection.currencies.gems or 0)
 		for _, record in ipairs(perkCards) do
 			local preview = Perks.preview(cfg, record.perkId, projection.permanentPerks[record.perkId] or 0)
+			local copy = COPY[record.perkId]
 			local grew = record.displayedLevel ~= nil and record.displayedLevel ~= preview.level
 			record.displayedLevel = preview.level
 			for lv, dot in ipairs(record.pips) do
 				local lit = lv <= preview.level
 				dot.BackgroundColor3 = if lit then Tokens.color.leafBright else WOOD_DEEP
-				dot.BackgroundTransparency = if lit then 0 else 0.25
+				dot.BackgroundTransparency = if lit then 0 else 0.3
 				if lit and grew and lv == preview.level then
 					local dotScale = dot:FindFirstChildOfClass("UIScale") or Instance.new("UIScale")
 					dotScale.Parent = dot
@@ -955,18 +926,18 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 				end
 			end
 			record.level.Text = string.format("LV %d", preview.level)
+			local word = copy and copy.word or ""
 			if preview.maxed then
-				record.nextLine.Text =
-					string.format("MAX: +%d%% %s", math.floor((preview.currentMultiplier - 1) * 100 + 0.5), NEXT_WORD[record.perkId] or "")
+				record.nextLine.Text = string.format("MAX: +%d%% %s", math.floor((preview.currentMultiplier - 1) * 100 + 0.5), word)
 				record.buy.button.Visible = false
 				record.maxBadge.Visible = true
 			else
 				local nextPct = math.floor(((preview.nextMultiplier or 1) - 1) * 100 + 0.5)
-				record.nextLine.Text = string.format("NEXT: +%d%% %s", nextPct, NEXT_WORD[record.perkId] or "")
+				record.nextLine.Text = string.format("NEXT: +%d%% %s", nextPct, word)
 				record.buy.button.Visible = true
 				record.maxBadge.Visible = false
-				local affordable = projection.currencies.gems >= (preview.costGems or 0)
-				record.buy.setText(string.format("     %d GEMS", preview.costGems or 0))
+				local affordable = (projection.currencies.gems or 0) >= (preview.costGems or 0)
+				record.buy.setText(string.format("%d GEMS", preview.costGems or 0))
 				record.buy.setEnabled(affordable)
 			end
 		end
@@ -1000,13 +971,15 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 	if api.registerDebug then
 		api.registerDebug({
 			tab = function(name: string)
-				setTab(tostring(name))
+				setTab(name)
+				return { tab = tab }
+			end,
+			state = function()
 				return { tab = tab }
 			end,
 		})
 	end
 	deps.audio:play(Tokens.sound.uiOpen)
-
 	return function()
 		for _, cleanup in ipairs(cleanups) do
 			if type(cleanup) == "function" then
@@ -1019,7 +992,6 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 	end
 end
 
--- The "gems" station: the same market, opened on the GEMS tab.
 function ShopModal.buildGems(container: ScrollingFrame, api: any, deps: Deps): () -> ()
 	return ShopModal.build(container, api, deps, "gems")
 end
