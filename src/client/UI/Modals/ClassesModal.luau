@@ -381,6 +381,17 @@ local function buildCard(parent: GuiObject, entry: any, tier: string, z: number)
 	local packFrame = Skin.overlay(root, frameRole, { zIndex = 4, name = "PackFrame", sliceScale = 0.5 })
 	local rainbow: UIGradient? = nil
 	if packFrame then
+		-- The rarity frame's corners scale with the card so small reel cards keep a thin, even rim.
+		local frameImage = packFrame :: ImageLabel
+		local sourceHeight = frameImage.SliceCenter.Max.Y + frameImage.SliceCenter.Min.Y
+		local function fitFrame()
+			local height = root.AbsoluteSize.Y
+			if height > 0 and sourceHeight > 0 then
+				frameImage.SliceScale = math.clamp(height / sourceHeight, 0.15, 1)
+			end
+		end
+		fitFrame()
+		root:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitFrame)
 		if tier == "mythic" then
 			local gradient = Instance.new("UIGradient")
 			gradient.Color = RAINBOW

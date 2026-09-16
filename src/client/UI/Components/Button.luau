@@ -241,12 +241,29 @@ function Button.build(parent: Instance, options: Options): Handle
 	wash.Parent = face
 
 	-- The pack's rim, over the face and under the lettering. Round buttons keep the vector rim.
+	-- The rim is the button's edge: it is drawn exactly at the face's bounds (no inset), the face
+	-- fills the whole control (the rim art carries its own bottom shade, so the vector lip would
+	-- only show as a stray band under it), and its nine-slice corners scale with the control's
+	-- height so a 44 px button gets 44 px worth of bevel, not the 88 px source's.
 	local rimRole = RIM_BY_VARIANT[variantName]
+	local packRim: ImageLabel? = nil
 	if rimRole and not options.round and not options.image then
-		local packRim = Skin.overlay(face, rimRole, { zIndex = z + 3, inset = 3, name = "PackRim" })
+		packRim = Skin.overlay(face, rimRole, { zIndex = z + 3, inset = 0, name = "PackRim" })
 		if packRim then
 			outline.Transparency = 1
 			rim.Transparency = 1
+			button.BackgroundTransparency = 1
+			face.Size = UDim2.fromScale(1, 1)
+			local rimImage = packRim :: ImageLabel
+			local sourceHeight = rimImage.SliceCenter.Max.Y + rimImage.SliceCenter.Min.Y
+			local function fitRim()
+				local height = face.AbsoluteSize.Y
+				if height > 0 and sourceHeight > 0 then
+					rimImage.SliceScale = math.clamp(height / sourceHeight, 0.2, 1)
+				end
+			end
+			fitRim()
+			face:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitRim)
 		end
 	end
 	-- The shine: a streak of light that sweeps the face while the button is pulsing.
@@ -330,7 +347,7 @@ function Button.build(parent: Instance, options: Options): Handle
 	local stopPulse: (() -> ())? = nil
 
 	local function setFaceDown(down: boolean)
-		if style.ghost or imageLabel then
+		if style.ghost or imageLabel or packRim then
 			return
 		end
 		local target = if down then UDim2.fromOffset(0, LIP) else UDim2.fromOffset(0, 0)
@@ -543,7 +560,7 @@ function Button.build(parent: Instance, options: Options): Handle
 			gradient.Color = Depth.sheen(style.face, style.faceLight)
 			rim.Color = Depth.shade(style.face, 0.45)
 			rim.Transparency = if style.ghost then 1 else Tokens.depth.rimTransparency
-			face.Size = UDim2.new(1, 0, 1, if style.ghost then 0 else -LIP)
+			face.Size = UDim2.new(1, 0, 1, if style.ghost or packRim then 0 else -LIP)
 			if textOutline then
 				textOutline.Enabled = style.outlined
 			elseif style.outlined then
