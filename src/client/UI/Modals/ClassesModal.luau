@@ -1306,10 +1306,13 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		cardHolder.Parent = column
 		local view = buildCard(cardHolder, entry, landing.tier, oz + 3, animated)
 		view.root.Position = UDim2.fromScale(0.5, 0.5)
-		view.root.Size = UDim2.fromScale(0, 1)
+		view.root.Size = UDim2.fromScale(1, 1)
 		local viewRatio = Instance.new("UIAspectRatioConstraint")
 		viewRatio.AspectRatio = cardW / cardH
-		viewRatio.DominantAxis = Enum.DominantAxis.Height -- the holder gives the height; the width follows
+		-- The holder gives the height and the width follows; FitWithinMaxSize would treat the
+		-- requested size as a ceiling and collapse the card to nothing.
+		viewRatio.AspectType = Enum.AspectType.ScaleWithParentSize
+		viewRatio.DominantAxis = Enum.DominantAxis.Height
 		viewRatio.Parent = view.root
 		view.odds.Text = landing.view.odds.Text
 		view.hit:Destroy()
