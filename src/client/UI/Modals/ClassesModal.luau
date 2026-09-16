@@ -1,10 +1,11 @@
 --!strict
--- Class Forge: a five-card reel under one fixed golden egg pointer (centre card largest, sides
--- readable), the equipped slots on the right, one SPIN button, AUTO and SKIP toggles, and the two
--- passes in the bottom corners. Every element is Scale relative to the shell's content frame,
--- so nothing crops, scrolls or overlaps at any size. The reveal screen covers the card with the
--- won class, its bonuses, EQUIP NOW / KEEP CURRENT. Odds, prices and slots come from config and
--- the profile; the roll, equip and purchases go through the same remotes as before.
+-- Class Forge: a wooden forging machine. Warm wood interior with hay, a five-card reel under one
+-- golden egg pointer (the chosen card largest and lit, the neighbours smaller, tilted and behind
+-- it), a hanging EQUIPPED CLASSES board on the right, one big SPIN button, AUTO / SKIP toggles and
+-- the two passes along the bottom, and an (i) CLASS INFO drawer that slides in over the reel with
+-- every obtainable class, its odds and its exact bonuses read from config. Every element is Scale
+-- relative to the shell's content frame. Odds, prices and slots come from config and the profile;
+-- the roll, equip and purchases go through the same remotes as before.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -39,7 +40,7 @@ export type Deps = {
 	openGemShop: (() -> ())?,
 }
 
--- Art per class (falls back to the effect summary for unknown ids).
+-- Fallback art per class when the painted card is missing.
 local CLASS_COPY: { [string]: { art: string, icon: string } } = {
 	newcomer = { art = "icon.feather", icon = "feather" },
 	nestCarrier = { art = "tool.hand.normal", icon = "star" },
@@ -87,7 +88,7 @@ local function percent(value: number): string
 	return string.format("%.1f%%", pct)
 end
 
--- Bonus chips for the reveal screen: one short title per effect, in a stable order.
+-- Exact bonus lines per effect key, in a stable order, read straight from the class config.
 local ORDER = {
 	"bagCapacityMultiplier",
 	"sellMultiplier",
@@ -102,7 +103,6 @@ local ORDER = {
 	"droneCapacityMultiplier",
 	"swarmChancePerTrip",
 	"goldenRushChancePerMinute",
-	"grantsAllPassiveBonuses",
 }
 local BONUS_TITLE: { [string]: { title: string, icon: string } } = {
 	bagCapacityMultiplier = { title = "BAG CAPACITY", icon = "feather" },
@@ -120,6 +120,71 @@ local BONUS_TITLE: { [string]: { title: string, icon: string } } = {
 	goldenRushChancePerMinute = { title = "GOLDEN RUSH", icon = "star" },
 	grantsAllPassiveBonuses = { title = "EVERY BONUS", icon = "star" },
 }
+local function lineFor(key: string, value: any, effect: { [string]: any }): string?
+	if key == "bagCapacityMultiplier" then
+		return string.format("+%s bag capacity", percent(value - 1))
+	elseif key == "sellMultiplier" then
+		return string.format("Feathers sell for +%s", percent(value - 1))
+	elseif key == "rakeYieldMultiplier" then
+		return string.format("+%s feathers per rake sweep", percent(value - 1))
+	elseif key == "rakeUpgradeCostMultiplier" then
+		return string.format("Rake upgrades cost %s less", percent(1 - value))
+	elseif key == "blastRadiusMultiplier" then
+		return string.format("+%s blast radius", percent(value - 1))
+	elseif key == "miniChargeChance" then
+		return string.format("%s chance a blast spawns %d mini-charges", percent(value), effect.miniChargeCount or 0)
+	elseif key == "gemFindChance" then
+		return string.format("%s chance a feather drops Gems", percent(value))
+	elseif key == "diamondFeatherChance" then
+		return string.format("%s chance of a diamond feather", percent(value))
+	elseif key == "grantsScoutChick" and value == true then
+		return "Free Scout Chick every search"
+	elseif key == "droneSpeedMultiplier" then
+		return string.format("Chick moves +%s faster", percent(value - 1))
+	elseif key == "droneCapacityMultiplier" then
+		return string.format("Chick carries +%s more", percent(value - 1))
+	elseif key == "swarmChancePerTrip" then
+		return string.format("%s chance per trip of %d helper chicks", percent(value), effect.swarmCount or 0)
+	elseif key == "goldenRushChancePerMinute" then
+		return string.format("%s chance each minute of a %ds Golden Rush", percent(value), effect.goldenRushSeconds or 0)
+	end
+	return nil
+end
+
+-- Every bonus a class grants. "Every passive bonus" expands to the passive bonuses of every other
+-- class so the 0.1 % card lists everything it grants.
+local function effectLines(entry: any, weights: { any }): { string }
+	local lines = {}
+	local effect = entry.effect or {}
+	for _, key in ipairs(ORDER) do
+		local value = effect[key]
+		if value ~= nil then
+			local line = lineFor(key, value, effect)
+			if line then
+				table.insert(lines, line)
+			end
+		end
+	end
+	if effect.grantsAllPassiveBonuses == true then
+		local seen = {}
+		for _, other in ipairs(weights) do
+			if other.id ~= entry.id then
+				for _, key in ipairs(ORDER) do
+					local value = (other.effect or {})[key]
+					if value ~= nil and not seen[key] then
+						local line = lineFor(key, value, other.effect or {})
+						if line then
+							seen[key] = true
+							table.insert(lines, line)
+						end
+					end
+				end
+			end
+		end
+	end
+	return lines
+end
+
 local function bonusChips(entry: any): { { title: string, icon: string } }
 	local chips = {}
 	local effect = entry.effect or {}
@@ -132,30 +197,41 @@ local function bonusChips(entry: any): { { title: string, icon: string } }
 			end
 		end
 	end
+	if #chips < 3 and effect.grantsAllPassiveBonuses == true then
+		table.insert(chips, BONUS_TITLE.grantsAllPassiveBonuses)
+	end
 	return chips
 end
 
+-- Palette: warm wood, never black.
 local WOOD = Color3.fromRGB(150, 108, 60)
 local WOOD_DEEP = Color3.fromRGB(96, 64, 34)
 local WOOD_LIGHT = Color3.fromRGB(204, 158, 100)
-local BARREL = Color3.fromRGB(92, 62, 34)
-local BARREL_DEEP = Color3.fromRGB(58, 38, 22)
+local WOOD_WARM = Color3.fromRGB(128, 86, 48)
+local BARREL = Color3.fromRGB(118, 76, 40)
+local BARREL_DEEP = Color3.fromRGB(78, 48, 26)
+local BARREL_GLOW = Color3.fromRGB(196, 132, 62)
 local PAPER = Color3.fromRGB(250, 241, 220)
 local PARCHMENT = Color3.fromRGB(238, 224, 190)
-local STRAW = Color3.fromRGB(232, 196, 96)
+local STRAW = Color3.fromRGB(240, 204, 104)
+local STRAW_DEEP = Color3.fromRGB(198, 150, 60)
 local CARD_ASPECT = 0.74
 
--- Reel geometry by distance from the centre slot (Scale of the reel): x offset and card height.
-local REEL_OFFSET = { [0] = 0, 0.245, 0.42, 0.5 }
-local REEL_HEIGHT = { [0] = 0.84, 0.64, 0.42, 0.3 }
-local function reelAt(distance: number): (number, number)
+-- Reel geometry by distance from the centre slot (Scale of the reel): x offset, card height, tilt
+-- and drop. Neighbours sit slightly behind the chosen card, like cards fanned on a shelf.
+local REEL_OFFSET = { [0] = 0, 0.255, 0.415, 0.5 }
+local REEL_HEIGHT = { [0] = 0.9, 0.66, 0.48, 0.36 }
+local REEL_TILT = { [0] = 0, 5, 9, 12 }
+local REEL_DROP = { [0] = 0, 0.035, 0.06, 0.08 }
+local function reelAt(distance: number): (number, number, number, number)
 	local d = math.clamp(distance, 0, 3)
 	local lo = math.floor(d)
 	local hi = math.min(lo + 1, 3)
 	local t = d - lo
-	local offset = REEL_OFFSET[lo] + (REEL_OFFSET[hi] - REEL_OFFSET[lo]) * t
-	local height = REEL_HEIGHT[lo] + (REEL_HEIGHT[hi] - REEL_HEIGHT[lo]) * t
-	return offset, height
+	local function mix(list: { [number]: number }): number
+		return list[lo] + (list[hi] - list[lo]) * t
+	end
+	return mix(REEL_OFFSET), mix(REEL_HEIGHT), mix(REEL_TILT), mix(REEL_DROP)
 end
 
 local function wrapRel(value: number, count: number): number
@@ -166,18 +242,42 @@ local function wrapRel(value: number, count: number): number
 	return rel
 end
 
--- Wood plank with paper lettering.
-local function plank(parent: GuiObject, name: string, position: UDim2, size: UDim2, z: number): Frame
+-- Accelerate, pass the pointer, decelerate, snap.
+local function spinEase(t: number): number
+	if t < 0.5 then
+		return 4 * t * t * t
+	end
+	local u = -2 * t + 2
+	return 1 - (u * u * u) / 2
+end
+
+-- Wood plank with a light rim and a dark keyline.
+local function plank(parent: GuiObject, name: string, position: UDim2, size: UDim2, z: number, face: Color3?): Frame
 	local frame = Instance.new("Frame")
 	frame.Name = name
 	frame.Position = position
 	frame.Size = size
 	frame.BorderSizePixel = 0
 	frame.ZIndex = z
-	Depth.panel(frame, WOOD, { radius = Tokens.radius.md, rim = WOOD_LIGHT })
+	Depth.panel(frame, face or WOOD, { radius = Tokens.radius.md, rim = WOOD_LIGHT })
 	Fit.corner(frame, 0.22)
 	frame.Parent = parent
 	return frame
+end
+
+-- A leaf sprig (painted when available) at a Scale spot.
+local function leaf(parent: GuiObject, name: string, position: UDim2, height: number, z: number, rotation: number?, left: boolean?)
+	local image = Fit.image(parent, if left then "modal.leaf.left" else "modal.leaf.right", {
+		size = UDim2.fromScale(0, height),
+		position = position,
+		zIndex = z,
+		name = name,
+	})
+	if image then
+		Fit.aspect(image, 1, Enum.DominantAxis.Height)
+		image.Rotation = rotation or 0
+	end
+	return image
 end
 
 -- Painted class art if the owner supplied it, else the icon the class has always used.
@@ -203,13 +303,15 @@ type CardView = {
 	odds: TextLabel,
 	name: TextLabel,
 	hit: TextButton,
+	edge: UIStroke,
+	sheen: UIGradient,
 	entry: any,
 	tier: string,
 	rainbow: UIGradient?,
 }
 
 -- One class card: rarity face with a sunburst, the pack's rarity rim (rainbow for mythic), art,
--- name, odds and the rarity pill. Sized by its parent; the caller sets Size (height-driven).
+-- name, odds, the rarity pill and a rarity-coloured edge light. Sized by its parent (height-driven).
 local function buildCard(parent: GuiObject, entry: any, tier: string, z: number): CardView
 	local colors = colorsFor(tier)
 	local root = Instance.new("Frame")
@@ -230,6 +332,10 @@ local function buildCard(parent: GuiObject, entry: any, tier: string, z: number)
 	Depth.panel(face, colors.fill, { radius = Tokens.radius.md, rim = Color3.new(1, 1, 1) })
 	Fit.corner(face, 0.07)
 	face.Parent = root
+	local edge = Depth.keylineOf(face) or Depth.keyline(face)
+	edge.Color = colors.fill:Lerp(Color3.new(1, 1, 1), 0.35)
+	edge.Thickness = 2
+	edge.Transparency = 0.2
 	local burst = Skin.texture(face, "texture.sunburst", { transparency = 0.7, name = "Burst", zIndex = 2 })
 	if burst then
 		burst.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -250,6 +356,26 @@ local function buildCard(parent: GuiObject, entry: any, tier: string, z: number)
 		NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.4, 0), NumberSequenceKeypoint.new(1, 0) })
 	footFade.Parent = foot
 	foot.Parent = face
+	-- Shimmer: a light band that sweeps the face now and then.
+	local shine = Instance.new("Frame")
+	shine.Name = "Shine"
+	shine.Size = UDim2.fromScale(1, 1)
+	shine.BackgroundColor3 = Color3.new(1, 1, 1)
+	shine.BackgroundTransparency = 0.75
+	shine.BorderSizePixel = 0
+	shine.ZIndex = 3
+	local sheen = Instance.new("UIGradient")
+	sheen.Rotation = 25
+	sheen.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.45, 1),
+		NumberSequenceKeypoint.new(0.5, 0.2),
+		NumberSequenceKeypoint.new(0.55, 1),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	sheen.Offset = Vector2.new(-1, 0)
+	sheen.Parent = shine
+	shine.Parent = face
 
 	local frameRole = "class." .. (if tier == "mythic" then "legendary" else tier) .. ".owned"
 	local packFrame = Skin.overlay(root, frameRole, { zIndex = 4, name = "PackFrame", sliceScale = 0.5 })
@@ -261,17 +387,14 @@ local function buildCard(parent: GuiObject, entry: any, tier: string, z: number)
 			gradient.Parent = packFrame
 			rainbow = gradient
 		end
-	else
-		local line = Depth.keyline(face, 3, colors.deep)
-		if tier == "mythic" then
-			local gradient = Instance.new("UIGradient")
-			gradient.Color = RAINBOW
-			gradient.Parent = line
-			rainbow = gradient
-		end
+	elseif tier == "mythic" then
+		local gradient = Instance.new("UIGradient")
+		gradient.Color = RAINBOW
+		gradient.Parent = edge
+		rainbow = gradient
 	end
 
-	local artBox = Fit.frame(root, "ArtBox", UDim2.fromScale(0.5, 0.35), UDim2.fromScale(0.68, 0.44), 3, Vector2.new(0.5, 0.5))
+	local artBox = Fit.frame(root, "ArtBox", UDim2.fromScale(0.5, 0.36), UDim2.fromScale(0.74, 0.48), 3, Vector2.new(0.5, 0.5))
 	classArt(artBox, entry, 3)
 	local name = Fit.text(root, "Name", string.upper(entry.displayName), {
 		font = Tokens.typography.title.font,
@@ -282,7 +405,7 @@ local function buildCard(parent: GuiObject, entry: any, tier: string, z: number)
 		outlineColor = colors.deep,
 		zIndex = 5,
 		size = UDim2.fromScale(0.9, 0.12),
-		position = UDim2.fromScale(0.5, 0.665),
+		position = UDim2.fromScale(0.5, 0.675),
 		anchor = Vector2.new(0.5, 0.5),
 	})
 	local odds = Fit.text(root, "Odds", "0%", {
@@ -294,7 +417,7 @@ local function buildCard(parent: GuiObject, entry: any, tier: string, z: number)
 		outlineColor = colors.deep,
 		zIndex = 5,
 		size = UDim2.fromScale(0.8, 0.11),
-		position = UDim2.fromScale(0.5, 0.775),
+		position = UDim2.fromScale(0.5, 0.78),
 		anchor = Vector2.new(0.5, 0.5),
 	})
 	local pill = Instance.new("Frame")
@@ -334,7 +457,19 @@ local function buildCard(parent: GuiObject, entry: any, tier: string, z: number)
 	hit.Selectable = true
 	hit.Parent = root
 	root.Parent = parent
-	return { root = root, scale = scale, face = face, odds = odds, name = name, hit = hit, entry = entry, tier = tier, rainbow = rainbow }
+	return {
+		root = root,
+		scale = scale,
+		face = face,
+		odds = odds,
+		name = name,
+		hit = hit,
+		edge = edge,
+		sheen = sheen,
+		entry = entry,
+		tier = tier,
+		rainbow = rainbow,
+	}
 end
 
 function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): () -> ()
@@ -368,12 +503,82 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		return deps.entitlements() or {}
 	end
 
-	-- The content frame is the one root: no scrolling, every child in Scale.
+	-- The content frame is the one root: no scrolling, every child in Scale. The shell's parchment
+	-- becomes the machine's inner bevel and the plaque grows into the carved sign.
 	container.AutomaticCanvasSize = Enum.AutomaticSize.None
 	container.CanvasSize = UDim2.fromScale(0, 0)
 	container.ScrollingEnabled = false
 	container.ScrollBarThickness = 0
-	local root = Fit.frame(container, "Forge", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), 1)
+	container.Position = UDim2.fromScale(0.012, 0.02)
+	container.Size = UDim2.fromScale(0.976, 0.96)
+	shell.panel.BackgroundColor3 = BARREL_DEEP
+	local panelSheen = shell.panel:FindFirstChildOfClass("UIGradient")
+	if panelSheen then
+		panelSheen.Color = Depth.sheen(BARREL_DEEP)
+	end
+	for _, name in ipairs({ "Weave", "SFE_InnerShadow" }) do
+		local child = shell.panel:FindFirstChild(name)
+		if child then
+			child.Visible = false
+		end
+	end
+	shell.plaque.Size = UDim2.fromScale(if phone then 0.44 else 0.48, 1.32)
+	shell.plaque.Position = UDim2.fromScale(0.5, 0.62)
+	local titleConstraint = shell.titleLabel:FindFirstChildOfClass("UITextSizeConstraint")
+	if titleConstraint then
+		titleConstraint.MaxTextSize = 64
+	end
+	shell.titleLabel.Size = UDim2.fromScale(0.66, 0.66)
+	shell.titleLabel.Position = UDim2.fromScale(0.56, 0.5)
+
+	local root = Instance.new("Frame")
+	root.Name = "Forge"
+	root.Size = UDim2.fromScale(1, 1)
+	root.BackgroundColor3 = WOOD_WARM
+	root.BorderSizePixel = 0
+	root.ZIndex = 1
+	Fit.corner(root, 0.035)
+	root.Parent = container
+	-- Warm interior: lighter towards the reel, darker at the edges; vertical planks.
+	local roomLight = Instance.new("UIGradient")
+	roomLight.Rotation = 90
+	roomLight.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(146, 100, 56)),
+		ColorSequenceKeypoint.new(0.55, WOOD_WARM),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(104, 68, 36)),
+	})
+	roomLight.Parent = root
+	for index = 1, 9 do
+		local seam = Instance.new("Frame")
+		seam.Name = "Plank" .. index
+		seam.Position = UDim2.fromScale(index / 10, 0)
+		seam.Size = UDim2.fromScale(0.003, 1)
+		seam.BackgroundColor3 = WOOD_DEEP
+		seam.BackgroundTransparency = 0.72
+		seam.BorderSizePixel = 0
+		seam.ZIndex = 1
+		seam.Parent = root
+	end
+	local warmGlow = Instance.new("Frame")
+	warmGlow.Name = "WarmGlow"
+	warmGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+	warmGlow.Position = UDim2.fromScale(0.39, 0.45)
+	warmGlow.Size = UDim2.fromScale(0.78, 0.9)
+	warmGlow.BackgroundColor3 = BARREL_GLOW
+	warmGlow.BackgroundTransparency = 0.72
+	warmGlow.BorderSizePixel = 0
+	warmGlow.ZIndex = 1
+	Fit.corner(warmGlow, 0.5)
+	local warmFade = Instance.new("UIGradient")
+	warmFade.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.5, 0),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	warmFade.Parent = warmGlow
+	warmGlow.Parent = root
+	local bevel = Depth.keyline(root, 3, WOOD_LIGHT)
+	bevel.Transparency = 0.35
 
 	local state = {
 		center = 1, -- continuous reel position (1-based, wraps)
@@ -383,6 +588,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		auto = cfg.classes.autoRollDefault == true,
 		skip = false,
 		closed = false,
+		infoOpen = false,
+		infoSelected = 1,
 		lastReveal = nil :: string?,
 	}
 	local stats = { rolls = 0, autoRolls = 0, autoStops = 0, reveals = 0 }
@@ -406,26 +613,27 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	table.insert(cleanups, chip.destroy)
 
 	-- Geometry (Scale of the content frame).
-	local REEL_X, REEL_W = 0.07, 0.65
+	local REEL_X, REEL_W = 0.045, 0.69
 	local REEL_CX = REEL_X + REEL_W / 2
-	local RIGHT_X = 0.785
-	local REEL_H = if phone then 0.5 else 0.56
-	local SPIN_Y = if phone then 0.665 else 0.745
-	local SPIN_H = if phone then 0.13 else 0.125
-	local TOGGLE_Y = if phone then 0.805 else 0.875
-	local TOGGLE_H = if phone then 0.11 else 0.085
-	local PASS_Y = if phone then 0.9 else 0.9
-	local PASS_H = if phone then 0.14 else 0.12
+	local REEL_Y = 0.115
+	local REEL_H = if phone then 0.55 else 0.585
+	local RIGHT_X = 0.775
+	local SPIN_Y = if phone then 0.795 else 0.805
+	local SPIN_H = 0.15
+	local TOGGLE_Y = 0.93
+	local TOGGLE_H = if phone then 0.1 else 0.085
+	local PASS_Y = 0.905
+	local PASS_H = if phone then 0.14 else 0.125
 
-	-- Top plank with the two captions and the golden egg pointer over the reel's centre.
-	local top = plank(root, "TopPlank", UDim2.fromScale(REEL_X, 0.005), UDim2.fromScale(REEL_W, 0.085), 2)
+	-- Caption plank with the golden egg pointer over the reel's centre.
+	local top = plank(root, "TopPlank", UDim2.fromScale(REEL_X, 0.018), UDim2.fromScale(REEL_W, 0.082), 2)
 	Fit.text(top, "CaptionLeft", "SPIN FOR A NEW CLASS!", {
 		font = Tokens.typography.label.font,
 		color = PAPER,
 		max = 18,
 		zIndex = 3,
 		size = UDim2.fromScale(0.36, 0.6),
-		position = UDim2.fromScale(0.06, 0.2),
+		position = UDim2.fromScale(0.07, 0.2),
 		align = Enum.TextXAlignment.Left,
 	})
 	Fit.text(top, "CaptionRight", "EVERY FORAGER STARTS SOMEWHERE!", {
@@ -434,37 +642,44 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		max = 18,
 		zIndex = 3,
 		size = UDim2.fromScale(0.4, 0.6),
-		position = UDim2.fromScale(0.94, 0.2),
+		position = UDim2.fromScale(0.93, 0.2),
 		anchor = Vector2.new(1, 0),
 		align = Enum.TextXAlignment.Right,
 	})
-	Fit.image(top, "modal.leaf.left", { size = UDim2.fromScale(0.03, 0.7), position = UDim2.fromScale(0.03, 0.5), zIndex = 3 })
-	Fit.image(top, "modal.leaf.right", { size = UDim2.fromScale(0.03, 0.7), position = UDim2.fromScale(0.97, 0.5), zIndex = 3 })
-	local pointer = Fit.frame(root, "Pointer", UDim2.fromScale(REEL_CX, 0.0), UDim2.fromScale(0, 0.17), 9, Vector2.new(0.5, 0))
+	leaf(top, "LeafLeft", UDim2.fromScale(0.035, 0.5), 0.72, 3, -10, true)
+	leaf(top, "LeafRight", UDim2.fromScale(0.965, 0.5), 0.72, 3, 10, false)
+	local pointer = Fit.frame(root, "Pointer", UDim2.fromScale(REEL_CX, 0.0), UDim2.fromScale(0, 0.2), 9, Vector2.new(0.5, 0))
 	Fit.aspect(pointer, 0.7, Enum.DominantAxis.Height)
 	local pointerGlow = Instance.new("Frame")
 	pointerGlow.Name = "Glow"
 	pointerGlow.AnchorPoint = Vector2.new(0.5, 0.5)
 	pointerGlow.Position = UDim2.fromScale(0.5, 0.36)
-	pointerGlow.Size = UDim2.fromScale(1.5, 0.9)
+	pointerGlow.Size = UDim2.fromScale(1.7, 0.95)
 	pointerGlow.BackgroundColor3 = Tokens.color.goldLight
 	pointerGlow.BackgroundTransparency = 0.55
 	pointerGlow.BorderSizePixel = 0
 	pointerGlow.ZIndex = 1
 	Fit.corner(pointerGlow, 0.5)
+	local pointerFade = Instance.new("UIGradient")
+	pointerFade.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.5, 0),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	pointerFade.Parent = pointerGlow
 	pointerGlow.Parent = pointer
 	local eggBox = { size = UDim2.fromScale(1.1, 0.68), position = UDim2.fromScale(0.5, 0.34), zIndex = 2, name = "Egg" }
 	local egg = Fit.image(pointer, "forge.egg", eggBox) or Fit.image(pointer, "icon.egg", eggBox)
 	if not egg then
 		local glyph = Icons.egg(pointer, 10, { zIndex = 2, color = Tokens.color.gold })
 		glyph.AnchorPoint = Vector2.new(0.5, 0.5)
-		glyph.Position = UDim2.fromScale(0.5, 0.33)
+		glyph.Position = UDim2.fromScale(0.5, 0.34)
 		glyph.Size = UDim2.fromScale(1, 0.62)
 	end
 	local arrowDown = Fit.text(pointer, "Arrow", "▼", {
 		font = Tokens.typography.display.font,
 		color = Tokens.color.gold,
-		max = 40,
+		max = 44,
 		outline = 2,
 		outlineColor = WOOD_DEEP,
 		zIndex = 2,
@@ -473,137 +688,218 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		anchor = Vector2.new(0.5, 0.5),
 	})
 
-	-- Reel: a wooden barrel with a straw bed; the cards ride inside it.
+	-- Reel: the forge's display window. Warm barrel interior, curved lintel, gold trim, staves, a
+	-- lit centre and a hay bed with tufts and stray feathers.
+	local reelFrame = Instance.new("Frame")
+	reelFrame.Name = "ReelFrame"
+	reelFrame.Position = UDim2.fromScale(REEL_X - 0.012, REEL_Y - 0.02)
+	reelFrame.Size = UDim2.fromScale(REEL_W + 0.024, REEL_H + 0.04)
+	reelFrame.BorderSizePixel = 0
+	reelFrame.ZIndex = 2
+	Depth.panel(reelFrame, WOOD_DEEP, { radius = Tokens.radius.xl, rim = Tokens.color.gold })
+	Fit.corner(reelFrame, 0.09)
+	local trim = Depth.keylineOf(reelFrame)
+	if trim then
+		trim.Color = Tokens.color.goldDeep
+		trim.Thickness = 3
+	end
+	reelFrame.Parent = root
 	local reel = Instance.new("Frame")
 	reel.Name = "Reel"
-	reel.Position = UDim2.fromScale(REEL_X, 0.105)
+	reel.Position = UDim2.fromScale(REEL_X, REEL_Y)
 	reel.Size = UDim2.fromScale(REEL_W, REEL_H)
 	reel.BorderSizePixel = 0
 	reel.ZIndex = 3
 	reel.ClipsDescendants = true
-	Depth.panel(reel, BARREL, { radius = Tokens.radius.lg, rim = WOOD })
-	Fit.corner(reel, 0.06)
+	reel.BackgroundColor3 = BARREL
+	Fit.corner(reel, 0.08)
 	reel.Parent = root
 	local barrelGradient = Instance.new("UIGradient")
 	barrelGradient.Rotation = 0
 	barrelGradient.Color = ColorSequence.new({
 		ColorSequenceKeypoint.new(0, BARREL_DEEP),
-		ColorSequenceKeypoint.new(0.5, BARREL),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(150, 98, 52)),
 		ColorSequenceKeypoint.new(1, BARREL_DEEP),
 	})
-	local existingSheen = reel:FindFirstChildOfClass("UIGradient")
-	if existingSheen then
-		existingSheen:Destroy()
-	end
 	barrelGradient.Parent = reel
-	for index = 1, 6 do
+	for index = 1, 7 do
 		local stave = Instance.new("Frame")
 		stave.Name = "Stave" .. index
-		stave.Position = UDim2.fromScale(index / 7, 0)
+		stave.Position = UDim2.fromScale(index / 8, 0)
 		stave.Size = UDim2.fromScale(0.004, 1)
 		stave.BackgroundColor3 = BARREL_DEEP
-		stave.BackgroundTransparency = 0.5
+		stave.BackgroundTransparency = 0.45
 		stave.BorderSizePixel = 0
 		stave.ZIndex = 1
 		stave.Parent = reel
 	end
-	local straw = Instance.new("Frame")
-	straw.Name = "Straw"
-	straw.Position = UDim2.fromScale(0, 0.86)
-	straw.Size = UDim2.fromScale(1, 0.14)
-	straw.BackgroundColor3 = STRAW
-	straw.BackgroundTransparency = 0.25
-	straw.BorderSizePixel = 0
-	straw.ZIndex = 1
-	local strawFade = Instance.new("UIGradient")
-	strawFade.Rotation = 90
-	strawFade.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.1) })
-	strawFade.Parent = straw
-	straw.Parent = reel
-	local glow = Instance.new("Frame")
-	glow.Name = "Glow"
-	glow.AnchorPoint = Vector2.new(0.5, 0.5)
-	glow.Position = UDim2.fromScale(0.5, 0.5)
-	glow.Size = UDim2.fromScale(0.3, 1.0)
-	glow.BackgroundColor3 = Tokens.color.goldLight
-	glow.BackgroundTransparency = 0.6
-	glow.BorderSizePixel = 0
-	glow.ZIndex = 2
-	local glowGradient = Instance.new("UIGradient")
-	glowGradient.Transparency = NumberSequence.new({
+	local lantern = Instance.new("Frame")
+	lantern.Name = "Lantern"
+	lantern.AnchorPoint = Vector2.new(0.5, 0.5)
+	lantern.Position = UDim2.fromScale(0.5, 0.5)
+	lantern.Size = UDim2.fromScale(0.42, 1.2)
+	lantern.BackgroundColor3 = Color3.fromRGB(255, 214, 120)
+	lantern.BackgroundTransparency = 0.55
+	lantern.BorderSizePixel = 0
+	lantern.ZIndex = 2
+	Fit.corner(lantern, 0.5)
+	local lanternFade = Instance.new("UIGradient")
+	lanternFade.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 1),
 		NumberSequenceKeypoint.new(0.5, 0),
 		NumberSequenceKeypoint.new(1, 1),
 	})
-	glowGradient.Parent = glow
-	glow.Parent = reel
+	lanternFade.Parent = lantern
+	lantern.Parent = reel
+	local rays = Skin.texture(reel, "texture.rays", { transparency = 0.82, name = "Rays", zIndex = 2 })
+	if rays then
+		rays.AnchorPoint = Vector2.new(0.5, 0.5)
+		rays.Position = UDim2.fromScale(0.5, 0.5)
+		rays.Size = UDim2.fromScale(0.7, 1.6)
+		rays.ImageColor3 = Tokens.color.goldLight
+	end
+	local lintel = Instance.new("Frame")
+	lintel.Name = "Lintel"
+	lintel.Size = UDim2.fromScale(1, 0.09)
+	lintel.BackgroundColor3 = WOOD_DEEP
+	lintel.BackgroundTransparency = 0.15
+	lintel.BorderSizePixel = 0
+	lintel.ZIndex = 4
+	local lintelFade = Instance.new("UIGradient")
+	lintelFade.Rotation = 90
+	lintelFade.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) })
+	lintelFade.Parent = lintel
+	lintel.Parent = reel
+	-- Hay bed.
+	local hay = Instance.new("Frame")
+	hay.Name = "Hay"
+	hay.Position = UDim2.fromScale(0, 0.86)
+	hay.Size = UDim2.fromScale(1, 0.14)
+	hay.BackgroundColor3 = STRAW
+	hay.BorderSizePixel = 0
+	hay.ZIndex = 4
+	local hayFade = Instance.new("UIGradient")
+	hayFade.Rotation = 90
+	hayFade.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, STRAW), ColorSequenceKeypoint.new(1, STRAW_DEEP) })
+	hayFade.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(1, 0) })
+	hayFade.Parent = hay
+	hay.Parent = reel
+	for index = 1, 14 do
+		local tuft = Instance.new("Frame")
+		tuft.Name = "Tuft" .. index
+		tuft.AnchorPoint = Vector2.new(0.5, 1)
+		tuft.Position = UDim2.fromScale((index - 0.5) / 14 + ((index % 3) - 1) * 0.012, 0.9 + (index % 2) * 0.02)
+		tuft.Size = UDim2.fromScale(0.05, 0.075 + (index % 3) * 0.02)
+		tuft.Rotation = ((index * 37) % 50) - 25
+		tuft.BackgroundColor3 = if index % 2 == 0 then STRAW else STRAW_DEEP
+		tuft.BackgroundTransparency = 0.1
+		tuft.BorderSizePixel = 0
+		tuft.ZIndex = 4
+		Fit.corner(tuft, 0.5)
+		tuft.Parent = reel
+	end
+	for index, spot in ipairs({ { 0.08, 0.93 }, { 0.5, 0.95 }, { 0.9, 0.92 } }) do
+		local feather = Fit.image(reel, "icon.feather", {
+			size = UDim2.fromScale(0, 0.09),
+			position = UDim2.fromScale(spot[1], spot[2]),
+			zIndex = 5,
+			name = "HayFeather" .. index,
+		})
+		if feather then
+			Fit.aspect(feather, 1, Enum.DominantAxis.Height)
+			feather.Rotation = -20 + index * 25
+		end
+	end
+	-- Leaves on the frame corners.
+	leaf(root, "CornerLeafLeft", UDim2.fromScale(REEL_X - 0.005, REEL_Y - 0.005), 0.075, 9, -25, true)
+	leaf(root, "CornerLeafRight", UDim2.fromScale(REEL_X + REEL_W + 0.005, REEL_Y - 0.005), 0.075, 9, 25, false)
 
 	-- Cards: one per class, positioned by distance from the reel centre.
 	local cards: { CardView } = {}
 	local animated: { { gradient: UIGradient, speed: number } } = {}
 	for _, entry in ipairs(weights) do
-		local view = buildCard(reel, entry, tierFor(entry), 5)
+		local view = buildCard(reel, entry, tierFor(entry), 6)
 		table.insert(cards, view)
 		if view.rainbow then
 			table.insert(animated, { gradient = view.rainbow, speed = 90 })
 		end
 	end
-
+	local hovered: { [CardView]: boolean } = {}
 	local function layoutReel()
 		for index, view in ipairs(cards) do
 			local rel = wrapRel(index - state.center, count)
 			local distance = math.abs(rel)
-			local offset, height = reelAt(distance)
-			local visible = distance < 2.5
+			local offset, height, tilt, drop = reelAt(distance)
+			local visible = distance < 2.6
 			view.root.Visible = visible
 			if visible then
-				view.root.Position = UDim2.fromScale(0.5 + (if rel < 0 then -offset else offset), 0.5)
+				local side = if rel < 0 then -1 else 1
+				view.root.Position = UDim2.fromScale(0.5 + side * offset, 0.5 + drop)
 				view.root.Size = UDim2.fromScale(0, height)
+				view.root.Rotation = side * tilt + (if hovered[view] then side * 1.5 else 0)
 				view.root.ZIndex = 8 - math.floor(distance + 0.5)
 				view.hit.Selectable = distance < 2.5
+				-- Edge light: the chosen card burns bright, the rest keep a soft rarity rim.
+				local lit = math.clamp(1 - distance, 0, 1)
+				view.edge.Thickness = 2 + lit * 3
+				view.edge.Transparency = 0.45 - lit * 0.4
 			end
 		end
 	end
 
-	-- Arrows straddle the reel's edges.
+	-- Arrows: wooden tabs riding the frame's edges.
 	local function arrow(name: string, x: number, glyph: string, step: number): TextButton
 		local button = Instance.new("TextButton")
 		button.Name = name
 		button.Text = ""
 		button.AutoButtonColor = false
 		button.AnchorPoint = Vector2.new(0.5, 0.5)
-		button.Position = UDim2.fromScale(x, 0.105 + REEL_H / 2)
-		button.Size = UDim2.fromScale(0, 0.1)
+		button.Position = UDim2.fromScale(x, REEL_Y + REEL_H / 2)
+		button.Size = UDim2.fromScale(0, 0.115)
 		button.BackgroundColor3 = WOOD_DEEP
 		button.BorderSizePixel = 0
-		button.ZIndex = 6
+		button.ZIndex = 10
 		button.Selectable = true
-		Fit.aspect(button, 1, Enum.DominantAxis.Height)
+		Fit.aspect(button, 0.78, Enum.DominantAxis.Height)
 		local minSize = Instance.new("UISizeConstraint")
 		minSize.MinSize = Vector2.new(tap, tap)
 		minSize.Parent = button
 		relax(button)
-		Fit.corner(button, 0.5)
-		Depth.keyline(button)
+		Fit.corner(button, 0.3)
+		Depth.keyline(button, 2, Tokens.color.goldDeep)
 		local face = Instance.new("Frame")
 		face.Name = "Face"
 		face.Size = UDim2.fromScale(1, 0.9)
-		face.BackgroundColor3 = WOOD_LIGHT
+		face.BackgroundColor3 = Tokens.color.gold
 		face.BorderSizePixel = 0
 		face.ZIndex = 2
-		Fit.corner(face, 0.5)
-		Depth.applySheen(face, WOOD_LIGHT)
-		Depth.rim(face, WOOD_LIGHT)
+		Fit.corner(face, 0.3)
+		Depth.applySheen(face, Tokens.color.gold, Tokens.color.goldLight)
+		Depth.rim(face, Tokens.color.gold)
 		face.Parent = button
 		Fit.text(face, "Glyph", glyph, {
 			font = Tokens.typography.display.font,
 			color = WOOD_DEEP,
-			max = 34,
+			max = 36,
 			zIndex = 3,
 			size = UDim2.fromScale(0.7, 0.7),
 			position = UDim2.fromScale(0.5, 0.5),
 			anchor = Vector2.new(0.5, 0.5),
 		})
+		local scale = Instance.new("UIScale")
+		scale.Parent = button
+		table.insert(
+			cleanups,
+			button.MouseEnter:Connect(function()
+				Tween.scale(scale, "hover", motion, 1.08)
+			end)
+		)
+		table.insert(
+			cleanups,
+			button.MouseLeave:Connect(function()
+				Tween.scale(scale, "release", motion, 1)
+			end)
+		)
 		button.Parent = root
 		table.insert(
 			cleanups,
@@ -615,13 +911,11 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 				local target = ((state.selected - 1 + step) % count) + 1
 				local rel = wrapRel(target - state.center, count)
 				state.selected = target
-				TweenService:Create(button, TweenInfo.new(0.08), { Rotation = step * 6 }):Play()
-				task.delay(0.09, function()
-					TweenService:Create(button, TweenInfo.new(0.16, Enum.EasingStyle.Back), { Rotation = 0 }):Play()
-				end)
+				scale.Scale = 0.9
+				Tween.scale(scale, "release", motion, 1)
 				local from = state.center
 				local started = os.clock()
-				local seconds = 0.28
+				local seconds = 0.3
 				local conn: RBXScriptConnection
 				conn = RunService.RenderStepped:Connect(function()
 					local t = math.min(1, (os.clock() - started) / seconds)
@@ -638,8 +932,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		)
 		return button
 	end
-	arrow("ArrowLeft", 0.032, "<", -1)
-	arrow("ArrowRight", REEL_X + REEL_W + 0.038, ">", 1)
+	arrow("ArrowLeft", REEL_X - 0.008, "<", -1)
+	arrow("ArrowRight", REEL_X + REEL_W + 0.008, ">", 1)
 
 	local function selectClass(index: number)
 		if state.rolling then
@@ -650,7 +944,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		state.selected = target
 		local from = state.center
 		local started = os.clock()
-		local seconds = if math.abs(rel) < 0.01 then 0 else 0.3
+		local seconds = if math.abs(rel) < 0.01 then 0 else 0.32
 		if seconds == 0 then
 			state.center = target
 			layoutReel()
@@ -681,28 +975,47 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			cleanups,
 			view.hit.MouseEnter:Connect(function()
 				if not state.rolling then
+					hovered[view] = true
 					deps.audio:play(Tokens.sound.uiHover)
-					Tween.scale(view.scale, "hover", motion, 1.04)
+					Tween.scale(view.scale, "hover", motion, 1.05)
+					layoutReel()
 				end
 			end)
 		)
 		table.insert(
 			cleanups,
 			view.hit.MouseLeave:Connect(function()
+				hovered[view] = nil
 				Tween.scale(view.scale, "release", motion, 1)
+				layoutReel()
 			end)
 		)
 	end
 
-	-- Equipped column ----------------------------------------------------------------------------
-	local right =
-		Fit.frame(root, "Equipped", UDim2.fromScale(RIGHT_X, 0.005), UDim2.fromScale(1 - RIGHT_X, if phone then 0.78 else 0.79), 3)
-	local rightHead = plank(right, "Head", UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.105), 2)
+	-- Equipped board: a wooden board hanging from two ropes ----------------------------------
+	local right = Fit.frame(root, "Equipped", UDim2.fromScale(RIGHT_X, 0.0), UDim2.fromScale(0.985 - RIGHT_X, 0.76), 3)
+	for index, x in ipairs({ 0.22, 0.78 }) do
+		local rope = Instance.new("Frame")
+		rope.Name = "Rope" .. index
+		rope.AnchorPoint = Vector2.new(0.5, 0)
+		rope.Position = UDim2.fromScale(x, 0)
+		rope.Size = UDim2.fromScale(0.03, 0.06)
+		rope.BackgroundColor3 = STRAW_DEEP
+		rope.BorderSizePixel = 0
+		rope.ZIndex = 2
+		Fit.corner(rope, 0.5)
+		rope.Parent = right
+	end
+	local rightHead = plank(right, "Head", UDim2.fromScale(0, 0.05), UDim2.fromScale(1, 0.105), 3, WOOD_DEEP)
+	local headLine = Depth.keylineOf(rightHead)
+	if headLine then
+		headLine.Color = Tokens.color.goldDeep
+	end
 	Fit.text(rightHead, "Title", "EQUIPPED CLASSES", {
 		font = Tokens.typography.label.font,
-		color = PAPER,
+		color = Tokens.color.goldLight,
 		max = 20,
-		zIndex = 3,
+		zIndex = 4,
 		outline = 1.5,
 		outlineColor = WOOD_DEEP,
 		size = UDim2.fromScale(0.9, 0.62),
@@ -711,17 +1024,12 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	})
 	local rightBody = Instance.new("Frame")
 	rightBody.Name = "Body"
-	rightBody.Position = UDim2.fromScale(0, 0.12)
-	rightBody.Size = UDim2.fromScale(1, 0.88)
+	rightBody.Position = UDim2.fromScale(0, 0.165)
+	rightBody.Size = UDim2.fromScale(1, 0.835)
 	rightBody.BorderSizePixel = 0
 	rightBody.ZIndex = 2
-	Depth.panel(rightBody, PARCHMENT, { radius = Tokens.radius.md, rim = Color3.new(1, 1, 1) })
+	Depth.panel(rightBody, WOOD, { radius = Tokens.radius.md, rim = WOOD_LIGHT })
 	Fit.corner(rightBody, 0.06)
-	local rightLine = Depth.keylineOf(rightBody)
-	if rightLine then
-		rightLine.Color = WOOD
-		rightLine.Thickness = 2
-	end
 	rightBody.Parent = right
 
 	type SlotView = {
@@ -745,26 +1053,28 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		local slotHeight = 0.94 / maximumSlots - 0.03
 		Fit.text(rightBody, "SlotLabel" .. index, "SLOT " .. index, {
 			font = Tokens.typography.label.font,
-			color = WOOD_DEEP,
+			color = PAPER,
 			max = 16,
 			zIndex = 3,
+			outline = 1.2,
+			outlineColor = WOOD_DEEP,
 			size = UDim2.fromScale(0.9, slotHeight * 0.14),
 			position = UDim2.fromScale(0.5, slotTop),
 			anchor = Vector2.new(0.5, 0),
 		})
 		local frame = Instance.new("Frame")
 		frame.Name = "Slot" .. index
-		frame.Position = UDim2.fromScale(0.08, slotTop + slotHeight * 0.16)
-		frame.Size = UDim2.fromScale(0.84, slotHeight * 0.82)
+		frame.Position = UDim2.fromScale(0.07, slotTop + slotHeight * 0.16)
+		frame.Size = UDim2.fromScale(0.86, slotHeight * 0.82)
 		frame.BorderSizePixel = 0
 		frame.ZIndex = 3
 		Depth.panel(frame, PAPER, { radius = Tokens.radius.md, rim = Color3.new(1, 1, 1) })
 		Fit.corner(frame, 0.08)
 		local line = Depth.keylineOf(frame) or Depth.keyline(frame)
-		line.Color = WOOD
+		line.Color = WOOD_DEEP
 		line.Thickness = 2
 		frame.Parent = rightBody
-		local artBox = Fit.frame(frame, "ArtBox", UDim2.fromScale(0.5, 0.3), UDim2.fromScale(0.5, 0.4), 4, Vector2.new(0.5, 0.5))
+		local artBox = Fit.frame(frame, "ArtBox", UDim2.fromScale(0.5, 0.3), UDim2.fromScale(0.5, 0.42), 4, Vector2.new(0.5, 0.5))
 		local name = Fit.text(frame, "Name", "", {
 			font = Tokens.typography.title.font,
 			color = Tokens.color.inkStrong,
@@ -878,13 +1188,31 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		)
 	end
 
-	-- Spin button, toggles and the two passes ----------------------------------------------------
+	-- SPIN: the one irresistible button. Gold-orange face, inner highlight, glow behind it.
+	local spinGlow = Instance.new("Frame")
+	spinGlow.Name = "SpinGlow"
+	spinGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+	spinGlow.Position = UDim2.fromScale(REEL_CX, SPIN_Y)
+	spinGlow.Size = UDim2.fromScale(0.56, SPIN_H * 1.7)
+	spinGlow.BackgroundColor3 = Tokens.color.goldLight
+	spinGlow.BackgroundTransparency = 0.6
+	spinGlow.BorderSizePixel = 0
+	spinGlow.ZIndex = 3
+	Fit.corner(spinGlow, 0.5)
+	local spinGlowFade = Instance.new("UIGradient")
+	spinGlowFade.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.5, 0),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	spinGlowFade.Parent = spinGlow
+	spinGlow.Parent = root
 	local rollHandle = Button.build(root, {
 		text = string.format("SPIN  -  %d GEMS", cfg.classes.rollGemCost),
 		variant = "primary",
 		minimumTapTarget = tap,
 		motion = motion,
-		size = UDim2.fromScale(0.44, SPIN_H),
+		size = UDim2.fromScale(0.5, SPIN_H),
 		zIndex = 4,
 		sound = function()
 			deps.audio:play(Tokens.sound.uiConfirm)
@@ -893,21 +1221,41 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	rollHandle.button.Name = "RollButton"
 	rollHandle.button.AnchorPoint = Vector2.new(0.5, 0.5)
 	rollHandle.button.Position = UDim2.fromScale(REEL_CX, SPIN_Y)
-	local rollLabel = Fit.buttonText(rollHandle, 40)
+	local rollLabel = Fit.buttonText(rollHandle, 46)
 	if rollLabel then
 		local pad = rollLabel:FindFirstChildOfClass("UIPadding")
 		if pad then
-			pad.PaddingLeft = UDim.new(0.16, 0)
+			pad.PaddingLeft = UDim.new(0.17, 0)
 			pad.PaddingRight = UDim.new(0.04, 0)
 		end
 	end
 	local rollFace = rollHandle.button:FindFirstChild("Face")
-	if rollFace then
-		local gemIcon = Fit.image(
-			rollFace,
-			"hud.gem",
-			{ size = UDim2.fromScale(0, 0.74), position = UDim2.fromScale(0.1, 0.5), zIndex = 6, name = "Gem" }
-		)
+	if rollFace and rollFace:IsA("Frame") then
+		local faceGradient = rollFace:FindFirstChildOfClass("UIGradient")
+		if faceGradient then
+			faceGradient.Rotation = 90
+			faceGradient.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 226, 120)),
+				ColorSequenceKeypoint.new(0.45, Color3.fromRGB(255, 176, 48)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(240, 128, 28)),
+			})
+		end
+		local highlight = Instance.new("Frame")
+		highlight.Name = "Highlight"
+		highlight.Position = UDim2.fromScale(0.03, 0.06)
+		highlight.Size = UDim2.fromScale(0.94, 0.34)
+		highlight.BackgroundColor3 = Color3.new(1, 1, 1)
+		highlight.BackgroundTransparency = 0.72
+		highlight.BorderSizePixel = 0
+		highlight.ZIndex = rollFace.ZIndex + 1
+		Fit.corner(highlight, 0.5)
+		highlight.Parent = rollFace
+		local gemIcon = Fit.image(rollFace, "hud.gem", {
+			size = UDim2.fromScale(0, 0.74),
+			position = UDim2.fromScale(0.1, 0.5),
+			zIndex = rollFace.ZIndex + 6,
+			name = "Gem",
+		})
 		if gemIcon then
 			Fit.aspect(gemIcon, 1, Enum.DominantAxis.Height)
 		end
@@ -1010,8 +1358,394 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		table.insert(cleanups, handle.destroy)
 		passHandles[passKey] = { handle = handle, label = label, priceKey = priceKey }
 	end
-	passButton("LuckPass", "doubleLuck", "2× LUCK", "doubleLuckRobux", "success", 0.1, "star")
-	passButton("FastPass", "fastRolls", "FAST ROLLS", "fastRollsRobux", "teal", 0.9, "flame")
+	passButton("LuckPass", "doubleLuck", "2× LUCK", "doubleLuckRobux", "success", 0.115, "star")
+	passButton("FastPass", "fastRolls", "FAST ROLLS", "fastRollsRobux", "teal", 0.88, "flame")
+
+	-- CLASS INFO drawer ----------------------------------------------------------------------------
+	local infoTab = Instance.new("TextButton")
+	infoTab.Name = "InfoTab"
+	infoTab.Text = ""
+	infoTab.AutoButtonColor = false
+	infoTab.AnchorPoint = Vector2.new(0.5, 0.5)
+	infoTab.Position = UDim2.fromScale(REEL_X + REEL_W - 0.028, REEL_Y + 0.045)
+	infoTab.Size = UDim2.fromScale(0, 0.085)
+	infoTab.BackgroundColor3 = WOOD_DEEP
+	infoTab.BorderSizePixel = 0
+	infoTab.ZIndex = 11
+	infoTab.Selectable = true
+	Fit.aspect(infoTab, 1, Enum.DominantAxis.Height)
+	local infoMin = Instance.new("UISizeConstraint")
+	infoMin.MinSize = Vector2.new(tap, tap)
+	infoMin.Parent = infoTab
+	relax(infoTab)
+	Fit.corner(infoTab, 0.5)
+	Depth.keyline(infoTab, 2, Tokens.color.goldDeep)
+	local infoFace = Instance.new("Frame")
+	infoFace.Name = "Face"
+	infoFace.Size = UDim2.fromScale(1, 0.9)
+	infoFace.BackgroundColor3 = Tokens.color.goldLight
+	infoFace.BorderSizePixel = 0
+	infoFace.ZIndex = 2
+	Fit.corner(infoFace, 0.5)
+	Depth.applySheen(infoFace, Tokens.color.goldLight)
+	infoFace.Parent = infoTab
+	Fit.text(infoFace, "Glyph", "i", {
+		font = Tokens.typography.display.font,
+		color = WOOD_DEEP,
+		max = 30,
+		zIndex = 3,
+		size = UDim2.fromScale(0.7, 0.72),
+		position = UDim2.fromScale(0.5, 0.48),
+		anchor = Vector2.new(0.5, 0.5),
+	})
+	local infoTabScale = Instance.new("UIScale")
+	infoTabScale.Parent = infoTab
+	infoTab.Parent = root
+	local infoHint = Fit.text(root, "InfoHint", "CLASS INFO", {
+		font = Tokens.typography.label.font,
+		color = Tokens.color.goldLight,
+		max = 14,
+		outline = 1.2,
+		outlineColor = WOOD_DEEP,
+		zIndex = 11,
+		size = UDim2.fromScale(0.1, 0.035),
+		position = UDim2.fromScale(REEL_X + REEL_W - 0.06, REEL_Y + 0.045),
+		anchor = Vector2.new(1, 0.5),
+		align = Enum.TextXAlignment.Right,
+	})
+	infoHint.TextTransparency = 0.15
+
+	local DRAWER_X = 0.36
+	local drawer = Instance.new("Frame")
+	drawer.Name = "InfoDrawer"
+	drawer.Position = UDim2.fromScale(1.02, 0.01)
+	drawer.Size = UDim2.fromScale(1 - DRAWER_X - 0.01, 0.98)
+	drawer.BorderSizePixel = 0
+	drawer.ZIndex = 12
+	drawer.Visible = false
+	Depth.panel(drawer, WOOD_DEEP, { radius = Tokens.radius.xl, rim = Tokens.color.gold })
+	Fit.corner(drawer, 0.04)
+	drawer.Parent = root
+	local drawerPage = Instance.new("Frame")
+	drawerPage.Name = "Page"
+	drawerPage.Position = UDim2.fromScale(0.02, 0.03)
+	drawerPage.Size = UDim2.fromScale(0.96, 0.94)
+	drawerPage.BorderSizePixel = 0
+	drawerPage.ZIndex = 1
+	Depth.panel(drawerPage, PAPER, { radius = Tokens.radius.lg, rim = Color3.new(1, 1, 1) })
+	Fit.corner(drawerPage, 0.035)
+	drawerPage.Parent = drawer
+	local drawerTitle = plank(drawerPage, "Title", UDim2.fromScale(0.5, 0.06), UDim2.fromScale(0.5, 0.1), 2)
+	drawerTitle.AnchorPoint = Vector2.new(0.5, 0.5)
+	Fit.text(drawerTitle, "Text", "CLASS INFO", {
+		font = Tokens.typography.title.font,
+		color = Tokens.color.goldLight,
+		max = 24,
+		outline = 1.5,
+		outlineColor = WOOD_DEEP,
+		zIndex = 3,
+		size = UDim2.fromScale(0.8, 0.7),
+		position = UDim2.fromScale(0.5, 0.5),
+		anchor = Vector2.new(0.5, 0.5),
+	})
+	Fit.text(drawerPage, "Sub", "EVERY CLASS THE FORGE CAN ROLL, WITH ITS EXACT ODDS AND BONUSES", {
+		font = Tokens.typography.caption.font,
+		color = WOOD,
+		max = 13,
+		zIndex = 2,
+		size = UDim2.fromScale(0.7, 0.05),
+		position = UDim2.fromScale(0.5, 0.135),
+		anchor = Vector2.new(0.5, 0.5),
+	})
+	local drawerClose = Instance.new("TextButton")
+	drawerClose.Name = "DrawerClose"
+	drawerClose.Text = ""
+	drawerClose.AutoButtonColor = false
+	drawerClose.AnchorPoint = Vector2.new(0.5, 0.5)
+	drawerClose.Position = UDim2.fromScale(0.955, 0.065)
+	drawerClose.Size = UDim2.fromScale(0, 0.09)
+	drawerClose.BackgroundColor3 = Tokens.color.emberDeep
+	drawerClose.BorderSizePixel = 0
+	drawerClose.ZIndex = 4
+	drawerClose.Selectable = true
+	Fit.aspect(drawerClose, 1, Enum.DominantAxis.Height)
+	local drawerCloseMin = Instance.new("UISizeConstraint")
+	drawerCloseMin.MinSize = Vector2.new(tap, tap)
+	drawerCloseMin.Parent = drawerClose
+	relax(drawerClose)
+	Fit.corner(drawerClose, 0.5)
+	Depth.keyline(drawerClose)
+	local drawerCloseFace = Instance.new("Frame")
+	drawerCloseFace.Name = "Face"
+	drawerCloseFace.Size = UDim2.fromScale(1, 0.9)
+	drawerCloseFace.BackgroundColor3 = Tokens.color.ember
+	drawerCloseFace.BorderSizePixel = 0
+	drawerCloseFace.ZIndex = 2
+	Fit.corner(drawerCloseFace, 0.5)
+	Depth.applySheen(drawerCloseFace, Tokens.color.ember)
+	drawerCloseFace.Parent = drawerClose
+	local cross = Icons.close(drawerCloseFace, 10, { color = Tokens.color.featherWhite, zIndex = 3 })
+	cross.AnchorPoint = Vector2.new(0.5, 0.5)
+	cross.Position = UDim2.fromScale(0.5, 0.5)
+	cross.Size = UDim2.fromScale(0.46, 0.46)
+	drawerClose.Parent = drawerPage
+
+	-- Class tiles: two rows, every class in roll order.
+	local grid = Fit.frame(drawerPage, "Grid", UDim2.fromScale(0.03, 0.17), UDim2.fromScale(0.94, 0.5), 2)
+	local columns = math.ceil(count / 2)
+	type InfoTile = { root: Frame, line: UIStroke, odds: TextLabel, hit: TextButton, index: number }
+	local infoTiles: { InfoTile } = {}
+	for index, entry in ipairs(weights) do
+		local entryTier = tierFor(entry)
+		local colors = colorsFor(entryTier)
+		local col = (index - 1) % columns
+		local row = math.floor((index - 1) / columns)
+		local tile = Instance.new("Frame")
+		tile.Name = "Tile_" .. entry.id
+		tile.Position = UDim2.fromScale(col / columns + 0.005, row * 0.51)
+		tile.Size = UDim2.fromScale(1 / columns - 0.01, 0.48)
+		tile.BorderSizePixel = 0
+		tile.ZIndex = 2
+		Depth.panel(tile, colors.fill, { radius = Tokens.radius.md, rim = Color3.new(1, 1, 1) })
+		Fit.corner(tile, 0.1)
+		local line = Depth.keylineOf(tile) or Depth.keyline(tile)
+		line.Color = colors.deep
+		line.Thickness = 2
+		tile.Parent = grid
+		if entryTier == "mythic" then
+			local gradient = Instance.new("UIGradient")
+			gradient.Color = RAINBOW
+			gradient.Parent = line
+			table.insert(animated, { gradient = gradient, speed = 90 })
+		end
+		local tileArt = Fit.frame(tile, "ArtBox", UDim2.fromScale(0.5, 0.36), UDim2.fromScale(0.7, 0.56), 3, Vector2.new(0.5, 0.5))
+		classArt(tileArt, entry, 3)
+		Fit.text(tile, "Name", string.upper(entry.displayName), {
+			font = Tokens.typography.label.font,
+			color = Tokens.color.featherWhite,
+			max = 15,
+			min = 5,
+			outline = 1.5,
+			outlineColor = colors.deep,
+			zIndex = 4,
+			size = UDim2.fromScale(0.94, 0.15),
+			position = UDim2.fromScale(0.5, 0.71),
+			anchor = Vector2.new(0.5, 0.5),
+		})
+		local tileOdds = Fit.text(tile, "Odds", "", {
+			font = Tokens.typography.display.font,
+			color = Tokens.color.featherWhite,
+			max = 16,
+			min = 5,
+			outline = 1.5,
+			outlineColor = colors.deep,
+			zIndex = 4,
+			size = UDim2.fromScale(0.9, 0.16),
+			position = UDim2.fromScale(0.5, 0.87),
+			anchor = Vector2.new(0.5, 0.5),
+		})
+		local tileHit = Instance.new("TextButton")
+		tileHit.Name = "Hit"
+		tileHit.Text = ""
+		tileHit.BackgroundTransparency = 1
+		tileHit.Size = UDim2.fromScale(1, 1)
+		tileHit.ZIndex = 6
+		tileHit.Selectable = true
+		tileHit.Parent = tile
+		table.insert(infoTiles, { root = tile, line = line, odds = tileOdds, hit = tileHit, index = index })
+	end
+	-- Breakdown: the selected class's exact numbers.
+	local breakdown = Instance.new("Frame")
+	breakdown.Name = "Breakdown"
+	breakdown.Position = UDim2.fromScale(0.03, 0.69)
+	breakdown.Size = UDim2.fromScale(0.94, 0.29)
+	breakdown.BorderSizePixel = 0
+	breakdown.ZIndex = 2
+	Depth.panel(breakdown, PARCHMENT, { radius = Tokens.radius.md, rim = Color3.new(1, 1, 1) })
+	Fit.corner(breakdown, 0.08)
+	local breakdownLine = Depth.keylineOf(breakdown)
+	if breakdownLine then
+		breakdownLine.Color = WOOD
+	end
+	breakdown.Parent = drawerPage
+	local breakdownArt = Fit.frame(breakdown, "ArtBox", UDim2.fromScale(0.09, 0.5), UDim2.fromScale(0, 0.8), 3, Vector2.new(0.5, 0.5))
+	Fit.aspect(breakdownArt, 1, Enum.DominantAxis.Height)
+	local breakdownName = Fit.text(breakdown, "Name", "", {
+		font = Tokens.typography.title.font,
+		color = Tokens.color.inkStrong,
+		max = 24,
+		zIndex = 3,
+		size = UDim2.fromScale(0.5, 0.26),
+		position = UDim2.fromScale(0.19, 0.06),
+		align = Enum.TextXAlignment.Left,
+	})
+	local breakdownRarity = Instance.new("Frame")
+	breakdownRarity.Name = "Rarity"
+	breakdownRarity.AnchorPoint = Vector2.new(1, 0)
+	breakdownRarity.Position = UDim2.fromScale(0.97, 0.08)
+	breakdownRarity.Size = UDim2.fromScale(0.26, 0.22)
+	breakdownRarity.BorderSizePixel = 0
+	breakdownRarity.ZIndex = 3
+	Fit.corner(breakdownRarity, 0.5)
+	local breakdownRarityText = Fit.text(breakdownRarity, "Label", "", {
+		font = Tokens.typography.label.font,
+		color = Tokens.color.featherWhite,
+		max = 14,
+		zIndex = 4,
+		size = UDim2.fromScale(0.9, 0.76),
+		position = UDim2.fromScale(0.5, 0.5),
+		anchor = Vector2.new(0.5, 0.5),
+	})
+	breakdownRarity.Parent = breakdown
+	local breakdownLines = Fit.text(breakdown, "Lines", "", {
+		font = Tokens.typography.body.font,
+		color = Tokens.color.inkStrong,
+		max = 15,
+		zIndex = 3,
+		size = UDim2.fromScale(0.78, 0.62),
+		position = UDim2.fromScale(0.19, 0.34),
+		align = Enum.TextXAlignment.Left,
+		valign = Enum.TextYAlignment.Top,
+	})
+	local breakdownArtView: GuiObject? = nil
+	local function renderInfo()
+		local projection = deps.profile.projection
+		local ent = entitlements()
+		local odds = ClassRoll.odds(cfg, ent.doubleLuck == true)
+		for _, tile in ipairs(infoTiles) do
+			local record = odds[tile.index]
+			tile.odds.Text = if record then string.format("%.1f%%", record.percent) else ""
+			local selected = tile.index == state.infoSelected
+			tile.line.Thickness = if selected then 4 else 2
+			local tileTier = tierFor(weights[tile.index])
+			if tileTier ~= "mythic" then
+				tile.line.Color = if selected then Tokens.color.goldLight else colorsFor(tileTier).deep
+			end
+		end
+		local entry = weights[state.infoSelected]
+		if not entry then
+			return
+		end
+		local entryTier = tierFor(entry)
+		local record = odds[state.infoSelected]
+		breakdownName.Text = string.format(
+			"%s  -  %s ROLL CHANCE",
+			string.upper(entry.displayName),
+			if record then string.format("%.1f%%", record.percent) else ""
+		)
+		breakdownRarity.BackgroundColor3 = colorsFor(entryTier).fill
+		breakdownRarityText.Text = string.upper(RARITY_LABEL[entryTier] or entryTier)
+		local lines = effectLines(entry, weights)
+		local owned = projection and projection.classes.owned[entry.id] == true
+		if #lines == 0 then
+			table.insert(lines, "No bonuses. Every forager starts somewhere.")
+		end
+		local text = "• " .. table.concat(lines, "\n• ")
+		if owned then
+			text ..= "\n✓ OWNED"
+		end
+		breakdownLines.Text = text
+		if breakdownArtView == nil or breakdownArtView:GetAttribute("SFE_ClassId") ~= entry.id then
+			if breakdownArtView then
+				breakdownArtView:Destroy()
+			end
+			local art = classArt(breakdownArt, entry, 3)
+			art:SetAttribute("SFE_ClassId", entry.id)
+			breakdownArtView = art
+		end
+	end
+	for _, tile in ipairs(infoTiles) do
+		table.insert(
+			cleanups,
+			tile.hit.Activated:Connect(function()
+				deps.audio:play(Tokens.sound.uiTab)
+				state.infoSelected = tile.index
+				renderInfo()
+			end)
+		)
+	end
+	local function setInfo(open: boolean)
+		if state.infoOpen == open then
+			return
+		end
+		state.infoOpen = open
+		container:SetAttribute("SFE_ClassesInfoOpen", open)
+		if open then
+			state.infoSelected = state.selected
+			renderInfo()
+			drawer.Visible = true
+			drawer.Position = UDim2.fromScale(1.02, 0.01)
+			deps.audio:play(Tokens.sound.uiPageFlip)
+			TweenService:Create(
+				drawer,
+				TweenInfo.new(if motion.reducedMotion then 0.12 else 0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+				{ Position = UDim2.fromScale(DRAWER_X, 0.01) }
+			):Play()
+			api.setInitialFocus(drawerClose)
+		else
+			deps.audio:play(Tokens.sound.uiClose)
+			local slide = TweenService:Create(
+				drawer,
+				TweenInfo.new(if motion.reducedMotion then 0.1 else 0.26, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+				{ Position = UDim2.fromScale(1.02, 0.01) }
+			)
+			slide:Play()
+			slide.Completed:Once(function()
+				if not state.infoOpen then
+					drawer.Visible = false
+				end
+			end)
+		end
+	end
+	table.insert(
+		cleanups,
+		infoTab.Activated:Connect(function()
+			deps.audio:play(Tokens.sound.uiTap)
+			setInfo(not state.infoOpen)
+		end)
+	)
+	table.insert(
+		cleanups,
+		infoTab.MouseEnter:Connect(function()
+			Tween.scale(infoTabScale, "hover", motion, 1.1)
+		end)
+	)
+	table.insert(
+		cleanups,
+		infoTab.MouseLeave:Connect(function()
+			Tween.scale(infoTabScale, "release", motion, 1)
+		end)
+	)
+	table.insert(
+		cleanups,
+		drawerClose.Activated:Connect(function()
+			setInfo(false)
+		end)
+	)
+
+	-- Drifting feathers over the scene.
+	local drifters: { { image: ImageLabel, x: number, y: number, speed: number, phase: number } } = {}
+	if not motion.reducedMotion then
+		for index = 1, 5 do
+			local image = Fit.image(root, "icon.feather", {
+				size = UDim2.fromScale(0, 0.06),
+				position = UDim2.fromScale((index * 0.19) % 1, (index * 0.23) % 1),
+				zIndex = 2,
+				name = "Drift" .. index,
+				transparency = 0.35,
+			})
+			if image then
+				Fit.aspect(image, 1, Enum.DominantAxis.Height)
+				table.insert(drifters, {
+					image = image,
+					x = (index * 0.19) % 1,
+					y = (index * 0.23) % 1,
+					speed = 0.018 + index * 0.004,
+					phase = index * 1.3,
+				})
+			end
+		end
+	end
 
 	-- Rendering ------------------------------------------------------------------------------------
 	render = function()
@@ -1055,7 +1789,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 				view.pill.BackgroundColor3 = colorsFor(entryTier).fill
 			end
 			local active = view.index == state.slot and not locked
-			view.line.Color = if active then Tokens.color.gold else WOOD
+			view.line.Color = if active then Tokens.color.gold else WOOD_DEEP
 			view.line.Thickness = if active then 3.5 else 2
 		end
 		for passKey, record in pairs(passHandles) do
@@ -1068,6 +1802,9 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		local canRoll = not state.rolling and (projection.currencies.gems or 0) >= cfg.classes.rollGemCost
 		rollHandle.setEnabled(canRoll or state.rolling)
 		paintToggles()
+		if state.infoOpen then
+			renderInfo()
+		end
 	end
 
 	-- Reveal screen --------------------------------------------------------------------------------
@@ -1080,7 +1817,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		local overlay = Instance.new("Frame")
 		overlay.Name = "Result"
 		overlay.Size = UDim2.fromScale(1, 1)
-		overlay.BackgroundColor3 = Color3.fromRGB(40, 26, 14)
+		overlay.BackgroundColor3 = Color3.fromRGB(46, 30, 16)
 		overlay.BackgroundTransparency = 0.25
 		overlay.BorderSizePixel = 0
 		overlay.ZIndex = 5
@@ -1121,7 +1858,6 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		auraFade.Parent = aura
 		aura.Parent = overlay
 
-		-- Title and the class sub-plate.
 		local title = Fit.text(overlay, "Title", string.upper(RARITY_LABEL[entryTier] or entryTier) .. " CLASS!", {
 			font = Tokens.typography.display.font,
 			color = Tokens.color.goldLight,
@@ -1155,15 +1891,13 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 				color = PAPER,
 				max = 26,
 				zIndex = 5,
-				size = UDim2.fromScale(0.8, 0.7),
+				size = UDim2.fromScale(0.72, 0.7),
 				position = UDim2.fromScale(0.5, 0.5),
 				anchor = Vector2.new(0.5, 0.5),
 			}
 		)
 		Fit.image(sub, "modal.leaf.left", { size = UDim2.fromScale(0.07, 0.7), position = UDim2.fromScale(0.05, 0.5), zIndex = 5 })
 		Fit.image(sub, "modal.leaf.right", { size = UDim2.fromScale(0.07, 0.7), position = UDim2.fromScale(0.95, 0.5), zIndex = 5 })
-
-		-- Sparkles around the card.
 		local sparkles: { Frame } = {}
 		for index, spot in ipairs({ { 0.26, 0.36 }, { 0.74, 0.34 }, { 0.27, 0.66 }, { 0.73, 0.68 }, { 0.34, 0.5 }, { 0.66, 0.52 } }) do
 			local star = Icons.star(overlay, 10, { zIndex = 4, color = Tokens.color.goldLight })
@@ -1175,7 +1909,6 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			table.insert(sparkles, star)
 		end
 
-		-- The won card.
 		local holder = Fit.frame(overlay, "CardHolder", UDim2.fromScale(0.5, 0.5), UDim2.fromScale(0, 0.5), 5, Vector2.new(0.5, 0.5))
 		Fit.aspect(holder, CARD_ASPECT, Enum.DominantAxis.Height)
 		local card = buildCard(holder, entry, entryTier, 1)
@@ -1183,13 +1916,14 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		card.root.Size = UDim2.fromScale(0, 1)
 		card.odds.Text = percent(result.percent or (entry.weight / 100))
 		card.hit:Destroy()
+		card.edge.Thickness = 5
+		card.edge.Transparency = 0.05
 		card.scale.Scale = 0.2
 		Tween.scale(card.scale, "release", motion, 1)
 		if card.rainbow then
 			table.insert(animated, { gradient = card.rainbow, speed = 90 })
 		end
 
-		-- Bonus chips.
 		local chips = bonusChips(entry)
 		local chipRow = Fit.frame(overlay, "Bonuses", UDim2.fromScale(0.5, 0.815), UDim2.fromScale(0.8, 0.095), 5, Vector2.new(0.5, 0.5))
 		Fit.row(chipRow, { gap = 0.02 })
@@ -1222,7 +1956,6 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			})
 		end
 
-		-- Actions.
 		local done = false
 		local function finish()
 			if done then
@@ -1337,7 +2070,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		return finish
 	end
 
-	-- Spin: the reel runs, slows onto the committed class, then the reveal screen opens ----------
+	-- Spin: the reel accelerates, passes the pointer, slows and snaps onto the committed class;
+	-- the landing sound and the reveal come only after the final card is in place --------------
 	local function reveal(result: any, previousClassId: string?, onLanded: () -> ())
 		local seconds = result.animationSeconds or cfg.lobby.classRollAnimationSeconds
 		local scaled = if state.skip then 0.15 else seconds * deps.accessibility:motionScale()
@@ -1355,8 +2089,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 				return
 			end
 			local t = math.min(1, (os.clock() - started) / math.max(scaled, 0.05))
-			local eased = 1 - (1 - t) * (1 - t) * (1 - t)
-			state.center = from + distance * eased
+			state.center = from + distance * spinEase(t)
 			layoutReel()
 			local tick = math.floor(state.center)
 			if tick ~= lastTick then
@@ -1370,8 +2103,9 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 				layoutReel()
 				local landing = cards[landingIndex]
 				if landing then
-					landing.scale.Scale = 1.12
+					landing.scale.Scale = 1.14
 					Tween.scale(landing.scale, "release", motion, 1)
+					Tween.sheen(landing.sheen, motion)
 				end
 				deps.audio:play(Tokens.sound.uiConfetti)
 				deps.audio:play(Tokens.sound.rollLand)
@@ -1382,7 +2116,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 					if result.duplicate then result.displayName .. " (duplicate) equipped" else "Unlocked " .. result.displayName,
 					"success"
 				)
-				task.delay(if state.skip then 0.05 else 0.35, function()
+				task.delay(if state.skip then 0.05 else 0.4, function()
 					if state.closed then
 						return
 					end
@@ -1424,6 +2158,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			stopAuto(if auto then "Auto stopped: out of Gems" else nil)
 			return
 		end
+		setInfo(false)
 		local previousClassId = projection.classes.equipped[state.slot]
 		state.rolling = true
 		render()
@@ -1497,7 +2232,9 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	end
 	layoutReel()
 	render()
-	-- Motion: rainbow rims turn, the glow breathes, the egg bobs.
+	-- Life: rainbow rims turn, the lantern breathes, the egg bobs, the chosen card breathes, a
+	-- shimmer sweeps a card now and then, feathers drift.
+	local nextShimmer = os.clock() + 2
 	table.insert(
 		cleanups,
 		RunService.RenderStepped:Connect(function(dt)
@@ -1505,11 +2242,39 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			for _, entry in ipairs(animated) do
 				entry.gradient.Rotation = (entry.gradient.Rotation + dt * entry.speed) % 360
 			end
-			if not motion.reducedMotion then
-				glow.BackgroundTransparency = 0.55 + 0.15 * math.sin(now * 2.4)
-				pointer.Position = UDim2.fromScale(REEL_CX, 0.0 + math.sin(now * 3) * 0.006)
-				pointerGlow.BackgroundTransparency = 0.5 + 0.2 * math.sin(now * 2)
-				arrowDown.TextTransparency = 0.1 + 0.1 * math.sin(now * 4)
+			if motion.reducedMotion then
+				return
+			end
+			lantern.BackgroundTransparency = 0.55 + 0.1 * math.sin(now * 1.6)
+			warmGlow.BackgroundTransparency = 0.72 + 0.06 * math.sin(now * 0.9)
+			if rays then
+				rays.Rotation = math.sin(now * 0.5) * 4
+			end
+			pointer.Position = UDim2.fromScale(REEL_CX, math.sin(now * 3) * 0.006)
+			pointerGlow.BackgroundTransparency = 0.5 + 0.2 * math.sin(now * 2)
+			arrowDown.TextTransparency = 0.1 + 0.1 * math.sin(now * 4)
+			spinGlow.BackgroundTransparency = 0.6 + 0.15 * math.sin(now * 2.2)
+			if not state.rolling then
+				local chosen = cards[state.selected]
+				if chosen and not hovered[chosen] then
+					chosen.scale.Scale = 1 + 0.015 * math.sin(now * 2)
+				end
+				if now > nextShimmer then
+					nextShimmer = now + 3.5
+					if chosen then
+						Tween.sheen(chosen.sheen, motion)
+					end
+				end
+			end
+			for _, drifter in ipairs(drifters) do
+				drifter.y += dt * drifter.speed
+				if drifter.y > 1.05 then
+					drifter.y = -0.08
+					drifter.x = (drifter.x + 0.37) % 1
+				end
+				local sway = math.sin(now * 1.2 + drifter.phase) * 0.02
+				drifter.image.Position = UDim2.fromScale(drifter.x + sway, drifter.y)
+				drifter.image.Rotation = math.sin(now * 0.8 + drifter.phase) * 25
 			end
 		end)
 	)
@@ -1556,6 +2321,15 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 				render()
 				return { slot = state.slot }
 			end,
+			info = function(open: any)
+				setInfo(if open == nil then not state.infoOpen else open == true or open == 1 or open == "on")
+				return { open = state.infoOpen }
+			end,
+			infoSelect = function(index: number)
+				state.infoSelected = math.clamp(index, 1, count)
+				renderInfo()
+				return { selected = state.infoSelected, lines = breakdownLines.Text }
+			end,
 			-- The result screen's two buttons, for the probe.
 			dismiss = function()
 				if currentResult then
@@ -1576,12 +2350,14 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 					rolling = state.rolling,
 					auto = state.auto,
 					skip = state.skip,
+					info = state.infoOpen,
 					stats = stats,
 				}
 			end,
 		})
 	end
 	container:SetAttribute("SFE_ClassesRolling", false)
+	container:SetAttribute("SFE_ClassesInfoOpen", false)
 	local attrThread = task.spawn(function()
 		while not state.closed do
 			container:SetAttribute("SFE_ClassesRolling", state.rolling)
