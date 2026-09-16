@@ -629,7 +629,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 		variant = "pill",
 		minimumTapTarget = tap,
 		motion = motion,
-		size = UDim2.fromOffset(if compact then 150 else 220, tap - 6),
+		size = UDim2.fromOffset(if compact then 160 else 250, tap - 4),
 		zIndex = z + 1,
 		textSize = Tokens.typography.caption.size + 1,
 		sound = function()
@@ -772,7 +772,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 		if isPopular then
 			local ribbon = FrameKit.badge(card, "Popular", "POPULAR", Tokens.color.goldDeep, z + 6)
 			ribbon.AnchorPoint = Vector2.new(0, 0.5)
-			ribbon.Position = UDim2.new(0, -Tokens.spacing.sm, 0, 2)
+			ribbon.Position = UDim2.fromOffset(-Tokens.spacing.sm, 2)
 			ribbon.Rotation = -8
 		end
 		if isBest then
