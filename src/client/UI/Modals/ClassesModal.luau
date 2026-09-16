@@ -1309,6 +1309,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		view.root.Size = UDim2.fromScale(0, 1)
 		local viewRatio = Instance.new("UIAspectRatioConstraint")
 		viewRatio.AspectRatio = cardW / cardH
+		viewRatio.DominantAxis = Enum.DominantAxis.Height -- the holder gives the height; the width follows
 		viewRatio.Parent = view.root
 		view.odds.Text = landing.view.odds.Text
 		view.hit:Destroy()
