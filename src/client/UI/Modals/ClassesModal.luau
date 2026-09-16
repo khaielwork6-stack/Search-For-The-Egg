@@ -1843,6 +1843,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		Fit.corner(overlay, 0.03)
 		overlay.Parent = shell.card
 		shell.plaque.Visible = false
+		-- The controls under the overlay rest while the result is up.
+		toggles.Visible = false
 		local rays = Skin.texture(overlay, "texture.rays", { transparency = 0.6, name = "Rays", zIndex = 1 })
 		if rays then
 			rays.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -1982,6 +1984,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			done = true
 			currentResult = nil
 			shell.plaque.Visible = true
+			toggles.Visible = true
 			TweenService:Create(overlay, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
 			task.delay(0.2, function()
 				overlay:Destroy()
@@ -2080,6 +2083,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			if not done then
 				done = true
 				shell.plaque.Visible = true
+				toggles.Visible = true
 				if overlay.Parent then
 					overlay:Destroy()
 				end
