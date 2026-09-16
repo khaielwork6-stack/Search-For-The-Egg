@@ -21,6 +21,7 @@ local Confetti = require(script.Parent.Parent.Components.Confetti)
 local Fit = require(script.Parent.Parent.Components.Fit)
 local GemChip = require(script.Parent.Parent.Components.GemChip)
 local UpgradeActions = require(script.Parent.Parent.UpgradeActions)
+local SafeArea = require(script.Parent.Parent.SafeArea)
 
 local ShopModal = {}
 
@@ -191,6 +192,9 @@ local function priceButton(parent: GuiObject, name: string, text: string, option
 	handle.button.Name = name
 	handle.button.Position = options.position or handle.button.Position
 	handle.button.AnchorPoint = options.anchor or handle.button.AnchorPoint
+	if options.relax then
+		options.relax(handle.button)
+	end
 	local label = Fit.buttonText(handle, options.max or 28)
 	if gem and label then
 		local pad = label:FindFirstChildOfClass("UIPadding")
@@ -247,6 +251,16 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 	local tier = deps.quality and deps.quality:tier() or nil
 	local shell = api.shell
 	local promptDeps = { net = deps.net, audio = deps.audio, toasts = deps.toasts }
+	local phone = SafeArea.classOf(container) == "phone"
+	-- Phones give controls their Scale height; the 44 px floor would stack them over each other.
+	local function relax(button: GuiObject)
+		if phone then
+			local constraint = button:FindFirstChildOfClass("UISizeConstraint")
+			if constraint then
+				constraint.MinSize = Vector2.new(0, 0)
+			end
+		end
+	end
 	local function entitlements(): { [string]: boolean }
 		return deps.entitlements and deps.entitlements() or {}
 	end
@@ -296,6 +310,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 		local minSize = Instance.new("UISizeConstraint")
 		minSize.MinSize = Vector2.new(tap, tap)
 		minSize.Parent = button
+		relax(button)
 		local face = Instance.new("Frame")
 		face.Name = "Face"
 		face.Size = UDim2.fromScale(1, 0.9)
@@ -497,6 +512,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 			tap = tap,
 			motion = motion,
 			audio = deps.audio,
+			relax = relax,
 			size = UDim2.fromScale(0.5, 0.2),
 			position = UDim2.fromScale(0.47, 0.76),
 			zIndex = 4,
@@ -607,6 +623,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 			tap = tap,
 			motion = motion,
 			audio = deps.audio,
+			relax = relax,
 			size = UDim2.fromScale(0.3, 0.58),
 			position = UDim2.fromScale(0.97, 0.5),
 			anchor = Vector2.new(1, 0.5),
@@ -637,6 +654,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 	viewForever.button.Name = "ViewForever"
 	viewForever.button.AnchorPoint = Vector2.new(1, 0.5)
 	viewForever.button.Position = UDim2.fromScale(0.995, 0.915)
+	relax(viewForever.button)
 	Fit.buttonText(viewForever, 20)
 	table.insert(cleanups, viewForever.destroy)
 
@@ -749,6 +767,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 			tap = tap,
 			motion = motion,
 			audio = deps.audio,
+			relax = relax,
 			size = UDim2.fromScale(0.84, 0.16),
 			position = UDim2.fromScale(0.5, 0.88),
 			anchor = Vector2.new(0.5, 0.5),
@@ -855,6 +874,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 			tap = tap,
 			motion = motion,
 			audio = deps.audio,
+			relax = relax,
 			size = UDim2.fromScale(0.7, 0.14),
 			position = UDim2.fromScale(0.5, 0.9),
 			anchor = Vector2.new(0.5, 0.5),

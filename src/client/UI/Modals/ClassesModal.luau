@@ -21,6 +21,7 @@ local Confetti = require(script.Parent.Parent.Components.Confetti)
 local Fit = require(script.Parent.Parent.Components.Fit)
 local GemChip = require(script.Parent.Parent.Components.GemChip)
 local UpgradeActions = require(script.Parent.Parent.UpgradeActions)
+local SafeArea = require(script.Parent.Parent.SafeArea)
 
 local ClassesModal = {}
 
@@ -340,6 +341,16 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	local tap = deps.minimumTapTarget
 	local tier = deps.quality and deps.quality:tier() or nil
 	local shell = api.shell
+	local phone = SafeArea.classOf(container) == "phone"
+	-- Phones give the rows their Scale height; the 44 px floor would stack them over each other.
+	local function relax(button: GuiObject)
+		if phone then
+			local constraint = button:FindFirstChildOfClass("UISizeConstraint")
+			if constraint then
+				constraint.MinSize = Vector2.new(0, 0)
+			end
+		end
+	end
 	local weights = cfg.classes.weights
 	local count = #weights
 	local byId: { [string]: number } = {}
@@ -395,6 +406,13 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	local REEL_X, REEL_W = 0.035, 0.715
 	local REEL_CX = REEL_X + REEL_W / 2
 	local RIGHT_X = 0.785
+	local REEL_H = if phone then 0.5 else 0.56
+	local SPIN_Y = if phone then 0.665 else 0.745
+	local SPIN_H = if phone then 0.13 else 0.125
+	local TOGGLE_Y = if phone then 0.805 else 0.875
+	local TOGGLE_H = if phone then 0.11 else 0.085
+	local PASS_Y = if phone then 0.9 else 0.9
+	local PASS_H = if phone then 0.14 else 0.12
 
 	-- Top plank with the two captions and the golden egg pointer over the reel's centre.
 	local top = plank(root, "TopPlank", UDim2.fromScale(REEL_X, 0.005), UDim2.fromScale(REEL_W, 0.085), 2)
@@ -456,7 +474,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	local reel = Instance.new("Frame")
 	reel.Name = "Reel"
 	reel.Position = UDim2.fromScale(REEL_X, 0.105)
-	reel.Size = UDim2.fromScale(REEL_W, 0.56)
+	reel.Size = UDim2.fromScale(REEL_W, REEL_H)
 	reel.BorderSizePixel = 0
 	reel.ZIndex = 3
 	reel.ClipsDescendants = true
@@ -551,7 +569,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		button.Text = ""
 		button.AutoButtonColor = false
 		button.AnchorPoint = Vector2.new(0.5, 0.5)
-		button.Position = UDim2.fromScale(x, 0.385)
+		button.Position = UDim2.fromScale(x, 0.105 + REEL_H / 2)
 		button.Size = UDim2.fromScale(0, 0.1)
 		button.BackgroundColor3 = WOOD_DEEP
 		button.BorderSizePixel = 0
@@ -673,7 +691,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	end
 
 	-- Equipped column ----------------------------------------------------------------------------
-	local right = Fit.frame(root, "Equipped", UDim2.fromScale(RIGHT_X, 0.005), UDim2.fromScale(1 - RIGHT_X, 0.79), 3)
+	local right =
+		Fit.frame(root, "Equipped", UDim2.fromScale(RIGHT_X, 0.005), UDim2.fromScale(1 - RIGHT_X, if phone then 0.78 else 0.79), 3)
 	local rightHead = plank(right, "Head", UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.105), 2)
 	Fit.text(rightHead, "Title", "EQUIPPED CLASSES", {
 		font = Tokens.typography.label.font,
@@ -804,6 +823,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		})
 		buy.button.AnchorPoint = Vector2.new(0.5, 1)
 		buy.button.Position = UDim2.fromScale(0.5, 0.96)
+		relax(buy.button)
 		Fit.buttonText(buy, 22, 4)
 		table.insert(cleanups, buy.destroy)
 		local hit = Instance.new("TextButton")
@@ -860,7 +880,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		variant = "primary",
 		minimumTapTarget = tap,
 		motion = motion,
-		size = UDim2.fromScale(0.44, 0.125),
+		size = UDim2.fromScale(0.44, SPIN_H),
 		zIndex = 4,
 		sound = function()
 			deps.audio:play(Tokens.sound.uiConfirm)
@@ -868,7 +888,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	})
 	rollHandle.button.Name = "RollButton"
 	rollHandle.button.AnchorPoint = Vector2.new(0.5, 0.5)
-	rollHandle.button.Position = UDim2.fromScale(REEL_CX, 0.745)
+	rollHandle.button.Position = UDim2.fromScale(REEL_CX, SPIN_Y)
 	local rollLabel = Fit.buttonText(rollHandle, 40)
 	if rollLabel then
 		local pad = rollLabel:FindFirstChildOfClass("UIPadding")
@@ -891,7 +911,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	table.insert(cleanups, rollHandle.destroy)
 	rollHandle.pulse(true)
 
-	local toggles = Fit.frame(root, "Toggles", UDim2.fromScale(REEL_CX, 0.875), UDim2.fromScale(0.36, 0.085), 4, Vector2.new(0.5, 0.5))
+	local toggles =
+		Fit.frame(root, "Toggles", UDim2.fromScale(REEL_CX, TOGGLE_Y), UDim2.fromScale(0.36, TOGGLE_H), 4, Vector2.new(0.5, 0.5))
 	Fit.row(toggles, { gap = 0.04 })
 	local function toggle(name: string, text: string, order: number): (any, Frame)
 		local handle = Button.build(toggles, {
@@ -928,6 +949,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		Depth.keyline(dot, 1.5, WOOD_DEEP)
 		local face = handle.button:FindFirstChild("Face")
 		dot.Parent = face or handle.button
+		relax(handle.button)
 		table.insert(cleanups, handle.destroy)
 		return handle, dot
 	end
@@ -949,7 +971,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			variant = variant :: any,
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromScale(0.175, 0.12),
+			size = UDim2.fromScale(0.175, PASS_H),
 			zIndex = 4,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTap)
@@ -963,7 +985,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		})
 		handle.button.Name = name
 		handle.button.AnchorPoint = Vector2.new(0.5, 0.5)
-		handle.button.Position = UDim2.fromScale(x, 0.9)
+		handle.button.Position = UDim2.fromScale(x, PASS_Y)
+		relax(handle.button)
 		local text = Fit.buttonText(handle, 22)
 		if text then
 			local pad = text:FindFirstChildOfClass("UIPadding")

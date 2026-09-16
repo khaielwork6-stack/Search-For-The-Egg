@@ -14,6 +14,7 @@ local Depth = require(script.Parent.Depth)
 local Skin = require(script.Parent.Skin)
 local Icons = require(script.Parent.Icons)
 local Fit = require(script.Parent.Fit)
+local SafeArea = require(script.Parent.Parent.SafeArea)
 
 local ModalShell = {}
 
@@ -65,6 +66,10 @@ function ModalShell.create(
 	local tap = options.minimumTapTarget or Tokens.layout.minimumTapTargetPx
 	local geometry = if options.wide then GEOMETRY.wide elseif options.compact then GEOMETRY.compact else GEOMETRY.regular
 	local z = Tokens.zIndex.modal
+	-- Phones: the responsive stage shrinks offset-based HUD; a Scale-based card wants the whole
+	-- screen instead, so a holder cancels the stage scale and the card fills its box.
+	local phone = SafeArea.classOf(gui) == "phone"
+	local stageScale = SafeArea.scaleOf(gui)
 
 	local root = Instance.new("Frame")
 	root.Name = "Modal_" .. (options.id or options.title)
@@ -75,12 +80,24 @@ function ModalShell.create(
 	root.ZIndex = z
 	root.Parent = gui
 
+	local holder = Instance.new("Frame")
+	holder.Name = "Holder"
+	holder.AnchorPoint = Vector2.new(0.5, 0.5)
+	holder.Position = UDim2.fromScale(0.5, 0.5)
+	holder.Size = UDim2.fromScale(1, 1)
+	holder.BackgroundTransparency = 1
+	holder.ZIndex = z + 1
+	local holderScale = Instance.new("UIScale")
+	holderScale.Scale = if phone and stageScale > 0 then 1 / stageScale else 1
+	holderScale.Parent = holder
+	holder.Parent = root
+
 	-- The one centred root container. Scale box + aspect lock; a max width keeps 4K sane.
 	local card = Instance.new("Frame")
 	card.Name = "Card"
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
 	card.Position = UDim2.fromScale(0.5, 0.5)
-	card.Size = UDim2.fromScale(geometry.box.X, geometry.box.Y)
+	card.Size = if phone then UDim2.fromScale(0.97, 0.97) else UDim2.fromScale(geometry.box.X, geometry.box.Y)
 	card.BackgroundTransparency = 1
 	card.BorderSizePixel = 0
 	card.ZIndex = z + 1
@@ -95,7 +112,7 @@ function ModalShell.create(
 	maxSize.Parent = card
 	local cardScale = Instance.new("UIScale")
 	cardScale.Parent = card
-	card.Parent = root
+	card.Parent = holder
 
 	-- Board: wood face, dark keyline, light rim, banded sheen; the top rail is a lighter plank.
 	local board = Instance.new("Frame")
