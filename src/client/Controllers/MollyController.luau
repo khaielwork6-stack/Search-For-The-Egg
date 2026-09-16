@@ -1,0 +1,1992 @@
+--!strict
+-- Molly the Mole on the client. Owns everything the player sees of her and her machine: the
+-- nameplate, the outline while her prompt is in reach, the idle (looking between the pile and the
+-- map, goggles, notes, tapping tiles, the crank, a drill test, an ear to the table, greeting who
+-- walks up), the map's region selection (mouse hover and click, touch, gamepad and keyboard), the
+-- live pick relayed to the party, the trade request, the full survey sequence after a committed
+-- trade, and the result on the map and the board from the round snapshot.
+--
+-- The rig arrives anchored; limbs are freed locally and the Motor6D C0s driven from here. Every
+-- resource a mode takes (input, cursor, camera, props) is returned by one trove with a watchdog.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage.Shared
+local Tokens = require(Shared.Design.Tokens)
+local Motion = require(Shared.Design.Motion)
+local AssetManifest = require(Shared.Design.AssetManifest)
+local Trove = require(Shared.Util.Trove)
+local NestSurvey = require(Shared.Domain.NestSurvey)
+local NpcPlate = require(script.Parent.Parent.UI.NpcPlate)
+local SurveyPanel = require(script.Parent.Parent.UI.SurveyPanel)
+local Dialog = require(script.Parent.Parent.UI.Components.Dialog)
+local Confetti = require(script.Parent.Parent.UI.Components.Confetti)
+
+local MollyController = {}
+MollyController.__index = MollyController
+
+MollyController.ARENA_NAME = "SFE_Chapter1"
+MollyController.MODEL_NAME = "MollyTheMole"
+MollyController.STATION_NAME = "SurveyStation"
+MollyController.PROMPT_NAME = "SFE_MollySurvey"
+MollyController.NPC_NAME = "Molly the Mole"
+
+local LOOK_RANGE = 16
+local TILE_RAISE = 0.22
+local TILE_HOVER = 0.1
+local WATCHDOG_GRACE = 4
+local STRAW = Color3.fromRGB(226, 196, 132)
+local STRAW_LIT = Color3.fromRGB(255, 226, 150)
+local STRAW_HOVER = Color3.fromRGB(240, 214, 150)
+local NONE_TINT = Color3.fromRGB(170, 176, 190)
+local WEAK_TINT = Color3.fromRGB(240, 190, 110)
+local STRONG_TINT = Color3.fromRGB(255, 214, 96)
+local RED = Color3.fromRGB(196, 52, 44)
+local PAPER = Color3.fromRGB(246, 236, 212)
+local INK = Color3.fromRGB(60, 44, 32)
+
+local RIG_PARTS = { "HumanoidRootPart", "Head", "UpperTorso", "RightUpperArm", "RightLowerArm", "LeftUpperArm", "LeftLowerArm" }
+local RIG_MOTORS = {
+	Neck = "Head",
+	Waist = "UpperTorso",
+	RightShoulder = "RightUpperArm",
+	RightElbow = "RightLowerArm",
+	LeftShoulder = "LeftUpperArm",
+	LeftElbow = "LeftLowerArm",
+}
+local STATION_PARTS = {
+	"Tile_A1",
+	"Tile_C3",
+	"DrillBridge",
+	"DrillHead",
+	"GaugeNeedle",
+	"LampNone",
+	"LampWeak",
+	"LampStrong",
+	"Gear1",
+	"Lever",
+	"SeismoNeedle",
+	"SeismoPaper",
+	"ResultBoard",
+	"CratePlatform",
+	"HopperFunnel",
+	"Whistle",
+	"CrankWheel",
+	"MapPlinth",
+}
+
+type Pivoted = { part: BasePart, rest: CFrame, pivot: Vector3, axis: Vector3 }
+type SpinGroup = { rest: CFrame, pieces: { { part: BasePart, rel: CFrame } } }
+
+export type MollyController = typeof(setmetatable(
+	{} :: {
+		_deps: any,
+		_trove: Trove.Trove,
+		_rig: Model?,
+		_station: Model?,
+		_bound: Trove.Trove?,
+		_highlights: { Highlight },
+		_motors: { [string]: { motor: Motor6D, base: CFrame } },
+		_tiles: { [string]: { part: BasePart, restY: number, tufts: { { part: BasePart, rest: CFrame } }, lift: number, color: Color3 } },
+		_mapCentre: Vector3,
+		_pivots: { [string]: Pivoted },
+		_gears: { SpinGroup },
+		_crank: SpinGroup?,
+		_drill: { head: Model, headRest: CFrame, bridge: BasePart, bridgeRest: CFrame, target: Vector3, descend: number, current: Vector3 }?,
+		_gesture: { name: string, t: number, duration: number, region: string? }?,
+		_nextGesture: number,
+		_look: { yaw: number, pitch: number, until_: number }?,
+		_yaw: number,
+		_pitch: number,
+		_hop: number,
+		_selection: { trove: Trove.Trove, region: string?, hovered: string?, sent: string?, panel: any, canSurvey: boolean }?,
+		_sequence: { trove: Trove.Trove, done: boolean, committed: boolean, data: any, panel: any? }?,
+		_pending: boolean,
+		_remoteSelection: string?,
+		_lamps: { [string]: { part: BasePart, light: PointLight, level: number } },
+		_gaugeLevel: number,
+		_seismoLevel: number,
+		_gearSpeed: number,
+		_gearAngle: number,
+		stats: {
+			opens: number,
+			refused: number,
+			selections: number,
+			cancels: number,
+			surveys: number,
+			sequences: number,
+			skips: number,
+			banners: number,
+			boardUpdates: number,
+			restored: number,
+			feathersFlown: number,
+			gestures: number,
+		},
+	},
+	MollyController
+))
+
+function MollyController.new(deps: {
+	net: any,
+	round: any,
+	modals: any,
+	hud: any,
+	input: any,
+	audio: any,
+	haptics: any,
+	accessibility: any,
+	quality: any,
+	camera: any,
+	config: { [string]: any },
+	interaction: any,
+}): MollyController
+	local self = setmetatable({
+		_deps = deps,
+		_trove = Trove.new(),
+		_rig = nil,
+		_station = nil,
+		_bound = nil,
+		_highlights = {},
+		_motors = {},
+		_tiles = {},
+		_mapCentre = Vector3.zero,
+		_pivots = {},
+		_gears = {},
+		_crank = nil,
+		_drill = nil,
+		_gesture = nil,
+		_nextGesture = os.clock() + 4,
+		_look = nil,
+		_yaw = 0,
+		_pitch = 0,
+		_hop = 0,
+		_selection = nil,
+		_sequence = nil,
+		_pending = false,
+		_remoteSelection = nil,
+		_lamps = {},
+		_gaugeLevel = 0,
+		_seismoLevel = 0,
+		_gearSpeed = 0,
+		_gearAngle = 0,
+		stats = {
+			opens = 0,
+			refused = 0,
+			selections = 0,
+			cancels = 0,
+			surveys = 0,
+			sequences = 0,
+			skips = 0,
+			banners = 0,
+			boardUpdates = 0,
+			restored = 0,
+			feathersFlown = 0,
+			gestures = 0,
+		},
+	}, MollyController)
+
+	self._trove:add(deps.interaction.surveyRequested:Connect(function()
+		self:interact()
+	end))
+	self._trove:add(deps.net:on("SurveyCompleted", function(payload)
+		self:_onCompleted(payload)
+	end))
+	self._trove:add(deps.net:on("SurveySelection", function(payload)
+		self:_onRemoteSelection(payload)
+	end))
+	self._trove:add(deps.round.snapshot:Connect(function()
+		self:_applyResult()
+	end))
+	self._trove:add(deps.round.phaseChanged:Connect(function()
+		if deps.round:phase() ~= "Searching" then
+			self:_endSelection("phase")
+			if self._sequence then
+				self:_finishSequence("phase")
+			end
+		end
+		self:_applyResult()
+	end))
+	local player = Players.LocalPlayer
+	if player then
+		self._trove:add(player.CharacterAdded:Connect(function()
+			self:_endSelection("respawn")
+			if self._sequence then
+				self:_finishSequence("respawn")
+			end
+		end))
+	end
+	self._trove:add(ProximityPromptService.PromptShown:Connect(function(prompt)
+		if prompt.Name == MollyController.PROMPT_NAME then
+			self:_setHighlighted(true)
+			deps.audio:play(Tokens.sound.stationChime, { at = prompt.Parent :: any })
+		end
+	end))
+	self._trove:add(ProximityPromptService.PromptHidden:Connect(function(prompt)
+		if prompt.Name == MollyController.PROMPT_NAME then
+			self:_setHighlighted(false)
+		end
+	end))
+	self:_watchArena()
+	return self
+end
+
+-- Finding the rig and the station, now or when they are built; binding waits for their parts.
+function MollyController._watchArena(self: MollyController)
+	local function tryBind(folder: Instance)
+		local rig = folder:FindFirstChild(MollyController.MODEL_NAME)
+		local station = folder:FindFirstChild(MollyController.STATION_NAME)
+		if rig and rig:IsA("Model") and station and station:IsA("Model") then
+			self:_bind(rig, station)
+			return true
+		end
+		return false
+	end
+	local function watchFolder(folder: Instance)
+		if tryBind(folder) then
+			return
+		end
+		local conn: RBXScriptConnection
+		conn = folder.ChildAdded:Connect(function()
+			task.defer(function()
+				if self._rig == nil and tryBind(folder) then
+					conn:Disconnect()
+				end
+			end)
+		end)
+		self._trove:add(conn)
+	end
+	local arena = workspace:FindFirstChild(MollyController.ARENA_NAME)
+	if arena then
+		watchFolder(arena)
+	end
+	self._trove:add(workspace.ChildAdded:Connect(function(child)
+		if child.Name == MollyController.ARENA_NAME then
+			task.defer(watchFolder, child)
+		end
+	end))
+end
+
+function MollyController._bind(self: MollyController, rig: Model, station: Model)
+	if self._bound then
+		self._bound:destroy()
+	end
+	local bound = Trove.new()
+	self._bound = bound
+	self._rig = rig
+	self._station = station
+	local alive = true
+	bound:add(function()
+		alive = false
+	end)
+	task.spawn(function()
+		for _, name in ipairs(RIG_PARTS) do
+			rig:WaitForChild(name, 10)
+		end
+		for motorName, parentName in pairs(RIG_MOTORS) do
+			local parent = rig:FindFirstChild(parentName)
+			if parent then
+				parent:WaitForChild(motorName, 10)
+			end
+		end
+		for _, name in ipairs(STATION_PARTS) do
+			station:WaitForChild(name, 10)
+		end
+		local board = station:FindFirstChild("ResultBoard")
+		if board then
+			board:WaitForChild("Gui", 5)
+		end
+		if alive and self._bound == bound then
+			self:_bindReady(rig, station, bound)
+		end
+	end)
+end
+
+local function pivoted(part: BasePart, axis: Vector3): Pivoted
+	local attachment = part:FindFirstChild("Pivot")
+	local pivot = if attachment and attachment:IsA("Attachment") then attachment.WorldPosition else part.Position
+	return { part = part, rest = part.CFrame, pivot = pivot, axis = axis }
+end
+
+local function applyPivot(p: Pivoted, angle: number)
+	local rotation = CFrame.fromAxisAngle(p.axis, angle)
+	p.part.CFrame = CFrame.new(p.pivot) * rotation * CFrame.new(-p.pivot) * p.rest
+end
+
+local function spinGroup(hub: BasePart, pieces: { BasePart }): SpinGroup
+	local group = { rest = hub.CFrame, pieces = {} }
+	table.insert(group.pieces, { part = hub, rel = CFrame.new() })
+	for _, piece in ipairs(pieces) do
+		table.insert(group.pieces, { part = piece, rel = hub.CFrame:ToObjectSpace(piece.CFrame) })
+	end
+	return group
+end
+
+local function applySpin(group: SpinGroup, angle: number)
+	local turned = group.rest * CFrame.Angles(angle, 0, 0)
+	for _, piece in ipairs(group.pieces) do
+		piece.part.CFrame = turned * piece.rel
+	end
+end
+
+function MollyController._bindReady(self: MollyController, rig: Model, station: Model, bound: Trove.Trove)
+	self._highlights = {}
+	local root = rig:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") then
+		local _, size = rig:GetBoundingBox()
+		local plate = NpcPlate.build(root, MollyController.NPC_NAME, "Underground surveyor", size.Y * 0.5 + 0.9, { onTop = true })
+		bound:add(plate.destroy)
+	end
+	for _, model in ipairs({ rig, station }) do
+		local highlight = Instance.new("Highlight")
+		highlight.Name = "SFE_MollyOutline"
+		highlight.FillTransparency = 1
+		highlight.OutlineColor = Tokens.color.goldLight
+		highlight.OutlineTransparency = 0
+		highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+		highlight.Enabled = false
+		highlight.Adornee = model
+		highlight.Parent = model
+		bound:add(highlight)
+		table.insert(self._highlights, highlight)
+	end
+	-- Joints and locally freed limbs.
+	self._motors = {}
+	local function adopt(descendant: Instance)
+		if descendant:IsA("Motor6D") then
+			self._motors[descendant.Name] = { motor = descendant, base = descendant.C0 }
+		elseif descendant:IsA("BasePart") and descendant.Name ~= "HumanoidRootPart" then
+			descendant.Anchored = false
+		end
+	end
+	for _, descendant in ipairs(rig:GetDescendants()) do
+		adopt(descendant)
+	end
+	bound:add(rig.DescendantAdded:Connect(adopt))
+	-- The map.
+	self._tiles = {}
+	local centre = station:GetAttribute("SFE_MapCentre")
+	self._mapCentre = if typeof(centre) == "Vector3" then centre else Vector3.zero
+	for _, region in ipairs(NestSurvey.REGIONS) do
+		local tile = station:FindFirstChild("Tile_" .. region)
+		if tile and tile:IsA("BasePart") then
+			local tufts = {}
+			for _, child in ipairs(station:GetChildren()) do
+				if child:IsA("BasePart") and child:GetAttribute("SFE_TuftOf") == region then
+					table.insert(tufts, { part = child, rest = child.CFrame })
+				end
+			end
+			self._tiles[region] = { part = tile, restY = tile.Position.Y, tufts = tufts, lift = 0, color = tile.Color }
+		end
+	end
+	-- Pivoted pieces: gauge needle (about the gauge's normal), lever (about its hinge), seismo arm.
+	self._pivots = {}
+	local gauge = station:FindFirstChild("GaugeNeedle")
+	if gauge and gauge:IsA("BasePart") then
+		self._pivots.gauge = pivoted(gauge, gauge.CFrame.LookVector)
+	end
+	local lever = station:FindFirstChild("Lever")
+	if lever and lever:IsA("BasePart") then
+		local hinge = pivoted(lever, lever.CFrame.RightVector)
+		self._pivots.lever = hinge
+		local knob = station:FindFirstChild("LeverKnob")
+		if knob and knob:IsA("BasePart") then
+			self._pivots.leverKnob = { part = knob, rest = knob.CFrame, pivot = hinge.pivot, axis = hinge.axis }
+		end
+	end
+	local seismoArm = station:FindFirstChild("SeismoNeedle")
+	if seismoArm and seismoArm:IsA("BasePart") then
+		self._pivots.seismo = pivoted(seismoArm, Vector3.yAxis)
+	end
+	-- Gears and their teeth, the crank and its arm.
+	self._gears = {}
+	for i = 1, 3 do
+		local gear = station:FindFirstChild("Gear" .. i)
+		if gear and gear:IsA("BasePart") then
+			local teeth = {}
+			for _, child in ipairs(station:GetChildren()) do
+				if child:IsA("BasePart") and child:GetAttribute("SFE_GearOf") == i then
+					table.insert(teeth, child)
+				end
+			end
+			table.insert(self._gears, spinGroup(gear, teeth))
+		end
+	end
+	local wheel = station:FindFirstChild("CrankWheel")
+	if wheel and wheel:IsA("BasePart") then
+		local crankParts = {}
+		for _, child in ipairs(station:GetChildren()) do
+			if child:IsA("BasePart") and child:GetAttribute("SFE_CrankPart") then
+				table.insert(crankParts, child)
+			end
+		end
+		self._crank = spinGroup(wheel, crankParts)
+	end
+	-- The drill: bridge along world Z, head along world X; rest over B2.
+	local head = station:FindFirstChild("DrillHead")
+	local bridge = station:FindFirstChild("DrillBridge")
+	if head and head:IsA("Model") and head.PrimaryPart and bridge and bridge:IsA("BasePart") then
+		self._drill = {
+			head = head,
+			headRest = head:GetPivot(),
+			bridge = bridge,
+			bridgeRest = bridge.CFrame,
+			target = head:GetPivot().Position,
+			descend = 0,
+			current = head:GetPivot().Position,
+		}
+	end
+	-- Lamps.
+	self._lamps = {}
+	for _, spec in ipairs({ { "none", "LampNone" }, { "weak", "LampWeak" }, { "strong", "LampStrong" } }) do
+		local lamp = station:FindFirstChild(spec[2])
+		local light = lamp and lamp:FindFirstChild("Light")
+		if lamp and lamp:IsA("BasePart") and light and light:IsA("PointLight") then
+			self._lamps[spec[1]] = { part = lamp, light = light, level = 0 }
+		end
+	end
+	-- The tick.
+	local accumulator = 0
+	local started = os.clock()
+	bound:add(RunService.Heartbeat:Connect(function(dt)
+		accumulator += dt
+		local tier = self._deps.quality and self._deps.quality:tier() or "high"
+		local interval = if tier == "low" then 1 / 15 else 1 / 30
+		if accumulator < interval then
+			return
+		end
+		local step = accumulator
+		accumulator = 0
+		self:_stepIdle(step, os.clock() - started)
+		self:_stepMachine(step, os.clock() - started)
+	end))
+	bound:add(function()
+		self._rig = nil
+		self._station = nil
+		self._motors = {}
+		self._tiles = {}
+		self._drill = nil
+		self._gears = {}
+		self._crank = nil
+		self._pivots = {}
+		self._lamps = {}
+	end)
+	self:_applyResult()
+end
+
+function MollyController._setHighlighted(self: MollyController, on: boolean)
+	for _, highlight in ipairs(self._highlights) do
+		highlight.Enabled = on
+	end
+end
+
+-- World position over a tile (at gantry height for the drill, at the tile for a look).
+function MollyController._tilePosition(self: MollyController, region: string): Vector3?
+	local tile = self._tiles[region]
+	return tile and tile.part.Position or nil
+end
+
+-- ----------------------------------------------------------------------------------------------
+-- Idle
+
+local GESTURES = {
+	{ name = "lookPile", weight = 3, duration = 2.6 },
+	{ name = "lookMap", weight = 3, duration = 2.2 },
+	{ name = "goggles", weight = 1.5, duration = 1.8 },
+	{ name = "write", weight = 2, duration = 2.8 },
+	{ name = "tap", weight = 2.5, duration = 2.0 },
+	{ name = "crank", weight = 1.5, duration = 2.6 },
+	{ name = "drill", weight = 1, duration = 2.2 },
+	{ name = "ear", weight = 1, duration = 3.0 },
+}
+
+local function pickGesture(): { name: string, weight: number, duration: number }
+	local total = 0
+	for _, g in ipairs(GESTURES) do
+		total += g.weight
+	end
+	local roll = math.random() * total
+	for _, g in ipairs(GESTURES) do
+		roll -= g.weight
+		if roll <= 0 then
+			return g
+		end
+	end
+	return GESTURES[1]
+end
+
+-- Yaw/pitch (rig-local, the rig faces -Z) that puts the head on a world point.
+local function lookAngles(root: BasePart, head: BasePart, target: Vector3): (number, number)
+	local localDir = root.CFrame:VectorToObjectSpace(target - head.Position)
+	local horizontal = math.sqrt(localDir.X * localDir.X + localDir.Z * localDir.Z)
+	return math.clamp(math.atan2(-localDir.X, -localDir.Z), -1.1, 1.1), math.clamp(math.atan2(localDir.Y, horizontal), -0.75, 0.45)
+end
+
+function MollyController._stepIdle(self: MollyController, dt: number, t: number)
+	local rig = self._rig
+	if not rig then
+		return
+	end
+	local motors = self._motors
+	local neck, waist = motors.Neck, motors.Waist
+	local rShoulder, rElbow = motors.RightShoulder, motors.RightElbow
+	local lShoulder, lElbow = motors.LeftShoulder, motors.LeftElbow
+	if not (neck and waist and rShoulder and rElbow and lShoulder and lElbow) then
+		return
+	end
+	local reduced = self._deps.accessibility:motionSettings().reducedMotion
+	local root = rig:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local head = rig:FindFirstChild("Head") :: BasePart?
+	if not (root and head) then
+		return
+	end
+	-- Where she looks: an explicit target (a hovered tile, the machine) wins; then a player who has
+	-- walked up; then the current gesture; then a slow drift between the map and the mound.
+	local targetYaw, targetPitch = math.sin(t * 0.3) * 0.25 + 0.1, -0.35
+	local look = self._look
+	local nearestHead: BasePart? = nil
+	if look and os.clock() < look.until_ then
+		targetYaw, targetPitch = look.yaw, look.pitch
+	else
+		self._look = nil
+		local nearestDistance = LOOK_RANGE
+		for _, player in ipairs(Players:GetPlayers()) do
+			local character = player.Character
+			local pHead = character and character:FindFirstChild("Head")
+			if pHead and pHead:IsA("BasePart") then
+				local distance = (pHead.Position - head.Position).Magnitude
+				if distance < nearestDistance then
+					nearestHead, nearestDistance = pHead, distance
+				end
+			end
+		end
+		if nearestHead and not self._selection and not self._sequence then
+			targetYaw, targetPitch = lookAngles(root, head, nearestHead.Position)
+		end
+	end
+	-- Gestures.
+	local gesture = self._gesture
+	if not gesture and not self._sequence and os.clock() >= self._nextGesture then
+		local pick = pickGesture()
+		gesture = { name = pick.name, t = 0, duration = pick.duration, region = NestSurvey.REGIONS[math.random(1, 9)] }
+		self._gesture = gesture
+		self.stats.gestures += 1
+	end
+	local rPitch, rRoll, rElbowPitch = -0.55, 0.12, -0.6 -- hands resting on the bench edge
+	local lPitch, lRoll, lElbowPitch = -0.5, -0.12, -0.55
+	local waistPitch, waistYaw, waistY = 0, 0, 0
+	local crankSpin = nil
+	if gesture then
+		gesture.t += dt
+		local phase = math.clamp(gesture.t / gesture.duration, 0, 1)
+		local blend = math.sin(phase * math.pi)
+		local name = gesture.name
+		if name == "lookPile" then
+			local layoutTarget = self._mapCentre + Vector3.new(0, 2, 0)
+			local nest = workspace:FindFirstChild(MollyController.ARENA_NAME)
+			local pile = nest and nest:FindFirstChild("PileBody")
+			local target = if pile then pile:GetPivot().Position + Vector3.new(0, 6, 0) else layoutTarget - (root.CFrame.LookVector * -30)
+			if not look then
+				targetYaw, targetPitch = lookAngles(root, head, target)
+			end
+		elseif name == "lookMap" then
+			if not look then
+				targetYaw, targetPitch = lookAngles(root, head, self._mapCentre)
+			end
+		elseif name == "goggles" then
+			lPitch = -0.5 - 1.9 * blend
+			lElbowPitch = -0.55 - 0.9 * blend
+			lRoll = -0.12 - 0.2 * blend
+			if not look then
+				targetPitch = -0.1 * blend
+			end
+		elseif name == "write" then
+			rPitch = -1.0 + math.sin(t * 7) * 0.04 * blend
+			rElbowPitch = -1.15 + math.sin(t * 9) * 0.06 * blend
+			rRoll = 0.25
+			if not look then
+				targetYaw, targetPitch = 0.35, -0.6
+			end
+		elseif name == "tap" then
+			local tilePos = self:_tilePosition(gesture.region or "B2")
+			if tilePos and not look then
+				targetYaw, targetPitch = lookAngles(root, head, tilePos)
+			end
+			rPitch = -0.55 - 0.95 * blend
+			rElbowPitch = -0.6 + 0.2 * blend
+			rRoll = 0.1 + 0.35 * blend
+			local tile = self._tiles[gesture.region or ""]
+			if tile and phase > 0.4 and phase < 0.7 and not self._selection and not self._sequence then
+				tile.lift = math.max(tile.lift, TILE_HOVER * math.sin((phase - 0.4) / 0.3 * math.pi))
+			end
+		elseif name == "crank" then
+			rPitch = -0.9 + math.sin(gesture.t * 5) * 0.25
+			rElbowPitch = -0.8 + math.cos(gesture.t * 5) * 0.25
+			rRoll = 0.4
+			waistYaw = 0.35
+			crankSpin = gesture.t * 5
+			if not look then
+				targetYaw, targetPitch = 0.9, -0.3
+			end
+		elseif name == "drill" then
+			lPitch = -1.2 * blend
+			lElbowPitch = -0.4 * blend
+			if self._drill and not self._selection and not self._sequence then
+				self._drill.descend = 0.28 * blend
+			end
+			if not look then
+				local drillPos = self._drill and self._drill.current or self._mapCentre
+				targetYaw, targetPitch = lookAngles(root, head, drillPos)
+			end
+		elseif name == "headshake" then
+			-- Disappointed: a slow shake, shoulders down.
+			if not look then
+				targetYaw, targetPitch = math.sin(gesture.t * 9) * 0.35, -0.3
+			end
+			rPitch, lPitch = -0.3, -0.3
+			waistPitch = 0.12 * blend
+		elseif name == "cheer" then
+			-- Excited: both arms up, a little bounce carried by the hop.
+			rPitch = -0.55 - 2.4 * blend
+			lPitch = -0.5 - 2.4 * blend
+			rRoll, lRoll = 0.3, -0.3
+			rElbowPitch, lElbowPitch = -0.3, -0.3
+			if not look then
+				targetYaw, targetPitch = 0, 0.25 * blend
+			end
+		elseif name == "ear" then
+			waistPitch = 0.55 * blend
+			waistY = -0.12 * blend
+			if not look then
+				targetYaw, targetPitch = 0.6, 0.35 * blend - 0.5 * (1 - blend)
+			end
+			rPitch = -0.9 * blend
+			rElbowPitch = -0.7 * blend
+		end
+		if phase >= 1 then
+			self._gesture = nil
+			self._nextGesture = os.clock() + 3.5 + math.random() * 5
+		end
+	end
+	if reduced then
+		-- Reduced motion: the slow head turn only, and the gesture timer keeps ticking.
+		local ease = math.min(1, dt * 3)
+		self._yaw += (targetYaw - self._yaw) * ease
+		self._pitch += (targetPitch - self._pitch) * ease
+		neck.motor.C0 = neck.base * CFrame.fromEulerAnglesYXZ(self._pitch, self._yaw, 0)
+		return
+	end
+	local ease = math.min(1, dt * 6)
+	self._yaw += (targetYaw - self._yaw) * ease
+	self._pitch += (targetPitch - self._pitch) * ease
+	neck.motor.C0 = neck.base * CFrame.fromEulerAnglesYXZ(self._pitch, self._yaw, 0)
+	-- The hop decays on its own (set by the strong-signal reaction).
+	self._hop = math.max(0, self._hop - dt * 2.2)
+	local hopY = math.sin(math.min(1, self._hop) * math.pi) * 0.45
+	local breathe = math.sin(t * 1.7) * 0.02
+	waist.motor.C0 = waist.base
+		* CFrame.new(0, breathe + waistY + hopY, 0)
+		* CFrame.fromEulerAnglesYXZ(waistPitch + math.sin(t * 1.7) * 0.01, waistYaw, 0)
+	rShoulder.motor.C0 = rShoulder.base * CFrame.Angles(rPitch, 0, rRoll)
+	rElbow.motor.C0 = rElbow.base * CFrame.Angles(rElbowPitch, 0, 0)
+	lShoulder.motor.C0 = lShoulder.base * CFrame.Angles(lPitch, 0, lRoll)
+	lElbow.motor.C0 = lElbow.base * CFrame.Angles(lElbowPitch, 0, 0)
+	if crankSpin and self._crank then
+		applySpin(self._crank, crankSpin)
+	end
+end
+
+-- ----------------------------------------------------------------------------------------------
+-- Machine: tiles, drill, gears, gauge, lamps, seismograph. Levels are set by the modes; this
+-- moves the parts towards them every tick.
+
+function MollyController._stepMachine(self: MollyController, dt: number, t: number)
+	local station = self._station
+	if not station then
+		return
+	end
+	local reduced = self._deps.accessibility:motionSettings().reducedMotion
+	-- Tiles: rise towards their lift and fall back.
+	for _, tile in pairs(self._tiles) do
+		local currentY = tile.part.Position.Y
+		local wantY = tile.restY + tile.lift
+		local y = if reduced then wantY else currentY + (wantY - currentY) * math.min(1, dt * 10)
+		if math.abs(y - currentY) > 1e-4 then
+			local dy = y - currentY
+			tile.part.CFrame = tile.part.CFrame + Vector3.new(0, dy, 0)
+			for _, tuft in ipairs(tile.tufts) do
+				tuft.part.CFrame = tuft.rest + Vector3.new(0, y - tile.restY, 0)
+			end
+		end
+		if not self._selection and not self._sequence and tile.lift > 0 and tile.lift < TILE_RAISE then
+			tile.lift = math.max(0, tile.lift - dt * 0.4) -- an idle tap settles back
+		end
+	end
+	-- Drill: bridge follows the target's Z, head follows X and Z, and dips by `descend`.
+	local drill = self._drill
+	if drill then
+		local target = drill.target
+		local current = drill.current
+		local next = if reduced then target else current:Lerp(target, math.min(1, dt * 5))
+		drill.current = next
+		local restY = drill.headRest.Position.Y
+		local headCF = CFrame.new(next.X, restY - drill.descend, next.Z) * (drill.headRest - drill.headRest.Position)
+		drill.head:PivotTo(headCF)
+		local bridgeRest = drill.bridgeRest
+		drill.bridge.CFrame = CFrame.new(bridgeRest.Position.X, bridgeRest.Position.Y, next.Z) * (bridgeRest - bridgeRest.Position)
+	end
+	-- Gears turn at the current speed.
+	if self._gearSpeed > 0.01 and not reduced then
+		self._gearAngle += dt * self._gearSpeed
+		for i, gear in ipairs(self._gears) do
+			applySpin(gear, self._gearAngle * (if i == 2 then -1.4 else 1) * (if i == 3 then -0.8 else 1))
+		end
+	end
+	-- Gauge needle: 0 -> pointing down-left, 1 -> up-right; a little tremble while searching.
+	local gauge = self._pivots.gauge
+	if gauge then
+		local tremble = if self._sequence and not reduced then math.sin(t * 23) * 0.04 else 0
+		applyPivot(gauge, -math.rad(120) * math.clamp(self._gaugeLevel + tremble, 0, 1) + math.rad(60))
+	end
+	-- Seismograph arm and trace.
+	local seismo = self._pivots.seismo
+	if seismo then
+		local swing = if reduced then 0 else math.sin(t * 19) * 0.35 * self._seismoLevel
+		applyPivot(seismo, swing)
+	end
+	local paper = station:FindFirstChild("SeismoPaper")
+	local trace = paper and paper:FindFirstChild("Gui") and (paper :: any).Gui:FindFirstChild("Trace")
+	if trace and self._seismoLevel >= 0 then
+		local level = self._seismoLevel
+		-- Scroll: each bar takes the height of the one before; the first takes the live reading.
+		for i = 40, 2, -1 do
+			local bar = trace:FindFirstChild("Bar" .. i)
+			local previous = trace:FindFirstChild("Bar" .. (i - 1))
+			if bar and previous and bar:IsA("Frame") and previous:IsA("Frame") then
+				bar.Size = previous.Size
+			end
+		end
+		local first = trace:FindFirstChild("Bar1")
+		if first and first:IsA("Frame") then
+			local h = if level <= 0.001 then 2 else 2 + (math.abs(math.sin(t * 31)) * 0.6 + math.random() * 0.4) * 40 * level
+			first.Size = UDim2.new(first.Size.X.Scale, 0, 0, math.floor(h))
+		end
+	end
+	-- Lamps glow to their level.
+	for _, lamp in pairs(self._lamps) do
+		local target = lamp.level
+		lamp.part.Transparency = 0.55 - 0.5 * target
+		lamp.light.Brightness = 2.4 * target
+	end
+end
+
+-- ----------------------------------------------------------------------------------------------
+-- The result, from the round snapshot: tiles, stamp, board, lamps at rest.
+
+function MollyController._applyResult(self: MollyController)
+	local station = self._station
+	if not station then
+		return
+	end
+	local round = self._deps.round.round
+	local survey = if round and round.phase ~= "Returning" then round.survey else nil
+	-- Tiles and stamp.
+	local existingStamp = station:FindFirstChild("SFE_SurveyStamp")
+	if not self._sequence then
+		for region, tile in pairs(self._tiles) do
+			local chosen = survey and survey.region == region
+			tile.lift = if chosen then TILE_RAISE else 0
+			tile.part.Color = if chosen
+				then (if survey.signal == "strong" then STRONG_TINT elseif survey.signal == "weak" then WEAK_TINT else NONE_TINT)
+				else tile.color
+		end
+		if survey and not existingStamp then
+			self:_placeStamp(survey.region, survey.signal)
+		elseif not survey and existingStamp then
+			existingStamp:Destroy()
+		end
+		for key, lamp in pairs(self._lamps) do
+			lamp.level = if survey and survey.signal == key then 0.6 else 0
+		end
+		self._gaugeLevel = if survey then (if survey.signal == "strong" then 0.95 elseif survey.signal == "weak" then 0.35 else 0) else 0.05
+		self._seismoLevel = 0
+	end
+	-- The board.
+	local board = station:FindFirstChild("ResultBoard")
+	local gui = board and board:FindFirstChild("Gui")
+	if not gui then
+		return
+	end
+	local status = gui:FindFirstChild("Status")
+	local grid = gui:FindFirstChild("Grid")
+	local statusText = if survey then string.format("%s: %s", survey.region, survey.title) else "NOT YET RUN"
+	if status and status:IsA("TextLabel") then
+		if status.Text ~= statusText then
+			self.stats.boardUpdates += 1
+		end
+		status.Text = statusText
+		status.TextColor3 = if survey
+			then (if survey.signal == "none" then Color3.fromRGB(90, 110, 140) else RED)
+			else Color3.fromRGB(140, 120, 100)
+	end
+	if grid then
+		local adjacent = if survey and survey.signal == "weak" then NestSurvey.adjacent(survey.region) else {}
+		for _, region in ipairs(NestSurvey.REGIONS) do
+			local cell = grid:FindFirstChild("Cell_" .. region)
+			if cell and cell:IsA("Frame") then
+				local mark = cell:FindFirstChild("Mark")
+				local edge = cell:FindFirstChild("Edge")
+				local isChosen = survey ~= nil and survey.region == region
+				local isNear = table.find(adjacent, region) ~= nil
+				cell.BackgroundColor3 = if isChosen
+					then (if survey.signal == "strong" then STRONG_TINT elseif survey.signal == "weak" then WEAK_TINT else NONE_TINT)
+					elseif isNear then Color3.fromRGB(248, 222, 176)
+					else STRAW
+				if mark and mark:IsA("TextLabel") then
+					mark.Visible = isChosen or isNear
+					mark.Text = if isChosen then survey.short :: string elseif isNear then "?" else ""
+					mark.TextColor3 = if isChosen and survey.signal == "none" then Color3.fromRGB(90, 110, 140) else RED
+				end
+				if edge and edge:IsA("UIStroke") then
+					edge.Thickness = if isChosen then 5 elseif isNear then 3 else 2
+					edge.Color = if isChosen
+						then (if survey.signal == "none" then Color3.fromRGB(90, 110, 140) else RED)
+						elseif isNear then WEAK_TINT
+						else INK
+					edge.Transparency = if isChosen or isNear then 0 else 0.4
+				end
+				for i = 1, 2 do
+					local cross = cell:FindFirstChild("Cross" .. i)
+					if cross and cross:IsA("Frame") then
+						cross.Visible = isChosen and survey.signal == "none"
+					end
+				end
+			end
+		end
+	end
+end
+
+-- The permanent card on the chosen tile.
+function MollyController._placeStamp(self: MollyController, region: string, signal: string)
+	local station = self._station
+	local tile = self._tiles[region]
+	if not (station and tile) then
+		return
+	end
+	local card = Instance.new("Part")
+	card.Name = "SFE_SurveyStamp"
+	card.Anchored = true
+	card.CanCollide = false
+	card.CanQuery = false
+	card.CanTouch = false
+	card.Size = Vector3.new(1.0, 0.04, 0.6)
+	card.Color = PAPER
+	card.Material = Enum.Material.SmoothPlastic
+	card.CFrame = CFrame.new(tile.part.Position + Vector3.new(0, tile.part.Size.Y / 2 + 0.12 + (TILE_RAISE - tile.lift), 0))
+		* CFrame.Angles(0, math.rad(-8), 0)
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Top
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 120
+	gui.Parent = card
+	local text = Instance.new("TextLabel")
+	text.BackgroundTransparency = 1
+	text.Size = UDim2.fromScale(1, 1)
+	text.Font = Enum.Font.FredokaOne
+	text.TextSize = 34
+	text.TextColor3 = if signal == "none" then Color3.fromRGB(90, 110, 140) else RED
+	text.Text = (NestSurvey.WORDS :: any)[signal].short
+	text.Rotation = -6
+	text.Parent = gui
+	card.Parent = station
+	return card
+end
+
+-- ----------------------------------------------------------------------------------------------
+-- Interaction and region selection
+
+function MollyController.isBusy(self: MollyController): boolean
+	return self._selection ~= nil or self._sequence ~= nil or self._pending
+end
+
+local function sayOn(rig: Model?, line: string)
+	local root = rig and rig:FindFirstChild("HumanoidRootPart")
+	if root then
+		NpcPlate.sayOn(root, line, 3.2)
+	end
+end
+
+-- The prompt press. Opens the map when a scan is possible; otherwise Molly answers over her head.
+function MollyController.interact(self: MollyController): boolean
+	local deps = self._deps
+	if self:isBusy() then
+		self.stats.refused += 1
+		return false
+	end
+	local phase = deps.round:phase()
+	local round = deps.round.round
+	local player = deps.round.player
+	local carried = player and player.carriedStandard or 0
+	local used = round ~= nil and round.survey ~= nil
+	local exposed = phase == "EggRevealed"
+	local active = phase == "Searching"
+	local line = NestSurvey.lineFor(deps.config, { active = active, exposed = exposed, used = used, carriedStandard = carried })
+	self.stats.opens += 1
+	if not active or exposed or used then
+		deps.audio:play(Tokens.sound.uiTap)
+		sayOn(self._rig, line)
+		self.stats.refused += 1
+		return false
+	end
+	deps.audio:play(Tokens.sound.uiOpen)
+	return self:_beginSelection(line)
+end
+
+function MollyController._selectionState(self: MollyController): SurveyPanel.State
+	local deps = self._deps
+	local selection = self._selection
+	local player = deps.round.player
+	local carried = player and player.carriedStandard or 0
+	local cost = NestSurvey.crateCost(deps.config)
+	local region = selection and selection.region or nil
+	local mode = deps.input:mode()
+	local hint = if region
+		then (if mode == "gamepad"
+			then "A to survey  -  B to cancel"
+			elseif mode == "touch" then "Tap another tile to change"
+			else "Click another tile to change  -  Enter to survey")
+		else (if mode == "gamepad" then "D-pad to choose a region" elseif mode == "touch" then "Tap a map tile" else "Click a map tile")
+	local canSurvey = region ~= nil and carried >= cost and deps.round:phase() == "Searching"
+	if selection then
+		selection.canSurvey = canSurvey
+	end
+	return {
+		line = NestSurvey.lineFor(deps.config, { active = true, exposed = false, used = false, carriedStandard = carried }),
+		carried = carried,
+		cost = cost,
+		region = region,
+		regionText = if region then NestSurvey.describe(region) else nil,
+		canSurvey = canSurvey,
+		hint = hint,
+		mode = "select",
+	}
+end
+
+-- Frames the map, frees the cursor, and reads the player's pick until they survey or cancel.
+function MollyController._beginSelection(self: MollyController, _line: string): boolean
+	local deps = self._deps
+	local station, rig = self._station, self._rig
+	local camera = workspace.CurrentCamera
+	local player = Players.LocalPlayer
+	if not (station and rig and camera and player) then
+		return false
+	end
+	local selection = { trove = Trove.new(), region = nil, hovered = nil, sent = nil, panel = nil, canSurvey = false }
+	self._selection = selection
+	local motion = deps.accessibility:motionSettings()
+	local reduced = motion.reducedMotion
+	deps.input:setSuspended(true)
+	deps.modals:setExternalUnlock(true)
+	selection.trove:add(function()
+		deps.modals:setExternalUnlock(false)
+		deps.input:setSuspended(deps.modals:isBlocking())
+	end)
+	-- Camera: over the players' side of the map, looking down at it.
+	local anchor = station.PrimaryPart or station:FindFirstChild("MollyAnchor")
+	local base = if anchor and anchor:IsA("BasePart") then anchor.CFrame else rig:GetPivot()
+	local mapCentre = self._mapCentre
+	local eye = mapCentre + base.RightVector * -0.6 + base.LookVector * 6.2 + Vector3.new(0, 5.6, 0)
+	local baseline = { type = camera.CameraType, cframe = camera.CFrame }
+	camera.CameraType = Enum.CameraType.Scriptable
+	TweenService:Create(camera, TweenInfo.new(if reduced then 0.05 else 0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		CFrame = CFrame.lookAt(eye, mapCentre + Vector3.new(0, 0.4, 0)),
+	}):Play()
+	selection.trove:add(function()
+		-- Only hand the camera back if the sequence is not taking over from here.
+		if self._sequence then
+			return
+		end
+		self:_restoreCamera(baseline)
+	end)
+	selection.baseline = baseline
+	-- Panel.
+	local panel = SurveyPanel.create(
+		player:WaitForChild("PlayerGui"),
+		{ audio = deps.audio, accessibility = deps.accessibility, config = deps.config },
+		{
+			onSurvey = function()
+				self:_confirmSurvey()
+			end,
+			onCancel = function()
+				self:_endSelection("cancel")
+			end,
+			onSkip = function() end,
+		}
+	)
+	selection.panel = panel
+	selection.trove:add(panel.destroy)
+	panel.setState(self:_selectionState())
+	selection.trove:add(deps.round.playerChanged:Connect(function()
+		if self._selection == selection then
+			panel.setState(self:_selectionState())
+		end
+	end))
+	-- Pointing: the tile under the cursor (mouse) or the last touch; clicks pick it.
+	local tileParts = {}
+	for _, tile in pairs(self._tiles) do
+		table.insert(tileParts, tile.part)
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = tileParts
+	local function tileAt(screen: Vector2): string?
+		local ray = camera:ViewportPointToRay(screen.X, screen.Y)
+		local hit = workspace:Raycast(ray.Origin, ray.Direction * 60, params)
+		local region = hit and hit.Instance:GetAttribute("SFE_Region")
+		return if type(region) == "string" then region else nil
+	end
+	selection.trove:add(RunService.RenderStepped:Connect(function()
+		if deps.input:mode() == "mouse" then
+			local location = UserInputService:GetMouseLocation()
+			local region = tileAt(location)
+			if region ~= selection.hovered then
+				selection.hovered = region
+				self:_refreshSelectionVisuals()
+			end
+		end
+	end))
+	selection.trove:add(UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			local region = tileAt(UserInputService:GetMouseLocation())
+			if region then
+				self:select(region)
+			end
+		elseif input.UserInputType == Enum.UserInputType.Touch then
+			local region = tileAt(Vector2.new(input.Position.X, input.Position.Y))
+			if region then
+				self:select(region)
+			end
+		elseif input.UserInputType == Enum.UserInputType.Keyboard then
+			local key = input.KeyCode
+			if key == Enum.KeyCode.Up or key == Enum.KeyCode.W then
+				self:navigate(-1, 0)
+			elseif key == Enum.KeyCode.Down or key == Enum.KeyCode.S then
+				self:navigate(1, 0)
+			elseif key == Enum.KeyCode.Left or key == Enum.KeyCode.A then
+				self:navigate(0, -1)
+			elseif key == Enum.KeyCode.Right or key == Enum.KeyCode.D then
+				self:navigate(0, 1)
+			elseif key == Enum.KeyCode.Return then
+				self:_confirmSurvey()
+			elseif key == Enum.KeyCode.Escape then
+				self:_endSelection("cancel")
+			end
+		elseif input.UserInputType == Enum.UserInputType.Gamepad1 then
+			local key = input.KeyCode
+			if key == Enum.KeyCode.DPadUp then
+				self:navigate(-1, 0)
+			elseif key == Enum.KeyCode.DPadDown then
+				self:navigate(1, 0)
+			elseif key == Enum.KeyCode.DPadLeft then
+				self:navigate(0, -1)
+			elseif key == Enum.KeyCode.DPadRight then
+				self:navigate(0, 1)
+			elseif key == Enum.KeyCode.ButtonA then
+				self:_confirmSurvey()
+			elseif key == Enum.KeyCode.ButtonB then
+				self:_endSelection("cancel")
+			end
+		end
+	end))
+	-- Thumbstick steps, one per flick.
+	local stickArmed = true
+	selection.trove:add(UserInputService.InputChanged:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.Gamepad1 or input.KeyCode ~= Enum.KeyCode.Thumbstick1 then
+			return
+		end
+		local p = input.Position
+		if p.Magnitude < 0.35 then
+			stickArmed = true
+			return
+		end
+		if not stickArmed then
+			return
+		end
+		stickArmed = false
+		if math.abs(p.X) > math.abs(p.Y) then
+			self:navigate(0, if p.X > 0 then 1 else -1)
+		else
+			self:navigate(if p.Y > 0 then -1 else 1, 0)
+		end
+	end))
+	-- Molly watches the map while a player picks.
+	self._look = { yaw = 0.3, pitch = -0.6, until_ = math.huge }
+	selection.trove:add(function()
+		self._look = nil
+		self._remoteSelection = nil
+		for _, tile in pairs(self._tiles) do
+			tile.part.Color = tile.color
+		end
+		self:_applyResult()
+		if self._drill and not self._sequence then
+			self._drill.target = self._drill.headRest.Position
+			self._drill.descend = 0
+		end
+	end)
+	if deps.input:mode() ~= "mouse" then
+		self:select("B2")
+	end
+	self:_refreshSelectionVisuals()
+	return true
+end
+
+-- The pick itself, from any input path.
+function MollyController.select(self: MollyController, region: string): boolean
+	local selection = self._selection
+	if not selection or not NestSurvey.isRegion(region) then
+		return false
+	end
+	if selection.region ~= region then
+		self.stats.selections += 1
+		self._deps.audio:play(Tokens.sound.uiSelect)
+		self._deps.haptics:pulse(0.15, 0.04)
+	end
+	selection.region = region
+	self:_refreshSelectionVisuals()
+	if selection.sent ~= region then
+		selection.sent = region
+		local token = self._deps.round:sessionToken()
+		if token then
+			task.spawn(function()
+				self._deps.net:request("SurveySelect", { sessionToken = token, region = region })
+			end)
+		end
+	end
+	return true
+end
+
+function MollyController.navigate(self: MollyController, dRow: number, dCol: number): boolean
+	local selection = self._selection
+	if not selection then
+		return false
+	end
+	return self:select(NestSurvey.step(selection.region or "B2", dRow, dCol))
+end
+
+-- Tiles, drill and Molly's gaze follow the hover and the pick.
+function MollyController._refreshSelectionVisuals(self: MollyController)
+	local selection = self._selection
+	if not selection then
+		return
+	end
+	local focus = selection.hovered or selection.region
+	for region, tile in pairs(self._tiles) do
+		if region == selection.region then
+			tile.lift = TILE_RAISE
+			tile.part.Color = STRAW_LIT
+		elseif region == selection.hovered then
+			tile.lift = TILE_HOVER
+			tile.part.Color = STRAW_HOVER
+		else
+			tile.lift = 0
+			tile.part.Color = tile.color
+		end
+	end
+	if focus then
+		local pos = self:_tilePosition(focus)
+		if pos then
+			if self._drill then
+				self._drill.target = Vector3.new(pos.X, self._drill.headRest.Position.Y, pos.Z)
+				self._drill.descend = 0
+			end
+			local rig = self._rig
+			local root = rig and rig:FindFirstChild("HumanoidRootPart")
+			local head = rig and rig:FindFirstChild("Head")
+			if root and root:IsA("BasePart") and head and head:IsA("BasePart") then
+				local yaw, pitch = lookAngles(root, head, pos)
+				self._look = { yaw = yaw, pitch = pitch, until_ = math.huge }
+			end
+		end
+	end
+	if selection.panel then
+		selection.panel.setState(self:_selectionState())
+	end
+end
+
+function MollyController._endSelection(self: MollyController, reason: string)
+	local selection = self._selection
+	if not selection then
+		return
+	end
+	self._selection = nil
+	if reason == "cancel" then
+		self.stats.cancels += 1
+		local token = self._deps.round:sessionToken()
+		if token and selection.sent then
+			task.spawn(function()
+				self._deps.net:request("SurveySelect", { sessionToken = token })
+			end)
+		end
+	end
+	selection.trove:destroy()
+end
+
+function MollyController._restoreCamera(self: MollyController, baseline: { type: Enum.CameraType, cframe: CFrame })
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	local reduced = self._deps.accessibility:motionSettings().reducedMotion
+	local back = TweenService:Create(
+		camera,
+		TweenInfo.new(if reduced then 0.05 else 0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+		{ CFrame = baseline.cframe }
+	)
+	local released = false
+	local function release()
+		if released then
+			return
+		end
+		released = true
+		camera.CameraType = baseline.type
+		self.stats.restored += 1
+	end
+	back.Completed:Once(release)
+	back:Play()
+	task.delay(1.2, release)
+end
+
+-- The confirmation, then the request. Only a valid, affordable pick gets this far.
+function MollyController._confirmSurvey(self: MollyController)
+	local deps = self._deps
+	local selection = self._selection
+	if not selection or not selection.region or not selection.canSurvey or self._pending then
+		deps.audio:play(Tokens.sound.uiError)
+		return
+	end
+	local region = selection.region
+	local cost = NestSurvey.crateCost(deps.config)
+	Dialog.open(deps.modals, {
+		id = "surveyTrade",
+		title = "Survey the Nest",
+		message = string.format(
+			"%s\n\nTrade %d normal feathers to survey %s?",
+			NestSurvey.LINES.warning,
+			cost,
+			NestSurvey.describe(region)
+		),
+		confirmText = "Survey",
+		cancelText = "Not yet",
+		tone = "warning",
+		audio = deps.audio,
+		accessibility = deps.accessibility,
+		config = deps.config,
+		onConfirm = function()
+			if self._selection == selection then
+				self:survey(region)
+			end
+		end,
+	})
+end
+
+-- The request. Returns the envelope; a success hands the screen from the selection to the sequence.
+function MollyController.survey(self: MollyController, region: string): any
+	local deps = self._deps
+	local token = deps.round:sessionToken()
+	if not token then
+		return { ok = false, code = "invalid_state", message = "no_session" }
+	end
+	if self._sequence or self._pending then
+		self.stats.refused += 1
+		return { ok = false, code = "invalid_state", message = "busy" }
+	end
+	self._pending = true
+	local result = deps.net:request("SurveyRequest", { sessionToken = token, region = region })
+	if not result.ok then
+		self._pending = false
+		deps.audio:play(Tokens.sound.uiError)
+		local message = result.message
+		if message == "already_surveyed" then
+			sayOn(self._rig, NestSurvey.LINES.used)
+			self:_endSelection("used")
+		elseif message == "egg_found" then
+			sayOn(self._rig, NestSurvey.LINES.exposed)
+			self:_endSelection("egg")
+		else
+			deps.hud.toasts:push(
+				if message == "insufficient"
+					then string.format("You need %d normal feathers for a survey crate", NestSurvey.crateCost(deps.config))
+					elseif result.code == "out_of_range" then "Stand at Molly's bench"
+					elseif result.code == "rate_limited" then "One moment..."
+					else "Survey unavailable",
+				"warning"
+			)
+		end
+		return result
+	end
+	self.stats.surveys += 1
+	deps.haptics:pulse(0.4, 0.12)
+	local data = result.data
+	if deps.round.round and data then
+		deps.round.round.survey = data.survey
+	end
+	if data and data.player then
+		deps.round.player = data.player
+		deps.round.playerChanged:Fire(data.player)
+	end
+	task.defer(function()
+		self:_runSequence(data)
+		self._pending = false
+	end)
+	return result
+end
+
+-- ----------------------------------------------------------------------------------------------
+-- The sequence
+
+local function makeFeather(index: number): BasePart
+	local template = AssetManifest.model("feather")
+	local part: BasePart
+	if template and template:IsA("BasePart") then
+		part = template:Clone() :: BasePart
+	else
+		part = Instance.new("Part")
+	end
+	part.Name = "SFE_SurveyFeather" .. index
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Material = Enum.Material.SmoothPlastic
+	part.Color = Color3.fromRGB(246, 236, 212):Lerp(Color3.fromRGB(226, 196, 132), (index % 4) / 4)
+	part.Size = Vector3.new(0.4, 1.0, 0.1)
+	return part
+end
+
+local function bezier(a: Vector3, b: Vector3, c: Vector3, t: number): Vector3
+	local u = 1 - t
+	return a * (u * u) + b * (2 * u * t) + c * (t * t)
+end
+
+-- A survey crate: planks, iron bands, a hinged lid, full of feathers.
+local function makeCrate(): (Model, BasePart, BasePart)
+	local crate = Instance.new("Model")
+	crate.Name = "SFE_SurveyCrate"
+	local function box(name: string, size: Vector3, offset: CFrame, color: Color3, material: Enum.Material): Part
+		local p = Instance.new("Part")
+		p.Name = name
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.Size = size
+		p.CFrame = offset
+		p.Color = color
+		p.Material = material
+		p.Parent = crate
+		return p
+	end
+	local body = box("Body", Vector3.new(1.8, 1.2, 1.8), CFrame.new(0, 0.6, 0), Color3.fromRGB(150, 112, 66), Enum.Material.WoodPlanks)
+	box("BandA", Vector3.new(1.86, 0.14, 1.86), CFrame.new(0, 0.25, 0), Color3.fromRGB(70, 72, 78), Enum.Material.Metal)
+	box("BandB", Vector3.new(1.86, 0.14, 1.86), CFrame.new(0, 0.95, 0), Color3.fromRGB(70, 72, 78), Enum.Material.Metal)
+	local fill = box("Fill", Vector3.new(1.6, 0.3, 1.6), CFrame.new(0, 1.15, 0), Color3.fromRGB(246, 236, 212), Enum.Material.Sand)
+	fill.Name = "Fill"
+	local lid = box("Lid", Vector3.new(1.86, 0.12, 1.86), CFrame.new(0, 1.26, 0), Color3.fromRGB(104, 74, 42), Enum.Material.WoodPlanks)
+	crate.PrimaryPart = body
+	return crate, body, lid
+end
+
+function MollyController._runSequence(self: MollyController, data: any)
+	local deps = self._deps
+	local rig, station = self._rig, self._station
+	local camera = workspace.CurrentCamera
+	local player = Players.LocalPlayer
+	local region = tostring(data and data.region or "B2")
+	local signal = tostring(data and data.signal or "none")
+	if not (rig and station and camera and player) then
+		self:_endSelection("sequence")
+		self:_announce(data)
+		return
+	end
+	local selection = self._selection
+	local baseline = selection and (selection :: any).baseline or { type = camera.CameraType, cframe = camera.CFrame }
+	local session = { trove = Trove.new(), done = false, committed = true, data = data, panel = nil }
+	self._sequence = session
+	self.stats.sequences += 1
+	-- The selection hands over: its trove sees `_sequence` set and leaves the camera to us.
+	self:_endSelection("sequence")
+	local motion = deps.accessibility:motionSettings()
+	local reduced = motion.reducedMotion
+	local scale = math.max(0.5, (deps.config.survey.sequenceSeconds or 5) / 5)
+	local function at(seconds: number): number
+		return seconds * (if reduced then 0.55 else scale)
+	end
+
+	deps.input:setSuspended(true)
+	deps.modals:setExternalUnlock(true)
+	session.trove:add(function()
+		deps.modals:setExternalUnlock(false)
+		deps.input:setSuspended(deps.modals:isBlocking())
+		self:_restoreCamera(baseline)
+	end)
+	-- Camera: the whole station from the players' side, a little high.
+	local anchor = station.PrimaryPart or station:FindFirstChild("MollyAnchor")
+	local base = if anchor and anchor:IsA("BasePart") then anchor.CFrame else rig:GetPivot()
+	local focus = base.Position + Vector3.new(0, 0.4, 0)
+	local eye = (base * CFrame.new(1.8, 3.6, -9.4)).Position
+	camera.CameraType = Enum.CameraType.Scriptable
+	TweenService:Create(
+		camera,
+		TweenInfo.new(if reduced then 0.05 else 0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ CFrame = CFrame.lookAt(eye, focus) }
+	):Play()
+	-- Panel with Molly's line and a skip (the trade is already committed).
+	local panel = SurveyPanel.create(
+		player:WaitForChild("PlayerGui"),
+		{ audio = deps.audio, accessibility = deps.accessibility, config = deps.config },
+		{
+			onSurvey = function() end,
+			onCancel = function() end,
+			onSkip = function()
+				self.stats.skips += 1
+				self:_finishSequence("skip")
+			end,
+		}
+	)
+	session.panel = panel
+	session.trove:add(panel.destroy)
+	local playerState = deps.round.player
+	panel.setState({
+		line = "Crate's in. Stand back - the Mole-o-Matic is warming up.",
+		carried = playerState and playerState.carriedStandard or 0,
+		cost = NestSurvey.crateCost(deps.config),
+		region = region,
+		regionText = NestSurvey.describe(region),
+		canSurvey = false,
+		hint = "Surveying...",
+		mode = "sequence",
+		skippable = true,
+	})
+	session.trove:add(UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.ButtonB or input.KeyCode == Enum.KeyCode.Escape then
+			self.stats.skips += 1
+			self:_finishSequence("skip")
+		end
+	end))
+
+	-- Props and levels we set here are undone by _applyResult at the end.
+	local tile = self._tiles[region]
+	local drill = self._drill
+	local platform = station:FindFirstChild("CratePlatform")
+	local spot = platform and platform:FindFirstChild("CrateSpot")
+	local spotPos = if spot and spot:IsA("Attachment") then spot.WorldPosition else base.Position + base.RightVector * 5.6
+	local funnel = station:FindFirstChild("HopperFunnel")
+	local mouth = funnel and funnel:FindFirstChild("Mouth")
+	local mouthPos = if mouth and mouth:IsA("Attachment") then mouth.WorldPosition else base.Position + Vector3.new(0, 5, 0)
+	local whistle = station:FindFirstChild("Whistle")
+	local steam = whistle and whistle:FindFirstChild("Steam")
+	local function after(seconds: number, fn: () -> ())
+		task.delay(seconds, function()
+			if not session.done then
+				fn()
+			end
+		end)
+	end
+
+	-- 1. The crate slides in from the player and lands on the platform.
+	local crate, body, lid = makeCrate()
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local from = if root and root:IsA("BasePart") then root.Position + Vector3.new(0, 0.5, 0) else spotPos + base.LookVector * -4
+	crate:PivotTo(CFrame.new(from) * CFrame.Angles(0, math.rad(20), 0))
+	crate.Parent = workspace
+	session.trove:add(crate)
+	local crateStart = os.clock()
+	local slideSeconds = at(0.7)
+	session.trove:add(RunService.RenderStepped:Connect(function()
+		local u = math.min(1, (os.clock() - crateStart) / slideSeconds)
+		if u < 1 then
+			local eased = 1 - (1 - u) * (1 - u)
+			local pos = bezier(from, (from + spotPos) / 2 + Vector3.new(0, 2.2, 0), spotPos - Vector3.new(0, 0.9, 0), eased)
+			crate:PivotTo(CFrame.new(pos) * CFrame.Angles(0, math.rad(20 * (1 - eased)), 0))
+		end
+	end))
+	deps.audio:play(Tokens.sound.throw)
+	after(slideSeconds, function()
+		crate:PivotTo(CFrame.new(spotPos - Vector3.new(0, 0.9, 0)))
+		deps.audio:play(Tokens.sound.rewardLand)
+		deps.haptics:pulse(0.3, 0.06)
+	end)
+	-- 2. Lid opens; feathers flow into the hopper.
+	after(at(0.85), function()
+		local hinge = lid.Position + Vector3.new(0, 0, 0.93)
+		local lidTween = TweenService:Create(lid, TweenInfo.new(at(0.3), Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			CFrame = CFrame.new(hinge) * CFrame.Angles(math.rad(-110), 0, 0) * CFrame.new(0, 0, -0.93),
+		})
+		lidTween:Play()
+		deps.audio:play(Tokens.sound.introPaper)
+	end)
+	local featherCount = if reduced then 6 else 14
+	for i = 1, featherCount do
+		after(at(1.1) + (i - 1) * at(0.06), function()
+			local feather = makeFeather(i)
+			feather.Parent = workspace
+			session.trove:add(feather)
+			self.stats.feathersFlown += 1
+			local start = os.clock()
+			local origin = body.Position + Vector3.new((i % 3 - 1) * 0.4, 0.9, (i % 2) * 0.3 - 0.15)
+			local control = (origin + mouthPos) / 2 + Vector3.new(0, 2.6, 0)
+			local flight = at(0.5)
+			local conn: RBXScriptConnection
+			conn = RunService.RenderStepped:Connect(function()
+				local u = math.min(1, (os.clock() - start) / flight)
+				local eased = 1 - (1 - u) * (1 - u)
+				feather.CFrame = CFrame.new(bezier(origin, control, mouthPos, eased)) * CFrame.Angles(u * 6, u * 4, 0)
+				if u >= 1 then
+					conn:Disconnect()
+					feather:Destroy()
+				end
+			end)
+			session.trove:add(conn)
+			if i % 4 == 1 then
+				deps.audio:play(Tokens.sound.collectRelease, { pitchVariance = 0.1 })
+			end
+		end)
+	end
+	after(at(1.2), function()
+		local fill = crate:FindFirstChild("Fill")
+		if fill and fill:IsA("BasePart") then
+			TweenService
+				:Create(fill, TweenInfo.new(at(0.9)), { Size = Vector3.new(1.6, 0.05, 1.6), CFrame = fill.CFrame - Vector3.new(0, 0.3, 0) })
+				:Play()
+		end
+	end)
+	-- 3. The selected tile rises and lights.
+	after(at(1.0), function()
+		for r, t in pairs(self._tiles) do
+			t.lift = if r == region then TILE_RAISE + 0.08 else 0
+			t.part.Color = if r == region then STRAW_LIT else t.color
+		end
+	end)
+	-- 4. Molly pulls the goggles down and hauls the lever; gears wind up.
+	after(at(1.3), function()
+		self._gesture = { name = "goggles", t = 0, duration = at(0.9) }
+		self._look = { yaw = -0.7, pitch = -0.3, until_ = os.clock() + at(2) }
+	end)
+	after(at(1.9), function()
+		local lever = self._pivots.lever
+		local knob = self._pivots.leverKnob
+		if lever then
+			local start = os.clock()
+			local conn: RBXScriptConnection
+			conn = RunService.RenderStepped:Connect(function()
+				local u = math.min(1, (os.clock() - start) / at(0.4))
+				local angle = math.rad(56) * (1 - (1 - u) * (1 - u))
+				applyPivot(lever, angle)
+				if knob then
+					applyPivot(knob, angle)
+				end
+				if u >= 1 then
+					conn:Disconnect()
+				end
+			end)
+			session.trove:add(conn)
+		end
+		deps.audio:play(Tokens.sound.uiConfirm)
+		deps.haptics:pulse(0.35, 0.08)
+		local motors = self._motors
+		if motors.RightShoulder then
+			self._gesture = { name = "crank", t = 0, duration = at(1.0) }
+		end
+	end)
+	local hum: Sound? = nil
+	after(at(2.1), function()
+		hum = deps.audio:play(Tokens.sound.vacMotor, { at = station:FindFirstChild("MachineHousing") :: any })
+		local start = os.clock()
+		local conn: RBXScriptConnection
+		conn = RunService.RenderStepped:Connect(function()
+			local u = math.min(1, (os.clock() - start) / at(0.8))
+			self._gearSpeed = 7 * u
+			if u >= 1 then
+				conn:Disconnect()
+			end
+		end)
+		session.trove:add(conn)
+	end)
+	session.trove:add(function()
+		if hum then
+			hum:Stop()
+		end
+		self._gearSpeed = 0
+	end)
+	-- 5. The drill moves over the tile and descends; the table shakes; the machine searches.
+	after(at(2.3), function()
+		if drill and tile then
+			drill.target = Vector3.new(tile.part.Position.X, drill.headRest.Position.Y, tile.part.Position.Z)
+		end
+	end)
+	local searching = false
+	after(at(2.9), function()
+		searching = true
+		deps.audio:play(Tokens.sound.rakeImpact)
+		deps.camera:impulse(0.06)
+		deps.haptics:pulse(0.5, 0.12)
+		self._look = { yaw = 0.35, pitch = -0.7, until_ = os.clock() + at(2.2) }
+	end)
+	local searchStart = at(2.9)
+	local searchEnd = at(4.3)
+	local shakeBase: { [BasePart]: CFrame } = {}
+	local plinth = station:FindFirstChild("MapPlinth")
+	if plinth and plinth:IsA("BasePart") then
+		shakeBase[plinth] = plinth.CFrame
+	end
+	session.trove:add(RunService.RenderStepped:Connect(function()
+		if not searching then
+			return
+		end
+		local now = os.clock() - crateStart
+		local u = math.clamp((now - searchStart) / math.max(0.01, searchEnd - searchStart), 0, 1)
+		if drill then
+			drill.descend = math.sin(math.min(1, u * 1.2) * math.pi) * 0.9
+		end
+		if u < 1 then
+			self._seismoLevel = 0.35 + math.random() * 0.25
+			self._gaugeLevel = 0.3 + math.sin(now * 9) * 0.25 + math.random() * 0.1
+			for _, lamp in pairs(self._lamps) do
+				lamp.level = 0.25 + math.sin(now * 6 + lamp.part.Position.X) * 0.2
+			end
+			if not reduced then
+				for p, rest in pairs(shakeBase) do
+					p.CFrame = rest + Vector3.new((math.random() - 0.5) * 0.03, (math.random() - 0.5) * 0.02, (math.random() - 0.5) * 0.03)
+				end
+			end
+		else
+			for p, rest in pairs(shakeBase) do
+				p.CFrame = rest
+			end
+		end
+	end))
+	session.trove:add(function()
+		for p, rest in pairs(shakeBase) do
+			p.CFrame = rest
+		end
+	end)
+	-- 6. The reading.
+	after(searchEnd, function()
+		searching = false
+		if drill then
+			drill.descend = 0
+		end
+		self._gearSpeed = 2
+		local words = (NestSurvey.WORDS :: any)[signal]
+		for key, lamp in pairs(self._lamps) do
+			lamp.level = if key == signal then 1 else 0
+		end
+		if signal == "none" then
+			self._gaugeLevel = 0
+			self._seismoLevel = 0
+			self._gesture = { name = "headshake", t = 0, duration = at(1.2) }
+			self._look = { yaw = 0.3, pitch = -0.4, until_ = os.clock() + at(1.4) }
+			deps.audio:play(Tokens.sound.uiCancel)
+		elseif signal == "weak" then
+			self._gaugeLevel = 0.4
+			self._seismoLevel = 0.18
+			self._gesture = { name = "ear", t = 0.4, duration = at(2.4) }
+			deps.audio:play(Tokens.sound.stationChime)
+		else
+			self._gaugeLevel = 1
+			self._seismoLevel = 0.9
+			self._hop = 1.2
+			self._gesture = { name = "cheer", t = 0, duration = at(1.4) }
+			if steam and steam:IsA("ParticleEmitter") and not reduced then
+				steam.Enabled = true
+				task.delay(at(0.9), function()
+					steam.Enabled = false
+				end)
+			end
+			deps.audio:play(Tokens.sound.fuseHiss, { at = whistle :: any })
+			deps.audio:play(Tokens.sound.eggChime)
+			deps.haptics:pulse(0.8, 0.2)
+			deps.camera:impulse(0.05)
+		end
+		if tile then
+			tile.part.Color = if signal == "strong" then STRONG_TINT elseif signal == "weak" then WEAK_TINT else NONE_TINT
+		end
+		if session.panel then
+			session.panel.setState({
+				line = words.text,
+				carried = deps.round.player and deps.round.player.carriedStandard or 0,
+				cost = NestSurvey.crateCost(deps.config),
+				region = region,
+				regionText = string.format("%s: %s", region, words.title),
+				canSurvey = false,
+				hint = "",
+				mode = "sequence",
+				skippable = true,
+			})
+		end
+		sayOn(rig, words.text)
+	end)
+	-- 7. The stamp lands on the map and the board is written.
+	after(searchEnd + at(0.6), function()
+		local existing = station:FindFirstChild("SFE_SurveyStamp")
+		if existing then
+			existing:Destroy()
+		end
+		local card = self:_placeStamp(region, signal)
+		if card then
+			local restCF = card.CFrame
+			card.CFrame = restCF + Vector3.new(0, 1.4, 0)
+			TweenService:Create(card, TweenInfo.new(at(0.18), Enum.EasingStyle.Quad, Enum.EasingDirection.In), { CFrame = restCF }):Play()
+		end
+		deps.audio:play(Tokens.sound.rewardLand)
+		deps.haptics:pulse(0.4, 0.06)
+		self:_applyBoardOnly()
+	end)
+	-- 8. The party hears; then everything is handed back.
+	local finishAt = searchEnd + at(1.7)
+	after(finishAt, function()
+		self:_banner(data)
+	end)
+	task.delay(finishAt + 0.3, function()
+		self:_finishSequence("complete")
+	end)
+	task.delay(finishAt + 0.3 + WATCHDOG_GRACE, function()
+		if self._sequence == session then
+			self:_finishSequence("watchdog")
+		end
+	end)
+end
+
+-- The board alone (the tiles are owned by the sequence until it ends).
+function MollyController._applyBoardOnly(self: MollyController)
+	local sequence = self._sequence
+	self._sequence = nil
+	self:_applyResult()
+	self._sequence = sequence
+	-- _applyResult reset the lamps/gauge/tiles to the rest display for a finished survey, which is
+	-- exactly the state the sequence is converging on; the pulse below keeps the lamps alive.
+	local survey = self._deps.round.round and self._deps.round.round.survey
+	if survey then
+		local lamp = self._lamps[survey.signal]
+		if lamp then
+			lamp.level = 1
+		end
+	end
+end
+
+function MollyController._banner(self: MollyController, data: any)
+	local deps = self._deps
+	local stage = deps.hud.stage
+	if not stage then
+		return
+	end
+	self.stats.banners += 1
+	local motion = deps.accessibility:motionSettings()
+	local words = (NestSurvey.WORDS :: any)[tostring(data and data.signal or "none")] or NestSurvey.WORDS.none
+	local label = Instance.new("TextLabel")
+	label.Name = "SFE_SurveyBanner"
+	label.AnchorPoint = Vector2.new(0.5, 0)
+	label.Position = UDim2.fromScale(0.5, 0.16)
+	label.Size = UDim2.new(0.9, 0, 0, 64)
+	label.BackgroundTransparency = 1
+	label.Font = Tokens.typography.display.font
+	label.TextSize = Tokens.typography.display.size - 2
+	label.TextColor3 = if data and data.signal == "none" then Color3.fromRGB(200, 214, 236) else Tokens.color.goldLight
+	label.TextStrokeTransparency = 0.2
+	label.TextStrokeColor3 = Tokens.color.outline
+	label.Text = string.format("MOLLY SURVEYED %s: %s", tostring(data and data.region or "?"), words.title)
+	label.TextTransparency = 1
+	label.ZIndex = Tokens.zIndex.toast + 2
+	label.Parent = stage
+	local constraint = Instance.new("UISizeConstraint")
+	constraint.MaxSize = Vector2.new(780, 64)
+	constraint.Parent = label
+	local scale = Instance.new("UIScale")
+	scale.Scale = 0.8
+	scale.Parent = label
+	TweenService:Create(label, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeOut), { TextTransparency = 0 }):Play()
+	TweenService:Create(scale, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeBack), { Scale = 1 }):Play()
+	if data and data.signal == "strong" then
+		Confetti.burst(stage, {
+			origin = UDim2.fromScale(0.5, 0.2),
+			count = 16,
+			spread = 180,
+			motion = motion,
+			tier = deps.quality and deps.quality:tier() or nil,
+			zIndex = Tokens.zIndex.toast + 3,
+		})
+	end
+	deps.hud.toasts:push(words.text, if data and data.signal == "none" then "info" else "success", 4)
+	task.delay(2.0, function()
+		if label.Parent then
+			local out = TweenService:Create(
+				label,
+				TweenInfo.new(Motion.duration("quick", motion)),
+				{ TextTransparency = 1, TextStrokeTransparency = 1 }
+			)
+			out:Play()
+			out.Completed:Once(function()
+				label:Destroy()
+			end)
+		end
+	end)
+	self._trove:add(label)
+end
+
+function MollyController._announce(self: MollyController, data: any)
+	self:_banner(data)
+	self:_applyResult()
+end
+
+function MollyController._onCompleted(self: MollyController, payload: any)
+	local me = Players.LocalPlayer and Players.LocalPlayer.UserId
+	local round = self._deps.round.round
+	if round and payload.survey and round.roundId == payload.roundId then
+		round.survey = payload.survey
+	end
+	self._remoteSelection = nil
+	if payload.byUserId == me and (self._pending or self._sequence) then
+		return -- the payer's own sequence reads it out
+	end
+	-- Another member paid: their pick is no longer a preview; the map shows the reading.
+	if self._selection then
+		self:_endSelection("surveyed")
+		sayOn(self._rig, NestSurvey.LINES.used)
+	end
+	self._deps.audio:play(Tokens.sound.stationChime)
+	self:_announce(payload)
+end
+
+-- Another member's live pick: the tile and the drill follow it for anyone not picking themselves.
+function MollyController._onRemoteSelection(self: MollyController, payload: any)
+	local round = self._deps.round.round
+	if not round or round.roundId ~= payload.roundId or round.survey then
+		return
+	end
+	self._remoteSelection = if NestSurvey.isRegion(payload.region) then payload.region else nil
+	if self._selection or self._sequence then
+		return
+	end
+	for region, tile in pairs(self._tiles) do
+		local chosen = region == self._remoteSelection
+		tile.lift = if chosen then TILE_RAISE else 0
+		tile.part.Color = if chosen then STRAW_HOVER else tile.color
+	end
+	if self._drill then
+		local pos = self._remoteSelection and self:_tilePosition(self._remoteSelection)
+		self._drill.target = if pos then Vector3.new(pos.X, self._drill.headRest.Position.Y, pos.Z) else self._drill.headRest.Position
+	end
+end
+
+function MollyController._finishSequence(self: MollyController, reason: string)
+	local session = self._sequence
+	if not session then
+		return
+	end
+	session.done = true
+	self._sequence = nil
+	self._look = nil
+	self._gesture = nil
+	session.trove:destroy()
+	self:_applyResult()
+	if self._drill then
+		self._drill.target = self._drill.headRest.Position
+		self._drill.descend = 0
+	end
+	local _ = reason
+end
+
+function MollyController.cancel(self: MollyController)
+	self:_endSelection("cancel")
+end
+
+function MollyController.skip(self: MollyController)
+	if self._sequence then
+		self.stats.skips += 1
+		self:_finishSequence("skip")
+	end
+end
+
+function MollyController.status(self: MollyController): { [string]: any }
+	local camera = workspace.CurrentCamera
+	local station = self._station
+	local board = station and station:FindFirstChild("ResultBoard")
+	local gui = board and board:FindFirstChild("Gui")
+	local status = gui and gui:FindFirstChild("Status")
+	local highlighted = false
+	for _, highlight in ipairs(self._highlights) do
+		highlighted = highlighted or highlight.Enabled
+	end
+	local raised = {}
+	for region, tile in pairs(self._tiles) do
+		if tile.lift > 0.05 then
+			table.insert(raised, region)
+		end
+	end
+	table.sort(raised)
+	local motors = 0
+	for _ in pairs(self._motors) do
+		motors += 1
+	end
+	local selection = self._selection
+	return {
+		rig = self._rig ~= nil,
+		station = self._station ~= nil,
+		motors = motors,
+		tiles = (function()
+			local n = 0
+			for _ in pairs(self._tiles) do
+				n += 1
+			end
+			return n
+		end)(),
+		highlighted = highlighted,
+		busy = self:isBusy(),
+		selecting = selection ~= nil,
+		selected = selection and selection.region or nil,
+		hovered = selection and selection.hovered or nil,
+		canSurvey = selection and selection.canSurvey or false,
+		sequence = self._sequence ~= nil,
+		raisedTiles = raised,
+		drillDescend = self._drill and self._drill.descend or 0,
+		drillTarget = self._drill and tostring(self._drill.current) or nil,
+		gearSpeed = self._gearSpeed,
+		gauge = self._gaugeLevel,
+		lamps = (function()
+			local out = {}
+			for key, lamp in pairs(self._lamps) do
+				out[key] = math.floor(lamp.level * 100) / 100
+			end
+			return out
+		end)(),
+		boardStatus = if status and status:IsA("TextLabel") then status.Text else nil,
+		stamp = station and station:FindFirstChild("SFE_SurveyStamp") ~= nil or false,
+		gesture = self._gesture and self._gesture.name or nil,
+		remoteSelection = self._remoteSelection,
+		cameraType = tostring(camera and camera.CameraType),
+		stats = table.clone(self.stats),
+	}
+end
+
+function MollyController.destroy(self: MollyController)
+	self:_endSelection("destroy")
+	self:_finishSequence("destroy")
+	if self._bound then
+		self._bound:destroy()
+		self._bound = nil
+	end
+	self._trove:destroy()
+end
+
+return MollyController

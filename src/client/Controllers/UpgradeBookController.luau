@@ -25,6 +25,7 @@ local UpgradeActions = require(script.Parent.Parent.UI.UpgradeActions)
 local UpgradeCopy = require(script.Parent.Parent.UI.UpgradeCopy)
 local Depth = require(script.Parent.Parent.UI.Components.Depth)
 local NestClues = require(Shared.Domain.NestClues)
+local NestSurvey = require(Shared.Domain.NestSurvey)
 
 local UpgradeBookController = {}
 UpgradeBookController.__index = UpgradeBookController
@@ -622,6 +623,43 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 			stamp.TextSize = Tokens.typography.caption.size - 2
 		end
 	end
+	-- Molly's survey: the party's one reading of the round, or NOT RUN.
+	local survey = round and round.survey
+	local surveyRow = Instance.new("Frame")
+	surveyRow.Name = "Clue_survey"
+	surveyRow.Position =
+		UDim2.fromOffset(0, cluesTop + Tokens.typography.title.size + Tokens.spacing.sm + 2 * (rowHeight + Tokens.spacing.xs))
+	surveyRow.Size = UDim2.new(1, 0, 0, rowHeight)
+	surveyRow.BackgroundColor3 = if survey then Tokens.color.creamPill else Tokens.color.creamDeep
+	surveyRow.BackgroundTransparency = if survey then 0 else 0.35
+	surveyRow.BorderSizePixel = 0
+	surveyRow.ZIndex = z
+	local surveyCorner = Instance.new("UICorner")
+	surveyCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
+	surveyCorner.Parent = surveyRow
+	Depth.keyline(surveyRow, Tokens.stroke.hairline + 0.5, if survey then Tokens.color.gold else Tokens.color.strawDeep)
+	surveyRow.Parent = right
+	local surveyLabel = FrameKit.text(surveyRow, "Label", "SURVEY", "heading", { zIndex = z + 1, color = Tokens.color.inkStrong })
+	surveyLabel.AnchorPoint = Vector2.new(0, 0.5)
+	surveyLabel.Position = UDim2.new(0, Tokens.spacing.md, 0.5, 0)
+	surveyLabel.Size = UDim2.new(0.4, 0, 0, Tokens.typography.heading.size + 2)
+	local surveyValue = FrameKit.text(
+		surveyRow,
+		"Value",
+		if survey
+			then string.format("%s: %s", tostring(survey.region), tostring((NestSurvey.WORDS :: any)[survey.signal].title))
+			else "NOT RUN",
+		"heading",
+		{
+			zIndex = z + 1,
+			color = if survey then (if survey.signal == "none" then Tokens.color.inkMuted else PAGE_BLUE) else Tokens.color.inkMuted,
+			align = Enum.TextXAlignment.Right,
+		}
+	)
+	surveyValue.AnchorPoint = Vector2.new(1, 0.5)
+	surveyValue.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, 0)
+	surveyValue.Size = UDim2.new(0.6, -Tokens.spacing.md, 0, Tokens.typography.heading.size + 2)
+	surveyValue.TextSize = Tokens.typography.heading.size - 2
 	local found = 1 + (if rainbowCarried > 0 or session.rainbowSeen then 1 else 0)
 	local count = FrameKit.text(right, "Found", string.format("FEATHERS FOUND:\n%d/%d", found, #entries), "display", {
 		zIndex = z,

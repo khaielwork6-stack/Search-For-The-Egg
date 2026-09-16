@@ -24,6 +24,7 @@ export type InteractionController = typeof(setmetatable(
 		openUpgrades: any,
 		stationRequested: any,
 		plumeRequested: any,
+		surveyRequested: any,
 		_trove: Trove.Trove,
 		stats: { prompts: number, suppressed: number },
 	},
@@ -40,6 +41,7 @@ function InteractionController.new(
 		claimed = Signal.new(),
 		openUpgrades = Signal.new(),
 		plumeRequested = Signal.new(),
+		surveyRequested = Signal.new(),
 		stationRequested = Signal.new(),
 		displayRequested = Signal.new(),
 		_trove = Trove.new(),
@@ -162,6 +164,10 @@ function InteractionController.handle(self: InteractionController, promptName: s
 	elseif promptName == "SFE_PlumeAnalyze" then
 		-- Professor Plume: the PlumeController owns the conversation, the trade and the sequence.
 		self.plumeRequested:Fire()
+		return nil
+	elseif promptName == "SFE_MollySurvey" then
+		-- Molly the Mole: the MollyController owns the map, the trade and the sequence.
+		self.surveyRequested:Fire()
 		return nil
 	elseif promptName == "SFE_EggDeliver" then
 		local token = deps.round:sessionToken()

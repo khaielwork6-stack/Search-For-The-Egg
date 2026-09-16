@@ -39,6 +39,7 @@ local NameplateController = require(Controllers.NameplateController)
 local InspectController = require(Controllers.InspectController)
 local UpgradeBookController = require(Controllers.UpgradeBookController)
 local PlumeController = require(Controllers.PlumeController)
+local MollyController = require(Controllers.MollyController)
 local PromptController = require(Controllers.PromptController)
 local ObjectiveController = require(Controllers.ObjectiveController)
 local VictoryController = require(Controllers.VictoryController)
@@ -213,6 +214,21 @@ local plume = trove:add(PlumeController.new({
 	camera = camera,
 	config = config,
 	dialogue = dialogue,
+	interaction = interaction,
+}))
+-- Molly the Mole: the survey NPC. Nameplate, outline, idle, the map, the trade and its sequence.
+local molly = trove:add(MollyController.new({
+	net = net,
+	round = round,
+	modals = modals,
+	hud = hud,
+	input = input,
+	audio = audio,
+	haptics = haptics,
+	accessibility = accessibility,
+	quality = quality,
+	camera = camera,
+	config = config,
 	interaction = interaction,
 }))
 -- The upgrade book: Tab, the book button, or the supplies counter opens it during a search.
@@ -1187,6 +1203,63 @@ if RunService:IsStudio() then
 			status.bundleRainbow = stack and stack._rainbowCount or nil
 			status.bundleCount = stack and stack._count or nil
 			return status
+		end,
+		-- Molly the Mole: drive the map, the trade and the sequence, and read what the player sees.
+		mollyStatus = function()
+			local status = molly:status()
+			status.top = modals:topId()
+			status.inputSuspended = (input :: any)._suspended
+			status.hudEnabled = hud.gui.Enabled
+			status.mouseBehaviour = tostring(game:GetService("UserInputService").MouseBehavior)
+			status.roundSurvey = round.round and round.round.survey or nil
+			status.carriedStandard = round.player and round.player.carriedStandard or nil
+			status.carriedRainbow = round.player and round.player.carriedRainbow or nil
+			local stack = (hud :: any).carriedStack
+			status.bundleCount = stack and stack._count or nil
+			status.panel = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("SFE_Survey") ~= nil
+			return status
+		end,
+		mollyOpen = function()
+			return { opened = molly:interact(), status = molly:status() }
+		end,
+		mollySelect = function(region)
+			return { selected = molly:select(tostring(region)), status = molly:status() }
+		end,
+		mollyNavigate = function(dRow, dCol)
+			return { moved = molly:navigate(tonumber(dRow) or 0, tonumber(dCol) or 0), selected = molly:status().selected }
+		end,
+		mollyConfirm = function()
+			local selected = molly:status().selected
+			if not selected then
+				return { ok = false, message = "no_selection" }
+			end
+			return molly:survey(selected)
+		end,
+		mollyCancel = function()
+			molly:cancel()
+			return molly:status()
+		end,
+		mollySkip = function()
+			molly:skip()
+			return molly:status()
+		end,
+		mollySpam = function(n, region)
+			local token = round:sessionToken()
+			local codes = {}
+			local pending = 0
+			for _ = 1, tonumber(n) or 5 do
+				pending += 1
+				task.spawn(function()
+					local result = net:request("SurveyRequest", { sessionToken = token, region = tostring(region or "B2") })
+					table.insert(codes, if result.ok then "ok" else tostring(result.message or result.code))
+					pending -= 1
+				end)
+			end
+			local deadline = os.clock() + 8
+			while pending > 0 and os.clock() < deadline do
+				task.wait(0.05)
+			end
+			return { codes = codes, pending = pending }
 		end,
 		-- Raw request spam straight at the remote, past the controller's own guard.
 		plumeSpam = function(n, category)
