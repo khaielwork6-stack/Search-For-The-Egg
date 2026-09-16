@@ -1597,16 +1597,34 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		anchor = Vector2.new(0.5, 0.5),
 	})
 	breakdownRarity.Parent = breakdown
-	local breakdownLines = Fit.text(breakdown, "Lines", "", {
-		font = Tokens.typography.body.font,
-		color = Tokens.color.inkStrong,
-		max = 15,
-		zIndex = 3,
-		size = UDim2.fromScale(0.78, 0.62),
-		position = UDim2.fromScale(0.19, 0.34),
-		align = Enum.TextXAlignment.Left,
-		valign = Enum.TextYAlignment.Top,
-	})
+	-- The bonus list scrolls when a class grants more lines than the strip can hold (Master Forager).
+	local breakdownScroll = Instance.new("ScrollingFrame")
+	breakdownScroll.Name = "LinesScroll"
+	breakdownScroll.BackgroundTransparency = 1
+	breakdownScroll.BorderSizePixel = 0
+	breakdownScroll.Position = UDim2.fromScale(0.19, 0.34)
+	breakdownScroll.Size = UDim2.fromScale(0.78, 0.62)
+	breakdownScroll.CanvasSize = UDim2.fromScale(0, 0)
+	breakdownScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	breakdownScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+	breakdownScroll.ScrollBarThickness = 4
+	breakdownScroll.ScrollBarImageColor3 = WOOD
+	breakdownScroll.ElasticBehavior = Enum.ElasticBehavior.Never
+	breakdownScroll.ZIndex = 3
+	breakdownScroll.Parent = breakdown
+	local breakdownLines = Instance.new("TextLabel")
+	breakdownLines.Name = "Lines"
+	breakdownLines.BackgroundTransparency = 1
+	breakdownLines.Size = UDim2.new(1, -8, 0, 0)
+	breakdownLines.AutomaticSize = Enum.AutomaticSize.Y
+	breakdownLines.Font = Tokens.typography.body.font
+	breakdownLines.TextSize = if phone then 11 else 15
+	breakdownLines.TextColor3 = Tokens.color.inkStrong
+	breakdownLines.TextWrapped = true
+	breakdownLines.TextXAlignment = Enum.TextXAlignment.Left
+	breakdownLines.TextYAlignment = Enum.TextYAlignment.Top
+	breakdownLines.ZIndex = 3
+	breakdownLines.Parent = breakdownScroll
 	local breakdownArtView: GuiObject? = nil
 	local function renderInfo()
 		local projection = deps.profile.projection
