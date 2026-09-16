@@ -280,7 +280,7 @@ local function buildMap(station: Model, base: CFrame, tableTop: number): (Vector
 		-- The face reads from the FRONT (world +Z): rotate the gui contents so the letters are upright
 		-- for a viewer standing south of the map looking north.
 		local face = Instance.new("Frame")
-		face.Name = "Face"
+		face.Name = "Sheet" -- not "Face": that is a SurfaceGui property
 		face.BackgroundTransparency = 1
 		face.Size = UDim2.fromScale(1, 1)
 		face.Rotation = 180

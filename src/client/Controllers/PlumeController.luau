@@ -1066,7 +1066,9 @@ function PlumeController._finishSequence(self: PlumeController, reason: string)
 	local _ = reason
 end
 
+-- Dismisses whatever Plume has up: the card, or the sequence.
 function PlumeController.skip(self: PlumeController)
+	self:_closeCard()
 	self:_finishSequence("skip")
 end
 
