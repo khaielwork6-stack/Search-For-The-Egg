@@ -640,6 +640,12 @@ function Validator.validate(raw: any): Report
 			end
 			range("featherLengthRange", 0.2, 12)
 			range("featherWidthRange", 0.1, 6)
+			-- A record's slab must be at least as thick as the deepest layer step or the inside of the
+			-- mound shows between records; a nil here would size every feather to nothing.
+			check(
+				isPositiveNumber(visual.featherThicknessStuds) and visual.featherThicknessStuds <= 3,
+				"pile.visual.featherThicknessStuds must be > 0 and <= 3"
+			)
 			range("fluffLengthRange", 0.2, 12)
 			range("fluffWidthRange", 0.1, 6)
 			range("tiltRangeDegrees", 0, 90)

@@ -321,12 +321,12 @@
       "partBudgetDesktop": 42000,
       "partBudgetMobile": 10500,
       "featherLengthRange": [
-        1.15,
-        1.65
+        1.3,
+        1.9
       ],
       "tiltRangeDegrees": [
-        3,
-        13
+        5,
+        32
       ],
       "palette": [
         [
@@ -381,8 +381,8 @@
       "visibleSlotsPerCell": 7,
       "visibleSlotsPerCellMobile": 3,
       "featherWidthRange": [
-        0.42,
-        0.6
+        0.56,
+        0.74
       ],
       "featherSpreadFraction": 0.95,
       "rollRangeDegrees": 58,
@@ -409,7 +409,7 @@
         38
       ],
       "selectionFillTransparency": 0.42,
-      "downslopeYawJitterDegrees": 42,
+      "downslopeYawJitterDegrees": 180,
       "rimInsetStuds": -1.2,
       "rimTaperStuds": 1.8,
       "liftSeconds": 0.09,
@@ -487,7 +487,9 @@
       "capEvidence": "OWNER 15 Sep 2026: the coat window was capped at 22 slots. A centre column holds 32 records at a step of 0.5 studs, so even a column standing over a hole to the floor could only draw 11 studs of a 16-stud face and the bottom five studs were open air. The cap is the column itself now (32), so a wall renders every record it has - real, pickable feathers rather than filler - and only columns beside a drop ever ask for that many.",
       "wallStrandsPerLevelMobile": 0,
       "budgetEvidence": "OWNER 15 Sep 2026: 26,000 was the target from when the mound was a hollow shell - and it was never enforced on anything but the initial fluff bed, which allocates nothing. A mound whose interior is genuinely packed costs about 24k surface records plus wall filler that grows with how much has been dug: measured at 42k parts with 8.8% of the mound excavated across eight craters. The number now says what the system actually costs. Phones line a face at wallStrandsPerLevelMobile instead, on top of their much shallower coat window.",
-      "decorativeEvidence": "OWNER 15 Sep 2026 (clip of the vacuum hollowing the mound, then the audit): every rendered record was correct - 22,109 instances, 0 ghosts, 0 orphans, 0 duplicates - and 11,374 decorative strands were visible: wall filler, underlayer sheets and the front skirt, CanQuery=false and carrying no id. Those are the feathers that floated in the cavity and could not be collected, and the ones the hand ray passed through to claim a record behind. If it looks like a feather the player must be able to collect it, so every decorative source is zero; the mound is records and nothing else."
+      "decorativeEvidence": "OWNER 15 Sep 2026 (clip of the vacuum hollowing the mound, then the audit): every rendered record was correct - 22,109 instances, 0 ghosts, 0 orphans, 0 duplicates - and 11,374 decorative strands were visible: wall filler, underlayer sheets and the front skirt, CanQuery=false and carrying no id. Those are the feathers that floated in the cavity and could not be collected, and the ones the hand ray passed through to claim a record behind. If it looks like a feather the player must be able to collect it, so every decorative source is zero; the mound is records and nothing else.",
+      "featherThicknessStuds": 0.5,
+      "solidEvidence": "OWNER 16 Sep 2026 (standing on the sand inside a vacuumed cavity, looking up through the walls): there must be no space inside the mound, and every visible strand must be a record. A record was 0.09 studs thick stacked every 0.5, so from the side a column was mostly air. Thickness is now 0.5 (the crown step) so consecutive records touch; width starts above the 0.54 cell pitch so neighbouring columns abut; slabs are longer, tilted 5-32 degrees and yawed at random so the stack interlocks the way the reference's straw does. No filler, no body: the middle is closed by records alone."
     },
     "assumption": "ASSUMED",
     "recordSpacingStuds": 0.15,

@@ -299,9 +299,15 @@ local function placeFeather(
 	tilt: number,
 	roll: number,
 	length: number,
-	width: number
+	width: number,
+	thickness: number
 )
-	part.Size = Vector3.new(width, length, math.max(0.06, TEMPLATE_SIZE.Z * (length / TEMPLATE_SIZE.Y) * 0.7))
+	-- Thickness is the whole reason the inside of the mound can be seen. Records stack up a column at
+	-- `step` (half a stud at the crown); a slab 0.09 thick left 0.4 studs of air above each one, so
+	-- from the side a column was four parts air to one part feather and a dug cavity looked straight
+	-- through its own walls. At or above the step, consecutive records touch and a column is a solid
+	-- post from any angle - packed with records, never with filler.
+	part.Size = Vector3.new(width, length, thickness)
 	local yawDirection = Vector3.new(math.cos(yaw), 0, math.sin(yaw))
 	local tangent = yawDirection - normal * yawDirection:Dot(normal)
 	if tangent.Magnitude < 0.01 then
@@ -444,7 +450,19 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 				self:_dressRainbow(part, column.index, slot)
 			end
 			local yaw = self:_downslope(wx, wz) + (placement.yaw / (math.pi * 2) - 0.5) * math.rad(visual.downslopeYawJitterDegrees) * 2
-			placeFeather(part, wx, seatY, wz, normal, yaw, tilt, placement.roll, placement.length * scale, placement.width * scale)
+			placeFeather(
+				part,
+				wx,
+				seatY,
+				wz,
+				normal,
+				yaw,
+				tilt,
+				placement.roll,
+				placement.length * scale,
+				placement.width * scale,
+				visual.featherThicknessStuds
+			)
 			if column.built and not self._culled then
 				-- Newly exposed record: it was always there beneath; fade it in rather than pop.
 				local seconds = Motion.clampSeconds(visual.revealFadeSeconds or 0.32, self._accessibility:motionSettings())
@@ -520,7 +538,8 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 				math.rad(lerp(visual.fluffTiltRangeDegrees[1], visual.fluffTiltRangeDegrees[2], h(5))),
 				(h(6) - 0.5) * math.rad(visual.rollRangeDegrees),
 				lerp(visual.fluffLengthRange[1], visual.fluffLengthRange[2], h(7)) * scale,
-				lerp(visual.fluffWidthRange[1], visual.fluffWidthRange[2], h(8)) * scale
+				lerp(visual.fluffWidthRange[1], visual.fluffWidthRange[2], h(8)) * scale,
+				visual.featherThicknessStuds
 			)
 			part.Parent = folder
 		end
@@ -579,7 +598,8 @@ function PileVisualController._applyUnderlayer(self: PileVisualController, colum
 					math.rad(lerp(visual.underlayerTiltRangeDegrees[1], visual.underlayerTiltRangeDegrees[2], h(5))),
 					(h(6) - 0.5) * math.rad(40),
 					lerp(visual.underlayerLengthRange[1], visual.underlayerLengthRange[2], h(7)) * scale,
-					lerp(visual.underlayerWidthRange[1], visual.underlayerWidthRange[2], h(8)) * scale
+					lerp(visual.underlayerWidthRange[1], visual.underlayerWidthRange[2], h(8)) * scale,
+					visual.featherThicknessStuds
 				)
 				part.Parent = folder
 				table.insert(column.under, { part = part, depth = depth })
@@ -781,7 +801,8 @@ function PileVisualController._buildRimBed(self: PileVisualController, folder: F
 			math.rad(lerp(visual.fluffTiltRangeDegrees[1], visual.fluffTiltRangeDegrees[2], h(5))),
 			(h(6) - 0.5) * math.rad(visual.rollRangeDegrees),
 			lerp(visual.fluffLengthRange[1], visual.fluffLengthRange[2], h(7)) * math.max(scale, 0.6),
-			lerp(visual.fluffWidthRange[1], visual.fluffWidthRange[2], h(8)) * math.max(scale, 0.6)
+			lerp(visual.fluffWidthRange[1], visual.fluffWidthRange[2], h(8)) * math.max(scale, 0.6),
+			visual.featherThicknessStuds
 		)
 		part.Parent = folder
 		table.insert(self._rimBed, part)
@@ -1229,7 +1250,7 @@ function PileVisualController.collectFeather(
 		part = acquirePart(self)
 		part.CanQuery = false
 		local placement = FeatherLayout.placement(visual, cellIndex or 1, slot or 1, (self._field :: PileSurface.Field).cellSize)
-		part.Size = Vector3.new(placement.width, placement.length, 0.1)
+		part.Size = Vector3.new(placement.width, placement.length, visual.featherThicknessStuds)
 		local column2 = cellIndex and self._columns[cellIndex]
 		part.Color = paletteColor(self._config, depthTint(visual, placement.tint, if column2 and slot then column2.base - slot else 0))
 		part.CFrame = CFrame.new(hitPosition)
