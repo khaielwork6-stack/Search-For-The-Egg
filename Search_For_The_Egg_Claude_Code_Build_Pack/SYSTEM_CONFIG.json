@@ -516,6 +516,24 @@
     "repeatProtectionRounds": 3,
     "assumption": "ASSUMED"
   },
+  "clues": {
+    "costsRainbow": [
+      3,
+      5
+    ],
+    "maxPerRound": 2,
+    "stationRangeStuds": 10,
+    "analyzeSeconds": 2.0,
+    "direction": {
+      "sideFraction": 0.22
+    },
+    "depth": {
+      "outerMaxFraction": 0.52,
+      "coreMinFraction": 0.59
+    },
+    "evidence": "OWNER 16 Sep 2026 (Professor Plume brief): first clue 3 Rainbow Feathers, second 5, at most two clues per party per round, DIRECTION (barn side / center / fence side) and DEPTH (outer layer / packed middle / nest core). Band edges are ASSUMED: sideFraction 0.22 makes the centre stripe ~6.4 studs wide on a 14.6-stud mound; the depth edges split the configured 0.45-0.65 removal window into thirds so every band is reachable (a lucky shallow Egg reads OUTER LAYER).",
+    "assumption": "ASSUMED edges, OWNER costs and limits"
+  },
   "selling": {
     "cashPerStandardFeather": 0.01,
     "rainbowFeatherMultiplier": 10,

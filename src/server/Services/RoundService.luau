@@ -11,6 +11,7 @@ local RoundReducer = require(Shared.Reducers.RoundReducer)
 local SessionReducer = require(Shared.Reducers.SessionReducer)
 local WeightedRandom = require(Shared.WeightedRandom)
 local PileGrid = require(Shared.Domain.PileGrid)
+local NestClues = require(Shared.Domain.NestClues)
 local PileSurface = require(Shared.Domain.PileSurface)
 local EggNodes = require(Shared.Domain.EggNodes)
 local ToolSpecs = require(Shared.Domain.ToolSpecs)
@@ -58,6 +59,7 @@ export type Runtime = {
 	commitPending: boolean,
 	resultsShownAt: number?,
 	returnVotes: { [number]: string },
+	clues: NestClues.State?, -- Professor Plume's unlocked clues; owned by ClueService, reset with the round
 }
 
 export type RoundService = typeof(setmetatable(
@@ -548,6 +550,8 @@ function RoundService.project(self: RoundService, roundId: string, includePile: 
 		projection.introEndsInMs = math.floor(math.max(0, runtime.cutsceneDeadline - self._clock:monotonic()) * 1000 + 0.5)
 	end
 	projection.removedFraction = PileGrid.removedFraction(runtime.grid)
+	-- Clues are broad bands and fixed words only; the projection never carries the Egg's place.
+	projection.clues = NestClues.project(self._config, runtime.clues)
 	if includePile then
 		projection.pile = PileGrid.snapshot(runtime.grid)
 		projection.pile.rainbowSeed = runtime.rainbowSeed or 0

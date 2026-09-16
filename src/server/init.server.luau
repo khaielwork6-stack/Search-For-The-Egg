@@ -50,6 +50,7 @@ local SellingService = require(script.Services.SellingService)
 local UpgradeService = require(script.Services.UpgradeService)
 local ToolService = require(script.Services.ToolService)
 local EggService = require(script.Services.EggService)
+local ClueService = require(script.Services.ClueService)
 local VictoryService = require(script.Services.VictoryService)
 local ObjectiveService = require(script.Services.ObjectiveService)
 local ClassService = require(script.Services.ClassService)
@@ -374,6 +375,14 @@ local tools = ToolService.new({
 })
 local egg =
 	EggService.new({ config = config, rounds = rounds, clock = clock, getCharacterPosition = getCharacterPosition, analytics = analytics })
+-- Professor Plume: Rainbow Feathers for a clue, shared by the round.
+local clues = ClueService.new({
+	config = config,
+	rounds = rounds,
+	sessions = sessions,
+	getCharacterPosition = getCharacterPosition,
+	analytics = analytics,
+})
 -- Robux commerce: native prompts, pass verification, receipt grants. Grants push a fresh
 -- projection so the client sees the new gems or entitlement at once.
 local commerce = CommerceService.new({
@@ -1124,6 +1133,35 @@ end)
 registry:onRequest("EggDeliver", function(player, payload)
 	return egg:deliver(player.UserId, payload.sessionToken)
 end)
+registry:onRequest("ClueAnalyze", function(player, payload)
+	local result = clues:analyze(player.UserId, payload)
+	local runtime = rounds:roundOf(player.UserId)
+	if result.ok and runtime then
+		-- The payer's bag changed; the same snapshot shape the HUD already binds to carries it.
+		local data = result.data :: any
+		data.player = projectPlayerFor(runtime.state.roundId, player.UserId)
+	end
+	return result
+end)
+-- A clue belongs to the whole party: everyone hears the discovery and the words, with the payer's
+-- name for the banner. The payer's own client sequences the reveal after its machine has run.
+clues.unlocked:Connect(function(runtime, userId, entry, projection)
+	local payer = playerData:playerOf(userId)
+	local payerName = if payer and typeof(payer) == "Instance" then (payer :: Player).DisplayName else "A forager"
+	for _, member in ipairs(memberPlayers(runtime.state.members)) do
+		send(member, "ClueUnlocked", {
+			roundId = runtime.state.roundId,
+			category = entry.category,
+			band = entry.band,
+			title = entry.title,
+			text = entry.text,
+			byUserId = userId,
+			byName = payerName,
+			order = entry.order,
+			clues = projection,
+		})
+	end
+end)
 -- Carrying: the Egg rides on the carrier, everyone hears who has it; a drop puts it back.
 egg.carried:Connect(function(runtime, userId)
 	local carrier = playerData:playerOf(userId)
@@ -1336,6 +1374,7 @@ local container = {
 	selling = selling,
 	upgrades = upgrades,
 	egg = egg,
+	clues = clues,
 	tools = tools,
 	entitlements = entitlements,
 	commerce = commerce,

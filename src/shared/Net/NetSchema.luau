@@ -150,6 +150,7 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		),
 		request("EggClaim", Schema.object({ sessionToken = TOKEN }), slowRate, 2),
 		request("EggDeliver", Schema.object({ sessionToken = TOKEN }), slowRate, 2),
+		request("ClueAnalyze", Schema.object({ sessionToken = TOKEN, category = Schema.enum({ "direction", "depth" }) }), slowRate, 2),
 		-- Meta ---------------------------------------------------------------------------------
 		request(
 			"ClassRoll",
@@ -226,6 +227,7 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		serverEvent("CrateRun", Schema.object({}), 2),
 		serverEvent("UpgradeResult", Schema.object({}), 2),
 		serverEvent("EggRevealed", Schema.object({}), 2),
+		serverEvent("ClueUnlocked", Schema.object({}), 2),
 		serverEvent("EggCarried", Schema.object({}), 2),
 		serverEvent("EggDropped", Schema.object({}), 2),
 		serverEvent("VictoryStarted", Schema.object({}), 2),

@@ -176,6 +176,13 @@ ChapterLayout.chapter1 = table.freeze({
 	upgradePrompt = Vector3.new(-45, 58.9, 301.2),
 	farmer = Vector3.new(-28, 52.1, 338), -- the Farmer stands between the barn door and the mound
 	farmerFacing = Vector3.new(0, 52.1, 372),
+	-- Professor Plume's investigation station: open ground between the Farmer and the mound's
+	-- south-west foot (measured 16 Sep 2026: TanClearing at 52.1, nothing built in x -28..-10,
+	-- z 342..364). The station faces the mound; Plume stands at its left end, facing the same way.
+	clueStation = Vector3.new(-19, 52.1, 353),
+	clueStationFacing = Vector3.new(0, 52.1, 372),
+	-- The barn door: the DIRECTION clue's axis runs from the mound's centre to here.
+	clueBarn = Vector3.new(-45, 52.1, 322),
 	chickPathY = 52.1, -- scout chicks walk at ground level between the mound and the crate
 	-- Perches the chick flies between while the crate is away (measured 14 Sep 2026 from the map:
 	-- crate rear rim top 55.6, crate corner post top 55.4, conveyor end roller top 56.4). Feet height.

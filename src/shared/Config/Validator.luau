@@ -931,6 +931,36 @@ function Validator.validate(raw: any): Report
 		end
 	end
 
+	-- Clues (Professor Plume)
+	check(type(raw.clues) == "table", "clues missing")
+	if type(raw.clues) == "table" then
+		local clues = raw.clues
+		check(type(clues.costsRainbow) == "table" and #clues.costsRainbow > 0, "clues.costsRainbow must list at least one cost")
+		if type(clues.costsRainbow) == "table" then
+			for index, cost in ipairs(clues.costsRainbow) do
+				check(isPositiveNumber(cost) and cost == math.floor(cost), "clues.costsRainbow[" .. index .. "] must be a positive integer")
+			end
+		end
+		check(
+			isPositiveNumber(clues.maxPerRound) and clues.maxPerRound == math.floor(clues.maxPerRound),
+			"clues.maxPerRound must be a positive integer"
+		)
+		check(isPositiveNumber(clues.stationRangeStuds), "clues.stationRangeStuds must be > 0")
+		check(isPositiveNumber(clues.analyzeSeconds), "clues.analyzeSeconds must be > 0")
+		check(
+			type(clues.direction) == "table" and isPositiveNumber(clues.direction.sideFraction) and clues.direction.sideFraction < 1,
+			"clues.direction.sideFraction must be within (0, 1)"
+		)
+		check(
+			type(clues.depth) == "table"
+				and isPositiveNumber(clues.depth.outerMaxFraction)
+				and isPositiveNumber(clues.depth.coreMinFraction)
+				and clues.depth.outerMaxFraction < clues.depth.coreMinFraction
+				and clues.depth.coreMinFraction < 1,
+			"clues.depth fractions must satisfy 0 < outerMaxFraction < coreMinFraction < 1"
+		)
+	end
+
 	-- Victory
 	check(type(raw.victory) == "table" and isNonNegativeNumber(raw.victory.finderBonusGems), "victory.finderBonusGems must be >= 0")
 	check(type(raw.victory) == "table" and raw.victory.saveBeforeTeleport == true, "victory.saveBeforeTeleport must be true")

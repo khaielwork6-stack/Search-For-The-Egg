@@ -30,6 +30,7 @@ local UpgradeService = require(Server.Services.UpgradeService)
 local ToolService = require(Server.Services.ToolService)
 local PileTerrainService = require(Server.Services.PileTerrainService)
 local EggService = require(Server.Services.EggService)
+local ClueService = require(Server.Services.ClueService)
 local VictoryService = require(Server.Services.VictoryService)
 local ObjectiveService = require(Server.Services.ObjectiveService)
 local ClassService = require(Server.Services.ClassService)
@@ -181,6 +182,13 @@ function GameplayHarness.new(cfg, options)
 		getCharacterPosition = getCharacterPosition,
 		analytics = analytics,
 	})
+	local clues = ClueService.new({
+		config = cfg,
+		rounds = rounds,
+		sessions = sessions,
+		getCharacterPosition = getCharacterPosition,
+		analytics = analytics,
+	})
 	local saveShouldFail = false
 	local victory = VictoryService.new({
 		config = cfg,
@@ -315,6 +323,10 @@ function GameplayHarness.new(cfg, options)
 	h.classes, h.perks, h.rewards, h.inventory, h.leaderboards, h.leaderboardStore, h.group, h.classRng =
 		classes, perks, rewards, inventory, leaderboards, leaderboardStore, group, classRng
 	h.entitlements = entitlements
+	h.clues = clues
+	function h.analyze(userId, category)
+		return clues:analyze(userId, { sessionToken = h.token(userId), category = category })
+	end
 	h.toolEvents = toolEvents
 	h.toolRng = toolRng
 	h.pileTerrain = pileTerrain

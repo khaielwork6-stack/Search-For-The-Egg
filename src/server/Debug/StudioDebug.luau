@@ -360,6 +360,71 @@ function StudioDebug.install(container: any): any?
 		return table.clone(container.debugEntitlements[userId])
 	end
 
+	-- Professor Plume. `clueState` is what the party sees; `eggTruth` is the server's own band
+	-- arithmetic for the live Egg, so a delivered clue can be checked against it; `setCarried`
+	-- writes a bag directly (Rainbow Feathers are far too rare to farm in a test).
+	function hooks.clueState(userId: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return { error = "no_round" }
+		end
+		local state = runtime.players[userId]
+		return {
+			clues = container.clues:project(runtime),
+			carriedStandard = state and state.carriedStandard or 0,
+			carriedRainbow = state and state.carriedRainbow or 0,
+			phase = runtime.state.phase,
+			stats = table.clone(container.clues.stats),
+		}
+	end
+
+	function hooks.eggTruth(userId: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return { error = "no_round" }
+		end
+		local NestClues = require(game:GetService("ReplicatedStorage").Shared.Domain.NestClues)
+		local ChapterLayout = require(game:GetService("ReplicatedStorage").Shared.Domain.ChapterLayout)
+		local layout = ChapterLayout[runtime.state.chapter]
+		local facts = container.clues:eggFacts(runtime)
+		local position = container.egg:position(runtime)
+		return {
+			x = position.X,
+			y = position.Y,
+			z = position.Z,
+			depthFraction = facts.depthFraction,
+			sideFraction = NestClues.sideFraction(layout, facts.radius, facts.worldX, facts.worldZ),
+			direction = NestClues.directionBand(container.config, NestClues.sideFraction(layout, facts.radius, facts.worldX, facts.worldZ)),
+			depth = NestClues.depthBand(container.config, facts.depthFraction),
+			eggSlot = runtime.eggSlot,
+		}
+	end
+
+	function hooks.setCarried(userId: number, standard: number, rainbow: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local runtime = container.rounds:roundOf(userId)
+		local state = runtime and runtime.players[userId]
+		if not state then
+			return { error = "no_round" }
+		end
+		state.carriedStandard = math.max(0, math.floor(tonumber(standard) or state.carriedStandard))
+		state.carriedRainbow = math.max(0, math.floor(tonumber(rainbow) or state.carriedRainbow))
+		local player = container.playerData:playerOf(userId)
+		if player and typeof(player) == "Instance" and container.pushPreviews then
+			container.pushPreviews(player) -- carries the round player projection, so the bag updates on screen
+		end
+		debugLog("SET_CARRIED", { userId = userId, standard = state.carriedStandard, rainbow = state.carriedRainbow })
+		return { carriedStandard = state.carriedStandard, carriedRainbow = state.carriedRainbow }
+	end
+
 	function hooks.grantWins(userId: number, wins: number)
 		if not StudioDebug.isUserAllowed(userId) then
 			return nil
