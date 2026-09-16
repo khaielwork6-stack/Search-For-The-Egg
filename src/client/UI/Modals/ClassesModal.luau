@@ -145,8 +145,8 @@ local STRAW = Color3.fromRGB(232, 196, 96)
 local CARD_ASPECT = 0.74
 
 -- Reel geometry by distance from the centre slot (Scale of the reel): x offset and card height.
-local REEL_OFFSET = { [0] = 0, 0.215, 0.39, 0.5 }
-local REEL_HEIGHT = { [0] = 0.86, 0.71, 0.57, 0.46 }
+local REEL_OFFSET = { [0] = 0, 0.235, 0.42, 0.52 }
+local REEL_HEIGHT = { [0] = 0.86, 0.7, 0.5, 0.4 }
 local function reelAt(distance: number): (number, number)
 	local d = math.clamp(distance, 0, 3)
 	local lo = math.floor(d)
@@ -447,8 +447,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		outline = 2,
 		outlineColor = WOOD_DEEP,
 		zIndex = 2,
-		size = UDim2.fromScale(1, 0.34),
-		position = UDim2.fromScale(0.5, 0.82),
+		size = UDim2.fromScale(1, 0.4),
+		position = UDim2.fromScale(0.5, 0.8),
 		anchor = Vector2.new(0.5, 0.5),
 	})
 
@@ -772,8 +772,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		pill.Parent = frame
 		local lock = Icons.lock(frame, 10, { zIndex = 4, color = WOOD })
 		lock.AnchorPoint = Vector2.new(0.5, 0.5)
-		lock.Position = UDim2.fromScale(0.5, 0.32)
-		lock.Size = UDim2.fromScale(0, 0.36)
+		lock.Position = UDim2.fromScale(0.5, 0.28)
+		lock.Size = UDim2.fromScale(0, 0.3)
 		Fit.aspect(lock, 1, Enum.DominantAxis.Height)
 		local empty = Fit.text(frame, "Empty", "EMPTY", {
 			font = Tokens.typography.label.font,
@@ -789,7 +789,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			variant = "primary",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromScale(0.86, 0.36),
+			size = UDim2.fromScale(0.88, 0.42),
 			zIndex = 5,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTap)
@@ -803,8 +803,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			end,
 		})
 		buy.button.AnchorPoint = Vector2.new(0.5, 1)
-		buy.button.Position = UDim2.fromScale(0.5, 0.95)
-		Fit.buttonText(buy, 20)
+		buy.button.Position = UDim2.fromScale(0.5, 0.96)
+		Fit.buttonText(buy, 22, 4)
 		table.insert(cleanups, buy.destroy)
 		local hit = Instance.new("TextButton")
 		hit.Name = "Hit"
@@ -891,7 +891,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	table.insert(cleanups, rollHandle.destroy)
 	rollHandle.pulse(true)
 
-	local toggles = Fit.frame(root, "Toggles", UDim2.fromScale(REEL_CX, 0.875), UDim2.fromScale(0.42, 0.085), 4, Vector2.new(0.5, 0.5))
+	local toggles = Fit.frame(root, "Toggles", UDim2.fromScale(REEL_CX, 0.875), UDim2.fromScale(0.36, 0.085), 4, Vector2.new(0.5, 0.5))
 	Fit.row(toggles, { gap = 0.04 })
 	local function toggle(name: string, text: string, order: number): (any, Frame)
 		local handle = Button.build(toggles, {
@@ -907,12 +907,12 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		})
 		handle.button.Name = name
 		handle.button.LayoutOrder = order
-		local label = Fit.buttonText(handle, 20)
+		local label = Fit.buttonText(handle, 18)
 		if label then
 			local pad = label:FindFirstChildOfClass("UIPadding")
 			if pad then
-				pad.PaddingLeft = UDim.new(0.22, 0)
-				pad.PaddingRight = UDim.new(0.06, 0)
+				pad.PaddingLeft = UDim.new(0.27, 0)
+				pad.PaddingRight = UDim.new(0.05, 0)
 			end
 		end
 		local dot = Instance.new("Frame")
@@ -949,7 +949,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			variant = variant :: any,
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromScale(0.19, 0.12),
+			size = UDim2.fromScale(0.175, 0.12),
 			zIndex = 4,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTap)
@@ -983,8 +983,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		table.insert(cleanups, handle.destroy)
 		passHandles[passKey] = { handle = handle, label = label, priceKey = priceKey }
 	end
-	passButton("LuckPass", "doubleLuck", "2× LUCK", "doubleLuckRobux", "success", 0.13, "star")
-	passButton("FastPass", "fastRolls", "FAST ROLLS", "fastRollsRobux", "teal", 0.87, "flame")
+	passButton("LuckPass", "doubleLuck", "2× LUCK", "doubleLuckRobux", "success", 0.1, "star")
+	passButton("FastPass", "fastRolls", "FAST ROLLS", "fastRollsRobux", "teal", 0.9, "flame")
 
 	-- Rendering ------------------------------------------------------------------------------------
 	render = function()

@@ -83,7 +83,7 @@ local function passes(cfg: { [string]: any }): { Pass }
 			key = "doubleGems",
 			name = "2× GEMS",
 			blurb = "Every Gem you earn is doubled. Forever.",
-			art = "offer.gems2x",
+			art = "hud.gem",
 			icon = "gem",
 			robux = config.doubleGems.robux,
 		})
@@ -588,10 +588,10 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 		Fit.text(mini, "Name", pass.name, {
 			font = Tokens.typography.title.font,
 			color = INK,
-			max = 20,
+			max = 18,
 			zIndex = 3,
-			size = UDim2.fromScale(0.36, 0.42),
-			position = UDim2.fromScale(0.3, 0.1),
+			size = UDim2.fromScale(0.34, 0.42),
+			position = UDim2.fromScale(0.29, 0.1),
 			align = Enum.TextXAlignment.Left,
 		})
 		Fit.text(mini, "Forever", "FOREVER", {
@@ -599,8 +599,8 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 			color = WOOD,
 			max = 12,
 			zIndex = 3,
-			size = UDim2.fromScale(0.36, 0.3),
-			position = UDim2.fromScale(0.3, 0.56),
+			size = UDim2.fromScale(0.34, 0.3),
+			position = UDim2.fromScale(0.29, 0.56),
 			align = Enum.TextXAlignment.Left,
 		})
 		local buy = priceButton(mini, "Buy", "R$ " .. tostring(pass.robux), {
@@ -611,7 +611,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 			position = UDim2.fromScale(0.97, 0.5),
 			anchor = Vector2.new(1, 0.5),
 			zIndex = 4,
-			max = 20,
+			max = 18,
 			onActivated = function()
 				UpgradeActions.promptPurchase(promptDeps, pass.key, pass.name)
 			end,
@@ -670,7 +670,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 		card.ClipsDescendants = false
 		local line = Depth.keylineOf(card)
 		if line then
-			line.Thickness = if best then 4 else 2.5
+			line.Thickness = if best then 5 else 2.5
 			if best then
 				local gradient = Instance.new("UIGradient")
 				gradient.Color = RAINBOW
@@ -703,7 +703,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 			local badge = Instance.new("Frame")
 			badge.Name = "BestValue"
 			badge.AnchorPoint = Vector2.new(0.5, 0.5)
-			badge.Position = UDim2.fromScale(0.86, 0.32)
+			badge.Position = UDim2.fromScale(0.8, 0.32)
 			badge.Size = UDim2.fromScale(0.34, 0.17)
 			badge.BorderSizePixel = 0
 			badge.ZIndex = 5

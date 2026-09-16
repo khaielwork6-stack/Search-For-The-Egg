@@ -41,7 +41,7 @@ local PAPER_DEEP = Color3.fromRGB(226, 208, 170)
 
 -- Card geometry per size class: the Scale box it may fill and the aspect it keeps inside it.
 local GEOMETRY = {
-	wide = { box = Vector2.new(0.94, 0.9), aspect = 1.72, maxWidth = 1560 },
+	wide = { box = Vector2.new(0.94, 0.9), aspect = 1.72, maxWidth = 1700 },
 	regular = { box = Vector2.new(0.62, 0.88), aspect = 1.18, maxWidth = 760 },
 	compact = { box = Vector2.new(0.5, 0.72), aspect = 1.0, maxWidth = 520 },
 }
@@ -116,18 +116,6 @@ function ModalShell.create(
 	railCorner.CornerRadius = UDim.new(0, Tokens.radius.xl)
 	railCorner.Parent = rail
 	rail.Parent = board
-	-- Faint grain: three long streaks across the rails.
-	for index = 1, 3 do
-		local streak = Instance.new("Frame")
-		streak.Name = "Grain" .. index
-		streak.Size = UDim2.fromScale(0.86, 0.004)
-		streak.Position = UDim2.fromScale(0.07, 0.03 + index * 0.028)
-		streak.BackgroundColor3 = WOOD_DEEP
-		streak.BackgroundTransparency = 0.7
-		streak.BorderSizePixel = 0
-		streak.ZIndex = 3
-		streak.Parent = board
-	end
 	local shadow = Instance.new("Frame")
 	shadow.Name = "Shadow"
 	shadow.Size = UDim2.fromScale(1, 0.05)
@@ -222,8 +210,8 @@ function ModalShell.create(
 		outline = 2.5,
 		outlineColor = WOOD_DEEP,
 		zIndex = 3,
-		size = UDim2.fromScale(0.78, 0.6),
-		position = UDim2.fromScale(0.5, 0.5),
+		size = UDim2.fromScale(if options.icon then 0.6 else 0.78, 0.6),
+		position = UDim2.fromScale(if options.icon then 0.59 else 0.5, 0.5),
 		anchor = Vector2.new(0.5, 0.5),
 	})
 	local titleGradient = Instance.new("UIGradient")
@@ -248,8 +236,8 @@ function ModalShell.create(
 	})
 	if options.icon then
 		Fit.image(plaque, options.icon, {
-			size = UDim2.fromScale(0.14, 0.9),
-			position = UDim2.fromScale(0.08, 0.5),
+			size = UDim2.fromScale(0.13, 0.9),
+			position = UDim2.fromScale(0.09, 0.5),
 			zIndex = 5,
 			name = "Glyph",
 		})
