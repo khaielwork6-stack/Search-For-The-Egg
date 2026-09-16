@@ -453,8 +453,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	pointerGlow.ZIndex = 1
 	Fit.corner(pointerGlow, 0.5)
 	pointerGlow.Parent = pointer
-	local egg =
-		Fit.image(pointer, "icon.egg", { size = UDim2.fromScale(1, 0.62), position = UDim2.fromScale(0.5, 0.33), zIndex = 2, name = "Egg" })
+	local eggBox = { size = UDim2.fromScale(1, 0.62), position = UDim2.fromScale(0.5, 0.33), zIndex = 2, name = "Egg" }
+	local egg = Fit.image(pointer, "forge.egg", eggBox) or Fit.image(pointer, "icon.egg", eggBox)
 	if not egg then
 		local glyph = Icons.egg(pointer, 10, { zIndex = 2, color = Tokens.color.gold })
 		glyph.AnchorPoint = Vector2.new(0.5, 0.5)

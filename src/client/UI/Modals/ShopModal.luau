@@ -272,6 +272,23 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 	container.ScrollBarThickness = 0
 	local root = Fit.frame(container, "Market", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), 1)
 	local tab = initialTab or "perks"
+	-- Plume herself leans in over the bottom-left corner of the board (desktop only; phones need
+	-- every pixel of the frame).
+	if not phone then
+		local mascot = Fit.image(shell.card, "shop.mascot", {
+			size = UDim2.fromScale(0, 0.46),
+			position = UDim2.fromScale(0.005, 1.02),
+			anchor = Vector2.new(0.5, 1),
+			zIndex = 9,
+			name = "Mascot",
+		})
+		if mascot then
+			Fit.aspect(mascot, 1, Enum.DominantAxis.Height)
+			table.insert(cleanups, function()
+				mascot:Destroy()
+			end)
+		end
+	end
 	local setTab: (name: string) -> ()
 
 	-- Header chip ----------------------------------------------------------------------------------
