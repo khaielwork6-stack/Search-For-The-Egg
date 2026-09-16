@@ -18,7 +18,6 @@ local UpgradeActions = require(script.Parent.Parent.UI.UpgradeActions)
 local Button = require(script.Parent.Parent.UI.Components.Button)
 local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
 local PartyModal = require(script.Parent.Parent.UI.Modals.PartyModal)
-local GemShopModal = require(script.Parent.Parent.UI.Modals.GemShopModal)
 local ClassesModal = require(script.Parent.Parent.UI.Modals.ClassesModal)
 local ShopModal = require(script.Parent.Parent.UI.Modals.ShopModal)
 local DailyModal = require(script.Parent.Parent.UI.Modals.DailyModal)
@@ -363,7 +362,7 @@ function LobbyController.open(self: LobbyController, id: string): boolean
 	}
 	local builders: { [string]: any } = {
 		party = PartyModal.build,
-		gems = GemShopModal.build,
+		gems = ShopModal.buildGems,
 		classes = ClassesModal.build,
 		shop = ShopModal.build,
 		daily = DailyModal.build,
