@@ -87,15 +87,24 @@ function ClueService.project(self: ClueService, runtime: any): { [string]: any }
 	return NestClues.project(self._config, runtime.clues)
 end
 
--- The trade. `payload` = { sessionToken, category }.
-function ClueService.analyze(self: ClueService, userId: number, payload: { [string]: any }): Envelope.Envelope<any>
+-- The trade. `payload` = { sessionToken, category }. `options.trusted` is for server-side callers
+-- (Studio hooks, tests) that carry no session token; `options.characterPosition` stands in for a
+-- character the server has no body for (a simulated member). Remote requests never set either.
+function ClueService.analyze(
+	self: ClueService,
+	userId: number,
+	payload: { [string]: any },
+	options: { trusted: boolean?, characterPosition: Vector3? }?
+): Envelope.Envelope<any>
 	local runtime = self._rounds:roundOf(userId)
 	if not runtime then
 		return reject(self, Envelope.Codes.INVALID_STATE, "no_round")
 	end
-	local okToken, tokenErr = self._sessions:validate(userId, payload.sessionToken, "Round")
-	if not okToken then
-		return reject(self, Envelope.Codes.STALE_TOKEN, tokenErr)
+	if not (options and options.trusted) then
+		local okToken, tokenErr = self._sessions:validate(userId, payload.sessionToken, "Round")
+		if not okToken then
+			return reject(self, Envelope.Codes.STALE_TOKEN, tokenErr)
+		end
 	end
 	if not table.find(runtime.state.members, userId) then
 		return reject(self, Envelope.Codes.NOT_AUTHORIZED, "not_member")
@@ -126,7 +135,7 @@ function ClueService.analyze(self: ClueService, userId: number, payload: { [stri
 	if state.carriedRainbow < cost then
 		return reject(self, Envelope.Codes.INSUFFICIENT_FUNDS, "insufficient")
 	end
-	local characterPosition = self._getCharacterPosition(userId)
+	local characterPosition = (options and options.characterPosition) or self._getCharacterPosition(userId)
 	if not characterPosition then
 		return reject(self, Envelope.Codes.INVALID_STATE, "no_character")
 	end

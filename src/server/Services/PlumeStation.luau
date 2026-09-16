@@ -654,6 +654,16 @@ function PlumeStation.spawnPlume(workspaceService: Workspace, folder: Instance, 
 	end
 	local _, size = rig:GetBoundingBox()
 	rig:PivotTo(cframe * CFrame.new(0, size.Y / 2, 0))
+	-- The pivot is the root, not the box's centre: measure the lowest sole and stand him on the sand.
+	local lowest = math.huge
+	for _, descendant in ipairs(rig:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			lowest = math.min(lowest, descendant.Position.Y - descendant.Size.Y / 2)
+		end
+	end
+	if lowest ~= math.huge then
+		rig:PivotTo(rig:GetPivot() * CFrame.new(0, cframe.Position.Y - lowest, 0))
+	end
 	recolour(rig)
 	dress(rig)
 	rig:SetAttribute("SFE_Placeholder", PlumeStation.PLACEHOLDER_TAG)
@@ -690,7 +700,7 @@ function PlumeStation.build(workspaceService: Workspace, folder: Instance, layou
 		Enum.Material.SmoothPlastic
 	)
 	anchor.Transparency = 1
-	anchor.CanQuery = true
+	anchor.CanQuery = false -- the prompt needs no raycast target; aim and camera rays pass through
 	anchor:SetAttribute("SFE_Ambient", "plume")
 	anchor:SetAttribute("SFE_NpcModel", PlumeStation.MODEL_NAME)
 	anchor:SetAttribute("SFE_NpcName", "Professor Plume")

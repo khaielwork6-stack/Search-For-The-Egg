@@ -1183,7 +1183,29 @@ if RunService:IsStudio() then
 			status.roundClues = round.round and round.round.clues or nil
 			status.carriedRainbow = round.player and round.player.carriedRainbow or nil
 			status.carriedStandard = round.player and round.player.carriedStandard or nil
+			local stack = (hud :: any).carriedStack
+			status.bundleRainbow = stack and stack._rainbowCount or nil
+			status.bundleCount = stack and stack._count or nil
 			return status
+		end,
+		-- Raw request spam straight at the remote, past the controller's own guard.
+		plumeSpam = function(n, category)
+			local token = round:sessionToken()
+			local codes = {}
+			local pending = 0
+			for _ = 1, tonumber(n) or 5 do
+				pending += 1
+				task.spawn(function()
+					local result = net:request("ClueAnalyze", { sessionToken = token, category = tostring(category or "depth") })
+					table.insert(codes, if result.ok then "ok" else tostring(result.message or result.code))
+					pending -= 1
+				end)
+			end
+			local deadline = os.clock() + 8
+			while pending > 0 and os.clock() < deadline do
+				task.wait(0.05)
+			end
+			return { codes = codes, pending = pending }
 		end,
 		plumeOpen = function()
 			return { opened = plume:interact(), top = modals:topId() }

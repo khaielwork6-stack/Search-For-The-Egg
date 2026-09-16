@@ -406,6 +406,26 @@ function StudioDebug.install(container: any): any?
 		}
 	end
 
+	-- A trade made by another member (a simulated one has no character or token), so the real
+	-- client can be checked as the party member who did not pay.
+	function hooks.clueAnalyzeAs(userId: number, category: string)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local ChapterLayout = require(game:GetService("ReplicatedStorage").Shared.Domain.ChapterLayout)
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return { error = "no_round" }
+		end
+		local layout = ChapterLayout[runtime.state.chapter]
+		local result = container.clues:analyze(userId, { category = category }, { trusted = true, characterPosition = layout.clueStation })
+		local player = container.playerData:playerOf(userId)
+		if result.ok and player and typeof(player) == "Instance" and container.pushPreviews then
+			container.pushPreviews(player)
+		end
+		return result
+	end
+
 	function hooks.setCarried(userId: number, standard: number, rainbow: number)
 		if not StudioDebug.isUserAllowed(userId) then
 			return nil
