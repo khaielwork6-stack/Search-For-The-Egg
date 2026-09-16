@@ -548,7 +548,7 @@ local function buildMachine(station: Model, base: CFrame, tableTop: number)
 		station,
 		"LeverKnob",
 		0.14,
-		(leverCF * CFrame.Angles(math.rad(-28), 0, 0) * CFrame.new(0, 1.42, 0)).Position,
+		leverCF * CFrame.Angles(math.rad(-28), 0, 0) * CFrame.new(0, 1.42, 0),
 		RED,
 		Enum.Material.SmoothPlastic
 	):SetAttribute("SFE_LeverKnob", true)
