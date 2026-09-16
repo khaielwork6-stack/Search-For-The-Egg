@@ -56,6 +56,13 @@ function NpcPlate.build(adornee: BasePart, name: string, role: string, heightStu
 		outline = true,
 	})
 	pill.Font = Tokens.typography.label.font
+	local pillShade = pill:FindFirstChildOfClass("UIGradient")
+	if pillShade then
+		pillShade.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Tokens.color.cocoa),
+			ColorSequenceKeypoint.new(1, Tokens.color.outline),
+		})
+	end
 	local roleOutline = pill:FindFirstChild("TextOutline")
 	if roleOutline and roleOutline:IsA("UIStroke") then
 		roleOutline.Thickness = 2
