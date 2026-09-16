@@ -139,11 +139,12 @@ function NestSurvey.lineFor(
 	config: { [string]: any },
 	options: { active: boolean, exposed: boolean, used: boolean, carriedStandard: number }
 ): string
-	if not options.active then
-		return NestSurvey.LINES.inactive
-	end
+	-- An exposed Egg is still a live round: that line wins over "inactive".
 	if options.exposed then
 		return NestSurvey.LINES.exposed
+	end
+	if not options.active then
+		return NestSurvey.LINES.inactive
 	end
 	if options.used then
 		return NestSurvey.LINES.used
