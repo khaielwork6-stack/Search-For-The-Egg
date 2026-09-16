@@ -154,20 +154,6 @@ local STYLES: { [string]: Style } = {
 }
 STYLES.gold = STYLES.primary
 
--- The barn's glossy rims, by variant. Laid over the face (never replacing it), so the colour and
--- the lip still come from the style and the rim adds the bevel the reference buttons have.
-local RIM_BY_VARIANT: { [string]: string } = {
-	primary = "button.primary.normal",
-	gold = "button.primary.normal",
-	ember = "button.primary.normal",
-	danger = "button.danger.normal",
-	teal = "button.ghost.normal",
-	secondary = "button.secondary.normal",
-	pill = "button.secondary.normal",
-	success = "button.secondary.normal",
-	gem = "button.secondary.normal",
-}
-
 -- The lip is what gives the control a thickness. Four pixels was not enough to read as one at any
 -- size the game actually draws buttons at.
 local LIP = Tokens.depth.lipPx
@@ -240,32 +226,10 @@ function Button.build(parent: Instance, options: Options): Handle
 	washCorner.Parent = wash
 	wash.Parent = face
 
-	-- The pack's rim, over the face and under the lettering. Round buttons keep the vector rim.
-	-- The rim is the button's edge: it is drawn exactly at the face's bounds (no inset), the face
-	-- fills the whole control (the rim art carries its own bottom shade, so the vector lip would
-	-- only show as a stray band under it), and its nine-slice corners scale with the control's
-	-- height so a 44 px button gets 44 px worth of bevel, not the 88 px source's.
-	local rimRole = RIM_BY_VARIANT[variantName]
+	-- The bevel is vector: cocoa keyline, a rim lit from the face's own colour, the banded sheen and
+	-- the lip. The pack's painted rims were tried here and rejected: their gold ring and baked
+	-- drop shadow never matched a green, teal or purple face and read as a second, misaligned layer.
 	local packRim: ImageLabel? = nil
-	if rimRole and not options.round and not options.image then
-		packRim = Skin.overlay(face, rimRole, { zIndex = z + 3, inset = 0, name = "PackRim" })
-		if packRim then
-			outline.Transparency = 1
-			rim.Transparency = 1
-			button.BackgroundTransparency = 1
-			face.Size = UDim2.fromScale(1, 1)
-			local rimImage = packRim :: ImageLabel
-			local sourceHeight = rimImage.SliceCenter.Max.Y + rimImage.SliceCenter.Min.Y
-			local function fitRim()
-				local height = face.AbsoluteSize.Y
-				if height > 0 and sourceHeight > 0 then
-					rimImage.SliceScale = math.clamp(height / sourceHeight, 0.2, 1)
-				end
-			end
-			fitRim()
-			face:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitRim)
-		end
-	end
 	-- The shine: a streak of light that sweeps the face while the button is pulsing.
 	face.ClipsDescendants = true
 	local shine = Skin.overlay(face, "texture.rays", { zIndex = z + 2, name = "Shine", transparency = 0.55 })

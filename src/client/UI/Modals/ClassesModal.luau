@@ -1354,8 +1354,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		if text then
 			local pad = text:FindFirstChildOfClass("UIPadding")
 			if pad then
-				pad.PaddingLeft = UDim.new(0.3, 0)
-				pad.PaddingRight = UDim.new(0.04, 0)
+				pad.PaddingLeft = UDim.new(0.26, 0)
+				pad.PaddingRight = UDim.new(0.05, 0)
 			end
 		end
 		local face = handle.button:FindFirstChild("Face")
