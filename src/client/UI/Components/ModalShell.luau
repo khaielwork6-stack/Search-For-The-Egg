@@ -83,6 +83,7 @@ function ModalShell.create(
 	maxSize.Parent = card
 	local cardScale = Instance.new("UIScale")
 	cardScale.Parent = card
+	card.Parent = root
 	-- Plank seams along the frame's sides.
 	for _, spec in ipairs({ { 0, 0.5, 0, 1 }, { 1, 0.5, 1, 1 } }) do
 		local seam = Instance.new("Frame")
