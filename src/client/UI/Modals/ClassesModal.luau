@@ -219,7 +219,7 @@ local CARD_ASPECT = 0.74
 
 -- Reel geometry by distance from the centre slot (Scale of the reel): x offset, card height, tilt
 -- and drop. Neighbours sit slightly behind the chosen card, like cards fanned on a shelf.
-local REEL_OFFSET = { [0] = 0, 0.255, 0.4, 0.48 }
+local REEL_OFFSET = { [0] = 0, 0.255, 0.43, 0.5 }
 local REEL_HEIGHT = { [0] = 0.9, 0.66, 0.44, 0.34 }
 local REEL_TILT = { [0] = 0, 5, 9, 12 }
 local REEL_DROP = { [0] = 0, 0.035, 0.06, 0.08 }
