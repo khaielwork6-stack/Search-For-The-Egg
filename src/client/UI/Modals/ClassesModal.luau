@@ -1163,7 +1163,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 
 		-- Sparkles around the card.
 		local sparkles: { Frame } = {}
-		for index, spot in ipairs({ { 0.3, 0.3 }, { 0.7, 0.28 }, { 0.27, 0.66 }, { 0.73, 0.68 }, { 0.36, 0.2 }, { 0.65, 0.76 } }) do
+		for index, spot in ipairs({ { 0.26, 0.36 }, { 0.74, 0.34 }, { 0.27, 0.66 }, { 0.73, 0.68 }, { 0.34, 0.5 }, { 0.66, 0.52 } }) do
 			local star = Icons.star(overlay, 10, { zIndex = 4, color = Tokens.color.goldLight })
 			star.Name = "Sparkle" .. index
 			star.AnchorPoint = Vector2.new(0.5, 0.5)

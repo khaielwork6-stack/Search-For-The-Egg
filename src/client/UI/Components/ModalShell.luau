@@ -106,7 +106,7 @@ function ModalShell.create(
 	card.SelectionBehaviorDown = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorLeft = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorRight = Enum.SelectionBehavior.Stop
-	Fit.aspect(card, geometry.aspect)
+	local aspect = Fit.aspect(card, geometry.aspect)
 	local maxSize = Instance.new("UISizeConstraint")
 	maxSize.MaxSize = Vector2.new(geometry.maxWidth, geometry.maxWidth / geometry.aspect)
 	maxSize.Parent = card
@@ -181,6 +181,17 @@ function ModalShell.create(
 	content.ScrollingDirection = Enum.ScrollingDirection.Y
 	content.ElasticBehavior = Enum.ElasticBehavior.Never
 	content.SelectionGroup = false
+	-- List builders (Daily, Codes, Settings...) stack their rows in order; Scale builders place one
+	-- root frame that fills the window.
+	local contentLayout = Instance.new("UIListLayout")
+	contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	contentLayout.Padding = UDim.new(0, Tokens.spacing.sm + 2)
+	contentLayout.Parent = content
+	local contentPadding = Instance.new("UIPadding")
+	contentPadding.PaddingRight = UDim.new(0, Tokens.spacing.sm)
+	contentPadding.PaddingTop = UDim.new(0, Tokens.spacing.xs)
+	contentPadding.PaddingBottom = UDim.new(0, Tokens.spacing.sm)
+	contentPadding.Parent = content
 	content.Parent = panel
 
 	local footer = Instance.new("Frame")
@@ -339,6 +350,39 @@ function ModalShell.create(
 	end)
 	closeButton.Parent = headerRight
 
+	-- Card height: a Scale builder (AutomaticCanvasSize None) owns the whole aspect-locked box; a
+	-- list builder gets a card just tall enough for its rows, capped at the box, so short lists never
+	-- float in empty parchment and long ones scroll inside the panel.
+	local function relayout()
+		local boxHeight = if phone then 0.97 else geometry.box.Y
+		local boxWidth = if phone then 0.97 else geometry.box.X
+		if content.AutomaticCanvasSize == Enum.AutomaticSize.None then
+			if aspect.Parent ~= card then
+				aspect.Parent = card
+			end
+			card.Size = UDim2.fromScale(boxWidth, boxHeight)
+			return
+		end
+		if aspect.Parent then
+			aspect.Parent = nil
+		end
+		local holderHeight = holder.AbsoluteSize.Y
+		if holderHeight <= 0 then
+			return
+		end
+		local chrome = card.AbsoluteSize.Y - content.AbsoluteWindowSize.Y
+		local rows = contentLayout.AbsoluteContentSize.Y
+			+ contentPadding.PaddingTop.Offset
+			+ contentPadding.PaddingBottom.Offset
+			+ Tokens.spacing.sm
+		local wanted = math.clamp((rows + chrome) / holderHeight, 0.3, boxHeight)
+		card.Size = UDim2.fromScale(boxWidth, wanted)
+	end
+	contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(relayout)
+	content:GetPropertyChangedSignal("AutomaticCanvasSize"):Connect(relayout)
+	holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+	task.defer(relayout)
+
 	local motion = options.motion
 	local shell: Shell = {
 		root = root,
@@ -360,6 +404,7 @@ function ModalShell.create(
 				:Play()
 			TweenService:Create(cardScale, Motion.tweenInfo(openRecipe), { Scale = 1 }):Play()
 			TweenService:Create(card, Motion.tweenInfo(openRecipe), { Position = UDim2.fromScale(0.5, 0.5) }):Play()
+			relayout()
 		end,
 		close = function(onClosed)
 			local closeRecipe = Motion.recipe("panelClose", motion)
