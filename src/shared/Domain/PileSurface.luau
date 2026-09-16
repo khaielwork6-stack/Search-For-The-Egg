@@ -343,9 +343,17 @@ function PileSurface.coatSlotsAt(
 	end
 	local here = heightOf(x, z)
 	local drop = 0
+	-- Every column within two cells, not just the four touching ones. With a one-cell reach the solid
+	-- rendering was exactly one column thick behind an exposed face, so digging that column through
+	-- showed air behind it until the next delta re-seated the one beyond - a shell with nothing behind
+	-- it. Two cells deep means a breach always lands on a column that is already drawn to its floor.
 	-- Past the rim the neighbour is the ground, which is the same case as a column dug to nothing.
-	for _, offset in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
-		drop = math.max(drop, here - heightOf(x + offset[1], z + offset[2]))
+	for dz = -2, 2 do
+		for dx = -2, 2 do
+			if dx ~= 0 or dz ~= 0 then
+				drop = math.max(drop, here - heightOf(x + dx, z + dz))
+			end
+		end
 	end
 	local span = drop * (visual.coatDropCoverage or 1.35) + (visual.coatDropMarginStuds or 0.2)
 	return math.clamp(math.ceil(span / step) + 1, minSlots, cap)

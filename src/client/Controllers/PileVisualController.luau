@@ -450,6 +450,15 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 				self:_dressRainbow(part, column.index, slot)
 			end
 			local yaw = self:_downslope(wx, wz) + (placement.yaw / (math.pi * 2) - 0.5) * math.rad(visual.downslopeYawJitterDegrees) * 2
+			-- The bottom record rests on the sand. Records seat top-down at `step`, which left the
+			-- lowest slab hovering 0.57 studs above the floor at the crown - a strip of air under every
+			-- wall column, and the one sight line that ever left a cavity through its wall went out
+			-- exactly there. The bottom slab's underside is pinned to the floor; a pure function of the
+			-- slot, so it never moves, and nothing above it changes.
+			local thickness = visual.featherThicknessStuds
+			if slot == 1 then
+				thickness = math.max(thickness, (seatY - floorY) * 2)
+			end
 			placeFeather(
 				part,
 				wx,
@@ -461,7 +470,7 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 				placement.roll,
 				placement.length * scale,
 				placement.width * scale,
-				visual.featherThicknessStuds
+				thickness
 			)
 			if column.built and not self._culled then
 				-- Newly exposed record: it was always there beneath; fade it in rather than pop.
@@ -906,10 +915,13 @@ function PileVisualController.applyDelta(self: PileVisualController, payload: { 
 		dirty[index] = true
 		local column = self._columns[index]
 		if column then
-			for _, offset in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
-				local nx, nz = column.x + offset[1], column.z + offset[2]
-				if nx >= 0 and nz >= 0 and nx < pile.width and nz < pile.depth then
-					dirty[nz * pile.width + nx + 1] = true
+			-- Everything the window can now depend on: the 5x5 around a dug column, matching coatSlotsAt.
+			for dz = -2, 2 do
+				for dx = -2, 2 do
+					local nx, nz = column.x + dx, column.z + dz
+					if nx >= 0 and nz >= 0 and nx < pile.width and nz < pile.depth then
+						dirty[nz * pile.width + nx + 1] = true
+					end
 				end
 			end
 		end
