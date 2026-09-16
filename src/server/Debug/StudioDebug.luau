@@ -511,6 +511,28 @@ function StudioDebug.install(container: any): any?
 		return { ok = true, removed = removed, cells = #touched, removedFraction = PileGrid.removedFraction(grid) }
 	end
 
+	-- Publishes the authoritative masks to a replicated attribute so a client-side audit can compare
+	-- every rendered feather against what the server actually holds.
+	function hooks.auditMasks(userId: number)
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return { ok = false, err = "no_round" }
+		end
+		local PileGrid = require(game:GetService("ReplicatedStorage").Shared.Domain.PileGrid)
+		local snapshot = PileGrid.snapshot(runtime.grid)
+		workspace:SetAttribute(
+			"SFE_AuditMasks",
+			game:GetService("HttpService"):JSONEncode({
+				masks = snapshot.masks,
+				remaining = snapshot.remaining,
+				base = snapshot.base,
+				removed = runtime.grid.removed,
+				total = runtime.grid.total,
+			})
+		)
+		return { ok = true, removed = runtime.grid.removed, total = runtime.grid.total }
+	end
+
 	function hooks.simulateCollect(userId: number, cellX: number, cellZ: number)
 		local runtime = container.rounds:roundOf(userId)
 		if not runtime then

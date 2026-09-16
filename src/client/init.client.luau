@@ -649,6 +649,119 @@ if RunService:IsStudio() then
 				instances = pile:instanceCount(),
 			}
 		end,
+		-- Runtime audit of feather identity. The server writes its masks to workspace.SFE_AuditMasks
+		-- (see the `auditMasks` server hook); this walks every rendered instance and every column
+		-- against them and counts each way the visual pile can disagree with the authoritative one.
+		-- Every counter that names an error must be zero; the report is the acceptance test.
+		pileAudit = function()
+			local HttpService = game:GetService("HttpService")
+			local FeatherLayout = require(game:GetService("ReplicatedStorage").Shared.Domain.FeatherLayout)
+			local raw = workspace:GetAttribute("SFE_AuditMasks")
+			local server = if type(raw) == "string" and raw ~= "" then HttpService:JSONDecode(raw) else nil
+			local folder = workspace:FindFirstChild("SFE_PileVisual")
+			local columns = (pile :: any)._columns or {}
+			local report = {
+				serverPresent = server ~= nil,
+				serverActiveRecords = 0,
+				serverCollected = 0,
+				renderedActive = 0,
+				visibleNoId = 0,
+				visibleInactiveRecord = 0,
+				activeRenderedNoInstance = 0,
+				duplicateId = 0,
+				wrongCanQuery = 0,
+				pooledButVisible = 0,
+				decorativeVisible = 0,
+				columnMapMismatch = 0,
+				samples = {},
+			}
+			local function sample(kind, text)
+				if #report.samples < 12 then
+					table.insert(report.samples, kind .. ": " .. text)
+				end
+			end
+			local function taken(cellIndex, slot)
+				if not server then
+					return nil
+				end
+				local mask = server.masks[cellIndex] or 0
+				return bit32.band(mask, bit32.lshift(1, slot - 1)) ~= 0
+			end
+			if server then
+				for i, base in ipairs(server.base) do
+					local rem = server.remaining[i] or 0
+					report.serverActiveRecords += rem
+					report.serverCollected += math.max(0, base - rem)
+				end
+			end
+			-- 1. Every rendered instance in the coat folder.
+			local seen = {}
+			if folder then
+				for _, part in ipairs(folder:GetDescendants()) do
+					if part:IsA("BasePart") and part.Parent ~= nil then
+						local id = part:GetAttribute("SFE_FeatherId")
+						if part.Name == "Feather" then
+							if type(id) ~= "number" then
+								-- A detached feather mid-flight legitimately has no id; only a seated one is wrong.
+								if part.CanQuery then
+									report.visibleNoId += 1
+									sample("noId", part:GetFullName())
+								end
+							else
+								report.renderedActive += 1
+								local cellIndex, slot = FeatherLayout.decode(id)
+								if seen[id] then
+									report.duplicateId += 1
+									sample("dup", tostring(id))
+								end
+								seen[id] = true
+								if not part.CanQuery then
+									report.wrongCanQuery += 1
+									sample("canQuery", tostring(id))
+								end
+								local t = taken(cellIndex, slot)
+								if t == true then
+									report.visibleInactiveRecord += 1
+									sample("inactiveVisible", string.format("id %d cell %d slot %d", id, cellIndex, slot))
+								end
+								local column = columns[cellIndex]
+								if not column or column.feathers[slot] ~= part then
+									report.columnMapMismatch += 1
+									sample("mapMismatch", tostring(id))
+								end
+							end
+						elseif part.Name == "Fluff" then
+							report.decorativeVisible += 1
+						end
+					end
+				end
+			end
+			-- 2. Every column's expectation: the top window of untaken slots must each have an instance.
+			for cellIndex, column in pairs(columns) do
+				local exposed = FeatherLayout.exposedSlots(column.base, column.mask, (pile :: any):_slotsFor(column))
+				for _, slot in ipairs(exposed) do
+					local part = column.feathers[slot]
+					if not part or part.Parent == nil then
+						report.activeRenderedNoInstance += 1
+						sample("noInstance", string.format("cell %d slot %d", cellIndex, slot))
+					end
+				end
+			end
+			-- 3. Pooled parts must be unparented.
+			for _, part in ipairs((pile :: any)._partPool or {}) do
+				if part.Parent ~= nil then
+					report.pooledButVisible += 1
+				end
+			end
+			report.errors = report.visibleNoId
+				+ report.visibleInactiveRecord
+				+ report.activeRenderedNoInstance
+				+ report.duplicateId
+				+ report.wrongCanQuery
+				+ report.pooledButVisible
+				+ report.columnMapMismatch
+			return report
+		end,
 		-- What the pile's interior filling is actually doing, which is invisible from outside: the two
 		-- counts the config drives, and how many wall and floor strands exist right now.
 		pileInterior = function()
