@@ -442,6 +442,11 @@ function PlumeController.interact(self: PlumeController): boolean
 		self.stats.refused += 1
 		return false
 	end
+	-- Another screen (a conversation, the Book, the other NPC) has the HUD down: it owns the player.
+	if deps.hud.gui.Enabled == false then
+		self.stats.refused += 1
+		return false
+	end
 	local rig = self._rig
 	local phase = deps.round:phase()
 	if phase ~= "Searching" then
