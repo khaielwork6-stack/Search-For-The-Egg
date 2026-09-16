@@ -146,8 +146,8 @@ local STRAW = Color3.fromRGB(232, 196, 96)
 local CARD_ASPECT = 0.74
 
 -- Reel geometry by distance from the centre slot (Scale of the reel): x offset and card height.
-local REEL_OFFSET = { [0] = 0, 0.235, 0.405, 0.5 }
-local REEL_HEIGHT = { [0] = 0.86, 0.7, 0.5, 0.4 }
+local REEL_OFFSET = { [0] = 0, 0.245, 0.42, 0.5 }
+local REEL_HEIGHT = { [0] = 0.84, 0.64, 0.42, 0.3 }
 local function reelAt(distance: number): (number, number)
 	local d = math.clamp(distance, 0, 3)
 	local lo = math.floor(d)
@@ -403,7 +403,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	table.insert(cleanups, chip.destroy)
 
 	-- Geometry (Scale of the content frame).
-	local REEL_X, REEL_W = 0.035, 0.715
+	local REEL_X, REEL_W = 0.07, 0.65
 	local REEL_CX = REEL_X + REEL_W / 2
 	local RIGHT_X = 0.785
 	local REEL_H = if phone then 0.5 else 0.56
@@ -551,7 +551,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			local rel = wrapRel(index - state.center, count)
 			local distance = math.abs(rel)
 			local offset, height = reelAt(distance)
-			local visible = distance < 2.75
+			local visible = distance < 2.5
 			view.root.Visible = visible
 			if visible then
 				view.root.Position = UDim2.fromScale(0.5 + (if rel < 0 then -offset else offset), 0.5)
@@ -635,8 +635,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		)
 		return button
 	end
-	arrow("ArrowLeft", REEL_X, "<", -1)
-	arrow("ArrowRight", REEL_X + REEL_W, ">", 1)
+	arrow("ArrowLeft", 0.032, "<", -1)
+	arrow("ArrowRight", REEL_X + REEL_W + 0.038, ">", 1)
 
 	local function selectClass(index: number)
 		if state.rolling then

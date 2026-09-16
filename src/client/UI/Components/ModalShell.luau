@@ -135,8 +135,8 @@ function ModalShell.create(
 	rail.Parent = board
 	local shadow = Instance.new("Frame")
 	shadow.Name = "Shadow"
-	shadow.Size = UDim2.fromScale(1, 0.05)
-	shadow.Position = UDim2.fromScale(0, 0.96)
+	shadow.Size = UDim2.fromScale(1, 0.045)
+	shadow.Position = UDim2.fromScale(0, 0.955)
 	shadow.BackgroundColor3 = WOOD_DEEP
 	shadow.BackgroundTransparency = 0.5
 	shadow.BorderSizePixel = 0
@@ -204,20 +204,49 @@ function ModalShell.create(
 	local plaque = Instance.new("Frame")
 	plaque.Name = "Plaque"
 	plaque.AnchorPoint = Vector2.new(0.5, 0.5)
-	plaque.Position = UDim2.fromScale(0.5, 0.56)
-	plaque.Size = UDim2.fromScale(if options.wide then 0.4 elseif options.compact then 0.78 else 0.62, 1.08)
+	plaque.Position = UDim2.fromScale(0.5, 0.52)
+	plaque.Size = UDim2.fromScale(if options.wide then 0.4 elseif options.compact then 0.78 else 0.62, 0.9)
 	plaque.BackgroundTransparency = 1
 	plaque.ZIndex = 2
 	plaque.Parent = header
-	local sign = Skin.overlay(plaque, "world.stationSign", { sliceScale = 0.42, name = "Sign", zIndex = 1 })
-	if not sign then
-		local fallback = Instance.new("Frame")
-		fallback.Name = "Sign"
-		fallback.Size = UDim2.fromScale(1, 1)
-		fallback.BorderSizePixel = 0
-		fallback.ZIndex = 1
-		Depth.panel(fallback, WOOD_DEEP, { radius = Tokens.radius.md, rim = Tokens.color.gold })
-		fallback.Parent = plaque
+	-- Wooden sign: dark plank, light inner border, four nail heads, gold lettering.
+	local sign = Instance.new("Frame")
+	sign.Name = "Sign"
+	sign.Size = UDim2.fromScale(1, 1)
+	sign.BorderSizePixel = 0
+	sign.ZIndex = 1
+	Depth.panel(sign, WOOD_DEEP, { radius = Tokens.radius.md, rim = WOOD })
+	Fit.corner(sign, 0.18)
+	local signLine = Depth.keylineOf(sign)
+	if signLine then
+		signLine.Color = Tokens.color.goldDeep
+		signLine.Thickness = 2.5
+	end
+	sign.Parent = plaque
+	local signInner = Instance.new("Frame")
+	signInner.Name = "Inner"
+	signInner.AnchorPoint = Vector2.new(0.5, 0.5)
+	signInner.Position = UDim2.fromScale(0.5, 0.5)
+	signInner.Size = UDim2.fromScale(0.96, 0.84)
+	signInner.BackgroundTransparency = 1
+	signInner.ZIndex = 2
+	local innerLine = Depth.keyline(signInner, 1.5, Tokens.color.gold)
+	innerLine.Transparency = 0.45
+	Fit.corner(signInner, 0.16)
+	signInner.Parent = sign
+	for index, spot in ipairs({ { 0.035, 0.18 }, { 0.965, 0.18 }, { 0.035, 0.82 }, { 0.965, 0.82 } }) do
+		local nail = Instance.new("Frame")
+		nail.Name = "Nail" .. index
+		nail.AnchorPoint = Vector2.new(0.5, 0.5)
+		nail.Position = UDim2.fromScale(spot[1], spot[2])
+		nail.Size = UDim2.fromScale(0, 0.12)
+		nail.BackgroundColor3 = Tokens.color.gold
+		nail.BorderSizePixel = 0
+		nail.ZIndex = 3
+		Fit.aspect(nail, 1, Enum.DominantAxis.Height)
+		Fit.corner(nail, 0.5)
+		Depth.keyline(nail, 1, Tokens.color.goldDeep)
+		nail.Parent = sign
 	end
 	local title = Fit.text(plaque, "Title", string.upper(options.title), {
 		font = Tokens.typography.display.font,
