@@ -145,7 +145,7 @@ local STRAW = Color3.fromRGB(232, 196, 96)
 local CARD_ASPECT = 0.74
 
 -- Reel geometry by distance from the centre slot (Scale of the reel): x offset and card height.
-local REEL_OFFSET = { [0] = 0, 0.235, 0.42, 0.52 }
+local REEL_OFFSET = { [0] = 0, 0.235, 0.405, 0.5 }
 local REEL_HEIGHT = { [0] = 0.86, 0.7, 0.5, 0.4 }
 local function reelAt(distance: number): (number, number)
 	local d = math.clamp(distance, 0, 3)
@@ -1097,12 +1097,12 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		local title = Fit.text(overlay, "Title", string.upper(RARITY_LABEL[entryTier] or entryTier) .. " CLASS!", {
 			font = Tokens.typography.display.font,
 			color = Tokens.color.goldLight,
-			max = 76,
+			max = 66,
 			outline = 3,
 			outlineColor = WOOD_DEEP,
 			zIndex = 4,
-			size = UDim2.fromScale(0.7, 0.14),
-			position = UDim2.fromScale(0.5, 0.085),
+			size = UDim2.fromScale(0.46, 0.13),
+			position = UDim2.fromScale(0.5, 0.08),
 			anchor = Vector2.new(0.5, 0.5),
 		})
 		local titleGradient = Instance.new("UIGradient")
@@ -1116,7 +1116,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			})
 		end
 		titleGradient.Parent = title
-		local sub = plank(overlay, "Sub", UDim2.fromScale(0.5, 0.185), UDim2.fromScale(0.36, 0.07), 4)
+		local sub = plank(overlay, "Sub", UDim2.fromScale(0.5, 0.185), UDim2.fromScale(0.4, 0.07), 4)
 		sub.AnchorPoint = Vector2.new(0.5, 0.5)
 		Fit.text(
 			sub,
@@ -1135,28 +1135,6 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		Fit.image(sub, "modal.leaf.left", { size = UDim2.fromScale(0.07, 0.7), position = UDim2.fromScale(0.05, 0.5), zIndex = 5 })
 		Fit.image(sub, "modal.leaf.right", { size = UDim2.fromScale(0.07, 0.7), position = UDim2.fromScale(0.95, 0.5), zIndex = 5 })
 
-		-- Cracked golden egg behind the card: two halves of the egg art, tilted apart.
-		local function half(name: string, x: number, rotation: number, left: boolean)
-			local clip = Fit.frame(overlay, name, UDim2.fromScale(x, 0.56), UDim2.fromScale(0, 0.34), 3, Vector2.new(0.5, 0.5))
-			Fit.aspect(clip, 0.5, Enum.DominantAxis.Height)
-			clip.ClipsDescendants = true
-			clip.Rotation = rotation
-			local image = Fit.image(clip, "icon.egg", {
-				size = UDim2.fromScale(2, 1),
-				position = UDim2.fromScale(if left then 1 else 0, 0.5),
-				anchor = Vector2.new(0.5, 0.5),
-				zIndex = 3,
-				name = "Egg",
-			})
-			if not image then
-				local glyph = Icons.egg(clip, 10, { zIndex = 3, color = Tokens.color.gold })
-				glyph.AnchorPoint = Vector2.new(0.5, 0.5)
-				glyph.Position = UDim2.fromScale(if left then 1 else 0, 0.5)
-				glyph.Size = UDim2.fromScale(2, 1)
-			end
-		end
-		half("ShellLeft", 0.355, -14, true)
-		half("ShellRight", 0.645, 14, false)
 		-- Sparkles around the card.
 		local sparkles: { Frame } = {}
 		for index, spot in ipairs({ { 0.3, 0.3 }, { 0.7, 0.28 }, { 0.27, 0.66 }, { 0.73, 0.68 }, { 0.36, 0.2 }, { 0.65, 0.76 } }) do
@@ -1164,7 +1142,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			star.Name = "Sparkle" .. index
 			star.AnchorPoint = Vector2.new(0.5, 0.5)
 			star.Position = UDim2.fromScale(spot[1], spot[2])
-			star.Size = UDim2.fromScale(0, 0.05 + (index % 3) * 0.012)
+			star.Size = UDim2.fromScale(0, 0.03 + (index % 3) * 0.008)
 			Fit.aspect(star, 1, Enum.DominantAxis.Height)
 			table.insert(sparkles, star)
 		end
@@ -1243,7 +1221,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			finish()
 		end
 		currentResult = { finish = finish, keep = keepCurrent }
-		local actions = Fit.frame(overlay, "Actions", UDim2.fromScale(0.5, 0.925), UDim2.fromScale(0.62, 0.1), 5, Vector2.new(0.5, 0.5))
+		local actions = Fit.frame(overlay, "Actions", UDim2.fromScale(0.5, 0.925), UDim2.fromScale(0.56, 0.1), 5, Vector2.new(0.5, 0.5))
 		Fit.row(actions, { gap = 0.03 })
 		local equipNow = Button.build(actions, {
 			text = "EQUIP NOW",
@@ -1286,8 +1264,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			outline = 1.5,
 			outlineColor = WOOD_DEEP,
 			zIndex = 6,
-			size = UDim2.fromScale(0.22, 0.05),
-			position = UDim2.fromScale(0.985, 0.975),
+			size = UDim2.fromScale(0.17, 0.045),
+			position = UDim2.fromScale(0.985, 0.985),
 			anchor = Vector2.new(1, 1),
 			align = Enum.TextXAlignment.Right,
 		})
