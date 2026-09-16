@@ -254,7 +254,19 @@ local function buildCard(
 	rootCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
 	rootCorner.Parent = root
 	local outline = Depth.keyline(root, Tokens.stroke.bold, if tierName == "mythic" then Color3.new(1, 1, 1) else WOOD_DEEP)
-	if tierName == "mythic" then
+	-- The pack's rarity frame, over the face. The mythic wears the legendary frame under a turning
+	-- rainbow; without a painting the vector keyline (rainbow for the mythic) stands in.
+	local frameRole = "class." .. (if tierName == "mythic" then "legendary" else tierName) .. ".owned"
+	local packFrame = Skin.overlay(root, frameRole, { zIndex = z + 5, inset = 4, name = "PackFrame" })
+	if packFrame then
+		outline.Transparency = 1
+		if tierName == "mythic" then
+			local gradient = Instance.new("UIGradient")
+			gradient.Color = RAINBOW
+			gradient.Parent = packFrame
+			table.insert(animated, { gradient = gradient, speed = 50 })
+		end
+	elseif tierName == "mythic" then
 		outline.Thickness = Tokens.stroke.frame + 1
 		local gradient = Instance.new("UIGradient")
 		gradient.Color = RAINBOW
@@ -277,8 +289,8 @@ local function buildCard(
 	Depth.applySheen(face, rarity.fill)
 	Depth.rim(face, rarity.fill)
 	face.Parent = root
-	-- Rivets in the corners.
-	for _, corner in ipairs({ Vector2.new(0, 0), Vector2.new(1, 0), Vector2.new(0, 1), Vector2.new(1, 1) }) do
+	-- Rivets in the corners (the painted frame has its own).
+	for _, corner in ipairs(if packFrame then {} else { Vector2.new(0, 0), Vector2.new(1, 0), Vector2.new(0, 1), Vector2.new(1, 1) }) do
 		local rivet = Instance.new("Frame")
 		rivet.Name = "Rivet"
 		rivet.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -340,7 +352,7 @@ local function buildCard(
 	hit.Text = ""
 	hit.BackgroundTransparency = 1
 	hit.Size = UDim2.fromScale(1, 1)
-	hit.ZIndex = z + 6
+	hit.ZIndex = z + 7
 	hit.Parent = root
 	root.Parent = parent
 	return { root = root, face = face, odds = odds, name = name, scale = scale, pill = pill, hit = hit }
@@ -602,8 +614,13 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			end)
 		)
 	end
-	local slotOffsets = { [-2] = -cardW * 1.62, [-1] = -cardW * 0.92, [0] = 0, [1] = cardW * 0.92, [2] = cardW * 1.62 }
 	local slotScales = { [-2] = 0.62, [-1] = 0.8, [0] = 1, [1] = 0.8, [2] = 0.62 }
+	-- Five cards across whatever width the barrel has: the outer pair sit half inside its edge.
+	local function slotOffset(offset: number): number
+		local width = math.max(barrel.AbsoluteSize.X / SafeArea.scaleOf(container), cardW * 3.4)
+		local step = math.min(cardW * 0.98, (width / 2 - cardW * 0.5) / 1.7)
+		return offset * step * (if math.abs(offset) == 2 then 0.92 else 1)
+	end
 	local function layoutCarousel(animate: boolean)
 		local n = #cards
 		local shown: { [number]: boolean } = {}
@@ -619,7 +636,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			view.root.ZIndex = z + 2 + (2 - math.abs(offset))
 			view.face.ZIndex = view.root.ZIndex + 1
 			view.hit.ZIndex = view.root.ZIndex + 6
-			local target = UDim2.new(0.5, slotOffsets[offset], 0.52, 0)
+			local target = UDim2.new(0.5, slotOffset(offset), 0.52, 0)
 			local targetScale = slotScales[offset]
 			if animate and not motion.reducedMotion then
 				TweenService:Create(view.root, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = target })
@@ -648,6 +665,14 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			end
 		end
 	end
+	table.insert(
+		cleanups,
+		barrel:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+			if not state.rolling then
+				layoutCarousel(false)
+			end
+		end)
+	)
 	local function arrow(name: string, glyphRotation: number, anchorX: number, step: number)
 		local handle = Button.build(barrel, {
 			text = "",
@@ -722,11 +747,11 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	end
 	table.insert(cleanups, rollHandle.destroy)
 	autoHandle = Button.build(spinRow, {
-		text = "AUTO: OFF",
+		text = "AUTO OFF",
 		variant = "secondary",
 		minimumTapTarget = tap,
 		motion = motion,
-		size = UDim2.new(if compact then 0.26 else 0.17, -Tokens.spacing.xs, 0, tap),
+		size = UDim2.new(if compact then 0.26 else 0.19, -Tokens.spacing.xs, 0, tap),
 		zIndex = z + 1,
 		textSize = Tokens.typography.caption.size + 2,
 	})
@@ -1035,17 +1060,6 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	end
 	fastHandle = passButton(right, "FastPass", "fastRolls", "FAST ROLLS", "fastRollsRobux", "teal")
 
-	-- Terms line under everything.
-	local terms = FrameKit.text(
-		container,
-		"Terms",
-		"Odds are shown on every card. A spin always unlocks or re-equips the class it lands on; duplicates are not refunded.",
-		"caption",
-		{ zIndex = z, color = Tokens.color.inkMuted, align = Enum.TextXAlignment.Center }
-	)
-	terms.LayoutOrder = 3
-	terms.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 6)
-
 	-- Rendering ------------------------------------------------------------------------------------
 	local slotArt: { [number]: GuiObject } = {}
 	render = function()
@@ -1168,10 +1182,13 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		local host: GuiObject = (api.shell and api.shell.card) or container
 		local overlay = Instance.new("Frame")
 		overlay.Name = "Result"
-		overlay.Size = UDim2.fromScale(1, 1)
+		overlay.AnchorPoint = Vector2.new(0.5, 0.5)
+		overlay.Position = UDim2.fromScale(0.5, 0.5)
+		overlay.Size = UDim2.new(1, -8, 1, -8)
 		overlay.BackgroundColor3 = Tokens.color.overlay
-		overlay.BackgroundTransparency = 0.35
+		overlay.BackgroundTransparency = 0.3
 		overlay.BorderSizePixel = 0
+		overlay.ClipsDescendants = true
 		overlay.ZIndex = host.ZIndex + 20
 		local overlayCorner = Instance.new("UICorner")
 		overlayCorner.CornerRadius = UDim.new(0, Tokens.radius.xl)
@@ -1188,20 +1205,61 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			overlay:Destroy()
 			onDone()
 		end
-		-- Title: "<RARITY> CLASS!" - rainbow for the mythic, the rarity colour otherwise.
+		-- Light behind everything: the sunburst turning, a warm glow disc.
+		local rays = Instance.new("Frame")
+		rays.Name = "Rays"
+		rays.AnchorPoint = Vector2.new(0.5, 0.5)
+		rays.Position = UDim2.fromScale(0.5, 0.46)
+		rays.Size = UDim2.fromScale(1.2, 1.2)
+		rays.BackgroundTransparency = 1
+		rays.ZIndex = oz
+		local raysRatio = Instance.new("UIAspectRatioConstraint")
+		raysRatio.Parent = rays
+		rays.Parent = overlay
+		local burst = Skin.texture(
+			rays,
+			"texture.sunburst",
+			{ zIndex = oz, transparency = if mythic then 0.25 else 0.45, color = if mythic then Tokens.color.featherWhite else rarity.fill }
+		)
+		local glow = Instance.new("Frame")
+		glow.Name = "Glow"
+		glow.AnchorPoint = Vector2.new(0.5, 0.5)
+		glow.Position = UDim2.fromScale(0.5, 0.46)
+		glow.Size = UDim2.fromScale(0.42, 0.42)
+		glow.BackgroundColor3 = Tokens.color.goldLight
+		glow.BackgroundTransparency = 0.55
+		glow.BorderSizePixel = 0
+		glow.ZIndex = oz
+		local glowCorner = Instance.new("UICorner")
+		glowCorner.CornerRadius = UDim.new(1, 0)
+		glowCorner.Parent = glow
+		local glowRatio = Instance.new("UIAspectRatioConstraint")
+		glowRatio.Parent = glow
+		glow.Parent = overlay
+		-- The column: title, plaque, card, bonuses, buttons - nothing overlaps anything.
+		local column = Instance.new("Frame")
+		column.Name = "Column"
+		column.BackgroundTransparency = 1
+		column.Size = UDim2.fromScale(1, 1)
+		column.ZIndex = oz + 1
+		column.Parent = overlay
+		local columnLayout = Instance.new("UIListLayout")
+		columnLayout.FillDirection = Enum.FillDirection.Vertical
+		columnLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		columnLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+		columnLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		columnLayout.Padding = UDim.new(0, Tokens.spacing.sm)
+		columnLayout.Parent = column
 		local title = FrameKit.text(
-			overlay,
+			column,
 			"Title",
 			string.upper(RARITY_LABEL[landing.tier] or landing.tier) .. " CLASS!",
 			"display",
 			{ zIndex = oz + 2, color = rarity.fill, align = Enum.TextXAlignment.Center }
 		)
-		title.Position = UDim2.fromScale(0, 0.02)
-		title.Size = UDim2.fromScale(1, 0.14)
+		title.LayoutOrder = 1
+		title.Size = UDim2.new(1, 0, 0, if compact then 44 else 62)
 		title.TextScaled = true
-		local titleCap = Instance.new("UITextSizeConstraint")
-		titleCap.MaxTextSize = 56
-		titleCap.Parent = title
 		FrameKit.outline(title, 4, WOOD_DEEP)
 		if mythic then
 			local gradient = Instance.new("UIGradient")
@@ -1213,59 +1271,75 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		titleScale.Scale = 0.6
 		titleScale.Parent = title
 		TweenService:Create(titleScale, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
-		local sub = plaque(overlay, "Sub", string.format("%s  -  %s", string.upper(entry.displayName), landing.view.odds.Text), oz + 2, 34)
-		sub.AnchorPoint = Vector2.new(0.5, 0)
-		sub.Position = UDim2.fromScale(0.5, 0.16)
-		sub.Size = UDim2.new(0.44, 0, 0, 34)
-		-- The egg: two halves behind the card, cracked apart.
-		local eggY = 0.52
-		for i, spec in ipairs({ { -1, -22 }, { 1, 22 } }) do
-			local half = Instance.new("Frame")
-			half.Name = "EggHalf" .. i
-			half.AnchorPoint = Vector2.new(0.5, 0.5)
-			half.Position = UDim2.new(0.5, spec[1] * 120, eggY, 40)
-			half.Size = UDim2.fromOffset(140, 190)
-			half.Rotation = spec[2]
-			half.BackgroundColor3 = Tokens.color.gold
-			half.ZIndex = oz + 1
-			local halfCorner = Instance.new("UICorner")
-			halfCorner.CornerRadius = UDim.new(0.5, 0)
-			halfCorner.Parent = half
-			Depth.keyline(half, Tokens.stroke.bold, Tokens.color.goldDeep)
-			Depth.applySheen(half, Tokens.color.gold, Tokens.color.goldLight)
-			half.Parent = overlay
-			TweenService:Create(
-				half,
-				TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-				{ Position = UDim2.new(0.5, spec[1] * 175, eggY, 46), Rotation = spec[2] * 1.4 }
-			):Play()
+		local sub = Instance.new("Frame")
+		sub.Name = "Sub"
+		sub.LayoutOrder = 2
+		sub.Size = UDim2.new(0.5, 0, 0, 40)
+		sub.BackgroundTransparency = 1
+		sub.ZIndex = oz + 2
+		local subCap = Instance.new("UISizeConstraint")
+		subCap.MaxSize = Vector2.new(460, 40)
+		subCap.MinSize = Vector2.new(220, 40)
+		subCap.Parent = sub
+		if not Skin.overlay(sub, "modal.title", { zIndex = oz + 2, name = "Plate" }) then
+			Depth.panel(sub, WOOD, { radius = Tokens.radius.md, rim = WOOD_LIGHT })
 		end
-		-- Rays.
-		local rays = Instance.new("Frame")
-		rays.Name = "Rays"
-		rays.AnchorPoint = Vector2.new(0.5, 0.5)
-		rays.Position = UDim2.fromScale(0.5, eggY)
-		rays.Size = UDim2.fromOffset(420, 420)
-		rays.BackgroundTransparency = 1
-		rays.ZIndex = oz
-		rays.Parent = overlay
-		local burst = Skin.texture(
-			rays,
-			"texture.sunburst",
-			{ zIndex = oz, transparency = if mythic then 0.3 else 0.5, color = if mythic then Tokens.color.featherWhite else rarity.fill }
+		local subText = FrameKit.text(
+			sub,
+			"Text",
+			string.format("%s  -  %s", string.upper(entry.displayName), landing.view.odds.Text),
+			"label",
+			{ zIndex = oz + 4, color = Tokens.color.inkStrong, align = Enum.TextXAlignment.Center, size = UDim2.fromScale(1, 1) }
 		)
-		-- The card itself.
-		local view = buildCard(overlay, entry, landing.tier, oz + 3, animated)
-		view.root.Position = UDim2.fromScale(0.5, eggY)
-		view.root.Size = UDim2.fromOffset(cardW * 1.35, cardH * 1.35)
+		subText.TextScaled = true
+		local subTextCap = Instance.new("UITextSizeConstraint")
+		subTextCap.MaxTextSize = Tokens.typography.label.size + 2
+		subTextCap.Parent = subText
+		sub.Parent = column
+		-- The card, with the golden shell it came out of flying off either side.
+		local cardHolder = Instance.new("Frame")
+		cardHolder.Name = "CardHolder"
+		cardHolder.LayoutOrder = 3
+		cardHolder.BackgroundTransparency = 1
+		cardHolder.Size = UDim2.fromScale(1, if compact then 0.42 else 0.46)
+		cardHolder.ZIndex = oz + 1
+		cardHolder.Parent = column
+		local view = buildCard(cardHolder, entry, landing.tier, oz + 3, animated)
+		view.root.Position = UDim2.fromScale(0.5, 0.5)
+		view.root.Size = UDim2.fromScale(0, 1)
+		local viewRatio = Instance.new("UIAspectRatioConstraint")
+		viewRatio.AspectRatio = cardW / cardH
+		viewRatio.Parent = view.root
 		view.odds.Text = landing.view.odds.Text
 		view.hit:Destroy()
 		view.scale.Scale = 0.3
 		TweenService:Create(view.scale, TweenInfo.new(0.55, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+		for i = 1, 8 do
+			local shard = Instance.new("Frame")
+			shard.Name = "Shell" .. i
+			shard.AnchorPoint = Vector2.new(0.5, 0.5)
+			shard.Position = UDim2.fromScale(0.5, 0.5)
+			shard.Size = UDim2.fromOffset(18 + (i % 3) * 10, 14 + (i % 2) * 8)
+			shard.Rotation = i * 45
+			shard.BackgroundColor3 = if i % 2 == 0 then Tokens.color.gold else Tokens.color.goldLight
+			shard.BorderSizePixel = 0
+			shard.ZIndex = oz + 2
+			local shardCorner = Instance.new("UICorner")
+			shardCorner.CornerRadius = UDim.new(0, 5)
+			shardCorner.Parent = shard
+			Depth.keyline(shard, 1.5, Tokens.color.goldDeep)
+			shard.Parent = cardHolder
+			local angle = math.rad(i * 45 + 22)
+			TweenService:Create(shard, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Position = UDim2.new(0.5, math.cos(angle) * 260, 0.5, math.sin(angle) * 150),
+				Rotation = i * 45 + 160,
+				BackgroundTransparency = 0.4,
+			}):Play()
+		end
 		Confetti.burst(overlay, {
-			origin = UDim2.fromScale(0.5, eggY),
+			origin = UDim2.fromScale(0.5, 0.46),
 			count = if mythic then 80 elseif landing.tier == "legendary" then 50 else 30,
-			spread = if mythic then 300 else 200,
+			spread = if mythic then 320 else 220,
 			motion = motion,
 			tier = tier,
 			zIndex = oz + 8,
@@ -1275,7 +1349,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 				if not done then
 					Confetti.burst(
 						overlay,
-						{ origin = UDim2.fromScale(0.5, 0.3), count = 60, spread = 320, motion = motion, tier = tier, zIndex = oz + 8 }
+						{ origin = UDim2.fromScale(0.5, 0.3), count = 60, spread = 340, motion = motion, tier = tier, zIndex = oz + 8 }
 					)
 				end
 			end)
@@ -1284,12 +1358,11 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		local lines = effectLines(entry, weights)
 		local chipsRow = Instance.new("Frame")
 		chipsRow.Name = "Bonuses"
-		chipsRow.AnchorPoint = Vector2.new(0.5, 0)
-		chipsRow.Position = UDim2.fromScale(0.5, 0.78)
-		chipsRow.Size = UDim2.new(0.9, 0, 0, tap)
+		chipsRow.LayoutOrder = 4
+		chipsRow.Size = UDim2.new(0.92, 0, 0, tap + 4)
 		chipsRow.BackgroundTransparency = 1
 		chipsRow.ZIndex = oz + 2
-		chipsRow.Parent = overlay
+		chipsRow.Parent = column
 		local chipLayout = Instance.new("UIListLayout")
 		chipLayout.FillDirection = Enum.FillDirection.Horizontal
 		chipLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -1297,10 +1370,10 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		chipLayout.Padding = UDim.new(0, Tokens.spacing.sm)
 		chipLayout.Parent = chipsRow
 		local shown = if #lines == 0 then { "No bonuses - a fresh start" } else lines
-		for i = 1, math.min(3, #shown) do
+		for i = 1, math.min(if compact then 2 else 3, #shown) do
 			local chip = Instance.new("Frame")
 			chip.Name = "Bonus" .. i
-			chip.Size = UDim2.new(0, 210, 1, 0)
+			chip.Size = UDim2.new(0, if compact then 160 else 220, 1, 0)
 			chip.ZIndex = oz + 2
 			Depth.panel(chip, WOOD, { radius = Tokens.radius.md, rim = WOOD_LIGHT })
 			local text = FrameKit.text(
@@ -1311,8 +1384,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 				{ zIndex = oz + 3, color = PAPER, align = Enum.TextXAlignment.Center, wrap = true }
 			)
 			text.Font = Tokens.typography.label.font
-			text.Position = UDim2.fromScale(0, 0.05)
-			text.Size = UDim2.fromScale(1, 0.55)
+			text.Position = UDim2.fromScale(0, 0.06)
+			text.Size = UDim2.fromScale(1, 0.54)
 			text.TextScaled = true
 			local applied = FrameKit.text(
 				chip,
@@ -1321,20 +1394,19 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 				"caption",
 				{ zIndex = oz + 3, color = Tokens.color.goldLight, align = Enum.TextXAlignment.Center }
 			)
-			applied.Position = UDim2.fromScale(0, 0.58)
-			applied.Size = UDim2.fromScale(1, 0.36)
+			applied.Position = UDim2.fromScale(0, 0.6)
+			applied.Size = UDim2.fromScale(1, 0.34)
 			applied.TextSize = 11
 			chip.Parent = chipsRow
 		end
 		-- Buttons.
 		local row = Instance.new("Frame")
 		row.Name = "Actions"
-		row.AnchorPoint = Vector2.new(0.5, 1)
-		row.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.md)
-		row.Size = UDim2.new(0.9, 0, 0, tap + 12)
+		row.LayoutOrder = 5
+		row.Size = UDim2.new(0.92, 0, 0, tap + 16)
 		row.BackgroundTransparency = 1
 		row.ZIndex = oz + 2
-		row.Parent = overlay
+		row.Parent = column
 		local rowLayout = Instance.new("UIListLayout")
 		rowLayout.FillDirection = Enum.FillDirection.Horizontal
 		rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -1343,14 +1415,24 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		rowLayout.Parent = row
 		local previousEntry = entryFor(previousClassId)
 		local canKeep = previousEntry ~= nil and previousClassId ~= result.classId
+		local function keepCurrent()
+			if canKeep and previousEntry then
+				local back = deps.net:request("ClassEquip", { classId = previousEntry.id, slot = result.slot })
+				if not back.ok then
+					deps.toasts:push("Could not restore " .. previousEntry.displayName, "warning")
+				end
+			end
+			finish()
+		end
+		currentResult = { finish = finish, keep = keepCurrent }
 		local equipNow = Button.build(row, {
 			text = "EQUIP NOW",
 			variant = "ember",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromOffset(300, tap + 12),
+			size = UDim2.fromOffset(if compact then 220 else 300, tap + 16),
 			zIndex = oz + 3,
-			textSize = 30,
+			textSize = if compact then 24 else 30,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiConfirm)
 			end,
@@ -1362,22 +1444,12 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		})
 		equipNow.button.LayoutOrder = 1
 		equipNow.pulse(true)
-		local function keepCurrent()
-			if canKeep and previousEntry then
-				local back = deps.net:request("ClassEquip", { classId = previousEntry.id, slot = result.slot })
-				if not back.ok then
-					deps.toasts:push("Could not restore " .. previousEntry.displayName, "warning")
-				end
-			end
-			finish()
-		end
-		currentResult = { finish = finish, keep = keepCurrent }
 		local keep = Button.build(row, {
 			text = "KEEP CURRENT",
 			variant = "secondary",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromOffset(210, tap + 4),
+			size = UDim2.fromOffset(if compact then 160 else 210, tap + 4),
 			zIndex = oz + 3,
 			textSize = Tokens.typography.label.size,
 			sound = function()
@@ -1392,16 +1464,19 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			"Unlocked",
 			if result.duplicate then "ALREADY OWNED - EQUIPPED" else "NEW CLASS UNLOCKED!",
 			if result.duplicate then Tokens.color.inkMuted else Tokens.color.success,
-			oz + 4
+			oz + 6
 		)
 		tag.AnchorPoint = Vector2.new(1, 1)
 		tag.Position = UDim2.new(1, -Tokens.spacing.lg, 1, -Tokens.spacing.md)
 		tag.Rotation = -4
 		api.setInitialFocus(equipNow.button)
-		if burst and not motion.reducedMotion then
+		if not motion.reducedMotion then
 			local conn = RunService.RenderStepped:Connect(function(dt)
-				if burst.Parent then
+				if burst and burst.Parent then
 					burst.Rotation = (burst.Rotation + dt * 18) % 360
+				end
+				if glow.Parent then
+					glow.BackgroundTransparency = 0.5 + 0.12 * math.sin(os.clock() * 3)
 				end
 			end)
 			table.insert(cleanups, conn)
@@ -1473,7 +1548,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			state.auto = false
 			stats.autoStops += 1
 			if autoHandle then
-				autoHandle.setText("AUTO: OFF")
+				autoHandle.setText("AUTO OFF")
 				autoHandle.setSelected(false)
 			end
 			if reason then
@@ -1548,7 +1623,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 				stopAuto("Auto stopped")
 			else
 				state.auto = true
-				autoHandle.setText("AUTO: ON")
+				autoHandle.setText("AUTO ON")
 				autoHandle.setSelected(true)
 				deps.audio:play(Tokens.sound.uiConfirm)
 				rollOnce(true)
@@ -1599,7 +1674,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 					stopAuto("Auto stopped")
 				else
 					state.auto = true
-					autoHandle.setText("AUTO: ON")
+					autoHandle.setText("AUTO ON")
 					rollOnce(true)
 				end
 				return { auto = state.auto }

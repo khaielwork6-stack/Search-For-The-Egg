@@ -84,6 +84,7 @@ function LobbyController.new(deps: any): LobbyController
 		_buttons = {},
 		_titles = {},
 		_inRound = false,
+		_railHidden = false,
 		_trove = Trove.new(),
 		stats = { opened = 0, directives = 0, prompts = 0, rewards = 0 },
 	}, LobbyController)
@@ -109,6 +110,7 @@ function LobbyController.new(deps: any): LobbyController
 	railLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	railLayout.Parent = rail
 	rail.Parent = stage
+	self._rail = rail
 	self.rail = rail
 
 	local minimumTap = SafeArea.minimumTapTarget(gui, deps.config)
@@ -310,7 +312,7 @@ function LobbyController.new(deps: any): LobbyController
 	self._trove:add(deps.round.phaseChanged:Connect(function(phase)
 		local inRound = phase ~= nil and phase ~= "Returning" and phase ~= "Abandoned"
 		self._inRound = inRound
-		rail.Visible = not inRound
+		rail.Visible = not inRound and not self._railHidden
 		if offer then
 			offer.setVisible(not inRound)
 		end
@@ -398,6 +400,15 @@ function LobbyController.open(self: LobbyController, id: string): boolean
 		end
 	end
 	return opened
+end
+
+-- The side menu steps aside while a modal owns the screen (it used to show through the frame).
+function LobbyController.setRailHidden(self: LobbyController, hidden: boolean)
+	self._railHidden = hidden
+	local rail = self._rail
+	if rail then
+		rail.Visible = not self._inRound and not hidden
+	end
 end
 
 function LobbyController.isOpen(self: LobbyController, id: string): boolean

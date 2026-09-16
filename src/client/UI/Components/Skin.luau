@@ -43,6 +43,44 @@ local function isFrameRole(role: string): boolean
 	return false
 end
 
+-- A painted piece of the barn laid over a control: a glossy rim over a button face, a rarity frame
+-- over a class card, the crate frame around a panel. Full-size (plus `inset` past the edges), sliced
+-- at `sliceScale`, drawn at `zIndex`. This deliberately ignores the frame-art gate above: the gate
+-- retired the old full-face art; these are rims and frames the owner asked for by name.
+function Skin.overlay(
+	parent: GuiObject,
+	role: string,
+	options: { zIndex: number?, inset: number?, sliceScale: number?, name: string?, color: Color3?, transparency: number? }?
+): ImageLabel?
+	local opts = (options or {}) :: any
+	local id, rect = AssetManifest.skin(role)
+	if not id then
+		return nil
+	end
+	local inset = opts.inset or 0
+	local label = Instance.new("ImageLabel")
+	label.Name = opts.name or ("Skin_" .. role)
+	label.BackgroundTransparency = 1
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Position = UDim2.fromScale(0.5, 0.5)
+	label.Size = UDim2.new(1, inset * 2, 1, inset * 2)
+	label.Image = id
+	if rect then
+		label.ScaleType = Enum.ScaleType.Slice
+		label.SliceCenter = rect
+		label.SliceScale = opts.sliceScale or 1
+	else
+		label.ScaleType = Enum.ScaleType.Fit
+	end
+	if opts.color then
+		label.ImageColor3 = opts.color
+	end
+	label.ImageTransparency = opts.transparency or 0
+	label.ZIndex = opts.zIndex or (parent.ZIndex + 1)
+	label.Parent = parent
+	return label
+end
+
 -- Applies a role's image + slice settings to an existing ImageLabel/ImageButton. Returns success.
 function Skin.apply(image: ImageLabel | ImageButton, role: string): boolean
 	local id, rect, scale = AssetManifest.skin(role)

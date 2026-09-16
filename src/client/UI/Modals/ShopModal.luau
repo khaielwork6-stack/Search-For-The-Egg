@@ -198,7 +198,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 				Icons.gem(chipIcon, Tokens.icon.md, { zIndex = chipIcon.ZIndex + 1 })
 			end
 			chip.AnchorPoint = Vector2.new(1, 0.5)
-			chip.Position = UDim2.new(1, -(tap + Tokens.spacing.xs), 0.5, 0)
+			chip.Position = UDim2.new(1, -(tap + Tokens.spacing.md), 0.5, 0)
 			local plus = Button.build(shell.headerRight, {
 				text = "+",
 				variant = "success",
@@ -249,11 +249,11 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 		{ "forever", "FOREVER", "", "star" },
 	}) do
 		local handle = Button.build(tabsRow, {
-			text = "      " .. spec[2],
+			text = "    " .. spec[2],
 			variant = "secondary",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.new(if compact then 0.32 else 0.24, -Tokens.spacing.xs, 0, tap + 4),
+			size = UDim2.fromOffset(if compact then 118 else 190, tap + 6),
 			zIndex = z + 1,
 			textSize = Tokens.typography.label.size,
 			sound = function()
@@ -666,8 +666,8 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 			bestIndex, bestRatio = index, ratio
 		end
 	end
-	local bundleFills = { Tokens.color.sky, Tokens.color.gem, Color3.fromRGB(70, 44, 110) }
-	local bundleDeeps = { Tokens.color.skyDeep, Tokens.color.gemDeep, Color3.fromRGB(40, 24, 70) }
+	local bundleFills = { Tokens.color.sky, Tokens.color.gem, Color3.fromRGB(226, 214, 255) }
+	local bundleDeeps = { Tokens.color.skyDeep, Tokens.color.gemDeep, Color3.fromRGB(150, 110, 220) }
 	for index, bundle in ipairs(bundles) do
 		local isBest = index == bestIndex
 		local isPopular = bundle.popular == true
@@ -707,17 +707,15 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 		faceCorner.Parent = face
 		Depth.applySheen(face, fill)
 		face.Parent = card
-		local amount = FrameKit.text(
-			face,
-			"Amount",
-			withCommas(bundle.gems) .. " GEMS",
-			"display",
-			{ zIndex = z + 4, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Center }
-		)
-		amount.Position = UDim2.fromScale(0, 0.04)
+		local amount = FrameKit.text(face, "Amount", withCommas(bundle.gems) .. " GEMS", "display", {
+			zIndex = z + 4,
+			color = if isBest then Tokens.color.goldDeep else Tokens.color.featherWhite,
+			align = Enum.TextXAlignment.Center,
+		})
+		amount.Position = UDim2.fromScale(0, 0.08)
 		amount.Size = UDim2.fromScale(1, 0.14)
 		amount.TextScaled = true
-		FrameKit.outline(amount, 3, deep)
+		FrameKit.outline(amount, 3, if isBest then Tokens.color.featherWhite else deep)
 		local artHolder = Instance.new("Frame")
 		artHolder.Name = "Art"
 		artHolder.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -770,16 +768,17 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 		buy.button.AnchorPoint = Vector2.new(0.5, 1)
 		buy.button.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.md)
 		table.insert(cleanups, buy.destroy)
+		-- Ribbons hang over the top corners, never over the amount: POPULAR left, BEST VALUE right.
 		if isPopular then
 			local ribbon = FrameKit.badge(card, "Popular", "POPULAR", Tokens.color.goldDeep, z + 6)
-			ribbon.AnchorPoint = Vector2.new(1, 0)
-			ribbon.Position = UDim2.new(1, Tokens.spacing.xs, 0, Tokens.spacing.xl)
-			ribbon.Rotation = 8
+			ribbon.AnchorPoint = Vector2.new(0, 0.5)
+			ribbon.Position = UDim2.new(0, -Tokens.spacing.sm, 0, 2)
+			ribbon.Rotation = -8
 		end
 		if isBest then
 			local ribbon = FrameKit.badge(card, "Best", "BEST VALUE", Tokens.color.danger, z + 6)
-			ribbon.AnchorPoint = Vector2.new(1, 0)
-			ribbon.Position = UDim2.new(1, Tokens.spacing.xs, 0, if isPopular then Tokens.spacing.xl + 30 else Tokens.spacing.xl)
+			ribbon.AnchorPoint = Vector2.new(1, 0.5)
+			ribbon.Position = UDim2.new(1, Tokens.spacing.sm, 0, 2)
 			ribbon.Rotation = 8
 		end
 		if isBest and not motion.reducedMotion then

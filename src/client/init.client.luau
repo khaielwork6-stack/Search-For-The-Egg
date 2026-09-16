@@ -343,6 +343,15 @@ local lobbyMeta = trove:add(LobbyController.new({
 	interaction = interaction,
 	lobbyShell = lobby,
 }))
+-- A blocking modal owns the screen: the HUD and the side menu step behind it (lobby only; in a
+-- round the HUD stays for the results and the objective).
+trove:add(modals.changed:Connect(function()
+	local blocking = modals:isBlocking()
+	lobbyMeta:setRailHidden(blocking)
+	if not round:inRound() then
+		hud.gui.Enabled = not blocking
+	end
+end))
 hud:setGemShopOpener(function()
 	if round:phase() == nil or round:phase() == "Lobby" then
 		lobbyMeta:open("gems")

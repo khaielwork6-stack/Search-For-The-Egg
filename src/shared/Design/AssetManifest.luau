@@ -228,6 +228,10 @@ AssetManifest.slices = table.freeze({
 	["textbox.focused"] = { 36, 36, 284, 52 },
 	["textbox.idle"] = { 36, 36, 284, 52 },
 	["victory.plate"] = { 80, 50, 944, 110 },
+	-- The barn woodwork used as UI chrome (the sign and the crate frame are square/rectangular
+	-- paintings; sliced, they stretch into plaques and panels of any size).
+	["world.stationSign"] = { 100, 60, 924, 452 },
+	["world.tradeTop"] = { 130, 130, 894, 894 },
 })
 AssetManifest.sliceScale = 0.5
 

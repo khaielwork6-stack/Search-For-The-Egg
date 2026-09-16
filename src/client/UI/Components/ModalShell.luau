@@ -22,7 +22,9 @@ local WOOD = Color3.fromRGB(150, 112, 66)
 local WOOD_DEEP = Color3.fromRGB(104, 74, 42)
 local WOOD_LIGHT = Color3.fromRGB(196, 150, 96)
 local PAPER = Color3.fromRGB(248, 238, 214)
-local FRAME = 14 -- the wooden edge around the panel
+local FRAME_SCALE = 0.4 -- the crate painting's slice scale
+local FRAME = math.floor(130 * FRAME_SCALE) + 4 -- the wooden edge around the panel at that scale
+local TOP_ROOM = 44 -- room above the frame for the plaque to hang over
 
 local ModalShell = {}
 
@@ -63,52 +65,33 @@ function ModalShell.create(
 	root.ZIndex = if options.blocking then Tokens.zIndex.blocking else Tokens.zIndex.modal
 	root.Active = options.blocking
 
-	-- The frame: a wooden crate edge around a parchment panel, the way every stall in the barn is
-	-- built. The title hangs over the top edge on its own plaque; the close is a red knob on the
-	-- corner; the top-right of the frame keeps a slot for a currency chip.
+	-- The frame: the barn's crate painting, sliced, so the panel is real wood with a gold inner rim
+	-- and parchment inside (the feather rides the bottom-right corner). The title hangs over the top
+	-- edge on the station sign; the close is a red knob on the corner; the top-right of the frame
+	-- keeps a slot for a currency chip.
 	local card = Instance.new("Frame")
 	card.Name = "Card"
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
-	card.Position = UDim2.fromScale(0.5, 0.5)
+	card.Position = UDim2.new(0.5, 0, 0.5, TOP_ROOM / 2)
 	card.Size = UDim2.fromScale(if options.compact then 0.8 elseif options.wide then 0.92 else 0.88, Tokens.layout.cardMaxHeightFraction)
+	card.BackgroundTransparency = 1
 	card.ZIndex = root.ZIndex + 1
 	card.SelectionGroup = true
 	card.SelectionBehaviorUp = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorDown = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorLeft = Enum.SelectionBehavior.Stop
 	card.SelectionBehaviorRight = Enum.SelectionBehavior.Stop
-	Depth.panel(card, WOOD, { radius = Tokens.radius.xl, rim = WOOD_LIGHT })
 	local maxSize = Instance.new("UISizeConstraint")
 	maxSize.MaxSize = Vector2.new(if options.compact then 440 elseif options.wide then 1040 else Tokens.layout.cardMaxWidthPx + 40, 900)
 	maxSize.Parent = card
 	local cardScale = Instance.new("UIScale")
 	cardScale.Parent = card
 	card.Parent = root
-	-- Plank seams along the frame's sides.
-	for _, spec in ipairs({ { 0, 0.5, 0, 1 }, { 1, 0.5, 1, 1 } }) do
-		local seam = Instance.new("Frame")
-		seam.Name = "Seam"
-		seam.AnchorPoint = Vector2.new(spec[1], spec[2])
-		seam.Position = UDim2.new(spec[3], if spec[1] == 0 then FRAME * 0.5 else -FRAME * 0.5, 0.5, 0)
-		seam.Size = UDim2.new(0, 2, 0.7, 0)
-		seam.BackgroundColor3 = WOOD_DEEP
-		seam.BackgroundTransparency = 0.55
-		seam.BorderSizePixel = 0
-		seam.ZIndex = card.ZIndex + 1
-		seam.Parent = card
-	end
-	local hasLeafArt = false
-	for index, role in ipairs({ "modal.leaf.left", "modal.leaf.right" }) do
-		local leaf = Skin.icon(card, role, 26, card.ZIndex + 6)
-		if leaf then
-			hasLeafArt = true
-			leaf.Size = UDim2.fromOffset(52, 28)
-			leaf.AnchorPoint = Vector2.new(if index == 1 then 0 else 1, 1)
-			leaf.Position = UDim2.new(if index == 1 then 0 else 1, if index == 1 then -8 else 8, 1, 4)
-		end
-	end
-	if not hasLeafArt then
-		FrameKit.leaves(card, card.ZIndex + 4)
+	local crate = Skin.overlay(card, "world.tradeTop", { zIndex = card.ZIndex, sliceScale = FRAME_SCALE, name = "Crate" })
+	if not crate then
+		-- No painting: a vector wood frame stands in.
+		card.BackgroundTransparency = 0
+		Depth.panel(card, WOOD, { radius = Tokens.radius.xl, rim = WOOD_LIGHT })
 	end
 
 	local panel = Instance.new("Frame")
@@ -117,91 +100,79 @@ function ModalShell.create(
 	panel.Position = UDim2.fromScale(0.5, 0.5)
 	panel.Size = UDim2.new(1, -FRAME * 2, 1, -FRAME * 2)
 	panel.BackgroundColor3 = PAPER
+	panel.BackgroundTransparency = if crate then 1 else 0
 	panel.BorderSizePixel = 0
 	panel.ZIndex = card.ZIndex + 1
 	local panelCorner = Instance.new("UICorner")
 	panelCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
 	panelCorner.Parent = panel
-	Depth.keyline(panel, Tokens.stroke.standard, WOOD_DEEP)
-	Depth.innerShadow(panel, 18, panel.ZIndex + 1)
+	if not crate then
+		Depth.keyline(panel, Tokens.stroke.standard, WOOD_DEEP)
+	end
 	local panelPadding = Instance.new("UIPadding")
-	panelPadding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
-	panelPadding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
-	panelPadding.PaddingTop = UDim.new(0, Tokens.spacing.md)
-	panelPadding.PaddingBottom = UDim.new(0, Tokens.spacing.md)
+	panelPadding.PaddingLeft = UDim.new(0, Tokens.spacing.sm)
+	panelPadding.PaddingRight = UDim.new(0, Tokens.spacing.sm)
+	panelPadding.PaddingTop = UDim.new(0, Tokens.spacing.sm)
+	panelPadding.PaddingBottom = UDim.new(0, Tokens.spacing.sm)
 	panelPadding.Parent = panel
 	panel.Parent = card
 
-	-- The plaque.
-	local plaqueHeight = tap + 24
+	-- The plaque: the station sign, hung over the top edge, the title in gold on its parchment.
+	local plaqueHeight = tap + 28
 	local plaque = Instance.new("Frame")
 	plaque.Name = "Header"
 	plaque.AnchorPoint = Vector2.new(0.5, 0.5)
-	plaque.Position = UDim2.new(0.5, 0, 0, 2)
-	plaque.Size = UDim2.new(if options.compact then 0.78 else 0.56, 0, 0, plaqueHeight)
+	plaque.Position = UDim2.new(0.5, 0, 0, 6)
+	plaque.Size = UDim2.new(if options.compact then 0.8 else 0.58, 0, 0, plaqueHeight)
+	plaque.BackgroundTransparency = 1
 	plaque.ZIndex = card.ZIndex + 6
-	Depth.panel(plaque, WOOD_DEEP, { radius = Tokens.radius.lg, rim = WOOD_LIGHT })
 	local plaqueCap = Instance.new("UISizeConstraint")
-	plaqueCap.MaxSize = Vector2.new(620, plaqueHeight)
-	plaqueCap.MinSize = Vector2.new(220, plaqueHeight)
+	plaqueCap.MaxSize = Vector2.new(640, plaqueHeight)
+	plaqueCap.MinSize = Vector2.new(240, plaqueHeight)
 	plaqueCap.Parent = plaque
-	local plaqueFace = Instance.new("Frame")
-	plaqueFace.Name = "Face"
-	plaqueFace.AnchorPoint = Vector2.new(0.5, 0)
-	plaqueFace.Position = UDim2.new(0.5, 0, 0, 4)
-	plaqueFace.Size = UDim2.new(1, -8, 1, -12)
-	plaqueFace.BackgroundColor3 = WOOD
-	plaqueFace.BorderSizePixel = 0
-	plaqueFace.ZIndex = plaque.ZIndex + 1
-	local faceCorner = Instance.new("UICorner")
-	faceCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
-	faceCorner.Parent = plaqueFace
-	Depth.applySheen(plaqueFace, WOOD, WOOD_LIGHT)
-	plaqueFace.Parent = plaque
-	for _, x in ipairs({ 0.06, 0.94 }) do
-		local nail = Instance.new("Frame")
-		nail.Name = "Nail"
-		nail.AnchorPoint = Vector2.new(0.5, 0.5)
-		nail.Position = UDim2.fromScale(x, 0.5)
-		nail.Size = UDim2.fromOffset(9, 9)
-		nail.BackgroundColor3 = Tokens.color.goldDeep
-		nail.ZIndex = plaque.ZIndex + 3
-		local nailCorner = Instance.new("UICorner")
-		nailCorner.CornerRadius = UDim.new(1, 0)
-		nailCorner.Parent = nail
-		nail.Parent = plaque
+	local sign = Skin.overlay(plaque, "world.stationSign", { zIndex = plaque.ZIndex, sliceScale = 0.42, name = "Sign" })
+	if not sign then
+		Depth.panel(plaque, WOOD_DEEP, { radius = Tokens.radius.lg, rim = WOOD_LIGHT })
 	end
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
 	title.BackgroundTransparency = 1
 	title.AnchorPoint = Vector2.new(0.5, 0.5)
-	title.Position = UDim2.fromScale(0.5, 0.5)
-	title.Size = UDim2.new(1, -Tokens.spacing.xl * 2, 0.86, 0)
+	title.Position = UDim2.new(0.5, 0, 0.5, -1)
+	title.Size = UDim2.new(1, -Tokens.spacing.xxl * 2, 0.74, 0)
 	title.Font = Tokens.typography.display.font
 	title.TextScaled = true
 	title.Text = string.upper(options.title)
-	title.TextColor3 = Tokens.color.goldLight
+	title.TextColor3 = Tokens.color.gold
 	title.ZIndex = plaque.ZIndex + 3
 	local titleGradient = Instance.new("UIGradient")
 	titleGradient.Rotation = 90
 	titleGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 244, 200)),
-		ColorSequenceKeypoint.new(0.55, Tokens.color.goldLight),
-		ColorSequenceKeypoint.new(1, Tokens.color.gold),
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 232, 150)),
+		ColorSequenceKeypoint.new(0.5, Tokens.color.gold),
+		ColorSequenceKeypoint.new(1, Tokens.color.goldDeep),
 	})
 	titleGradient.Parent = title
-	FrameKit.outline(title, 3, WOOD_DEEP)
+	FrameKit.outline(title, 3.5, WOOD_DEEP)
 	local titleCap = Instance.new("UITextSizeConstraint")
-	titleCap.MaxTextSize = 40
+	titleCap.MaxTextSize = 44
 	titleCap.MinTextSize = 16
 	titleCap.Parent = title
 	title.Parent = plaque
-	FrameKit.leaves(plaque, plaque.ZIndex + 1)
+	-- Leaves at both ends of the sign.
+	for index, role in ipairs({ "modal.leaf.left", "modal.leaf.right" }) do
+		local leaf = Skin.icon(plaque, role, 40, plaque.ZIndex + 4)
+		if leaf then
+			leaf.Size = UDim2.fromOffset(58, 34)
+			leaf.AnchorPoint = Vector2.new(if index == 1 then 1 else 0, 0.5)
+			leaf.Position = UDim2.new(if index == 1 then 0 else 1, if index == 1 then 12 else -12, 1, -8)
+		end
+	end
 	if options.icon then
-		local glyph = Skin.icon(plaque, options.icon, plaqueHeight - Tokens.spacing.lg, plaque.ZIndex + 4)
+		local glyph = Skin.icon(plaque, options.icon, plaqueHeight - Tokens.spacing.md, plaque.ZIndex + 4)
 		if glyph then
 			glyph.AnchorPoint = Vector2.new(1, 0.5)
-			glyph.Position = UDim2.new(0, Tokens.spacing.xs, 0.5, 0)
+			glyph.Position = UDim2.new(0, -Tokens.spacing.xs, 0.5, 0)
 		end
 	end
 	plaque.Parent = card
@@ -210,7 +181,7 @@ function ModalShell.create(
 	local headerRight = Instance.new("Frame")
 	headerRight.Name = "HeaderRight"
 	headerRight.AnchorPoint = Vector2.new(1, 0.5)
-	headerRight.Position = UDim2.new(1, -(tap + 28), 0, 2)
+	headerRight.Position = UDim2.new(1, -(tap + 34), 0, 8)
 	headerRight.Size = UDim2.fromOffset(280, tap + 8)
 	headerRight.BackgroundTransparency = 1
 	headerRight.ZIndex = card.ZIndex + 6
@@ -289,7 +260,7 @@ function ModalShell.create(
 	local spacer = Instance.new("Frame")
 	spacer.Name = "HeaderSpace"
 	spacer.BackgroundTransparency = 1
-	spacer.Size = UDim2.new(1, 0, 0, plaqueHeight / 2 - FRAME + Tokens.spacing.sm)
+	spacer.Size = UDim2.new(1, 0, 0, math.max(0, plaqueHeight / 2 + 6 - FRAME) + Tokens.spacing.sm)
 	spacer.LayoutOrder = 1
 	spacer.Parent = panel
 
@@ -342,8 +313,8 @@ function ModalShell.create(
 		content.Size = UDim2.new(1, 0, 1, -(spacer.Size.Y.Offset + Tokens.spacing.md + footerHeight))
 		local host = gui :: GuiBase2d
 		local stageHeight = host.AbsoluteSize.Y / SafeArea.scaleOf(gui)
-		local maxHeight = stageHeight * Tokens.layout.cardMaxHeightFraction
-		local chrome = spacer.Size.Y.Offset + Tokens.spacing.md + footerHeight + FRAME * 2 + Tokens.spacing.md * 2 + 5
+		local maxHeight = math.min(stageHeight * Tokens.layout.cardMaxHeightFraction, stageHeight - TOP_ROOM - Tokens.spacing.lg)
+		local chrome = spacer.Size.Y.Offset + Tokens.spacing.md + footerHeight + FRAME * 2 + Tokens.spacing.sm * 2 + 5
 		local inner = contentLayout.AbsoluteContentSize.Y / SafeArea.scaleOf(gui) + Tokens.spacing.sm * 2
 		local wanted = math.clamp(inner + chrome, 220, maxHeight)
 		card.Size = UDim2.new(card.Size.X.Scale, 0, 0, math.floor(wanted))
@@ -357,45 +328,49 @@ function ModalShell.create(
 	root.Parent = gui
 
 	local motion = options.motion
-	local shell: Shell = {
-		root = root,
-		card = card,
-		panel = panel,
-		content = content,
-		footer = footer,
-		headerRight = headerRight,
-		closeButton = closeButton,
-		titleLabel = title,
-		open = function()
-			local openRecipe = Motion.recipe("panelOpen", motion)
-			local fadeRecipe = Motion.recipe("panelFadeIn", motion)
-			cardScale.Scale = openRecipe.fromScale or 0.82
-			card.Position = UDim2.new(0.5, 0, 0.5, Motion.amplitude(18, motion))
-			TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = if options.blocking then 0.5 else 0.72 })
-				:Play()
-			TweenService:Create(cardScale, Motion.tweenInfo(openRecipe), { Scale = 1 }):Play()
-			TweenService:Create(card, Motion.tweenInfo(openRecipe), { Position = UDim2.fromScale(0.5, 0.5) }):Play()
-			relayout()
-		end,
-		close = function(onClosed)
-			local closeRecipe = Motion.recipe("panelClose", motion)
-			local fadeRecipe = Motion.recipe("panelFadeOut", motion)
-			local fade = TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = 1 })
-			fade:Play()
-			TweenService:Create(cardScale, Motion.tweenInfo(closeRecipe), { Scale = closeRecipe.toScale or 0.86 }):Play()
-			TweenService:Create(card, Motion.tweenInfo(closeRecipe), { Position = UDim2.new(0.5, 0, 0.5, Motion.amplitude(12, motion)) })
-				:Play()
-			fade.Completed:Once(function()
-				root:Destroy()
-				if onClosed then
-					onClosed()
-				end
-			end)
-		end,
-		setTitle = function(text)
-			title.Text = string.upper(text)
-		end,
-	}
+	local shell: Shell =
+		{
+			root = root,
+			card = card,
+			panel = panel,
+			content = content,
+			footer = footer,
+			headerRight = headerRight,
+			closeButton = closeButton,
+			titleLabel = title,
+			open = function()
+				local openRecipe = Motion.recipe("panelOpen", motion)
+				local fadeRecipe = Motion.recipe("panelFadeIn", motion)
+				cardScale.Scale = openRecipe.fromScale or 0.82
+				card.Position = UDim2.new(0.5, 0, 0.5, TOP_ROOM / 2 + Motion.amplitude(18, motion))
+				TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = if options.blocking then 0.5 else 0.72 })
+					:Play()
+				TweenService:Create(cardScale, Motion.tweenInfo(openRecipe), { Scale = 1 }):Play()
+				TweenService:Create(card, Motion.tweenInfo(openRecipe), { Position = UDim2.new(0.5, 0, 0.5, TOP_ROOM / 2) }):Play()
+				relayout()
+			end,
+			close = function(onClosed)
+				local closeRecipe = Motion.recipe("panelClose", motion)
+				local fadeRecipe = Motion.recipe("panelFadeOut", motion)
+				local fade = TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = 1 })
+				fade:Play()
+				TweenService:Create(cardScale, Motion.tweenInfo(closeRecipe), { Scale = closeRecipe.toScale or 0.86 }):Play()
+				TweenService:Create(
+					card,
+					Motion.tweenInfo(closeRecipe),
+					{ Position = UDim2.new(0.5, 0, 0.5, TOP_ROOM / 2 + Motion.amplitude(12, motion)) }
+				):Play()
+				fade.Completed:Once(function()
+					root:Destroy()
+					if onClosed then
+						onClosed()
+					end
+				end)
+			end,
+			setTitle = function(text)
+				title.Text = string.upper(text)
+			end,
+		}
 	return shell
 end
 
