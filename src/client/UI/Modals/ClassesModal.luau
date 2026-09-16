@@ -219,8 +219,8 @@ local CARD_ASPECT = 0.74
 
 -- Reel geometry by distance from the centre slot (Scale of the reel): x offset, card height, tilt
 -- and drop. Neighbours sit slightly behind the chosen card, like cards fanned on a shelf.
-local REEL_OFFSET = { [0] = 0, 0.255, 0.415, 0.5 }
-local REEL_HEIGHT = { [0] = 0.9, 0.66, 0.48, 0.36 }
+local REEL_OFFSET = { [0] = 0, 0.255, 0.4, 0.48 }
+local REEL_HEIGHT = { [0] = 0.9, 0.66, 0.44, 0.34 }
 local REEL_TILT = { [0] = 0, 5, 9, 12 }
 local REEL_DROP = { [0] = 0, 0.035, 0.06, 0.08 }
 local function reelAt(distance: number): (number, number, number, number)
@@ -522,8 +522,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			child.Visible = false
 		end
 	end
-	shell.plaque.Size = UDim2.fromScale(if phone then 0.44 else 0.48, 1.32)
-	shell.plaque.Position = UDim2.fromScale(0.5, 0.62)
+	shell.plaque.Size = UDim2.fromScale(if phone then 0.44 else 0.48, 1.24)
+	shell.plaque.Position = UDim2.fromScale(0.5, 0.6)
 	local titleConstraint = shell.titleLabel:FindFirstChildOfClass("UITextSizeConstraint")
 	if titleConstraint then
 		titleConstraint.MaxTextSize = 64
@@ -784,19 +784,19 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	hayFade.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(1, 0) })
 	hayFade.Parent = hay
 	hay.Parent = reel
-	for index = 1, 14 do
-		local tuft = Instance.new("Frame")
-		tuft.Name = "Tuft" .. index
-		tuft.AnchorPoint = Vector2.new(0.5, 1)
-		tuft.Position = UDim2.fromScale((index - 0.5) / 14 + ((index % 3) - 1) * 0.012, 0.9 + (index % 2) * 0.02)
-		tuft.Size = UDim2.fromScale(0.05, 0.075 + (index % 3) * 0.02)
-		tuft.Rotation = ((index * 37) % 50) - 25
-		tuft.BackgroundColor3 = if index % 2 == 0 then STRAW else STRAW_DEEP
-		tuft.BackgroundTransparency = 0.1
-		tuft.BorderSizePixel = 0
-		tuft.ZIndex = 4
-		Fit.corner(tuft, 0.5)
-		tuft.Parent = reel
+	for index = 1, 26 do
+		local strand = Instance.new("Frame")
+		strand.Name = "Straw" .. index
+		strand.AnchorPoint = Vector2.new(0.5, 1)
+		strand.Position = UDim2.fromScale((index - 0.5) / 26 + ((index % 3) - 1) * 0.008, 0.97 + (index % 2) * 0.02)
+		strand.Size = UDim2.fromScale(0.006, 0.09 + (index % 4) * 0.02)
+		strand.Rotation = ((index * 53) % 70) - 35
+		strand.BackgroundColor3 = if index % 2 == 0 then Color3.fromRGB(252, 226, 140) else STRAW_DEEP
+		strand.BackgroundTransparency = 0.15
+		strand.BorderSizePixel = 0
+		strand.ZIndex = 4
+		Fit.corner(strand, 0.5)
+		strand.Parent = reel
 	end
 	for index, spot in ipairs({ { 0.08, 0.93 }, { 0.5, 0.95 }, { 0.9, 0.92 } }) do
 		local feather = Fit.image(reel, "icon.feather", {
@@ -1193,7 +1193,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 	spinGlow.Name = "SpinGlow"
 	spinGlow.AnchorPoint = Vector2.new(0.5, 0.5)
 	spinGlow.Position = UDim2.fromScale(REEL_CX, SPIN_Y)
-	spinGlow.Size = UDim2.fromScale(0.56, SPIN_H * 1.7)
+	spinGlow.Size = UDim2.fromScale(0.48, SPIN_H * 1.7)
 	spinGlow.BackgroundColor3 = Tokens.color.goldLight
 	spinGlow.BackgroundTransparency = 0.6
 	spinGlow.BorderSizePixel = 0
@@ -1212,7 +1212,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		variant = "primary",
 		minimumTapTarget = tap,
 		motion = motion,
-		size = UDim2.fromScale(0.5, SPIN_H),
+		size = UDim2.fromScale(0.42, SPIN_H),
 		zIndex = 4,
 		sound = function()
 			deps.audio:play(Tokens.sound.uiConfirm)
@@ -1323,7 +1323,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			variant = variant :: any,
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromScale(0.175, PASS_H),
+			size = UDim2.fromScale(0.15, PASS_H),
 			zIndex = 4,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTap)
@@ -1358,8 +1358,8 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		table.insert(cleanups, handle.destroy)
 		passHandles[passKey] = { handle = handle, label = label, priceKey = priceKey }
 	end
-	passButton("LuckPass", "doubleLuck", "2× LUCK", "doubleLuckRobux", "success", 0.115, "star")
-	passButton("FastPass", "fastRolls", "FAST ROLLS", "fastRollsRobux", "teal", 0.88, "flame")
+	passButton("LuckPass", "doubleLuck", "2× LUCK", "doubleLuckRobux", "success", 0.095, "star")
+	passButton("FastPass", "fastRolls", "FAST ROLLS", "fastRollsRobux", "teal", 0.9, "flame")
 
 	-- CLASS INFO drawer ----------------------------------------------------------------------------
 	local infoTab = Instance.new("TextButton")
