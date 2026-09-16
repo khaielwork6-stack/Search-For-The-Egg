@@ -344,16 +344,16 @@ end
 -- The drill gantry: rails either side of the map (world X), a bridge that rides them (world Z),
 -- a carriage on the bridge (world X) and the drill head under it. The client moves bridge and head.
 local function buildGantry(station: Model, centre: Vector3)
-	local railY = centre.Y + 3.4
+	local railH = 3.8 -- rail height over the map centre
 	local span = MollyStation.TILE_PITCH * 3 + 0.6
 	for _, x in ipairs({ -span / 2, span / 2 }) do
-		part(station, "GantryRail", Vector3.new(0.16, 0.16, span), CFrame.new(centre + Vector3.new(x, railY, 0)), IRON, Enum.Material.Metal)
+		part(station, "GantryRail", Vector3.new(0.16, 0.16, span), CFrame.new(centre + Vector3.new(x, railH, 0)), IRON, Enum.Material.Metal)
 		for _, z in ipairs({ -span / 2, span / 2 }) do
 			part(
 				station,
 				"GantryPost",
-				Vector3.new(0.16, railY - centre.Y + 0.1, 0.16),
-				CFrame.new(centre + Vector3.new(x, (railY - centre.Y) / 2, z)),
+				Vector3.new(0.16, railH + 0.1, 0.16),
+				CFrame.new(centre + Vector3.new(x, railH / 2, z)),
 				IRON_DARK,
 				Enum.Material.Metal
 			)
@@ -363,7 +363,7 @@ local function buildGantry(station: Model, centre: Vector3)
 		station,
 		"DrillBridge",
 		Vector3.new(span + 0.3, 0.2, 0.28),
-		CFrame.new(centre + Vector3.new(0, railY + 0.18, 0)),
+		CFrame.new(centre + Vector3.new(0, railH + 0.18, 0)),
 		BRASS_DARK,
 		Enum.Material.Metal
 	)
@@ -374,17 +374,17 @@ local function buildGantry(station: Model, centre: Vector3)
 		head,
 		"DrillCarriage",
 		Vector3.new(0.6, 0.5, 0.6),
-		CFrame.new(centre + Vector3.new(0, railY + 0.18, 0)),
+		CFrame.new(centre + Vector3.new(0, railH + 0.18, 0)),
 		IRON,
 		Enum.Material.Metal
 	)
-	part(head, "DrillMotor", Vector3.new(0.44, 0.7, 0.44), CFrame.new(centre + Vector3.new(0, railY - 0.42, 0)), BRASS, Enum.Material.Metal)
+	part(head, "DrillMotor", Vector3.new(0.44, 0.7, 0.44), CFrame.new(centre + Vector3.new(0, railH - 0.42, 0)), BRASS, Enum.Material.Metal)
 	cylinder(
 		head,
 		"DrillShaft",
 		0.08,
 		1.6,
-		CFrame.new(centre + Vector3.new(0, railY - 1.55, 0)) * CFrame.Angles(0, 0, math.rad(90)),
+		CFrame.new(centre + Vector3.new(0, railH - 1.55, 0)) * CFrame.Angles(0, 0, math.rad(90)),
 		IRON,
 		Enum.Material.Metal
 	)
@@ -392,7 +392,7 @@ local function buildGantry(station: Model, centre: Vector3)
 		head,
 		"DrillBit",
 		Vector3.new(0.18, 0.4, 0.18),
-		CFrame.new(centre + Vector3.new(0, railY - 2.5, 0)) * CFrame.Angles(math.rad(180), 0, 0),
+		CFrame.new(centre + Vector3.new(0, railH - 2.5, 0)) * CFrame.Angles(math.rad(180), 0, 0),
 		IRON_DARK,
 		Enum.Material.Metal
 	)
@@ -403,7 +403,7 @@ local function buildGantry(station: Model, centre: Vector3)
 			"DrillFlute",
 			0.11,
 			0.14,
-			CFrame.new(centre + Vector3.new(0, railY - 0.9 - i * 0.28, 0)) * CFrame.Angles(0, 0, math.rad(90)),
+			CFrame.new(centre + Vector3.new(0, railH - 0.9 - i * 0.28, 0)) * CFrame.Angles(0, 0, math.rad(90)),
 			IRON_DARK,
 			Enum.Material.Metal
 		)
