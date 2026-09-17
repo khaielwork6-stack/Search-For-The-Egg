@@ -248,6 +248,23 @@ Tokens.layout = table.freeze({
 	cardMaxHeightFraction = 0.9, -- of the viewport; content scrolls inside
 })
 
+-- World billboards (UI/Components/WorldBillboard): sized in studs so they shrink with distance,
+-- depth-tested so geometry (the feather pile, stalls, walls) hides them, and culled past a range.
+-- Sizes are width x height in studs; distances are studs from the camera.
+Tokens.world = table.freeze({
+	npcPlateMaxDistance = 60,
+	playerPlateMaxDistance = 60,
+	promptMaxDistance = 25,
+	displayCardMaxDistance = 40,
+	padBoardMaxDistance = 90,
+	npcPlateStuds = Vector2.new(2.6, 0.72),
+	speechStuds = Vector2.new(3.4, 1.0),
+	playerPlateStuds = Vector2.new(2.6, 0.66),
+	promptStuds = Vector2.new(1.9, 0.52),
+	displayCardStuds = Vector2.new(2.2, 0.72),
+	padBoardStuds = Vector2.new(6.4, 2.2),
+})
+
 Tokens.zIndex = table.freeze({ world = 1, hud = 10, toast = 20, modal = 30, blocking = 40, prompt = 50, veil = 60 })
 
 -- Icon glyph sizes (vector icons drawn from frames; see UI/Components/Icons).
