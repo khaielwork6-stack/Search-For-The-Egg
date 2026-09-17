@@ -1,5 +1,5 @@
 --!strict
--- Segmented tab strip: cream track, one teal-accent selected tab that slides between items, hover
+-- Segmented tab strip: a dark recessed track, one blue selected tab that slides between items, hover
 -- and press feedback on every tab, controller selectable, wraps on narrow screens. Selection is
 -- announced through onSelect; the caller owns what the tab shows.
 
@@ -42,17 +42,13 @@ function Tabs.build(parent: Instance, options: Options): Handle
 	frame.Name = "Tabs"
 	frame.Size = UDim2.new(1, 0, 0, options.minimumTapTarget + Tokens.spacing.sm)
 	frame.AutomaticSize = Enum.AutomaticSize.Y
-	frame.BackgroundColor3 = Tokens.color.creamDeep
+	frame.BackgroundColor3 = Tokens.color.panelDeep
 	frame.BorderSizePixel = 0
 	frame.ZIndex = z
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, Tokens.radius.md + 2)
 	corner.Parent = frame
-	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = Tokens.stroke.hairline + 0.5
-	stroke.Color = Tokens.color.strawDeep
-	stroke.Transparency = 0.5
-	stroke.Parent = frame
+	Depth.keyline(frame, Tokens.depth.keylineThin)
 	local padding = Instance.new("UIPadding")
 	padding.PaddingTop = UDim.new(0, Tokens.spacing.xs)
 	padding.PaddingBottom = UDim.new(0, Tokens.spacing.xs)
@@ -84,7 +80,7 @@ function Tabs.build(parent: Instance, options: Options): Handle
 			local outline = Depth.keylineOf(handle.button) :: UIStroke?
 			if outline then
 				outline.Transparency = if on then 0 else 1
-				outline.Color = if on then Tokens.color.tealDeep else Tokens.color.strawDeep
+				outline.Color = Tokens.color.outline
 			end
 			if on and animate then
 				local scale = handle.button:FindFirstChildOfClass("UIScale")

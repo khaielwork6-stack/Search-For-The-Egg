@@ -40,16 +40,16 @@ export type UpgradeBookController = typeof(setmetatable(
 	UpgradeBookController
 ))
 
--- The book is a physical object, so it gets its own small palette rather than borrowing the modal
--- one: a deep blue board, a gold rule inlaid just inside it, warm paper, and a shadowed gutter where
--- the two halves meet. Everything else on the page is the game's farm palette.
-local PAGE_BLUE = Color3.fromRGB(40, 104, 172) -- the section headings, in the board's own blue
-local COVER = Color3.fromRGB(32, 84, 146) -- the board
-local COVER_DEEP = Color3.fromRGB(18, 54, 98) -- its thickness, seen under the bottom edge
-local COVER_RULE = Color3.fromRGB(226, 178, 74) -- the gold rule inlaid in the board
-local PAGE = Color3.fromRGB(252, 244, 224) -- paper
-local PAGE_EDGE = Color3.fromRGB(226, 208, 170) -- the stack of pages under the top sheet
-local GUTTER = Color3.fromRGB(196, 174, 136)
+-- The book is a physical object, but it is drawn in the kit's dark palette (17 Sep 2026, to the
+-- reference clip): a charcoal board with a thickness under its bottom edge, a gold rule inlaid just
+-- inside it, slate pages with white stroked lettering, and a shadowed gutter where the two halves
+-- meet. Green buys, a red close, gold for what is lit.
+local COVER = Tokens.color.panel -- the board
+local COVER_DEEP = Tokens.color.panelDeep -- its thickness, seen under the bottom edge
+local COVER_RULE = Tokens.color.gold -- the gold rule inlaid in the board
+local PAGE = Tokens.color.surface -- the page
+local PAGE_EDGE = Tokens.color.surfaceAlt -- the stack of pages under the top sheet
+local GUTTER = Tokens.color.panelDeep
 local BOARD_THICKNESS_PX = 7 -- how far the board's underside shows below the cover
 local BOARD_RULE_INSET = 10 -- how far in from the board's edge the gold rule is inlaid
 
@@ -128,20 +128,24 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 		return
 	end
 	local z = page.ZIndex + 1
-	-- The section heading sits on a paper band with a rule under it, the way a chapter head does in a
-	-- printed book. A bare line of blue text over cream was the single biggest reason this read as a
-	-- UI card rather than a page.
+	-- The section heading sits over a gold rule, the way a chapter head does in a printed book:
+	-- white display lettering with a thick black stroke.
 	local head = Instance.new("Frame")
 	head.Name = "Head"
 	head.Size = UDim2.new(1, 0, 0, Tokens.typography.display.size + Tokens.spacing.sm)
 	head.BackgroundTransparency = 1
 	head.ZIndex = z
 	head.Parent = page
-	local title =
-		FrameKit.text(head, "Title", item.title, "display", { zIndex = z + 1, color = PAGE_BLUE, align = Enum.TextXAlignment.Center })
+	local title = FrameKit.text(
+		head,
+		"Title",
+		item.title,
+		"display",
+		{ zIndex = z + 1, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Center }
+	)
 	title.Size = UDim2.fromScale(1, 1)
 	title.TextSize = Tokens.typography.display.size - 2
-	FrameKit.outline(title, 2.4, Tokens.color.featherWhite)
+	FrameKit.outline(title, 3)
 	local rule = Instance.new("Frame")
 	rule.Name = "Rule"
 	rule.AnchorPoint = Vector2.new(0.5, 1)
@@ -193,23 +197,26 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 	for index, pathId in ipairs(item.paths) do
 		local copy = UpgradeCopy.LABELS[pathId]
 		local preview = previewOf(deps.round, pathId)
-		-- Each path is a card: paper face, cocoa keyline, bright rim, and a lip so it has a thickness.
-		-- The selected one is lifted with a gold keyline instead of merely having a thicker border.
+		-- Each path is a card: a slate face on a darker lip, a thick black keyline, a faint rim. The
+		-- selected one is lifted with a gold keyline and a lighter face.
 		local isSelected = pathId == selected and owned
 		local tile = Instance.new("Frame")
 		tile.Name = "Path_" .. pathId
-		tile.BackgroundColor3 = if owned then Tokens.color.strawDeep else Tokens.color.inkMuted
+		tile.BackgroundColor3 = Tokens.color.panelDeep
 		tile.Size = UDim2.fromOffset(tap * 2 + Tokens.spacing.md, tap * 3)
 		tile.LayoutOrder = index
 		tile.ZIndex = z + 1
 		local tileCorner = Instance.new("UICorner")
 		tileCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
 		tileCorner.Parent = tile
-		Depth.keyline(tile, Tokens.stroke.bold, if isSelected then Tokens.color.goldDeep else Tokens.color.outline)
+		Depth.keyline(tile, if isSelected then Tokens.stroke.frame else Tokens.depth.keyline, if isSelected then Tokens.color.gold else nil)
 		local tileFace = Instance.new("Frame")
 		tileFace.Name = "Face"
 		tileFace.Size = UDim2.new(1, 0, 1, -Tokens.depth.lipPx)
-		tileFace.BackgroundColor3 = if owned then Tokens.color.featherWhite else Color3.fromRGB(196, 186, 172)
+		tileFace.BackgroundColor3 = if not owned
+			then Tokens.color.surfaceAlt
+			elseif isSelected then Depth.shade(Tokens.color.surface, 0.12)
+			else Tokens.color.surface
 		tileFace.BorderSizePixel = 0
 		tileFace.ZIndex = z + 2
 		local faceCorner = Instance.new("UICorner")
@@ -221,10 +228,11 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 		tile.Parent = tiles
 		local name = FrameKit.text(tileFace, "Name", if owned then (copy and copy.title or pathId) else "???", "label", {
 			zIndex = z + 2,
-			color = Tokens.color.inkStrong,
+			color = if owned then Tokens.color.featherWhite else Tokens.color.inkMuted,
 			align = Enum.TextXAlignment.Center,
 		})
 		name.Size = UDim2.new(1, 0, 0, Tokens.typography.label.size + 4)
+		FrameKit.outline(name, 2)
 		-- Level pips as little feathers.
 		local pips = Instance.new("Frame")
 		pips.Name = "Pips"
@@ -247,7 +255,7 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 		for level = 1, maxLevel do
 			local dot = Instance.new("Frame")
 			dot.Size = UDim2.fromOffset(dotSize, dotSize)
-			dot.BackgroundColor3 = if preview and level <= preview.level then Tokens.color.gold else Tokens.color.creamDeep
+			dot.BackgroundColor3 = if preview and level <= preview.level then Tokens.color.gold else Tokens.color.panelDeep
 			dot.BorderSizePixel = 0
 			dot.ZIndex = z + 2
 			dot.LayoutOrder = level
@@ -255,8 +263,8 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 			dotCorner.CornerRadius = UDim.new(1, 0)
 			dotCorner.Parent = dot
 			local dotStroke = Instance.new("UIStroke")
-			dotStroke.Thickness = 1.2
-			dotStroke.Color = Tokens.color.strawDeep
+			dotStroke.Thickness = 1.5
+			dotStroke.Color = Tokens.color.outline
 			dotStroke.Parent = dot
 			dot.Parent = pips
 		end
@@ -266,21 +274,13 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 		square.AnchorPoint = Vector2.new(0.5, 0)
 		square.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + Tokens.spacing.lg + 4)
 		square.Size = UDim2.fromOffset(tap + Tokens.spacing.lg, tap + Tokens.spacing.lg)
-		-- A warm well for the art to sit in, so the icon reads as inlaid rather than pasted on.
-		square.BackgroundColor3 = if owned then Tokens.color.creamPill else Color3.fromRGB(176, 168, 156)
+		-- A dark well for the art to sit in, so the icon reads as inlaid rather than pasted on.
+		square.BackgroundColor3 = Tokens.color.panelDeep
 		square.ZIndex = z + 3
 		local squareCorner = Instance.new("UICorner")
 		squareCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
 		squareCorner.Parent = square
-		local squareStroke = Instance.new("UIStroke")
-		squareStroke.Thickness = Tokens.stroke.standard
-		squareStroke.Color = if isSelected then Tokens.color.goldDeep else Tokens.color.strawDeep
-		squareStroke.Transparency = if isSelected then 0 else 0.35
-		squareStroke.Parent = square
-		local squareShade = Instance.new("UIGradient")
-		squareShade.Rotation = 90
-		squareShade.Color = ColorSequence.new(Depth.shade(square.BackgroundColor3, -0.06), Depth.shade(square.BackgroundColor3, 0.08))
-		squareShade.Parent = square
+		Depth.keyline(square, Tokens.depth.keylineThin, if isSelected then Tokens.color.gold else nil)
 		square.Parent = tileFace
 		if owned then
 			local art = Skin.icon(square, (copy and copy.icon) or item.art, tap, z + 3)
@@ -297,18 +297,19 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 			"Price",
 			"",
 			"label",
-			{ zIndex = z + 2, color = Tokens.color.inkStrong, align = Enum.TextXAlignment.Center }
+			{ zIndex = z + 2, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Center }
 		)
 		price.AnchorPoint = Vector2.new(0.5, 1)
 		price.Position = UDim2.fromScale(0.5, 1)
 		price.Size = UDim2.new(1, 0, 0, Tokens.typography.label.size + 4)
+		FrameKit.outline(price, 2)
 		if not owned then
 			price.Text = "?"
 		elseif not preview then
 			price.Text = "-"
 		elseif preview.maxed then
 			price.Text = "MAX"
-			price.TextColor3 = Tokens.color.leafDeep
+			price.TextColor3 = Tokens.color.success
 		elseif preview.costGems then
 			price.Text = string.format("%d Gems", preview.costGems)
 		else
@@ -331,43 +332,52 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 
 	-- Story box for the selected path (or the tool itself when unowned) and the BUY.
 	local boxTop = tileTop + tap * 3 + Tokens.spacing.lg + Tokens.spacing.md
-	-- The detail panel. This was a lavender-grey box at 25% transparency - a cold colour from no part
-	-- of this game, washed out on top of that - and it sat under every tool page in the book. It is
-	-- warm paper now, inset into the page with a keyline and a rim, and it carries a gold cap so the
-	-- name of the thing you are about to buy has somewhere to sit.
+	-- The detail panel: a darker slate box inset into the page with a keyline and a rim, and a dark
+	-- cap with a green line under it so the name of the thing you are about to buy has somewhere to
+	-- sit.
 	local box = Instance.new("Frame")
 	box.Name = "Story"
-	box.BackgroundColor3 = Tokens.color.creamPill
+	box.BackgroundColor3 = Tokens.color.surfaceAlt
 	box.Position = UDim2.fromOffset(0, boxTop)
 	box.Size = UDim2.new(1, 0, 0, tap * 2 + Tokens.spacing.xl)
 	box.ZIndex = z
 	local boxCorner = Instance.new("UICorner")
 	boxCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
 	boxCorner.Parent = box
-	Depth.keyline(box, Tokens.stroke.bold)
-	Depth.rim(box, Tokens.color.creamPill)
-	Depth.applySheen(box, Tokens.color.creamPill)
+	Depth.keyline(box)
+	Depth.rim(box, Tokens.color.surfaceAlt)
+	Depth.applySheen(box, Tokens.color.surfaceAlt)
 	local cap = Instance.new("Frame")
 	cap.Name = "Cap"
 	cap.Size = UDim2.new(1, 0, 0, Tokens.typography.title.size + Tokens.spacing.sm)
-	cap.BackgroundColor3 = Tokens.color.gold
+	cap.BackgroundColor3 = Tokens.color.panelDeep
 	cap.BorderSizePixel = 0
 	cap.ZIndex = z + 1
 	local capCorner = Instance.new("UICorner")
 	capCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
 	capCorner.Parent = cap
-	Depth.applySheen(cap, Tokens.color.gold)
+	Depth.applySheen(cap, Tokens.color.panelDeep)
 	cap.Parent = box
-	-- Square off the cap's bottom corners so it reads as a band across the top of the panel.
+	-- Square off the cap's bottom corners so it reads as a band across the top of the panel, and
+	-- rule it off with the green line.
 	local capFoot = Instance.new("Frame")
 	capFoot.Name = "CapFoot"
 	capFoot.AnchorPoint = Vector2.new(0.5, 1)
 	capFoot.Position = UDim2.fromScale(0.5, 1)
 	capFoot.Size = UDim2.new(1, 0, 0, Tokens.radius.md)
-	capFoot.BackgroundColor3 = Tokens.color.gold
+	capFoot.BackgroundColor3 = Tokens.color.panelDeep
 	capFoot.BorderSizePixel = 0
 	capFoot.ZIndex = z + 1
 	capFoot.Parent = cap
+	local capLine = Instance.new("Frame")
+	capLine.Name = "Line"
+	capLine.AnchorPoint = Vector2.new(0.5, 1)
+	capLine.Position = UDim2.fromScale(0.5, 1)
+	capLine.Size = UDim2.new(1, 0, 0, 3)
+	capLine.BackgroundColor3 = Tokens.color.success
+	capLine.BorderSizePixel = 0
+	capLine.ZIndex = z + 2
+	capLine.Parent = cap
 	local boxPadding = Instance.new("UIPadding")
 	boxPadding.PaddingLeft = UDim.new(0, Tokens.spacing.md)
 	boxPadding.PaddingRight = UDim.new(0, Tokens.spacing.md)
@@ -386,17 +396,19 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 		"Text",
 		"",
 		"body",
-		{ zIndex = z + 1, color = Tokens.color.inkStrong, align = Enum.TextXAlignment.Center, wrap = true }
+		{ zIndex = z + 1, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Center, wrap = true }
 	)
 	storyText.Position = UDim2.fromOffset(0, Tokens.typography.title.size + Tokens.spacing.lg)
 	storyText.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size * 2 + 6)
 	storyText.TextYAlignment = Enum.TextYAlignment.Top
+	FrameKit.outline(storyText, 2)
 	local values =
-		FrameKit.text(box, "Values", "", "label", { zIndex = z + 1, color = Tokens.color.inkStrong, align = Enum.TextXAlignment.Center })
+		FrameKit.text(box, "Values", "", "label", { zIndex = z + 1, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Center })
 	values.AnchorPoint = Vector2.new(0.5, 1)
 	values.Position = UDim2.fromScale(0.5, 1)
 	values.Size = UDim2.new(1, 0, 0, Tokens.typography.label.size + 4)
 	values.RichText = true
+	FrameKit.outline(values, 2)
 	local buyText = ""
 	local buyId: string? = nil
 	local buyEnabled = false
@@ -420,15 +432,11 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 		if preview and copy then
 			local current = copy.describe(preview.current)
 			if preview.maxed then
-				values.Text = string.format('%s  <font color="#%s">MAX</font>', current, Tokens.color.leafDeep:ToHex())
+				values.Text = string.format('%s  <font color="#%s">MAX</font>', current, Tokens.color.success:ToHex())
 				buyText = "MAXED"
 			else
-				values.Text = string.format(
-					'%s  <font color="#%s">→  %s</font>',
-					current,
-					Tokens.color.goldDeep:ToHex(),
-					copy.describe(preview.next)
-				)
+				values.Text =
+					string.format('%s  <font color="#%s">→  %s</font>', current, Tokens.color.gold:ToHex(), copy.describe(preview.next))
 				buyText = if preview.costGems
 					then string.format("BUY  %d Gems", preview.costGems)
 					else string.format("BUY  %s", EconomyMath.formatCents(preview.costCents or 0))
@@ -440,9 +448,12 @@ function UpgradeBookController._renderPage(self: UpgradeBookController, page: Fr
 			buyText = "-"
 		end
 	end
+	-- The BUY: green, with a gem or a coin beside the price so the currency reads before the number.
+	local buyCurrency = if not owned then acquire else preview
 	local buy = Button.build(page, {
 		text = buyText,
-		variant = "primary",
+		variant = "success",
+		icon = if buyId then (if buyCurrency and buyCurrency.costGems then "gem" else "coin") else nil,
 		minimumTapTarget = tap,
 		motion = motion,
 		size = UDim2.new(0.66, 0, 0, tap + Tokens.spacing.xs),
@@ -525,11 +536,12 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 		square.AnchorPoint = Vector2.new(0, 0.5)
 		square.Position = UDim2.fromScale(0, 0.5)
 		square.Size = UDim2.fromOffset(tap + Tokens.spacing.lg, tap + Tokens.spacing.lg)
-		square.BackgroundColor3 = if entry.rainbow then Tokens.color.gem else Tokens.color.creamPill
+		square.BackgroundColor3 = if entry.rainbow then Tokens.color.gem else Tokens.color.panelDeep
 		square.ZIndex = z + 1
 		local squareCorner = Instance.new("UICorner")
 		squareCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
 		squareCorner.Parent = square
+		Depth.keyline(square, Tokens.depth.keylineThin)
 		square.Parent = row
 		local art = Skin.icon(square, entry.art, tap, z + 2)
 		if art then
@@ -543,25 +555,35 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 			end
 		end
 		local left2 = tap + Tokens.spacing.lg + Tokens.spacing.md
-		local name = FrameKit.text(row, "Name", if entry.found then entry.name else "???", "title", { zIndex = z + 1, color = PAGE_BLUE })
+		local name = FrameKit.text(
+			row,
+			"Name",
+			if entry.found then entry.name else "???",
+			"title",
+			{ zIndex = z + 1, color = Tokens.color.featherWhite }
+		)
 		name.Position = UDim2.fromOffset(left2, Tokens.spacing.xs)
 		name.Size = UDim2.new(1, -(left2 + tap * 2), 0, Tokens.typography.title.size + 2)
+		FrameKit.outline(name, 2.5)
 		local chance = FrameKit.text(row, "Chance", entry.chance, "body", { zIndex = z + 1, color = Tokens.color.ink })
 		chance.Position = UDim2.fromOffset(left2, Tokens.typography.title.size + Tokens.spacing.sm)
 		chance.Size = UDim2.new(1, -(left2 + tap * 2), 0, Tokens.typography.body.size + 4)
+		FrameKit.outline(chance, 2)
 		local value = FrameKit.text(row, "Value", string.format("x%d", entry.value), "display", {
 			zIndex = z + 1,
-			color = PAGE_BLUE,
+			color = Tokens.color.gold,
 			align = Enum.TextXAlignment.Right,
 		})
 		value.AnchorPoint = Vector2.new(1, 0.5)
 		value.Position = UDim2.fromScale(1, 0.5)
 		value.Size = UDim2.fromOffset(tap * 2, Tokens.typography.display.size)
 		value.TextSize = Tokens.typography.display.size - 6
+		FrameKit.outline(value, 3)
 	end
-	local title = FrameKit.text(right, "Title", "FEATHER INDEX", "display", { zIndex = z, color = PAGE_BLUE })
+	local title = FrameKit.text(right, "Title", "FEATHER INDEX", "display", { zIndex = z, color = Tokens.color.featherWhite })
 	title.Size = UDim2.new(1, 0, 0, Tokens.typography.display.size + 4)
 	title.TextSize = Tokens.typography.display.size - 4
+	FrameKit.outline(title, 3)
 	local story = FrameKit.text(
 		right,
 		"Story",
@@ -576,6 +598,7 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 	story.Position = UDim2.fromOffset(0, Tokens.typography.display.size + Tokens.spacing.md)
 	story.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size * 5)
 	story.TextYAlignment = Enum.TextYAlignment.Top
+	FrameKit.outline(story, 2)
 	-- NEST INTEL: Professor Plume's rod loans and Molly's survey this round. One row each; the
 	-- data is the round snapshot's `plume` and `survey`, so a member who paid nothing and a member
 	-- who joined late read the same rows.
@@ -584,27 +607,30 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 	local usesLeft = if plume then (plume.usesLeft or 0) else EggSense.maxUses(deps.config)
 	local nextCost = if plume then plume.nextCost else EggSense.nextCost(deps.config, 0)
 	local cluesTop = Tokens.typography.display.size + Tokens.spacing.md + Tokens.typography.body.size * 5 + Tokens.spacing.md
-	local cluesTitle = FrameKit.text(right, "CluesTitle", "NEST INTEL", "title", { zIndex = z, color = PAGE_BLUE })
+	local cluesTitle = FrameKit.text(right, "CluesTitle", "NEST INTEL", "title", { zIndex = z, color = Tokens.color.featherWhite })
 	cluesTitle.Position = UDim2.fromOffset(0, cluesTop)
 	cluesTitle.Size = UDim2.new(1, 0, 0, Tokens.typography.title.size + 2)
+	FrameKit.outline(cluesTitle, 2.5)
 	local rowHeight = tap - 4
+	-- A live row is a slate card with a gold keyline; a spent one sinks into the page behind a black
+	-- one.
 	local rodRow = Instance.new("Frame")
 	rodRow.Name = "Clue_rod"
 	rodRow.Position = UDim2.fromOffset(0, cluesTop + Tokens.typography.title.size + Tokens.spacing.sm)
 	rodRow.Size = UDim2.new(1, 0, 0, rowHeight)
-	rodRow.BackgroundColor3 = if usesLeft > 0 then Tokens.color.creamPill else Tokens.color.creamDeep
-	rodRow.BackgroundTransparency = if usesLeft > 0 then 0 else 0.35
+	rodRow.BackgroundColor3 = if usesLeft > 0 then Tokens.color.surfaceAlt else Tokens.color.panelDeep
 	rodRow.BorderSizePixel = 0
 	rodRow.ZIndex = z
 	local rodCorner = Instance.new("UICorner")
 	rodCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
 	rodCorner.Parent = rodRow
-	Depth.keyline(rodRow, Tokens.stroke.hairline + 0.5, if usesLeft > 0 then Tokens.color.gold else Tokens.color.strawDeep)
+	Depth.keyline(rodRow, Tokens.depth.keylineThin, if usesLeft > 0 then Tokens.color.gold else nil)
 	rodRow.Parent = right
-	local rodLabel = FrameKit.text(rodRow, "Label", "EGG SENSE", "heading", { zIndex = z + 1, color = Tokens.color.inkStrong })
+	local rodLabel = FrameKit.text(rodRow, "Label", "EGG SENSE", "heading", { zIndex = z + 1, color = Tokens.color.featherWhite })
 	rodLabel.AnchorPoint = Vector2.new(0, 0.5)
 	rodLabel.Position = UDim2.new(0, Tokens.spacing.md, 0.5, 0)
 	rodLabel.Size = UDim2.new(0.4, 0, 0, Tokens.typography.heading.size + 2)
+	FrameKit.outline(rodLabel, 2)
 	local rodValue = FrameKit.text(
 		rodRow,
 		"Value",
@@ -612,7 +638,7 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 		"heading",
 		{
 			zIndex = z + 1,
-			color = if nextCost then PAGE_BLUE else Tokens.color.inkMuted,
+			color = if nextCost then Tokens.color.gold else Tokens.color.inkMuted,
 			align = Enum.TextXAlignment.Right,
 		}
 	)
@@ -620,6 +646,7 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 	rodValue.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, 0)
 	rodValue.Size = UDim2.new(0.6, -Tokens.spacing.md, 0, Tokens.typography.heading.size + 2)
 	rodValue.TextSize = Tokens.typography.heading.size - 2
+	FrameKit.outline(rodValue, 2)
 	-- Molly's survey: the party's latest reading of the round (of up to three), or NOT RUN.
 	local surveyState = round and round.survey
 	local survey = surveyState and surveyState.latest
@@ -628,19 +655,19 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 	surveyRow.Position =
 		UDim2.fromOffset(0, cluesTop + Tokens.typography.title.size + Tokens.spacing.sm + 1 * (rowHeight + Tokens.spacing.xs))
 	surveyRow.Size = UDim2.new(1, 0, 0, rowHeight)
-	surveyRow.BackgroundColor3 = if survey then Tokens.color.creamPill else Tokens.color.creamDeep
-	surveyRow.BackgroundTransparency = if survey then 0 else 0.35
+	surveyRow.BackgroundColor3 = if survey then Tokens.color.surfaceAlt else Tokens.color.panelDeep
 	surveyRow.BorderSizePixel = 0
 	surveyRow.ZIndex = z
 	local surveyCorner = Instance.new("UICorner")
 	surveyCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
 	surveyCorner.Parent = surveyRow
-	Depth.keyline(surveyRow, Tokens.stroke.hairline + 0.5, if survey then Tokens.color.gold else Tokens.color.strawDeep)
+	Depth.keyline(surveyRow, Tokens.depth.keylineThin, if survey then Tokens.color.gold else nil)
 	surveyRow.Parent = right
-	local surveyLabel = FrameKit.text(surveyRow, "Label", "SURVEY", "heading", { zIndex = z + 1, color = Tokens.color.inkStrong })
+	local surveyLabel = FrameKit.text(surveyRow, "Label", "SURVEY", "heading", { zIndex = z + 1, color = Tokens.color.featherWhite })
 	surveyLabel.AnchorPoint = Vector2.new(0, 0.5)
 	surveyLabel.Position = UDim2.new(0, Tokens.spacing.md, 0.5, 0)
 	surveyLabel.Size = UDim2.new(0.4, 0, 0, Tokens.typography.heading.size + 2)
+	FrameKit.outline(surveyLabel, 2)
 	local surveyValue = FrameKit.text(
 		surveyRow,
 		"Value",
@@ -656,7 +683,9 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 		"heading",
 		{
 			zIndex = z + 1,
-			color = if survey then (if survey.signal == "none" then Tokens.color.inkMuted else PAGE_BLUE) else Tokens.color.inkMuted,
+			color = if survey
+				then (if survey.signal == "none" then Tokens.color.inkMuted else Tokens.color.gold)
+				else Tokens.color.inkMuted,
 			align = Enum.TextXAlignment.Right,
 		}
 	)
@@ -664,16 +693,18 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 	surveyValue.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, 0)
 	surveyValue.Size = UDim2.new(0.6, -Tokens.spacing.md, 0, Tokens.typography.heading.size + 2)
 	surveyValue.TextSize = Tokens.typography.heading.size - 2
+	FrameKit.outline(surveyValue, 2)
 	local found = 1 + (if rainbowCarried > 0 or session.rainbowSeen then 1 else 0)
 	local count = FrameKit.text(right, "Found", string.format("FEATHERS FOUND:\n%d/%d", found, #entries), "display", {
 		zIndex = z,
-		color = Tokens.color.inkStrong,
+		color = Tokens.color.featherWhite,
 		align = Enum.TextXAlignment.Center,
 	})
 	count.AnchorPoint = Vector2.new(0.5, 1)
 	count.Position = UDim2.new(0.5, 0, 1, -tap)
 	count.Size = UDim2.new(1, 0, 0, Tokens.typography.display.size * 2 + 8)
 	count.TextSize = Tokens.typography.display.size - 4
+	FrameKit.outline(count, 3)
 end
 
 function UpgradeBookController._renderSpread(self: UpgradeBookController)
@@ -801,10 +832,10 @@ function UpgradeBookController.open(self: UpgradeBookController)
 		self:close()
 	end))
 
-	-- The book, built as an object rather than a panel: a board with a thickness under its bottom
-	-- edge, a gold rule inlaid just inside the board, the stack of pages showing along the outer
-	-- edges, and a shadowed gutter where the two halves meet. A flat rectangle with a corner radius
-	-- is what made this read as UI cards on a beige background.
+	-- The book, built as an object rather than a panel: a charcoal board with a thickness under its
+	-- bottom edge, a gold rule inlaid just inside the board, the stack of pages showing along the
+	-- outer edges, and a shadowed gutter where the two halves meet. A flat rectangle with a corner
+	-- radius is what made this read as UI cards on a flat background.
 	local holder = Instance.new("Frame")
 	holder.Name = "Book"
 	holder.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -842,7 +873,7 @@ function UpgradeBookController.open(self: UpgradeBookController)
 	coverCorner.Parent = cover
 	Depth.keyline(cover, Tokens.stroke.frame)
 	Depth.applySheen(cover, COVER)
-	Depth.rim(cover, COVER, Color3.fromRGB(92, 158, 220))
+	Depth.rim(cover, COVER)
 	cover.Parent = holder
 
 	-- The gold rule: a thin inlaid border a few pixels in from the board's edge. This one detail is
@@ -898,24 +929,17 @@ function UpgradeBookController.open(self: UpgradeBookController)
 		padding.PaddingTop = UDim.new(0, Tokens.spacing.md)
 		padding.PaddingBottom = UDim.new(0, Tokens.spacing.md)
 		padding.Parent = page
-		Skin.texture(page, "texture.studs", { zIndex = 3, transparency = 0.96, tile = 28 })
+		Depth.keyline(page, Tokens.depth.keylineThin)
 
-		-- Parchment rather than paper: a warm gradient down the sheet, a darker edge where it meets
-		-- the spine so the two halves read as one bound object, and stitched corners.
-		local age = Instance.new("UIGradient")
-		age.Rotation = 90
-		age.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(253, 248, 235)),
-			ColorSequenceKeypoint.new(0.55, PAGE),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(236, 223, 195)),
-		})
-		age.Parent = page
+		-- The page is lit like every other surface in the kit (the glossy ramp), with a darker edge
+		-- where it meets the spine so the two halves read as one bound object.
+		Depth.applySheen(page, PAGE)
 		local gutter = Instance.new("Frame")
 		gutter.Name = "Gutter"
 		gutter.AnchorPoint = Vector2.new(1 - anchorX, 0)
 		gutter.Position = UDim2.fromScale(1 - anchorX, 0)
 		gutter.Size = UDim2.new(0, 14, 1, 0)
-		gutter.BackgroundColor3 = Color3.fromRGB(214, 198, 166)
+		gutter.BackgroundColor3 = Tokens.color.overlay
 		gutter.BorderSizePixel = 0
 		gutter.ZIndex = 4
 		gutter.Parent = page
@@ -923,27 +947,9 @@ function UpgradeBookController.open(self: UpgradeBookController)
 		gutterFade.Rotation = if anchorX == 0 then 0 else 180
 		gutterFade.Transparency = NumberSequence.new({
 			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(1, 0.25),
+			NumberSequenceKeypoint.new(1, 0.45),
 		})
 		gutterFade.Parent = gutter
-		for _, corner in ipairs({ Vector2.new(0, 0), Vector2.new(1, 0), Vector2.new(0, 1), Vector2.new(1, 1) }) do
-			local stitch = Instance.new("Frame")
-			stitch.Name = "Stitch"
-			stitch.AnchorPoint = corner
-			stitch.Position = UDim2.new(corner.X, (if corner.X == 0 then 1 else -1) * 9, corner.Y, (if corner.Y == 0 then 1 else -1) * 9)
-			stitch.Size = UDim2.fromOffset(16, 16)
-			stitch.BackgroundTransparency = 1
-			stitch.ZIndex = 5
-			stitch.Parent = page
-			local stitchStroke = Instance.new("UIStroke")
-			stitchStroke.Thickness = 1.6
-			stitchStroke.Color = Color3.fromRGB(198, 172, 128)
-			stitchStroke.Transparency = 0.2
-			stitchStroke.Parent = stitch
-			local stitchCorner = Instance.new("UICorner")
-			stitchCorner.CornerRadius = UDim.new(0, 5)
-			stitchCorner.Parent = stitch
-		end
 		page.Parent = cover
 		-- The stack of sheets under the top one, along the outer edge. Two thin slivers stepped out and
 		-- down is all it takes for a page to stop being a rectangle and become paper. Built after the
@@ -971,16 +977,16 @@ function UpgradeBookController.open(self: UpgradeBookController)
 	spine.AnchorPoint = Vector2.new(0.5, 0)
 	spine.Position = UDim2.fromScale(0.5, 0)
 	spine.Size = UDim2.new(0, Tokens.spacing.md, 1, 0)
-	spine.BackgroundColor3 = Tokens.color.tealDeep
+	spine.BackgroundColor3 = Tokens.color.panelDeep
 	spine.BorderSizePixel = 0
 	spine.ZIndex = 6
 	spine.Parent = cover
 	local spineShade = Instance.new("UIGradient")
 	spineShade.Rotation = 0
 	spineShade.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(16, 54, 68)),
-		ColorSequenceKeypoint.new(0.5, Tokens.color.tealPanel),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(16, 54, 68)),
+		ColorSequenceKeypoint.new(0, Tokens.color.overlay),
+		ColorSequenceKeypoint.new(0.5, Tokens.color.cocoa),
+		ColorSequenceKeypoint.new(1, Tokens.color.overlay),
 	})
 	spineShade.Parent = spine
 	for _, at in ipairs({ 0.16, 0.84 }) do
@@ -989,7 +995,7 @@ function UpgradeBookController.open(self: UpgradeBookController)
 		band.AnchorPoint = Vector2.new(0.5, 0.5)
 		band.Position = UDim2.fromScale(0.5, at)
 		band.Size = UDim2.new(1, 6, 0, 7)
-		band.BackgroundColor3 = Tokens.color.goldDeep
+		band.BackgroundColor3 = Tokens.color.gold
 		band.BorderSizePixel = 0
 		band.ZIndex = 7
 		band.Parent = spine
@@ -1096,7 +1102,7 @@ function UpgradeBookController.open(self: UpgradeBookController)
 	money.AnchorPoint = Vector2.new(1, 1)
 	money.Position = UDim2.new(1, 0, 1, Tokens.spacing.lg + Tokens.typography.label.size)
 	money.Size = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + 4)
-	FrameKit.outline(money, 2)
+	FrameKit.outline(money, 2.5)
 	session.money = money
 
 	self:_renderSpread()

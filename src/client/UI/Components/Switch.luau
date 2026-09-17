@@ -1,6 +1,6 @@
 --!strict
 -- Settings switch row: label on the left, a pill toggle on the right whose knob slides and whose
--- track turns teal when on. The whole row is the tap target (controller selectable), the state is
+-- track turns green when on. The whole row is the tap target (controller selectable), the state is
 -- owned by the caller (server-acknowledged) and applied through set().
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,6 +9,7 @@ local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
 local FrameKit = require(script.Parent.Frame)
+local Depth = require(script.Parent.Depth)
 
 local Switch = {}
 
@@ -33,7 +34,7 @@ function Switch.build(parent: Instance, options: Options): Handle
 	row.AutoButtonColor = false
 	row.Text = ""
 	row.Size = UDim2.new(1, 0, 0, tap + Tokens.spacing.sm)
-	row.BackgroundColor3 = Tokens.color.featherWhite
+	row.BackgroundColor3 = Tokens.color.surface
 	row.BorderSizePixel = 0
 	row.ZIndex = z
 	row.Selectable = true
@@ -41,11 +42,11 @@ function Switch.build(parent: Instance, options: Options): Handle
 	corner.CornerRadius = UDim.new(0, Tokens.radius.md)
 	corner.Parent = row
 	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = Tokens.stroke.hairline + 0.5
-	stroke.Color = Tokens.color.strawDeep
-	stroke.Transparency = 0.45
+	stroke.Thickness = Tokens.depth.keylineThin
+	stroke.Color = Tokens.color.outline
 	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = row
+	Depth.applySheen(row, Tokens.color.surface)
 	local padding = Instance.new("UIPadding")
 	padding.PaddingLeft = UDim.new(0, Tokens.spacing.md)
 	padding.PaddingRight = UDim.new(0, Tokens.spacing.md)
@@ -53,16 +54,18 @@ function Switch.build(parent: Instance, options: Options): Handle
 	local scale = Instance.new("UIScale")
 	scale.Parent = row
 
-	local label = FrameKit.text(row, "Label", options.label, "heading", { zIndex = z + 1, color = Tokens.color.inkStrong })
+	local label = FrameKit.text(row, "Label", options.label, "heading", { zIndex = z + 1, color = Tokens.color.featherWhite })
 	label.Size = UDim2.new(1, -(tap * 2), 0, Tokens.typography.heading.size + Tokens.spacing.xs)
 	label.Position = UDim2.fromOffset(
 		0,
 		if options.detail then Tokens.spacing.xs else (tap + Tokens.spacing.sm - Tokens.typography.heading.size - Tokens.spacing.xs) / 2
 	)
+	FrameKit.outline(label, 2)
 	if options.detail then
 		local detail = FrameKit.text(row, "Detail", options.detail, "caption", { zIndex = z + 1, color = Tokens.color.inkMuted })
 		detail.Position = UDim2.fromOffset(0, Tokens.typography.heading.size + Tokens.spacing.sm)
 		detail.Size = UDim2.new(1, -(tap * 2), 0, Tokens.typography.caption.size + Tokens.spacing.xs)
+		FrameKit.outline(detail, 2)
 	end
 
 	local track = Instance.new("Frame")
@@ -70,7 +73,7 @@ function Switch.build(parent: Instance, options: Options): Handle
 	track.AnchorPoint = Vector2.new(1, 0.5)
 	track.Position = UDim2.fromScale(1, 0.5)
 	track.Size = UDim2.fromOffset(tap + Tokens.spacing.md, Tokens.icon.md + Tokens.spacing.xs)
-	track.BackgroundColor3 = Tokens.color.creamDeep
+	track.BackgroundColor3 = Tokens.color.panelDeep
 	track.BorderSizePixel = 0
 	track.ZIndex = z + 1
 	local trackCorner = Instance.new("UICorner")
@@ -101,14 +104,15 @@ function Switch.build(parent: Instance, options: Options): Handle
 	state.AnchorPoint = Vector2.new(1, 0.5)
 	state.Position = UDim2.new(1, -(tap + Tokens.spacing.lg + Tokens.spacing.sm), 0.5, 0)
 	state.Size = UDim2.fromOffset(tap, Tokens.typography.caption.size + Tokens.spacing.xs)
+	FrameKit.outline(state, 2)
 
 	local on = options.on
 	local enabled = true
 	local function apply(animate: boolean)
 		local knobX = if on then UDim2.new(1, -(Tokens.icon.md - 2) - 3, 0.5, 0) else UDim2.new(0, 3, 0.5, 0)
-		local trackColor = if on then Tokens.color.tealAccent else Tokens.color.creamDeep
+		local trackColor = if on then Tokens.color.success else Tokens.color.panelDeep
 		state.Text = if on then "On" else "Off"
-		state.TextColor3 = if on then Tokens.color.tealDeep else Tokens.color.inkMuted
+		state.TextColor3 = if on then Tokens.color.success else Tokens.color.inkMuted
 		if animate then
 			local info = TweenInfo.new(Motion.duration("quick", options.motion), Tokens.motion.easeBack)
 			TweenService:Create(knob, info, { Position = knobX }):Play()
@@ -134,23 +138,23 @@ function Switch.build(parent: Instance, options: Options): Handle
 			options.onToggle(on)
 		end),
 		row.MouseEnter:Connect(function()
-			TweenService:Create(row, TweenInfo.new(Motion.duration("quick", options.motion)), { BackgroundColor3 = Tokens.color.creamPill })
-				:Play()
+			TweenService:Create(
+				row,
+				TweenInfo.new(Motion.duration("quick", options.motion)),
+				{ BackgroundColor3 = Depth.shade(Tokens.color.surface, 0.1) }
+			):Play()
 		end),
 		row.MouseLeave:Connect(function()
-			TweenService
-				:Create(row, TweenInfo.new(Motion.duration("quick", options.motion)), { BackgroundColor3 = Tokens.color.featherWhite })
+			TweenService:Create(row, TweenInfo.new(Motion.duration("quick", options.motion)), { BackgroundColor3 = Tokens.color.surface })
 				:Play()
 		end),
 		row.SelectionGained:Connect(function()
-			stroke.Color = Tokens.color.goldLight
+			stroke.Color = Tokens.color.gold
 			stroke.Thickness = Tokens.stroke.frame
-			stroke.Transparency = 0
 		end),
 		row.SelectionLost:Connect(function()
-			stroke.Color = Tokens.color.strawDeep
-			stroke.Thickness = Tokens.stroke.hairline + 0.5
-			stroke.Transparency = 0.45
+			stroke.Color = Tokens.color.outline
+			stroke.Thickness = Tokens.depth.keylineThin
 		end),
 	}
 	row.Parent = parent

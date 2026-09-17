@@ -1,7 +1,7 @@
 --!strict
--- Gem balance chip for a modal header, to the reference clip (17 Sep 2026): a dark slate pill with
--- a thick black keyline, the painted gem, the count in white with a black stroke, and a round green
--- "+" that opens the gem bundles. Sized in Scale from its parent's height.
+-- Gem balance chip for a modal header: a dark slate chip, a darker well, the painted gem, the count
+-- in white stroked numerals, and a round green "+" that opens the gem bundles. Sized in Scale from
+-- its parent's height.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -19,6 +19,11 @@ export type Handle = {
 	destroy: () -> (),
 }
 
+local CHIP = Tokens.color.surface
+local WELL = Tokens.color.panelDeep
+local PLUS = Tokens.color.success
+local PLUS_DEEP = Tokens.color.leafDeep
+
 local function withCommas(n: number): string
 	local text = tostring(math.floor(n))
 	return (text:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", ""))
@@ -35,34 +40,46 @@ function GemChip.build(
 	root.BorderSizePixel = 0
 	root.ZIndex = z
 	Fit.aspect(root, 3.3, Enum.DominantAxis.Height)
-	Depth.panel(root, Tokens.color.surface, { radius = Tokens.radius.pill })
-	Fit.corner(root, 0.5)
+	Depth.panel(root, CHIP, { radius = Tokens.radius.md })
+	Fit.corner(root, 0.3)
 	root.Parent = parent
 
-	local gem = Fit.image(root, "hud.gem", {
-		size = UDim2.fromScale(0, 0.74),
-		position = UDim2.fromScale(0.16, 0.5),
-		zIndex = z + 2,
+	local window = Instance.new("Frame")
+	window.Name = "Window"
+	window.Position = UDim2.fromScale(0.05, 0.14)
+	window.Size = UDim2.fromScale(0.66, 0.72)
+	window.BackgroundColor3 = WELL
+	window.BorderSizePixel = 0
+	window.ZIndex = 2
+	Fit.corner(window, 0.35)
+	local line = Depth.keyline(window)
+	line.Thickness = Tokens.depth.keylineThin
+	window.Parent = root
+
+	local gem = Fit.image(window, "hud.gem", {
+		size = UDim2.fromScale(0, 0.86),
+		position = UDim2.fromScale(0.17, 0.5),
+		zIndex = 3,
 		name = "Gem",
 	})
 	if gem then
 		Fit.aspect(gem, 1, Enum.DominantAxis.Height)
 	else
-		local glyph = Icons.gem(root, 10, { zIndex = z + 2 })
+		local glyph = Icons.gem(window, 10, { zIndex = 3 })
 		glyph.AnchorPoint = Vector2.new(0.5, 0.5)
-		glyph.Position = UDim2.fromScale(0.16, 0.5)
-		glyph.Size = UDim2.fromScale(0, 0.7)
+		glyph.Position = UDim2.fromScale(0.17, 0.5)
+		glyph.Size = UDim2.fromScale(0, 0.8)
 		Fit.aspect(glyph, 1, Enum.DominantAxis.Height)
 	end
-	local count = Fit.text(root, "Count", withCommas(options.count), {
+	local count = Fit.text(window, "Count", withCommas(options.count), {
 		font = Tokens.typography.numeral.font,
 		color = Tokens.color.featherWhite,
 		max = 30,
-		zIndex = z + 2,
-		outline = 2.6,
+		zIndex = 3,
+		outline = 2,
 		outlineColor = Tokens.color.outline,
-		size = UDim2.fromScale(0.42, 0.72),
-		position = UDim2.fromScale(0.29, 0.14),
+		size = UDim2.fromScale(0.62, 0.8),
+		position = UDim2.fromScale(0.34, 0.1),
 		align = Enum.TextXAlignment.Center,
 	})
 
@@ -71,31 +88,31 @@ function GemChip.build(
 	plus.Text = ""
 	plus.AutoButtonColor = false
 	plus.AnchorPoint = Vector2.new(0.5, 0.5)
-	plus.Position = UDim2.fromScale(0.85, 0.5)
-	plus.Size = UDim2.fromScale(0, 0.84)
-	plus.BackgroundColor3 = Tokens.color.leafDeep
+	plus.Position = UDim2.fromScale(0.855, 0.5)
+	plus.Size = UDim2.fromScale(0, 0.86)
+	plus.BackgroundColor3 = PLUS_DEEP
 	plus.BorderSizePixel = 0
-	plus.ZIndex = z + 2
+	plus.ZIndex = 3
 	plus.Selectable = true
 	Fit.aspect(plus, 1, Enum.DominantAxis.Height)
 	Fit.corner(plus, 0.5)
-	Depth.keyline(plus, Tokens.depth.keylineThin)
+	Depth.keyline(plus)
 	local face = Instance.new("Frame")
 	face.Name = "Face"
 	face.Size = UDim2.fromScale(1, 0.9)
-	face.BackgroundColor3 = Tokens.color.success
+	face.BackgroundColor3 = PLUS
 	face.BorderSizePixel = 0
-	face.ZIndex = z + 3
+	face.ZIndex = 4
 	Fit.corner(face, 0.5)
-	Depth.applySheen(face, Tokens.color.success, Tokens.color.leafBright)
-	Depth.rim(face, Tokens.color.success)
+	Depth.applySheen(face, PLUS)
+	Depth.rim(face, PLUS)
 	face.Parent = plus
 	Fit.text(face, "Glyph", "+", {
 		font = Tokens.typography.display.font,
 		color = Tokens.color.featherWhite,
 		max = 34,
-		zIndex = z + 4,
-		outline = 2.6,
+		zIndex = 5,
+		outline = 2,
 		outlineColor = Tokens.color.outline,
 		size = UDim2.fromScale(0.9, 0.9),
 		position = UDim2.fromScale(0.5, 0.48),

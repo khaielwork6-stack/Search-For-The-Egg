@@ -1,8 +1,8 @@
 --!strict
--- Professor Plume's card: one look, one decision. A wooden title plate over a parchment card, the
--- Egg Sense rod with its glowing crystal on the left, the loan pips, the carried count against the
--- price in big gold numerals and a one-line note on the right, and one orange button. Nothing on
--- it is a paragraph; what Plume has to say, he says over his own head.
+-- Professor Plume's card: one look, one decision. A floating slate title plate over a charcoal
+-- card, the Egg Sense rod with its glowing crystal on the left, the loan pips, the carried count
+-- against the price in big gold stroked numerals and a one-line note on the right, and one green
+-- button. Nothing on it is a paragraph; what Plume has to say, he says over his own head.
 
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -18,11 +18,10 @@ local SafeArea = require(script.Parent.SafeArea)
 
 local PlumeCard = {}
 
-local PARCHMENT = Color3.fromRGB(248, 236, 208)
-local WOOD = Color3.fromRGB(160, 116, 66)
-local WOOD_DEEP = Color3.fromRGB(110, 76, 42)
-local STAMP = Color3.fromRGB(196, 52, 44)
-local ROD_WOOD = Color3.fromRGB(122, 82, 46)
+local CARD = Tokens.color.panel
+local PLATE = Tokens.color.surface
+local PLATE_DEEP = Tokens.color.panelDeep
+local ROD = Tokens.color.cocoa -- the rod's shaft and prongs: mid slate, like a dark metal wand
 local CARD_W, CARD_H = 600, 440
 
 export type State = {
@@ -95,7 +94,7 @@ function PlumeCard.create(
 	card.Position = UDim2.fromScale(0.5, 0.52)
 	card.Size = UDim2.fromScale(0.62, 0.66)
 	card.ZIndex = 2
-	Depth.panel(card, PARCHMENT, { radius = Tokens.radius.xl })
+	Depth.panel(card, CARD, { radius = Tokens.radius.xl })
 	local cap = Instance.new("UISizeConstraint")
 	cap.MaxSize = Vector2.new(CARD_W, CARD_H)
 	cap.MinSize = Vector2.new(340, 300)
@@ -107,27 +106,27 @@ function PlumeCard.create(
 	entrance.Scale = 0.72
 	entrance.Parent = card
 	card.Parent = stage
-	FrameKit.leaves(card, 2)
 
-	-- Title plate, overhanging the top edge.
+	-- Title plate, floating over the top edge: a slate pill on a darker lip, like the modal shell's.
 	local plate = Instance.new("Frame")
 	plate.Name = "Title"
 	plate.AnchorPoint = Vector2.new(0.5, 0.5)
 	plate.Position = UDim2.new(0.5, 0, 0, 4)
 	plate.Size = UDim2.new(0.74, 0, 0, 66)
 	plate.ZIndex = 4
-	Depth.panel(plate, WOOD, { radius = Tokens.radius.lg, rim = Color3.fromRGB(214, 170, 110) })
+	Depth.panel(plate, PLATE, { radius = Tokens.radius.lg })
 	local plateLip = Instance.new("Frame")
 	plateLip.Name = "Lip"
 	plateLip.AnchorPoint = Vector2.new(0.5, 1)
 	plateLip.Position = UDim2.new(0.5, 0, 1, 6)
 	plateLip.Size = UDim2.new(1, 0, 0, 12)
-	plateLip.BackgroundColor3 = WOOD_DEEP
+	plateLip.BackgroundColor3 = PLATE_DEEP
 	plateLip.BorderSizePixel = 0
 	plateLip.ZIndex = 3
 	local lipCorner = Instance.new("UICorner")
 	lipCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
 	lipCorner.Parent = plateLip
+	Depth.keyline(plateLip)
 	plateLip.Parent = plate
 	local title = FrameKit.text(plate, "Text", "PROFESSOR PLUME", "display", {
 		zIndex = 5,
@@ -136,17 +135,16 @@ function PlumeCard.create(
 		size = UDim2.fromScale(1, 1),
 	})
 	title.TextSize = 34
-	outlined(title, 3, WOOD_DEEP)
+	outlined(title, 3)
 	plate.Parent = card
-	FrameKit.leaves(plate, 4)
 
-	-- Close.
+	-- Close: the red corner X.
 	local close = Instance.new("TextButton")
 	close.Name = "Close"
 	close.AnchorPoint = Vector2.new(1, 0)
 	close.Position = UDim2.new(1, 14, 0, -14)
 	close.Size = UDim2.fromOffset(tap + 8, tap + 8)
-	close.BackgroundColor3 = STAMP
+	close.BackgroundColor3 = Tokens.color.ember
 	close.Text = "X"
 	close.Font = Tokens.typography.display.font
 	close.TextSize = 30
@@ -155,9 +153,10 @@ function PlumeCard.create(
 	local closeCorner = Instance.new("UICorner")
 	closeCorner.CornerRadius = UDim.new(1, 0)
 	closeCorner.Parent = close
-	Depth.keyline(close, Tokens.stroke.bold, WOOD_DEEP)
-	Depth.rim(close, STAMP)
-	outlined(close :: any, 2, WOOD_DEEP)
+	Depth.keyline(close)
+	Depth.rim(close, Tokens.color.ember)
+	Depth.applySheen(close, Tokens.color.ember)
+	outlined(close :: any, 2.5)
 	close.Parent = card
 	close.Activated:Connect(function()
 		deps.audio:play(Tokens.sound.uiClose)
@@ -190,13 +189,13 @@ function PlumeCard.create(
 	shaft.Position = UDim2.fromScale(0.5, 0.36)
 	shaft.Size = UDim2.fromScale(0.07, 0.6)
 	shaft.Rotation = -8
-	shaft.BackgroundColor3 = ROD_WOOD
+	shaft.BackgroundColor3 = ROD
 	shaft.BorderSizePixel = 0
 	shaft.ZIndex = 4
 	local shaftCorner = Instance.new("UICorner")
 	shaftCorner.CornerRadius = UDim.new(1, 0)
 	shaftCorner.Parent = shaft
-	Depth.keyline(shaft, Tokens.stroke.standard, WOOD_DEEP)
+	Depth.keyline(shaft, Tokens.stroke.standard)
 	shaft.Parent = art
 	for _, side in ipairs({ -1, 1 }) do
 		local prong = Instance.new("Frame")
@@ -205,20 +204,20 @@ function PlumeCard.create(
 		prong.Position = UDim2.fromScale(0.5 + side * 0.06, 0.4)
 		prong.Size = UDim2.fromScale(0.05, 0.24)
 		prong.Rotation = side * 28 - 8
-		prong.BackgroundColor3 = ROD_WOOD
+		prong.BackgroundColor3 = ROD
 		prong.BorderSizePixel = 0
 		prong.ZIndex = 4
 		local prongCorner = Instance.new("UICorner")
 		prongCorner.CornerRadius = UDim.new(1, 0)
 		prongCorner.Parent = prong
-		Depth.keyline(prong, Tokens.stroke.standard, WOOD_DEEP)
+		Depth.keyline(prong, Tokens.stroke.standard)
 		prong.Parent = art
 	end
 	local crystal = circle(art, "Crystal", cold, 5)
 	crystal.AnchorPoint = Vector2.new(0.5, 0.5)
 	crystal.Position = UDim2.fromScale(0.5, 0.28)
 	crystal.Size = UDim2.fromScale(0.2, 0.2)
-	Depth.keyline(crystal, Tokens.stroke.bold, WOOD_DEEP)
+	Depth.keyline(crystal, Tokens.stroke.bold)
 	local sparkles = {}
 	for i, spot in ipairs({ { 0.2, 0.12 }, { 0.82, 0.1 }, { 0.86, 0.5 }, { 0.14, 0.52 } }) do
 		local spark =
@@ -227,7 +226,7 @@ function PlumeCard.create(
 		spark.Position = UDim2.fromScale(spot[1], spot[2])
 		spark.Size = UDim2.fromOffset(28, 28)
 		spark.TextSize = 30 + (i % 2) * 8
-		outlined(spark, 1.5, Tokens.color.goldDeep)
+		outlined(spark, 2)
 		table.insert(sparkles, spark)
 	end
 
@@ -244,10 +243,11 @@ function PlumeCard.create(
 		"Heading",
 		"EGG SENSE ROD",
 		"heading",
-		{ zIndex = 4, color = Tokens.color.inkStrong, align = Enum.TextXAlignment.Center }
+		{ zIndex = 4, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Center }
 	)
 	heading.Size = UDim2.fromScale(1, 0.14)
 	heading.TextScaled = true
+	outlined(heading, 2)
 	local pips = Instance.new("Frame")
 	pips.Name = "Pips"
 	pips.BackgroundTransparency = 1
@@ -267,7 +267,7 @@ function PlumeCard.create(
 	count.Position = UDim2.fromScale(0, 0.28)
 	count.Size = UDim2.fromScale(1, 0.36)
 	count.TextScaled = true
-	outlined(count, 5, WOOD_DEEP)
+	outlined(count, 4)
 	local countScale = Instance.new("UIScale")
 	countScale.Parent = count
 	local caption = FrameKit.text(
@@ -275,11 +275,12 @@ function PlumeCard.create(
 		"Caption",
 		"FEATHERS FOR ONE LOAN",
 		"heading",
-		{ zIndex = 4, color = Tokens.color.inkStrong, align = Enum.TextXAlignment.Center }
+		{ zIndex = 4, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Center }
 	)
 	caption.Position = UDim2.fromScale(0, 0.64)
 	caption.Size = UDim2.fromScale(1, 0.12)
 	caption.TextScaled = true
+	outlined(caption, 2)
 	local note = FrameKit.text(
 		right,
 		"Note",
@@ -290,11 +291,12 @@ function PlumeCard.create(
 	note.Position = UDim2.fromScale(0, 0.78)
 	note.Size = UDim2.fromScale(1, 0.22)
 	note.TextScaled = true
+	outlined(note, 2)
 
-	-- The one button.
+	-- The one button: green, the "go" colour.
 	local button = Button.build(card, {
 		text = "BORROW THE ROD",
-		variant = "ember",
+		variant = "success",
 		minimumTapTarget = tap,
 		motion = motion,
 		size = UDim2.fromScale(0.86, 0.18),
@@ -353,20 +355,20 @@ function PlumeCard.create(
 		end
 		lastCount = countText
 		count.Text = countText
-		count.TextColor3 = if cost and state.carried < cost then Tokens.color.strawDeep else Tokens.color.gold
+		count.TextColor3 = if cost and state.carried < cost then Tokens.color.ember else Tokens.color.gold
 		-- One pip per loan the party may still take; spent ones sit hollow.
 		while #pipViews < state.maxUses do
 			local pip = circle(pips, "Pip" .. (#pipViews + 1), Tokens.color.gold, 5)
 			pip.Size = UDim2.fromScale(0.75, 0.75)
 			pip.LayoutOrder = #pipViews + 1
-			Depth.keyline(pip, Tokens.stroke.bold, WOOD_DEEP)
+			Depth.keyline(pip, Tokens.stroke.bold)
 			table.insert(pipViews, pip)
 		end
 		for index, pip in ipairs(pipViews) do
 			local left = index <= state.usesLeft
 			pip.Visible = index <= state.maxUses
-			pip.BackgroundColor3 = if left then Tokens.color.gold else PARCHMENT
-			pip.BackgroundTransparency = if left then 0 else 0.35
+			pip.BackgroundColor3 = if left then Tokens.color.gold else PLATE_DEEP
+			pip.BackgroundTransparency = 0
 		end
 		caption.Text = if state.reason == "active"
 			then "ROD IN YOUR HAND"

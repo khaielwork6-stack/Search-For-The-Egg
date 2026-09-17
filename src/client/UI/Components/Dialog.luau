@@ -27,8 +27,8 @@ export type Options = {
 }
 
 local TONES = {
-	info = { color = Tokens.color.tealAccent, icon = "feather" },
-	warning = { color = Tokens.color.warning, icon = "star" },
+	info = { color = Tokens.color.sky, icon = "feather" },
+	warning = { color = Tokens.color.ember, icon = "star" },
 	danger = { color = Tokens.color.danger, icon = "close" },
 	success = { color = Tokens.color.success, icon = "check" },
 }
@@ -71,10 +71,11 @@ function Dialog.open(modals: any, options: Options): boolean
 			"Message",
 			options.message,
 			"body",
-			{ zIndex = z, align = Enum.TextXAlignment.Center, autoHeight = true }
+			{ zIndex = z, align = Enum.TextXAlignment.Center, autoHeight = true, color = Tokens.color.featherWhite }
 		)
 		message.LayoutOrder = 2
 		message.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size * 2 + Tokens.spacing.sm)
+		FrameKit.outline(message, 2)
 		local actions = Instance.new("Frame")
 		actions.Name = "Actions"
 		actions.BackgroundTransparency = 1

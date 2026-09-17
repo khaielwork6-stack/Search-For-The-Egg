@@ -14,6 +14,7 @@ local Button = require(script.Parent.Components.Button)
 local Confetti = require(script.Parent.Components.Confetti)
 local UpgradeActions = require(script.Parent.UpgradeActions)
 local FrameKit = require(script.Parent.Components.Frame)
+local Depth = require(script.Parent.Components.Depth)
 local Skin = require(script.Parent.Components.Skin)
 
 local UpgradeModal = {}
@@ -67,10 +68,11 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 	cashLabel.BackgroundTransparency = 1
 	cashLabel.Font = Tokens.typography.label.font
 	cashLabel.TextSize = Tokens.typography.label.size
-	cashLabel.TextColor3 = Tokens.color.goldDeep
+	cashLabel.TextColor3 = Tokens.color.gold
 	cashLabel.TextXAlignment = Enum.TextXAlignment.Left
 	cashLabel.LayoutOrder = 0
 	cashLabel.ZIndex = container.ZIndex + 1
+	FrameKit.outline(cashLabel, 2)
 	cashLabel.Parent = container
 
 	local function header(key: string, text: string, order: number)
@@ -166,15 +168,12 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 				artHolder.AnchorPoint = Vector2.new(0, 0.5)
 				artHolder.Position = UDim2.new(0, -Tokens.spacing.xs, 0.5, 0)
 				artHolder.Size = UDim2.fromOffset(artSize, artSize)
-				artHolder.BackgroundColor3 = Tokens.color.creamPill
+				artHolder.BackgroundColor3 = Tokens.color.panelDeep
 				artHolder.ZIndex = z + 1
 				local artCorner = Instance.new("UICorner")
 				artCorner.CornerRadius = UDim.new(1, 0)
 				artCorner.Parent = artHolder
-				local artStroke = Instance.new("UIStroke")
-				artStroke.Thickness = Tokens.stroke.standard
-				artStroke.Color = Tokens.color.strawDeep
-				artStroke.Parent = artHolder
+				Depth.keyline(artHolder, Tokens.depth.keylineThin)
 				artHolder.Parent = frame
 				local art = Skin.icon(artHolder, artRole, artSize - Tokens.spacing.sm, z + 2)
 				if art then
@@ -183,13 +182,15 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 				end
 				local textLeft = artSize + Tokens.spacing.sm
 				local textWidth = -(buttonWidth + Tokens.spacing.md + textLeft)
-				local title = FrameKit.text(frame, "Title", "", "label", { zIndex = z + 1, color = Tokens.color.inkStrong })
+				local title = FrameKit.text(frame, "Title", "", "label", { zIndex = z + 1, color = Tokens.color.featherWhite })
 				title.Position = UDim2.new(0, textLeft, 0.5, -(Tokens.typography.label.size + Tokens.spacing.xs) + 2)
 				title.Size = UDim2.new(1, textWidth, 0, Tokens.typography.label.size + Tokens.spacing.xs)
+				FrameKit.outline(title, 2)
 				local detail = FrameKit.text(frame, "Detail", "", "caption", { zIndex = z + 1, color = Tokens.color.inkMuted })
 				detail.Position = UDim2.new(0, textLeft, 0.5, 2)
 				detail.Size = UDim2.new(1, textWidth, 0, Tokens.typography.caption.size + Tokens.spacing.xs)
 				detail.RichText = true
+				FrameKit.outline(detail, 2)
 				-- Level pips sit after the title: one dot per level, filled up to the current one.
 				local pips = Instance.new("Frame")
 				pips.Name = "Pips"
@@ -209,7 +210,7 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 					local dot = Instance.new("Frame")
 					dot.Name = "Pip" .. index
 					dot.Size = UDim2.fromOffset(9, 9)
-					dot.BackgroundColor3 = Tokens.color.creamDeep
+					dot.BackgroundColor3 = Tokens.color.panelDeep
 					dot.BorderSizePixel = 0
 					dot.ZIndex = z + 1
 					dot.LayoutOrder = index
@@ -218,7 +219,7 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 					dotCorner.Parent = dot
 					local dotStroke = Instance.new("UIStroke")
 					dotStroke.Thickness = 1.5
-					dotStroke.Color = Tokens.color.strawDeep
+					dotStroke.Color = Tokens.color.outline
 					dotStroke.Parent = dot
 					dot.Parent = pips
 					table.insert(pipDots, dot)
@@ -272,11 +273,7 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 			row.pips.Visible = #row.pipDots > 1
 			for index, dot in ipairs(row.pipDots) do
 				local lit = index <= (preview.level or 0)
-				dot.BackgroundColor3 = if lit then Tokens.color.gold else Tokens.color.creamDeep
-				local dotStroke = dot:FindFirstChildOfClass("UIStroke")
-				if dotStroke then
-					dotStroke.Color = if lit then Tokens.color.goldDeep else Tokens.color.strawDeep
-				end
+				dot.BackgroundColor3 = if lit then Tokens.color.gold else Tokens.color.panelDeep
 			end
 			local current = describe(preview, preview.current)
 			if preview.maxed then
@@ -284,7 +281,7 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 					then (if preview.permanent then "Yours for keeps" else "Ready in your hotbar")
 					elseif preview.permanent then "Fully upgraded, for keeps"
 					else "Fully upgraded"
-				row.detail.Text = string.format('%s  <font color="#%s">%s</font>', current, Tokens.color.leafDeep:ToHex(), suffix)
+				row.detail.Text = string.format('%s  <font color="#%s">%s</font>', current, Tokens.color.success:ToHex(), suffix)
 				row.handle.button.Visible = false
 				row.maxBadge.Visible = true
 				row.maxBadge.Text = if preview.kind == "acquire" then "OWNED" else "MAX"
@@ -292,7 +289,7 @@ function UpgradeModal.build(container: Frame, api: { close: () -> () }, deps: De
 				local nextText = describe(preview, preview.next)
 				row.detail.Text = if preview.kind == "acquire"
 					then (TOOL_TAGLINES[preview.toolId or ""] or nextText)
-					else string.format('%s  <font color="#%s">→  %s</font>', current, Tokens.color.goldDeep:ToHex(), nextText)
+					else string.format('%s  <font color="#%s">→  %s</font>', current, Tokens.color.gold:ToHex(), nextText)
 				local cash = player and player.cashCents or 0
 				local affordable = if preview.costGems then (gems or 0) >= preview.costGems else cash >= (preview.costCents or 0)
 				row.handle.button.Visible = true

@@ -1,7 +1,8 @@
 --!strict
--- Sale result popup: a cream card that springs up above the round strip when a trade lands,
--- "Sold N feathers" with the cash counting up, a coin glyph, a confetti burst and layered ticks.
--- One at a time; a new sale replaces the card. Cosmetic - the server owns the cash.
+-- Sale result popup: a dark slate card that springs up above the round strip when a trade lands,
+-- "Sold N feathers" with the cash counting up in white stroked numerals, a gold coin, a confetti
+-- burst and layered ticks. One at a time; a new sale replaces the card. Cosmetic - the server owns
+-- the cash.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -10,6 +11,7 @@ local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
 local EconomyMath = require(Shared.EconomyMath)
 local FrameKit = require(script.Parent.Components.Frame)
+local Depth = require(script.Parent.Components.Depth)
 local Icons = require(script.Parent.Components.Icons)
 local Skin = require(script.Parent.Components.Skin)
 local Tween = require(script.Parent.Components.Tween)
@@ -39,26 +41,16 @@ function SalePopup.show(parent: GuiObject, options: Options)
 	card.AnchorPoint = Vector2.new(0.5, 1)
 	card.Position = UDim2.new(0.5, 0, 1, -(Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx * 2 + Tokens.spacing.xl * 2))
 	card.Size = UDim2.fromOffset(280, Tokens.layout.minimumTapTargetPx + Tokens.spacing.xl)
-	card.BackgroundColor3 = Tokens.color.featherWhite
 	card.ZIndex = z
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, Tokens.radius.lg)
-	corner.Parent = card
-	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = Tokens.stroke.bold
-	stroke.Color = Tokens.color.outline
-	stroke.Parent = card
-	local gradient = Instance.new("UIGradient")
-	gradient.Rotation = 90
-	gradient.Color =
-		ColorSequence.new({ ColorSequenceKeypoint.new(0, Tokens.color.featherWhite), ColorSequenceKeypoint.new(1, Tokens.color.creamPill) })
-	gradient.Parent = card
-	FrameKit.shadow(card, { lifted = true, radius = Tokens.radius.lg })
+	Depth.panel(card, Tokens.color.surface, { radius = Tokens.radius.lg })
 	local scale = Instance.new("UIScale")
 	scale.Scale = 0.6
 	scale.Parent = card
-	local coin = Skin.icon(card, "hud.token", Tokens.icon.lg + Tokens.spacing.sm, z + 1)
-		or Icons.coin(card, Tokens.icon.lg + Tokens.spacing.sm, { zIndex = z + 1 })
+	local coinArt = Skin.icon(card, "hud.token", Tokens.icon.lg + Tokens.spacing.sm, z + 1)
+	if coinArt then
+		coinArt.ImageColor3 = Tokens.color.gold
+	end
+	local coin = coinArt or Icons.coin(card, Tokens.icon.lg + Tokens.spacing.sm, { zIndex = z + 1 })
 	coin.AnchorPoint = Vector2.new(0, 0.5)
 	coin.Position = UDim2.new(0, Tokens.spacing.md, 0.5, 0)
 	local title = FrameKit.text(
@@ -66,13 +58,15 @@ function SalePopup.show(parent: GuiObject, options: Options)
 		"Title",
 		string.format("Sold %d feather%s", options.feathers, if options.feathers == 1 then "" else "s"),
 		"heading",
-		{ zIndex = z + 1, color = Tokens.color.inkStrong }
+		{ zIndex = z + 1, color = Tokens.color.featherWhite }
 	)
 	title.Position = UDim2.fromOffset(Tokens.spacing.md + Tokens.icon.lg + Tokens.spacing.md, Tokens.spacing.sm)
 	title.Size = UDim2.new(1, -(Tokens.spacing.md * 3 + Tokens.icon.lg), 0, Tokens.typography.heading.size + 2)
-	local amount = FrameKit.text(card, "Amount", "+$0.00", "display", { zIndex = z + 1, color = Tokens.color.leafDeep })
+	FrameKit.outline(title, 2)
+	local amount = FrameKit.text(card, "Amount", "+$0.00", "display", { zIndex = z + 1, color = Tokens.color.featherWhite })
 	amount.Font = Tokens.typography.label.font
 	amount.TextSize = Tokens.typography.title.size
+	FrameKit.outline(amount, 3)
 	amount.Position = UDim2.fromOffset(
 		Tokens.spacing.md + Tokens.icon.lg + Tokens.spacing.md,
 		Tokens.spacing.sm + Tokens.typography.heading.size + Tokens.spacing.xs

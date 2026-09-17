@@ -1,8 +1,9 @@
 --!strict
--- Tool hotbar: one lipped square slot per owned tool (Hand first) with the tool art centred, the
--- name on a small pill beneath, a keycap hint in the corner by input mode, and a status bar for
--- cooldown / heat / trip state. The equipped slot glows gold and pops. Sits above the round strip
--- inside the safe area; hidden outside rounds. Display names come from config.
+-- Tool hotbar: one dark slate square slot per owned tool (Hand first) with the tool art centred, the
+-- name on a small dark pill beneath, a keycap hint in the corner by input mode, and a status bar for
+-- cooldown / heat / trip state. Every slot wears a thick black outline; the equipped one swaps it
+-- for gold and pops. Sits above the round strip inside the safe area; hidden outside rounds.
+-- Display names come from config.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -14,6 +15,7 @@ local ToolSpecs = require(Shared.Domain.ToolSpecs)
 local Skin = require(script.Parent.Components.Skin)
 local Icons = require(script.Parent.Components.Icons)
 local FrameKit = require(script.Parent.Components.Frame)
+local Depth = require(script.Parent.Components.Depth)
 local Tween = require(script.Parent.Components.Tween)
 
 local ToolHotbar = {}
@@ -116,11 +118,11 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	local scale = Instance.new("UIScale")
 	scale.Parent = frame
 
-	-- Lipped square tile.
+	-- Lipped square tile: a dark lip, a slate face with the glossy ramp, a thick black keyline.
 	local tile = Instance.new("Frame")
 	tile.Name = "Tile"
 	tile.Size = UDim2.fromOffset(size, size)
-	tile.BackgroundColor3 = Tokens.color.strawDeep
+	tile.BackgroundColor3 = Tokens.color.panelDeep
 	tile.BorderSizePixel = 0
 	tile.ZIndex = z
 	local tileCorner = Instance.new("UICorner")
@@ -128,7 +130,7 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	tileCorner.Parent = tile
 	local outline = Instance.new("UIStroke")
 	outline.Name = "Outline"
-	outline.Thickness = Tokens.stroke.bold
+	outline.Thickness = Tokens.depth.keyline
 	outline.Color = Tokens.color.outline
 	outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	outline.Parent = tile
@@ -136,17 +138,14 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	local face = Instance.new("Frame")
 	face.Name = "Face"
 	face.Size = UDim2.new(1, 0, 1, -LIP)
-	face.BackgroundColor3 = Tokens.color.creamPill
+	face.BackgroundColor3 = Tokens.color.surface
 	face.BorderSizePixel = 0
 	face.ZIndex = z + 1
 	local faceCorner = Instance.new("UICorner")
 	faceCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
 	faceCorner.Parent = face
-	local faceGradient = Instance.new("UIGradient")
-	faceGradient.Rotation = 90
-	faceGradient.Color =
-		ColorSequence.new({ ColorSequenceKeypoint.new(0, Tokens.color.featherWhite), ColorSequenceKeypoint.new(1, Tokens.color.creamPill) })
-	faceGradient.Parent = face
+	Depth.applySheen(face, Tokens.color.surface)
+	Depth.rim(face, Tokens.color.surface)
 	face.Parent = tile
 
 	-- Tool art centred in the tile.
@@ -167,30 +166,30 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	hint.Position = UDim2.fromOffset(-Tokens.spacing.xs, -Tokens.spacing.xs)
 	local hintText = hint:FindFirstChild("Glyph") :: TextLabel?
 
-	-- Name pill hanging under the tile.
+	-- Name pill hanging under the tile: a small dark pill with white stroked lettering.
 	local name = FrameKit.pill(frame, "Name", if toolId == "hand" then "Hand" else self._config.tools[toolId].displayName, {
 		size = UDim2.new(1, Tokens.spacing.sm, 0, Tokens.typography.caption.size + Tokens.spacing.md),
 		textSize = Tokens.typography.caption.size,
 		zIndex = z + 3,
-		outline = false,
+		outline = true,
 	})
 	name.AnchorPoint = Vector2.new(0.5, 1)
 	name.Position = UDim2.fromScale(0.5, 1)
-	name.TextColor3 = Tokens.color.inkStrong
+	name.TextColor3 = Tokens.color.featherWhite
 	local namePadding = name:FindFirstChildOfClass("UIPadding")
 	if namePadding then
 		namePadding.PaddingLeft = UDim.new(0, Tokens.spacing.sm)
 		namePadding.PaddingRight = UDim.new(0, Tokens.spacing.sm)
 	end
 
-	-- Status caption on a cream band above the bar, so it never fights the tool art.
+	-- Status caption on a dark band above the bar, so it never fights the tool art.
 	local band = Instance.new("Frame")
 	band.Name = "StatusBand"
 	band.AnchorPoint = Vector2.new(0.5, 1)
 	band.Position = UDim2.new(0.5, 0, 1, -(LIP + Tokens.spacing.sm + 6))
 	band.Size = UDim2.new(1, -Tokens.spacing.sm, 0, Tokens.typography.caption.size + 4)
-	band.BackgroundColor3 = Tokens.color.creamPill
-	band.BackgroundTransparency = 0.12
+	band.BackgroundColor3 = Tokens.color.panelDeep
+	band.BackgroundTransparency = 0.08
 	band.BorderSizePixel = 0
 	band.ZIndex = z + 3
 	band.Visible = false
@@ -198,9 +197,8 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	bandCorner.CornerRadius = UDim.new(0, Tokens.radius.sm)
 	bandCorner.Parent = band
 	local bandStroke = Instance.new("UIStroke")
-	bandStroke.Thickness = 1.2
+	bandStroke.Thickness = 1.5
 	bandStroke.Color = Tokens.color.outline
-	bandStroke.Transparency = 0.5
 	bandStroke.Parent = band
 	band.Parent = tile
 	local status = Instance.new("TextLabel")
@@ -215,9 +213,10 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	statusSize.MaxTextSize = Tokens.typography.caption.size - 2
 	statusSize.MinTextSize = 7
 	statusSize.Parent = status
-	status.TextColor3 = Tokens.color.inkStrong
+	status.TextColor3 = Tokens.color.featherWhite
 	status.Text = ""
 	status.ZIndex = z + 4
+	FrameKit.outline(status, 2)
 	status.Parent = band
 	status:GetPropertyChangedSignal("Text"):Connect(function()
 		band.Visible = status.Text ~= ""
@@ -227,7 +226,7 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	bar.AnchorPoint = Vector2.new(0.5, 1)
 	bar.Position = UDim2.new(0.5, 0, 1, -(LIP + Tokens.spacing.xs + 1))
 	bar.Size = UDim2.new(1, -Tokens.spacing.md, 0, 6)
-	bar.BackgroundColor3 = Tokens.color.creamDeep
+	bar.BackgroundColor3 = Tokens.color.panelDeep
 	bar.BorderSizePixel = 0
 	bar.ZIndex = z + 3
 	bar.Visible = false
@@ -238,7 +237,6 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 	local barStroke = Instance.new("UIStroke")
 	barStroke.Thickness = 1.5
 	barStroke.Color = Tokens.color.outline
-	barStroke.Transparency = 0.4
 	barStroke.Parent = bar
 	bar.Parent = tile
 	local fill = Instance.new("Frame")
@@ -273,8 +271,9 @@ function ToolHotbar._makeSlot(self: ToolHotbar, toolId: string, index: number, m
 		outline.Thickness = Tokens.stroke.frame
 	end)
 	frame.SelectionLost:Connect(function()
-		outline.Color = Tokens.color.outline
-		outline.Thickness = Tokens.stroke.bold
+		local equipped = toolId == self._equipped
+		outline.Color = if equipped then Tokens.color.gold else Tokens.color.outline
+		outline.Thickness = if equipped then Tokens.stroke.frame else Tokens.depth.keyline
 	end)
 	frame.Activated:Connect(function()
 		if self._sound then
@@ -317,29 +316,17 @@ function ToolHotbar._refresh(self: ToolHotbar)
 			end
 			slot.hint.Visible = hintText ~= ""
 		end
+		-- The equipped slot: a lighter slate face inside a gold keyline; every other slot sits behind
+		-- the same thick black line. The name pill's border follows the tile.
 		local equipped = toolId == self._equipped
-		local tile = slot.face.Parent :: Frame
-		tile.BackgroundColor3 = if equipped then Tokens.color.goldDeep else Tokens.color.strawDeep
-		slot.face.BackgroundColor3 = if equipped then Tokens.color.gold else Tokens.color.creamPill
-		local gradient = slot.face:FindFirstChildOfClass("UIGradient")
-		if gradient then
-			gradient.Color = if equipped
-				then ColorSequence.new({
-					ColorSequenceKeypoint.new(0, Tokens.color.goldLight),
-					ColorSequenceKeypoint.new(1, Tokens.color.gold),
-				})
-				else ColorSequence.new({
-					ColorSequenceKeypoint.new(0, Tokens.color.featherWhite),
-					ColorSequenceKeypoint.new(1, Tokens.color.creamPill),
-				})
-		end
-		slot.name.BackgroundColor3 = if equipped then Tokens.color.gold else Tokens.color.creamPill
-		slot.name.TextColor3 = if equipped then Tokens.color.featherWhite else Tokens.color.inkStrong
-		local nameOutline = slot.name:FindFirstChild("TextOutline")
-		if equipped and not nameOutline then
-			FrameKit.outline(slot.name, 1.2)
-		elseif nameOutline then
-			(nameOutline :: UIStroke).Enabled = equipped
+		local faceColor = if equipped then Depth.shade(Tokens.color.surface, 0.14) else Tokens.color.surface
+		slot.face.BackgroundColor3 = faceColor
+		Depth.applySheen(slot.face, faceColor)
+		slot.outline.Color = if equipped then Tokens.color.gold else Tokens.color.outline
+		slot.outline.Thickness = if equipped then Tokens.stroke.frame else Tokens.depth.keyline
+		local nameBorder = slot.name:FindFirstChildOfClass("UIStroke")
+		if nameBorder then
+			nameBorder.Color = if equipped then Tokens.color.gold else Tokens.color.outline
 		end
 	end
 end
