@@ -959,11 +959,13 @@ function HUDController.carriedStackWorldPoint(self: HUDController): Vector3?
 	return ray.Origin + ray.Direction.Unit * 2.2
 end
 
-function HUDController.setObjective(self: HUDController, title: string, detail: string?)
+-- `options.quiet` skips the pop for lines that tick (a countdown changes its title every second).
+function HUDController.setObjective(self: HUDController, title: string, detail: string?, options: { quiet: boolean? }?)
 	local changed = self._labels.banner.Text ~= title
 	self._labels.banner.Text = title
 	self._labels.detail.Text = detail or ""
-	if changed and self._bannerScale and not string.find(title, "^Get ready") then
+	local quiet = options ~= nil and options.quiet == true
+	if changed and not quiet and self._bannerScale and not string.find(title, "^Get ready") then
 		self._bannerScale.Scale = 1 + Motion.amplitude(0.06, self._deps.accessibility:motionSettings())
 		TweenService:Create(
 			self._bannerScale,

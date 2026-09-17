@@ -11,6 +11,7 @@ local Tokens = require(Shared.Design.Tokens)
 local Feedback = require(script.Parent.Parent.UI.Feedback)
 local AssetManifest = require(Shared.Design.AssetManifest)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
+local NextRoundStatus = require(Shared.Domain.NextRoundStatus)
 local Signal = require(Shared.Util.Signal)
 local Trove = require(Shared.Util.Trove)
 local SafeArea = require(script.Parent.Parent.UI.SafeArea)
@@ -40,6 +41,8 @@ export type LobbyController = typeof(setmetatable(
 		_buttons: { [string]: any },
 		_titles: { [string]: string },
 		_inRound: boolean,
+		status: any,
+		_returning: boolean,
 		_offer: any?,
 		_trove: Trove.Trove,
 		stats: { opened: number, directives: number, prompts: number, rewards: number },
@@ -85,6 +88,8 @@ function LobbyController.new(deps: any): LobbyController
 		_buttons = {},
 		_titles = {},
 		_inRound = false,
+		status = nil,
+		_returning = false,
 		_railHidden = false,
 		_trove = Trove.new(),
 		stats = { opened = 0, directives = 0, prompts = 0, rewards = 0 },
@@ -272,11 +277,12 @@ function LobbyController.new(deps: any): LobbyController
 			self:open("party")
 		end
 	end))
-	-- The banner narrates the party: waiting count, then the countdown. The countdown is silent after
-	-- its start chime (owner 17 Sep 2026: the per-second tick is gone).
+	-- The banner narrates what happens next (NextRoundStatus): no party, waiting for players, the
+	-- countdown, teleporting. The same line is drawn on the barn-door board. The countdown is silent
+	-- after its start chime (owner 17 Sep 2026: the per-second tick is gone); while it runs a light
+	-- loop re-resolves the line and the HUD only changes when the text does.
 	local lastPhase: string? = nil
 	local lastMembers = 0
-	local lastTick = -1
 	local countdownThread: thread? = nil
 	local function stopCountdown()
 		if countdownThread then
@@ -291,53 +297,37 @@ function LobbyController.new(deps: any): LobbyController
 		if self._inRound then
 			return
 		end
-		if not party then
-			stopCountdown()
-			if lastPhase then
-				deps.hud:setObjective("Step onto a nest pad", "Create a party there and set off together")
+		local members = if party then #party.members else 0
+		if party then
+			if members > lastMembers and lastMembers > 0 then
+				deps.audio:play(Tokens.sound.uiConfirm)
+			elseif members < lastMembers then
+				deps.audio:play(Tokens.sound.uiCancel)
 			end
-			lastPhase, lastMembers = nil, 0
-			return
-		end
-		local members = #party.members
-		if members > lastMembers and lastMembers > 0 then
-			deps.audio:play(Tokens.sound.uiConfirm)
-		elseif members < lastMembers then
-			deps.audio:play(Tokens.sound.uiCancel)
 		end
 		lastMembers = members
-		if party.phase == "Countdown" then
+		local phase = party and party.phase
+		if phase == "Countdown" then
 			if lastPhase ~= "Countdown" then
 				deps.audio:play(Tokens.sound.partyReady)
 				stopCountdown()
-				lastTick = -1
 				countdownThread = task.spawn(function()
-					while true do
-						local remaining = deps.party:countdownRemaining()
-						if not remaining then
-							break
-						end
-						local whole = math.max(1, math.ceil(remaining))
-						if whole ~= lastTick then
-							lastTick = whole
-							deps.hud:setObjective(string.format("Setting off in %d", whole), "Stay on the pad")
-						end
+					while deps.party:countdownRemaining() ~= nil do
+						self:refreshStatus()
 						task.wait(0.1)
 					end
+					countdownThread = nil
+					self:refreshStatus()
 				end)
 			end
 		else
 			stopCountdown()
-			local max = party.maxMembers or deps.config.project.maxPartyPlayers
-			if party.phase == "Reserving" or party.phase == "Teleporting" then
-				deps.hud:setObjective("Good luck!", "Off to the henhouse")
-			elseif members >= max then
-				deps.hud:setObjective("Party full", "Setting off in a moment")
-			else
-				deps.hud:setObjective(string.format("Party %d / %d", members, max), string.format("Waiting for %d more", max - members))
-			end
 		end
-		lastPhase = party.phase
+		lastPhase = phase
+		self:refreshStatus()
+	end))
+	self._trove:add(deps.profile.sessionChanged:Connect(function()
+		self:refreshStatus()
 	end))
 	self._trove:add(function()
 		stopCountdown()
@@ -372,6 +362,11 @@ function LobbyController.new(deps: any): LobbyController
 	self._trove:add(deps.round.phaseChanged:Connect(function(phase)
 		local inRound = phase ~= nil and phase ~= "Returning" and phase ~= "Abandoned"
 		self._inRound = inRound
+		-- Back from a search: until the session lands in the lobby the line says so (the round
+		-- controller has already dropped its phase by now, and the session may still read Round).
+		local sessionPhase = deps.profile.session and deps.profile.session.phase
+		self._returning = (phase == "Returning" or phase == "Abandoned") and sessionPhase ~= "Lobby" and sessionPhase ~= "Party"
+		self:refreshStatus()
 		rail.Visible = not inRound and not self._railHidden
 		if offer then
 			offer.setVisible(not inRound and not self._railHidden)
@@ -388,6 +383,62 @@ function LobbyController.new(deps: any): LobbyController
 		end
 	end))
 	return self
+end
+
+-- Whether the local character stands inside a party nest pad's zone (pad parties set off by
+-- themselves when full; the status line says so only there).
+local function standingOnPad(config: { [string]: any }): boolean
+	local character = Players.LocalPlayer and Players.LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not (root and root:IsA("BasePart")) then
+		return false
+	end
+	local position = root.Position
+	local height = config.lobby.padZoneHeightStuds
+	for _, pad in ipairs(ChapterLayout.lobby.pads) do
+		local half = pad.zoneSize / 2
+		if
+			math.abs(position.X - pad.center.X) <= half.X
+			and math.abs(position.Z - pad.center.Z) <= half.Z
+			and math.abs(position.Y - pad.center.Y) <= height
+		then
+			return true
+		end
+	end
+	return false
+end
+
+-- Re-resolves the next-search status from replicated state and draws it on the HUD pill and the
+-- barn-door board. A round owns the pill (`hidden`), so nothing is written then.
+function LobbyController.refreshStatus(self: LobbyController): NextRoundStatus.Status
+	local deps = self._deps
+	local session = deps.profile.session
+	local party = deps.party.party
+	if session and (session.phase == "Lobby" or session.phase == "Party") then
+		self._returning = false
+	end
+	local status = NextRoundStatus.resolve({
+		roundPhase = if self._returning then "Returning" else deps.round:phase(),
+		sessionPhase = session and session.phase,
+		party = party,
+		countdownRemaining = deps.party:countdownRemaining(),
+		localUserId = Players.LocalPlayer.UserId,
+		maxPartyPlayers = deps.config.project.maxPartyPlayers,
+		onPad = party ~= nil and standingOnPad(deps.config),
+	})
+	self.status = status
+	local shell = deps.lobbyShell
+	if status.state == "hidden" then
+		if shell and shell.setNextRoundLine then
+			shell:setNextRoundLine(nil)
+		end
+		return status
+	end
+	deps.hud:setObjective(status.title, status.detail, { quiet = status.state == "countdown" })
+	if shell and shell.setNextRoundLine then
+		shell:setNextRoundLine(if status.state == "loading" then nil else status.title)
+	end
+	return status
 end
 
 -- Opens a lobby modal by station id. Returns whether it opened (false when blocked or in a round).

@@ -133,6 +133,25 @@ ChapterLayout.lobby = table.freeze({
 			subtitle = "ROLL YOUR STYLE",
 		}),
 	}),
+	-- The yard chickens' ground (client-only ambience, LobbyChickens). XZ rectangles either side of
+	-- the barn-door path, in front of the barn wall (door at z -166, coops at z -162.5) and inside the
+	-- pads (zones start at x +-35). Exclusions are cut out on top: the door-to-spawn corridor, the spawn
+	-- pad, every pad zone (from `pads`, plus the config margin) and the lines players walk from spawn to
+	-- each pad (capsules, config clearance). Positions are Vector2(x, z). ASSUMED from the layout
+	-- constants above, not measured in Studio: the controller also raycasts each target and refuses
+	-- ground that is not at groundY, so a prop inside a rectangle is walked around, not through.
+	chickenYard = table.freeze({
+		rects = table.freeze({
+			table.freeze({ min = Vector2.new(-30, -158), max = Vector2.new(-10, -136) }),
+			table.freeze({ min = Vector2.new(9, -158), max = Vector2.new(29, -136) }),
+		}),
+		excludeRects = table.freeze({
+			table.freeze({ min = Vector2.new(-7.5, -172), max = Vector2.new(6.5, -90) }), -- spawn to barn door
+		}),
+		excludeCircles = table.freeze({
+			table.freeze({ center = Vector2.new(-0.5, -99), radius = 9 }), -- LobbySpawn
+		}),
+	}),
 	ambientAnchors = table.freeze({
 		Vector3.new(-0.5, 12, -164), -- feathers drifting out of the barn door
 		Vector3.new(-43.5, 9, -136), -- over the left pads

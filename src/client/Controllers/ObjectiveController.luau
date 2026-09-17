@@ -12,7 +12,14 @@ local ObjectiveController = {}
 ObjectiveController.__index = ObjectiveController
 
 export type ObjectiveController = typeof(setmetatable(
-	{} :: { _deps: any, step: string?, inRound: boolean, _highlight: Highlight?, _trove: Trove.Trove },
+	{} :: {
+		_deps: any,
+		step: string?,
+		inRound: boolean,
+		_highlight: Highlight?,
+		_lobbyStatus: (() -> ())?,
+		_trove: Trove.Trove,
+	},
 	ObjectiveController
 ))
 
@@ -38,7 +45,10 @@ local function resolve(path: { string }): Instance?
 end
 
 function ObjectiveController.new(deps: { net: any, hud: any, round: any }): ObjectiveController
-	local self = setmetatable({ _deps = deps, step = nil, inRound = false, _highlight = nil, _trove = Trove.new() }, ObjectiveController)
+	local self = setmetatable(
+		{ _deps = deps, step = nil, inRound = false, _highlight = nil, _lobbyStatus = nil, _trove = Trove.new() },
+		ObjectiveController
+	)
 	self._trove:add(deps.net:on("ObjectiveChanged", function(payload)
 		self:apply(payload.step, payload.inRound == true)
 	end))
@@ -62,12 +72,22 @@ function ObjectiveController.apply(self: ObjectiveController, step: string, inRo
 	self.step = step
 	self.inRound = inRound
 	local copy = Objectives.COPY[step]
-	if step == Objectives.COMPLETE and not inRound then
+	if not inRound and self._lobbyStatus then
+		-- In the lobby the pill says what happens next (LobbyController's next-search status); the
+		-- tutorial step still drives the world highlight below.
+		self._lobbyStatus()
+	elseif step == Objectives.COMPLETE and not inRound then
 		self._deps.hud:setObjective("Ready for another search", "Enter the henhouse doorway when you like")
 	elseif copy then
 		self._deps.hud:setObjective(copy.title, copy.detail)
 	end
 	self:_highlightTarget()
+end
+
+-- Hands the lobby pill to the next-search status: out of a round, objective updates refresh it
+-- instead of writing tutorial copy.
+function ObjectiveController.setLobbyStatus(self: ObjectiveController, refresh: (() -> ())?)
+	self._lobbyStatus = refresh
 end
 
 function ObjectiveController._highlightTarget(self: ObjectiveController)

@@ -48,6 +48,7 @@ local ObjectiveController = require(Controllers.ObjectiveController)
 local VictoryController = require(Controllers.VictoryController)
 local PartyController = require(Controllers.PartyController)
 local LobbyController = require(Controllers.LobbyController)
+local LobbyChickens = require(Controllers.LobbyChickens)
 
 local player = Players.LocalPlayer
 local bootStarted = os.clock()
@@ -496,6 +497,20 @@ lobby:start()
 PerfTrace.mark("arena:start")
 arena:start()
 lobbyMeta.leaderboards.request()
+-- The pill and the barn-door board say what happens next; tutorial updates in the lobby refresh it.
+objectives:setLobbyStatus(function()
+	lobbyMeta:refreshStatus()
+end)
+lobbyMeta:refreshStatus()
+-- Yard chickens by the barn: client-only ambience on the shared scheduler (lobby.ambience.chickens).
+PerfTrace.mark("lobbyChickens")
+local lobbyChickens = trove:add(LobbyChickens.new({
+	ambient = ambient,
+	quality = quality,
+	accessibility = accessibility,
+	config = config,
+}))
+lobbyChickens:start()
 
 -- Diagnostics for Studio verification: instance/connection snapshots and an exposed container.
 local container = {
@@ -525,6 +540,7 @@ local container = {
 	victory = victory,
 	party = party,
 	lobbyMeta = lobbyMeta,
+	lobbyChickens = lobbyChickens,
 	trove = trove,
 	snapshot = function()
 		return {
@@ -566,6 +582,18 @@ if RunService:IsStudio() then
 			local report: any = Feedback.stats()
 			report.toastsShown = hud.toasts.shown
 			report.toastsMerged = hud.toasts.merged
+			return report
+		end,
+		-- Lobby ambience cost: chicken count, update rate and the measured cost of each update
+		-- (os.clock around the whole flock step, rolling average), against lobby.ambience.frameBudgetMs.
+		lobbyAmbienceStats = function(reset)
+			local report: any = lobbyChickens:snapshot()
+			report.schedulerActors = ambient:actorCount()
+			report.schedulerStats = ambient.stats
+			report.status = lobbyMeta.status
+			if reset then
+				lobbyChickens:resetStats()
+			end
 			return report
 		end,
 		perfReport = function(reset)
