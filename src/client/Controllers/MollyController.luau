@@ -621,8 +621,10 @@ function MollyController._stepIdle(self: MollyController, dt: number, t: number)
 		self._gesture = gesture
 		self.stats.gestures += 1
 	end
-	local rPitch, rRoll, rElbowPitch = -0.55, 0.12, -0.6 -- hands resting on the bench edge
-	local lPitch, lRoll, lElbowPitch = -0.5, -0.12, -0.55
+	-- Rest: both paws flat on the bench top in front of her, elbows soft, a slow lean with the breath.
+	local settle = math.sin(t * 1.3) * 0.02
+	local rPitch, rRoll, rElbowPitch = -0.92 + settle, 0.1, -0.08
+	local lPitch, lRoll, lElbowPitch = -0.92 + settle, -0.1, -0.08
 	local waistPitch, waistYaw, waistY = 0, 0, 0
 	local crankSpin = nil
 	if gesture then

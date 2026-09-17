@@ -1458,7 +1458,8 @@ function PileVisualController.revealSpiral(self: PileVisualController, eggPositi
 	end
 	local motion = self._accessibility:motionSettings()
 	local scale = self._accessibility:motionScale()
-	local count = math.min(#coverCells * 2, 18)
+	-- The Egg blows the loose feathers outward: a ring of them bursts away and up, tumbling.
+	local count = math.min(#coverCells * 3 + 12, 36)
 	for i = 1, count do
 		local feather = acquirePart(self)
 		feather.CanQuery = false
@@ -1466,12 +1467,14 @@ function PileVisualController.revealSpiral(self: PileVisualController, eggPositi
 		feather.Color = paletteColor(self._config, FeatherLayout.hash(i, 0, 91))
 		feather.Parent = self._folder
 		local angle = (i / count) * math.pi * 2
-		feather.CFrame = CFrame.new(eggPosition + Vector3.new(math.cos(angle) * 2, 0.2, math.sin(angle) * 2))
+		local ring = if i % 2 == 0 then 1.4 else 2.2
+		feather.CFrame = CFrame.new(eggPosition + Vector3.new(math.cos(angle) * ring, 0.2, math.sin(angle) * ring))
 			* CFrame.Angles(math.rad(80), angle, 0)
-		local info = TweenInfo.new(Motion.duration("slow", motion) * 4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+		local info = TweenInfo.new(Motion.duration("slow", motion) * 3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+		local reach = (7 + (i % 3) * 1.5) * scale
 		local goal = CFrame.new(
-			eggPosition + Vector3.new(math.cos(angle + 2.5) * 5 * scale, 6 * scale + 1, math.sin(angle + 2.5) * 5 * scale)
-		) * CFrame.Angles(angle, angle * 2, 0)
+			eggPosition + Vector3.new(math.cos(angle + 0.6) * reach, (4 + (i % 4)) * scale + 1, math.sin(angle + 0.6) * reach)
+		) * CFrame.Angles(angle * 3, angle * 2, angle)
 		local tween = TweenService:Create(feather, info, { CFrame = goal, Transparency = 1 })
 		tween:Play()
 		tween.Completed:Once(function()

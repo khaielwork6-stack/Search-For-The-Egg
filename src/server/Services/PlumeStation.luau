@@ -342,7 +342,9 @@ end
 
 -- The parchment clue board on its easel behind the bench. The client writes the clue rows.
 local function buildBoard(station: Model, base: CFrame)
-	local origin = base * CFrame.new(-0.6, 0, 2.15)
+	-- OWNER 17 Sep 2026: the easel stands at the bench's right end and Plume at its left, so his arms
+	-- never cross the board and nothing covers the clues.
+	local origin = base * CFrame.new(2.1, 0, 2.15)
 	-- Easel: two legs and a crossbar, leaning back a touch.
 	local lean = CFrame.Angles(math.rad(-8), 0, 0)
 	for _, x in ipairs({ -2.2, 2.2 }) do
@@ -482,6 +484,25 @@ local function dress(rig: Model)
 		w.Part0 = to
 		w.Part1 = p
 		w.Parent = p
+	end
+	-- Clipboard in the left hand: a walnut board, a parchment sheet and a brass clip, welded to the
+	-- hand so the idle carries it to his chest.
+	local leftHand = rig:FindFirstChild("LeftHand") :: BasePart?
+	if leftHand then
+		local grip = leftHand.CFrame * CFrame.new(0.12, -0.25, -0.62) * CFrame.Angles(math.rad(-12), math.rad(90), 0)
+		local board = part(rig, "Clipboard", Vector3.new(1.05, 1.35, 0.08), grip, WALNUT, Enum.Material.Wood)
+		board.CanCollide = false
+		board.CanQuery = false
+		weld(board, leftHand)
+		local sheet =
+			part(rig, "ClipboardSheet", Vector3.new(0.9, 1.15, 0.03), grip * CFrame.new(0, -0.04, -0.05), PARCHMENT, Enum.Material.Fabric)
+		sheet.CanCollide = false
+		sheet.CanQuery = false
+		weld(sheet, leftHand)
+		local clip = part(rig, "ClipboardClip", Vector3.new(0.5, 0.16, 0.12), grip * CFrame.new(0, 0.6, -0.06), BRASS, Enum.Material.Metal)
+		clip.CanCollide = false
+		clip.CanQuery = false
+		weld(clip, leftHand)
 	end
 	local hs = head.Size
 	local front = head.CFrame * CFrame.new(0, 0.05, -hs.Z / 2)
@@ -719,8 +740,8 @@ function PlumeStation.build(workspaceService: Workspace, folder: Instance, layou
 	station.PrimaryPart = anchor
 	station:SetAttribute("SFE_Placeholder", PlumeStation.PLACEHOLDER_TAG)
 	station.Parent = folder
-	-- Plume stands behind the bench's left end, facing the same way as the station.
-	local rig = PlumeStation.spawnPlume(workspaceService, folder, base * CFrame.new(-2.3, 0, 1.7))
+	-- Plume stands behind the bench's left end, clear of the easel, facing the same way as the station.
+	local rig = PlumeStation.spawnPlume(workspaceService, folder, base * CFrame.new(-3.6, 0, 1.9))
 	if rig then
 		local root = rig:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root then

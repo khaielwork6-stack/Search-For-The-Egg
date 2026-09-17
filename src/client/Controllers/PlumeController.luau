@@ -298,8 +298,9 @@ function PlumeController._setHighlighted(self: PlumeController, on: boolean)
 end
 
 -- One idle step. Head follows the nearest player in range, otherwise drifts between the notes and
--- the board; the right hand writes; every so often a hand comes up to the glasses or the head
--- drops to the magnifier. Reduced motion keeps only the slow head-turn.
+-- the board; the left hand holds the clipboard at his chest and the right hangs at his side; every
+-- so often the right hand comes up to the glasses, or he looks down and taps the clipboard.
+-- Nothing reaches forward across the bench. Reduced motion keeps only the slow head-turn.
 function PlumeController._stepIdle(self: PlumeController, dt: number, t: number)
 	local rig = self._rig
 	if not rig then
@@ -356,37 +357,40 @@ function PlumeController._stepIdle(self: PlumeController, dt: number, t: number)
 	-- Gestures.
 	local gesture = self._gesture
 	if not gesture and os.clock() >= self._nextGesture then
-		local pick = if math.random() < 0.55 then "glasses" else "examine"
-		gesture = { name = pick, t = 0, duration = if pick == "glasses" then 1.9 else 2.6 }
+		local pick = if math.random() < 0.5 then "glasses" else "note"
+		gesture = { name = pick, t = 0, duration = if pick == "glasses" then 1.9 else 2.4 }
 		self._gesture = gesture
 	end
-	local writePitch = -1.02 + math.sin(t * 2.1) * 0.05
-	local writeRoll = 0.14 + math.sin(t * 5.7) * 0.02
-	local elbowPitch = -0.95 + math.sin(t * 6.3) * 0.07
-	local leftPitch, leftElbow = 0.05, -0.12
+	-- Rest: right arm down at his side with a slow sway; left forearm across the chest, clipboard up.
+	local rightPitch = -0.08 + math.sin(t * 1.5) * 0.02
+	local rightRoll = 0.14 + math.sin(t * 0.9) * 0.02
+	local rightElbow = -0.18
+	local leftPitch, leftRoll, leftElbow = -1.05 + math.sin(t * 1.5) * 0.02, -0.32, -1.5
 	if gesture then
 		gesture.t += dt
 		local phase = gesture.t / gesture.duration
 		local blend = math.sin(math.clamp(phase, 0, 1) * math.pi) -- rises, holds, falls
 		if gesture.name == "glasses" then
-			-- Left hand up to the frames; the head tips a touch with it.
-			leftPitch = -2.35 * blend
-			leftElbow = -1.35 * blend
+			-- Right hand up to the frames; the head tips a touch with it.
+			rightPitch = -0.08 - 2.25 * blend
+			rightElbow = -0.18 - 1.2 * blend
+			rightRoll = 0.14 - 0.25 * blend
 			self._look = { yaw = self._yaw, pitch = -0.1 * blend, until_ = os.clock() + dt * 2 }
 		else
-			-- Head down to the magnifier; the right hand lifts it.
-			self._look = { yaw = 0.45, pitch = -0.6, until_ = os.clock() + dt * 2 }
-			writePitch = -1.02 - 0.5 * blend
-			elbowPitch = -0.95 - 0.35 * blend
+			-- Eyes down to the clipboard; the right hand comes over and taps a note on it.
+			self._look = { yaw = 0.3, pitch = -0.55, until_ = os.clock() + dt * 2 }
+			rightPitch = -0.08 - 1.15 * blend + math.sin(t * 9) * 0.04 * blend
+			rightElbow = -0.18 - 1.35 * blend
+			rightRoll = 0.14 - 0.45 * blend
 		end
 		if phase >= 1 then
 			self._gesture = nil
 			self._nextGesture = os.clock() + 7 + math.random() * 8
 		end
 	end
-	rShoulder.motor.C0 = rShoulder.base * CFrame.Angles(writePitch, 0, writeRoll)
-	rElbow.motor.C0 = rElbow.base * CFrame.Angles(elbowPitch, 0, 0)
-	lShoulder.motor.C0 = lShoulder.base * CFrame.Angles(leftPitch, 0, -0.1)
+	rShoulder.motor.C0 = rShoulder.base * CFrame.Angles(rightPitch, 0, rightRoll)
+	rElbow.motor.C0 = rElbow.base * CFrame.Angles(rightElbow, 0, 0)
+	lShoulder.motor.C0 = lShoulder.base * CFrame.Angles(leftPitch, 0, leftRoll)
 	lElbow.motor.C0 = lElbow.base * CFrame.Angles(leftElbow, 0, 0)
 end
 

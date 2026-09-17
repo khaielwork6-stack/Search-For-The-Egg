@@ -1031,21 +1031,104 @@ function ChapterShellService.spawnEgg(folder: Instance, position: Vector3, confi
 	if existing then
 		existing:Destroy()
 	end
+	-- The hero object (OWNER 17 Sep 2026: the grey ball read as a placeholder). A smooth cream shell
+	-- with a gold band at its waist, gold speckles over the shell, a soft halo, sparkle motes and a
+	-- warm light, so it reads from across the pile and up close. Every trim piece is welded to the
+	-- shell, so the carry weld moves the whole egg; the client bobs and spins it while it waits.
 	local egg = Instance.new("Part")
 	egg.Name = "SFE_Egg"
-	egg.Shape = Enum.PartType.Ball
-	egg.Size = Vector3.new(2.2, 2.8, 2.2)
+	egg.Size = Vector3.new(2.3, 3.0, 2.3)
 	egg.Anchored = true
 	egg.CanCollide = false
-	egg.Color = Color3.fromRGB(252, 240, 205)
+	egg.CastShadow = true
+	egg.Color = Color3.fromRGB(255, 244, 214)
 	egg.Material = Enum.Material.SmoothPlastic
-	egg.CFrame = CFrame.new(position + Vector3.new(0, 0.6, 0))
+	egg.Reflectance = 0.06
+	egg.TopSurface = Enum.SurfaceType.Smooth
+	egg.BottomSurface = Enum.SurfaceType.Smooth
+	egg.CFrame = CFrame.new(position + Vector3.new(0, 0.7, 0))
 	egg:SetAttribute("SFE_Placeholder", ChapterShellService.PLACEHOLDER_TAG)
+	local shellMesh = Instance.new("SpecialMesh")
+	shellMesh.MeshType = Enum.MeshType.Sphere
+	shellMesh.Parent = egg
+	local GOLD = Color3.fromRGB(255, 196, 64)
+	local GOLD_DEEP = Color3.fromRGB(214, 150, 30)
+	local function trim(name: string, size: Vector3, cframe: CFrame, color: Color3, material: Enum.Material): Part
+		local piece = Instance.new("Part")
+		piece.Name = name
+		piece.Size = size
+		piece.CFrame = cframe
+		piece.Color = color
+		piece.Material = material
+		piece.Anchored = false
+		piece.Massless = true
+		piece.CanCollide = false
+		piece.CanQuery = false
+		piece.CanTouch = false
+		piece.CastShadow = false
+		piece.TopSurface = Enum.SurfaceType.Smooth
+		piece.BottomSurface = Enum.SurfaceType.Smooth
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = egg
+		weld.Part1 = piece
+		weld.Parent = piece
+		piece.Parent = egg
+		return piece
+	end
+	-- Gold band: a thin disc a touch wider than the waist.
+	local band = trim(
+		"Band",
+		Vector3.new(0.14, 2.42, 2.42),
+		egg.CFrame * CFrame.new(0, -0.1, 0) * CFrame.Angles(0, 0, math.rad(90)),
+		GOLD,
+		Enum.Material.Metal
+	)
+	band.Shape = Enum.PartType.Cylinder
+	band.Reflectance = 0.25
+	-- Speckles: gold dots seated on the shell above and below the band.
+	local rx, ry = egg.Size.X / 2, egg.Size.Y / 2
+	for i = 1, 16 do
+		local lat = if i <= 8 then math.rad(28 + (i % 3) * 14) else -math.rad(24 + (i % 3) * 14)
+		local lon = (i * 2.399) % (math.pi * 2)
+		local offset =
+			Vector3.new(math.cos(lat) * math.cos(lon) * rx * 0.97, math.sin(lat) * ry * 0.97, math.cos(lat) * math.sin(lon) * rx * 0.97)
+		local dot = trim(
+			"Speckle",
+			Vector3.new(0.24, 0.24, 0.24),
+			egg.CFrame * CFrame.new(offset),
+			if i % 4 == 0 then GOLD_DEEP else GOLD,
+			Enum.Material.Metal
+		)
+		dot.Shape = Enum.PartType.Ball
+		dot.Reflectance = 0.2
+	end
+	-- Halo: a soft gold shell the light lives in.
+	local halo = trim("Halo", egg.Size + Vector3.new(0.9, 1.0, 0.9), egg.CFrame, Color3.fromRGB(255, 214, 120), Enum.Material.Neon)
+	halo.Transparency = 0.88
+	local haloMesh = Instance.new("SpecialMesh")
+	haloMesh.MeshType = Enum.MeshType.Sphere
+	haloMesh.Parent = halo
 	local light = Instance.new("PointLight")
 	light.Color = Color3.fromRGB(255, 220, 140)
-	light.Range = 14
-	light.Brightness = 2
+	light.Range = 16
+	light.Brightness = 2.4
+	light.Shadows = true
 	light.Parent = egg
+	local motes = Instance.new("ParticleEmitter")
+	motes.Name = "Motes"
+	motes.Color = ColorSequence.new(Color3.fromRGB(255, 232, 160), GOLD)
+	motes.LightEmission = 1
+	motes.LightInfluence = 0
+	motes.Size =
+		NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.3, 0.22), NumberSequenceKeypoint.new(1, 0) })
+	motes.Transparency = NumberSequence.new(0.2)
+	motes.Lifetime = NumberRange.new(1.0, 1.6)
+	motes.Rate = 7
+	motes.Speed = NumberRange.new(0.5, 1.1)
+	motes.SpreadAngle = Vector2.new(180, 180)
+	motes.Acceleration = Vector3.new(0, 0.6, 0)
+	motes.Rotation = NumberRange.new(0, 360)
+	motes.Parent = egg
 	prompt(egg, "SFE_EggClaim", "Claim the Egg", "Hidden Egg", config.eggSpawn.claimHoldSeconds, config.eggSpawn.claimRadiusStuds)
 	egg.Parent = folder
 	return egg

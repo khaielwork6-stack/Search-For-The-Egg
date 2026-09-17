@@ -6,6 +6,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
@@ -84,9 +85,11 @@ function VictoryController.onRevealed(self: VictoryController, payload: { [strin
 		local highlight = Instance.new("Highlight")
 		highlight.Name = "SFE_EggGlow"
 		highlight.FillColor = Tokens.color.straw
-		highlight.FillTransparency = 0.6
-		highlight.OutlineColor = Tokens.color.cream
+		highlight.FillTransparency = 0.7
+		highlight.OutlineColor = Tokens.color.goldLight
 		highlight.Parent = eggPart
+		self:_burst(position)
+		self:_idle(eggPart :: BasePart)
 	end
 	-- Camera framing: ease toward the Egg for cameraFocusSeconds, then return control.
 	local camera = workspace.CurrentCamera
@@ -105,13 +108,68 @@ function VictoryController.onRevealed(self: VictoryController, payload: { [strin
 		else
 			local tween = TweenService:Create(camera, TweenInfo.new(seconds * 0.5, Tokens.motion.easeInOut), { CFrame = target })
 			tween:Play()
+			-- A short push in on the Egg, then the field of view eases back with the hand-off.
+			local fov = camera.FieldOfView
+			TweenService
+				:Create(camera, TweenInfo.new(seconds * 0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { FieldOfView = fov - 12 })
+				:Play()
 			tween.Completed:Once(function()
 				task.wait(seconds * 0.5)
+				TweenService:Create(camera, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { FieldOfView = fov })
+					:Play()
 				camera.CameraType = Enum.CameraType.Custom
 			end)
 		end
 		local _ = from
 	end
+end
+
+-- The reveal flash: a gold sphere of light that swells from the Egg and fades in under half a second.
+function VictoryController._burst(self: VictoryController, position: Vector3)
+	if self._deps.accessibility:reducedMotion() then
+		return
+	end
+	local flash = Instance.new("Part")
+	flash.Name = "SFE_EggBurst"
+	flash.Shape = Enum.PartType.Ball
+	flash.Size = Vector3.new(1, 1, 1)
+	flash.Anchored = true
+	flash.CanCollide = false
+	flash.CanQuery = false
+	flash.CanTouch = false
+	flash.CastShadow = false
+	flash.Material = Enum.Material.Neon
+	flash.Color = Color3.fromRGB(255, 226, 150)
+	flash.Transparency = 0.15
+	flash.CFrame = CFrame.new(position + Vector3.new(0, 1, 0))
+	flash.Parent = workspace
+	local tween = TweenService:Create(
+		flash,
+		TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Size = Vector3.new(16, 16, 16), Transparency = 1 }
+	)
+	tween:Play()
+	tween.Completed:Once(function()
+		flash:Destroy()
+	end)
+	self._deps.vfx:burst("sparkle", position + Vector3.new(0, 1.5, 0), 2)
+end
+
+-- While the Egg waits to be claimed it bobs and turns slowly; the loop ends the moment the server
+-- picks it up (unanchored for the carry weld) or removes it.
+function VictoryController._idle(self: VictoryController, egg: BasePart)
+	if self._deps.accessibility:reducedMotion() then
+		return
+	end
+	local base = egg.CFrame
+	local started = os.clock()
+	task.spawn(function()
+		while egg.Parent and egg.Anchored do
+			local t = os.clock() - started
+			egg.CFrame = base * CFrame.new(0, math.sin(t * 1.6) * 0.16 + 0.1, 0) * CFrame.Angles(0, t * 0.55, 0)
+			RunService.Heartbeat:Wait()
+		end
+	end)
 end
 
 -- Someone picked the Egg up: the carrier glows for everyone and the banner says where it goes.
