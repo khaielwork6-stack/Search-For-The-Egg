@@ -575,8 +575,8 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			local pill = Instance.new("Frame")
 			pill.Name = "Jackpot"
 			pill.AnchorPoint = Vector2.new(0.5, 0.5)
-			pill.Position = UDim2.fromScale(0.5, 0.235)
-			pill.Size = UDim2.fromScale(0.62, 0.125)
+			pill.Position = UDim2.fromScale(0.5, 0.275)
+			pill.Size = UDim2.fromScale(0.6, 0.12)
 			pill.BackgroundColor3 = Tokens.color.ember
 			pill.BorderSizePixel = 0
 			pill.ZIndex = z + 9
@@ -604,10 +604,10 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			pill.Parent = face
 			badge = pill
 			-- The amount drops under the badge on this card.
-			amount.Position = UDim2.fromScale(0.5, 0.3)
-			amount.Size = UDim2.fromScale(0.9, 0.15)
-			artBox.Position = UDim2.fromScale(0.5, 0.44)
-			artBox.Size = UDim2.fromScale(0.98, 0.37)
+			amount.Position = UDim2.fromScale(0.5, 0.335)
+			amount.Size = UDim2.fromScale(0.9, 0.14)
+			artBox.Position = UDim2.fromScale(0.5, 0.465)
+			artBox.Size = UDim2.fromScale(0.98, 0.35)
 			artHome = artBox.Position
 		end
 
