@@ -374,7 +374,7 @@ function LobbyController.new(deps: any): LobbyController
 		self._inRound = inRound
 		rail.Visible = not inRound and not self._railHidden
 		if offer then
-			offer.setVisible(not inRound)
+			offer.setVisible(not inRound and not self._railHidden)
 		end
 		if inRound then
 			for _, id in ipairs({ "party", "classes", "shop", "daily", "quests", "codes", "inventory", "stats", "event" }) do
@@ -470,6 +470,10 @@ function LobbyController.setRailHidden(self: LobbyController, hidden: boolean)
 	local rail = self._rail
 	if rail then
 		rail.Visible = not self._inRound and not hidden
+	end
+	-- The 2x Gems tile steps aside with the rail; it showed beside a phone modal's card.
+	if self._offer then
+		self._offer.setVisible(not self._inRound and not hidden)
 	end
 end
 
