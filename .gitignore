@@ -12,3 +12,6 @@ sourcemap.json
 
 # Rokit tool cache
 /.rokit/
+
+# Agent worktrees
+.claude/worktrees/
