@@ -30,6 +30,17 @@ function StudioDebug.install(container: any): any?
 	end
 	local hooks = {}
 
+	function hooks.perfReport(reset: any)
+		local PerfTrace = require(game:GetService("ReplicatedStorage").Shared.Util.PerfTrace) :: any
+		local report = PerfTrace.report()
+		report.instances = #workspace:GetDescendants()
+		report.players = #game:GetService("Players"):GetPlayers()
+		if reset then
+			PerfTrace.reset()
+		end
+		return report
+	end
+
 	function hooks.status()
 		return {
 			buildLabel = container.buildInfo.buildLabel,

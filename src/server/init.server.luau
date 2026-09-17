@@ -11,6 +11,10 @@ local HttpService = game:GetService("HttpService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Clock = require(Shared.Clock)
+local PerfTrace = require(Shared.Util.PerfTrace)
+if RunService:IsStudio() then
+	PerfTrace.startRecorder()
+end
 local WeightedRandom = require(Shared.WeightedRandom)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local AssetManifest = require(Shared.Design.AssetManifest)
@@ -1294,6 +1298,7 @@ end)
 -- 9. Player lifecycle wiring.
 local function onCharacterAdded(player: Player, character: Model)
 	task.wait(0.1)
+	PerfTrace.label("characterAdded")
 	local runtime = rounds:roundOf(player.UserId)
 	if runtime then
 		local layout = ChapterLayout[runtime.state.chapter]
@@ -1329,6 +1334,7 @@ local function onCharacterAdded(player: Player, character: Model)
 end
 
 local function onPlayerLoaded(player: Player)
+	PerfTrace.label("playerLoaded")
 	publishBestTime(player)
 	objectives:load(player.UserId)
 	sendObjective(player.UserId)
@@ -1340,6 +1346,7 @@ local function onPlayerLoaded(player: Player)
 	if player.Character then
 		task.spawn(onCharacterAdded, player, player.Character)
 	end
+	PerfTrace.label("idle")
 end
 
 Players.PlayerAdded:Connect(function(player)

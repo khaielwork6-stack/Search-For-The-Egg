@@ -9,6 +9,7 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Trove = require(Shared.Util.Trove)
+local PerfTrace = require(Shared.Util.PerfTrace)
 local AssetManifest = require(Shared.Design.AssetManifest)
 
 local Controllers = script:WaitForChild("Controllers")
@@ -49,6 +50,10 @@ local LobbyController = require(Controllers.LobbyController)
 
 local player = Players.LocalPlayer
 local bootStarted = os.clock()
+if RunService:IsStudio() then
+	PerfTrace.startRecorder()
+end
+PerfTrace.mark("waitRuntime")
 
 local runtime = ReplicatedStorage:WaitForChild(Config.RUNTIME_FOLDER_NAME, 60)
 if not runtime then
@@ -59,27 +64,41 @@ end
 local config = Config.get()
 local trove = Trove.new()
 -- Mesh templates must carry their mesh metadata before anything clones them (AssetManifest.warm).
+PerfTrace.mark("repairedMeshes")
 local repairedMeshes = AssetManifest.warm()
 
 -- Order: net -> profile -> settings-derived (accessibility/quality) -> input/modal -> presentation
 -- foundations -> HUD -> round/gameplay controllers -> scene ambience.
+PerfTrace.mark("net")
 local net = trove:add(NetClient.new(runtime, config))
+PerfTrace.mark("profile")
 local profile = trove:add(ProfileController.new(net))
+PerfTrace.mark("party")
 local party = trove:add(PartyController.new({ net = net, profile = profile }))
+PerfTrace.mark("accessibility")
 local accessibility = trove:add(AccessibilityController.new(profile, config))
+PerfTrace.mark("quality")
 local quality = trove:add(QualityController.new(profile, config))
+PerfTrace.mark("input")
 local input = trove:add(InputController.new())
 -- Tab opens the upgrade book: the core player list (which also toggles on Tab) is switched off;
 -- nameplates and the lobby boards carry the same information.
 pcall(function()
 	game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
 end)
+PerfTrace.mark("modals")
 local modals = trove:add(ModalController.new(input, accessibility, config))
+PerfTrace.mark("audio")
 local audio = trove:add(AudioDirector.new(profile, config))
+PerfTrace.mark("vfx")
 local vfx = trove:add(VFXDirector.new(quality, config))
+PerfTrace.mark("ambient")
 local ambient = trove:add(AmbientScheduler.new(quality, accessibility))
+PerfTrace.mark("camera")
 local camera = trove:add(CameraFeedback.new(accessibility, config))
+PerfTrace.mark("haptics")
 local haptics = trove:add(HapticsController.new(accessibility))
+PerfTrace.mark("hud")
 local hud = trove:add(HUDController.new({
 	net = net,
 	profile = profile,
@@ -91,12 +110,15 @@ local hud = trove:add(HUDController.new({
 	haptics = haptics,
 	config = config,
 }))
+PerfTrace.mark("round")
 local round = trove:add(
 	RoundController.new({ net = net, profile = profile, modals = modals, accessibility = accessibility, audio = audio, config = config })
 )
+PerfTrace.mark("pile")
 local pile = trove:add(
 	PileVisualController.new({ round = round, quality = quality, accessibility = accessibility, vfx = vfx, audio = audio, config = config })
 )
+PerfTrace.mark("toolVisuals")
 local toolVisuals = trove:add(ToolVisualController.new({
 	net = net,
 	round = round,
@@ -109,8 +131,10 @@ local toolVisuals = trove:add(ToolVisualController.new({
 	camera = camera,
 	hud = hud,
 }))
+PerfTrace.mark("crateRun")
 local crateRun = trove:add(CrateController.new({ net = net, audio = audio, vfx = vfx, config = config }))
 -- One presentation for every pick and every sale: press, release, flight, landing, bag, sound.
+PerfTrace.mark("pickupFeedback")
 local pickupFeedback = trove:add(PickupFeedbackController.new({
 	hud = hud,
 	pile = pile,
@@ -124,6 +148,7 @@ local pickupFeedback = trove:add(PickupFeedbackController.new({
 	crate = crateRun,
 	config = config,
 }))
+PerfTrace.mark("tools")
 local tools = trove:add(ToolController.new({
 	net = net,
 	round = round,
@@ -141,6 +166,7 @@ local tools = trove:add(ToolController.new({
 }))
 local hand = tools -- Phase 2 automation helpers keep working through the tool controller
 -- First-person tool models (no hands): the rake, dynamite and vacuum drawn under the camera.
+PerfTrace.mark("viewmodel")
 local viewmodel = trove:add(ToolViewmodelController.new({
 	tools = tools,
 	round = round,
@@ -165,6 +191,7 @@ toolVisuals:setProviders({
 	end,
 })
 -- NPC dialogue frame (the Farmer's lines): camera close-up, outline, typewriter box.
+PerfTrace.mark("dialogue")
 local dialogue = trove:add(DialogueController.new({
 	input = input,
 	modals = modals,
@@ -173,6 +200,7 @@ local dialogue = trove:add(DialogueController.new({
 	accessibility = accessibility,
 	config = config,
 }))
+PerfTrace.mark("interaction")
 local interaction = trove:add(InteractionController.new({
 	net = net,
 	round = round,
@@ -183,9 +211,12 @@ local interaction = trove:add(InteractionController.new({
 	config = config,
 	dialogue = dialogue,
 }))
+PerfTrace.mark("objectives")
 local objectives = trove:add(ObjectiveController.new({ net = net, hud = hud, round = round }))
+PerfTrace.mark("prompts")
 local prompts = trove:add(PromptController.new({ input = input, audio = audio, accessibility = accessibility }))
 local _ = prompts
+PerfTrace.mark("victory")
 local victory = trove:add(VictoryController.new({
 	net = net,
 	round = round,
@@ -204,6 +235,7 @@ local victory = trove:add(VictoryController.new({
 hud:bindRound(round, interaction)
 -- The round intro. It owns the intro phase: camera, HUD, input and the avatar on screen, and it
 -- reports ready to the server when it is done so the round starts for everyone at once.
+PerfTrace.mark("intro")
 local intro = trove:add(IntroCinematicController.new({
 	config = config,
 	round = round,
@@ -217,8 +249,10 @@ local intro = trove:add(IntroCinematicController.new({
 }))
 intro:bindRound()
 -- Player nameplates: display name and record time over every character.
+PerfTrace.mark("nameplates")
 local nameplates = trove:add(NameplateController.new(round))
 -- Professor Plume: the rod lender. Nameplate, outline, idle, the board, the loan and its hand-over.
+PerfTrace.mark("plume")
 local plume = trove:add(PlumeController.new({
 	net = net,
 	round = round,
@@ -236,6 +270,7 @@ local plume = trove:add(PlumeController.new({
 	tools = tools,
 }))
 -- Molly the Mole: the survey NPC. Nameplate, outline, idle, the map, the trade and its sequence.
+PerfTrace.mark("molly")
 local molly = trove:add(MollyController.new({
 	net = net,
 	round = round,
@@ -251,6 +286,7 @@ local molly = trove:add(MollyController.new({
 	interaction = interaction,
 }))
 -- The upgrade book: Tab, the book button, or the supplies counter opens it during a search.
+PerfTrace.mark("book")
 local book = trove:add(UpgradeBookController.new({
 	net = net,
 	round = round,
@@ -267,6 +303,7 @@ hud:setBookOpener(function()
 	book:toggle()
 end)
 -- Barn item inspection: camera focus, cinematic bars, options and skins for a display.
+PerfTrace.mark("inspect")
 local inspect = trove:add(InspectController.new({
 	net = net,
 	round = round,
@@ -281,6 +318,7 @@ local inspect = trove:add(InspectController.new({
 	accessibility = accessibility,
 }))
 -- Barn shop displays: price cards on the owner's item models and their inspect prompts.
+PerfTrace.mark("displays")
 local displays = trove:add(DisplayController.new({
 	inspect = inspect,
 	net = net,
@@ -321,6 +359,7 @@ trove:add(round.saleRefused:Connect(function(payload)
 end))
 -- The bag and bundle update when the picked feather lands (PickupFeedbackController), not here.
 
+PerfTrace.mark("lobby")
 local lobby = trove:add(LobbyShellController.new({
 	ambient = ambient,
 	vfx = vfx,
@@ -331,6 +370,7 @@ local lobby = trove:add(LobbyShellController.new({
 	config = config,
 	strandsPerAnchor = 0,
 }, "SFE_LobbyShell"))
+PerfTrace.mark("arena")
 local arena = trove:add(LobbyShellController.new({
 	ambient = ambient,
 	vfx = vfx,
@@ -343,6 +383,7 @@ local arena = trove:add(LobbyShellController.new({
 }, "SFE_Chapter1"))
 
 -- Lobby meta layer (Phase 4): station rail, modals, prompt routing, leaderboards, silhouettes.
+PerfTrace.mark("lobbyMeta")
 local lobbyMeta = trove:add(LobbyController.new({
 	net = net,
 	profile = profile,
@@ -424,7 +465,9 @@ if config.featureFlags.dailyAutoOpenOnJoin ~= false and config.featureFlags.dail
 end
 
 audio:setState("Lobby")
+PerfTrace.mark("lobby:start")
 lobby:start()
+PerfTrace.mark("arena:start")
 arena:start()
 lobbyMeta.leaderboards.request()
 
@@ -479,6 +522,15 @@ if RunService:IsStudio() then
 	local bridge = Instance.new("BindableFunction")
 	bridge.Name = "SFE_ClientDebug"
 	local actions: { [string]: (...any) -> any } = {
+		perfReport = function(reset)
+			local report = PerfTrace.report()
+			report.instances = #workspace:GetDescendants()
+			report.guiInstances = #player.PlayerGui:GetDescendants()
+			if reset then
+				PerfTrace.reset()
+			end
+			return report
+		end,
 		snapshot = function()
 			local snap: any = container.snapshot()
 			snap.profileLoaded = profile.projection ~= nil
@@ -1548,6 +1600,7 @@ if RunService:IsStudio() then
 	bridge.Parent = player:WaitForChild("PlayerScripts")
 end
 
+PerfTrace.mark("ready")
 player:SetAttribute("SFE_ClientReady", true)
 print(
 	string.format(
