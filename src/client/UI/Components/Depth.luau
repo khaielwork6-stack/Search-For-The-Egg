@@ -112,7 +112,8 @@ function Depth.rim(object: GuiObject, face: Color3, color: Color3?): UIStroke
 		stroke.Parent = object
 	end
 	stroke.Thickness = Tokens.depth.rim
-	stroke.Color = color or Color3.new(1, 1, 1)
+	-- White, faintly, whatever the face: on the dark kit a face-derived rim reads as a smudge.
+	stroke.Color = color or Depth.shade(face, 0.85)
 	stroke.Transparency = Tokens.depth.rimTransparency
 	return stroke
 end
