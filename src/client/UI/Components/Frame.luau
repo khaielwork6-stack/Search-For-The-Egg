@@ -96,7 +96,7 @@ function Frame.goldPanel(
 	local z = opts.zIndex or 1
 	local outer = Instance.new("Frame")
 	outer.Name = name
-	outer.BackgroundColor3 = opts.lipColor or Tokens.color.goldDeep
+	outer.BackgroundColor3 = opts.lipColor or Tokens.color.panelDeep
 	outer.BorderSizePixel = 0
 	outer.ZIndex = z
 	local outerCorner = Instance.new("UICorner")
@@ -118,15 +118,16 @@ function Frame.goldPanel(
 	local light = Instance.new("UIGradient")
 	light.Name = "Paper"
 	light.Rotation = 90
+	local fill = opts.fill or Tokens.color.panel
 	light.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Tokens.color.featherWhite),
-		ColorSequenceKeypoint.new(0.22, opts.fill or Tokens.color.panel),
-		ColorSequenceKeypoint.new(0.72, opts.fill or Tokens.color.panel),
-		ColorSequenceKeypoint.new(1, Tokens.color.panelDeep),
+		ColorSequenceKeypoint.new(0, Depth.shade(fill, 0.16)),
+		ColorSequenceKeypoint.new(0.18, fill),
+		ColorSequenceKeypoint.new(0.8, fill),
+		ColorSequenceKeypoint.new(1, Depth.shade(fill, -0.25)),
 	})
 	light.Parent = panel
-	Depth.rim(panel, opts.fill or Tokens.color.panel, Tokens.color.featherWhite)
-	if opts.texture ~= false then
+	Depth.rim(panel, fill)
+	if opts.texture == true then
 		-- On the outer card (not inside the panel's list layout), drawn above the panel body and
 		-- below its content.
 		local weave = texture(outer, "texture.studs", 0.965, Tokens.color.cocoa, 28, z + 1)
@@ -163,7 +164,7 @@ function Frame.headerBand(
 	local band = Instance.new("Frame")
 	band.Name = name
 	band.Size = UDim2.new(1, 0, 0, height)
-	band.BackgroundColor3 = opts.color or Tokens.color.gold
+	band.BackgroundColor3 = opts.color or Tokens.color.surfaceAlt
 	band.BorderSizePixel = 0
 	band.ZIndex = z
 	band.ClipsDescendants = true
@@ -177,13 +178,13 @@ function Frame.headerBand(
 	stroke.Parent = band
 	local gradient = Instance.new("UIGradient")
 	gradient.Rotation = 90
+	local bandFill = opts.color or Tokens.color.surfaceAlt
 	gradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Tokens.color.goldLight),
-		ColorSequenceKeypoint.new(0.55, opts.color or Tokens.color.gold),
-		ColorSequenceKeypoint.new(1, opts.deep or Tokens.color.goldDeep),
+		ColorSequenceKeypoint.new(0, Depth.shade(bandFill, 0.18)),
+		ColorSequenceKeypoint.new(0.5, bandFill),
+		ColorSequenceKeypoint.new(1, opts.deep or Depth.shade(bandFill, -0.25)),
 	})
 	gradient.Parent = band
-	texture(band, "texture.rays", 0.72, Tokens.color.featherWhite, nil, z + 1)
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
 	title.Size = UDim2.fromScale(1, 1)
@@ -195,7 +196,7 @@ function Frame.headerBand(
 	title.TextTruncate = Enum.TextTruncate.AtEnd
 	title.ZIndex = z + 2
 	title.Parent = band
-	Frame.outline(title, 2.5)
+	Frame.outline(title, 3)
 	band.Parent = parent
 	return band, title
 end
@@ -220,11 +221,11 @@ function Frame.pill(
 	local label = Instance.new("TextLabel")
 	label.Name = name
 	label.Size = opts.size or UDim2.new(1, 0, 0, Tokens.layout.minimumTapTargetPx)
-	label.BackgroundColor3 = opts.fill or Tokens.color.creamPill
+	label.BackgroundColor3 = opts.fill or Tokens.color.surface
 	label.BorderSizePixel = 0
 	label.Font = Tokens.typography.label.font
 	label.TextSize = Frame.textSize(opts.textSize or Tokens.typography.label.size)
-	label.TextColor3 = opts.textColor or Tokens.color.goldDeep
+	label.TextColor3 = opts.textColor or Tokens.color.featherWhite
 	label.Text = text
 	label.TextTruncate = Enum.TextTruncate.AtEnd
 	label.ZIndex = opts.zIndex or 1
@@ -238,17 +239,14 @@ function Frame.pill(
 	stroke.Parent = label
 	local gradient = Instance.new("UIGradient")
 	gradient.Rotation = 90
-	gradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Tokens.color.featherWhite),
-		ColorSequenceKeypoint.new(1, opts.fill or Tokens.color.creamPill),
-	})
+	gradient.Color = Depth.sheen(opts.fill or Tokens.color.surface)
 	gradient.Parent = label
 	local padding = Instance.new("UIPadding")
 	padding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
 	padding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
 	padding.Parent = label
 	if opts.outline ~= false then
-		Frame.outline(label, 1.5, Tokens.color.outline)
+		Frame.outline(label, 2, Tokens.color.outline)
 	end
 	if opts.fitText then
 		label.TextTruncate = Enum.TextTruncate.None
@@ -363,7 +361,7 @@ function Frame.meter(
 	local track = Instance.new("Frame")
 	track.Name = name
 	track.Size = UDim2.new(1, 0, 0, height)
-	track.BackgroundColor3 = Tokens.color.creamDeep
+	track.BackgroundColor3 = Tokens.color.panelDeep
 	track.BorderSizePixel = 0
 	track.ZIndex = opts.zIndex or 1
 	track.ClipsDescendants = true
@@ -429,7 +427,7 @@ function Frame.row(
 	local row = Instance.new("Frame")
 	row.Name = name
 	row.Size = UDim2.new(1, 0, 0, height)
-	row.BackgroundColor3 = if opts.muted then Tokens.color.surfaceAlt else (opts.tint or Tokens.color.featherWhite)
+	row.BackgroundColor3 = if opts.muted then Tokens.color.surfaceAlt else (opts.tint or Tokens.color.surface)
 	row.BorderSizePixel = 0
 	row.ZIndex = zIndex or 1
 	local corner = Instance.new("UICorner")
@@ -438,15 +436,12 @@ function Frame.row(
 	local stroke = Instance.new("UIStroke")
 	stroke.Thickness = Tokens.stroke.standard
 	stroke.Color = Tokens.color.outline
-	stroke.Transparency = if opts.muted then 0.75 else 0.55
+	stroke.Transparency = if opts.muted then 0.3 else 0
 	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = row
 	local gradient = Instance.new("UIGradient")
 	gradient.Rotation = 90
-	gradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(240, 236, 228)),
-	})
+	gradient.Color = Depth.sheen(row.BackgroundColor3)
 	gradient.Parent = row
 	local padding = Instance.new("UIPadding")
 	local pad = opts.padding or Tokens.spacing.md
@@ -551,7 +546,7 @@ function Frame.chip(
 	local chip = Instance.new("Frame")
 	chip.Name = name
 	chip.Size = UDim2.fromOffset(opts.width or height * 2, height)
-	chip.BackgroundColor3 = opts.lip or Tokens.color.goldDeep
+	chip.BackgroundColor3 = opts.lip or Tokens.color.panelDeep
 	chip.BorderSizePixel = 0
 	chip.ZIndex = z
 	local chipCorner = Instance.new("UICorner")
@@ -567,7 +562,7 @@ function Frame.chip(
 	local face = Instance.new("Frame")
 	face.Name = "Face"
 	face.Size = UDim2.new(1, 0, 1, -4)
-	face.BackgroundColor3 = opts.fill or Tokens.color.creamPill
+	face.BackgroundColor3 = opts.fill or Tokens.color.surface
 	face.BorderSizePixel = 0
 	face.ZIndex = z + 1
 	local faceCorner = Instance.new("UICorner")
@@ -575,10 +570,7 @@ function Frame.chip(
 	faceCorner.Parent = face
 	local faceGradient = Instance.new("UIGradient")
 	faceGradient.Rotation = 90
-	faceGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Tokens.color.featherWhite),
-		ColorSequenceKeypoint.new(1, opts.fill or Tokens.color.creamPill),
-	})
+	faceGradient.Color = Depth.sheen(opts.fill or Tokens.color.surface)
 	faceGradient.Parent = face
 	face.Parent = chip
 	local content = Instance.new("Frame")
@@ -617,6 +609,7 @@ function Frame.chip(
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Text = ""
 	label.ZIndex = z + 4
+	Frame.outline(label, 2)
 	label.Parent = content
 	if not opts.width then
 		local function fit()

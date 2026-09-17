@@ -65,8 +65,106 @@ type Style = {
 	ghost: boolean?,
 }
 
+-- Variants to the reference clip (17 Sep 2026): a lime-capped green for every "go", red for back and
+-- close, gold for VIP and prizes, blue for currency, purple for gems and premium, slate for the rest.
+-- Every face is white lettering with a black stroke inside a thick black keyline.
+local GREEN = Color3.fromRGB(96, 208, 40)
+local GREEN_LIGHT = Color3.fromRGB(196, 250, 82)
+local GREEN_DEEP = Color3.fromRGB(38, 132, 24)
+local RED = Tokens.color.ember
+local RED_LIGHT = Color3.fromRGB(255, 140, 130)
+local RED_DEEP = Tokens.color.emberDeep
+local SLATE = Color3.fromRGB(120, 126, 150)
+local SLATE_LIGHT = Color3.fromRGB(176, 182, 206)
+local SLATE_DEEP = Color3.fromRGB(64, 68, 90)
 local STYLES: { [string]: Style } = {
 	primary = {
+		face = GREEN,
+		faceLight = GREEN_LIGHT,
+		lip = GREEN_DEEP,
+		text = Tokens.color.featherWhite,
+		font = Tokens.typography.label.font,
+		radius = Tokens.radius.md,
+		outlined = true,
+	},
+	secondary = {
+		face = SLATE,
+		faceLight = SLATE_LIGHT,
+		lip = SLATE_DEEP,
+		text = Tokens.color.featherWhite,
+		font = Tokens.typography.label.font,
+		radius = Tokens.radius.md,
+		outlined = true,
+	},
+	ghost = {
+		face = Tokens.color.surface,
+		faceLight = Tokens.color.creamPill,
+		lip = Tokens.color.panelDeep,
+		text = Tokens.color.featherWhite,
+		font = Tokens.typography.heading.font,
+		radius = Tokens.radius.md,
+		outlined = true,
+		ghost = true,
+	},
+	teal = {
+		face = Tokens.color.sky,
+		faceLight = Color3.fromRGB(140, 214, 255),
+		lip = Tokens.color.skyDeep,
+		text = Tokens.color.featherWhite,
+		font = Tokens.typography.label.font,
+		radius = Tokens.radius.md,
+		outlined = true,
+	},
+	pill = {
+		face = Tokens.color.surface,
+		faceLight = Color3.fromRGB(96, 100, 128),
+		lip = Tokens.color.panelDeep,
+		text = Tokens.color.featherWhite,
+		font = Tokens.typography.label.font,
+		radius = Tokens.radius.pill,
+		outlined = true,
+	},
+	-- The big call-to-action of the NPC cards and the close knob: red, like the reference's Back.
+	ember = {
+		face = RED,
+		faceLight = RED_LIGHT,
+		lip = RED_DEEP,
+		text = Tokens.color.featherWhite,
+		font = Tokens.typography.label.font,
+		radius = Tokens.radius.lg,
+		outlined = true,
+	},
+	danger = {
+		face = RED,
+		faceLight = RED_LIGHT,
+		lip = RED_DEEP,
+		text = Tokens.color.featherWhite,
+		font = Tokens.typography.label.font,
+		radius = Tokens.radius.md,
+		outlined = true,
+	},
+	-- Gem purchases, Robux products and premium slots: the gem purple.
+	gem = {
+		face = Tokens.color.gem,
+		faceLight = Color3.fromRGB(206, 160, 255),
+		lip = Tokens.color.gemDeep,
+		text = Tokens.color.featherWhite,
+		font = Tokens.typography.label.font,
+		radius = Tokens.radius.md,
+		outlined = true,
+	},
+	-- The big "go" action (spin a class, set off, claim): the same green as primary.
+	success = {
+		face = GREEN,
+		faceLight = GREEN_LIGHT,
+		lip = GREEN_DEEP,
+		text = Tokens.color.featherWhite,
+		font = Tokens.typography.label.font,
+		radius = Tokens.radius.md,
+		outlined = true,
+	},
+	-- VIP and prizes: gold.
+	gold = {
 		face = Tokens.color.gold,
 		faceLight = Tokens.color.goldLight,
 		lip = Tokens.color.goldDeep,
@@ -75,84 +173,7 @@ local STYLES: { [string]: Style } = {
 		radius = Tokens.radius.md,
 		outlined = true,
 	},
-	secondary = {
-		face = Tokens.color.creamPill,
-		faceLight = Tokens.color.featherWhite,
-		lip = Tokens.color.strawDeep,
-		text = Tokens.color.inkStrong,
-		font = Tokens.typography.label.font,
-		radius = Tokens.radius.md,
-		outlined = false,
-	},
-	ghost = {
-		face = Tokens.color.featherWhite,
-		faceLight = Tokens.color.featherWhite,
-		lip = Tokens.color.strawDeep,
-		text = Tokens.color.ink,
-		font = Tokens.typography.heading.font,
-		radius = Tokens.radius.md,
-		outlined = false,
-		ghost = true,
-	},
-	teal = {
-		face = Tokens.color.tealAccent,
-		faceLight = Tokens.color.tealLight,
-		lip = Tokens.color.tealDeep,
-		text = Tokens.color.featherWhite,
-		font = Tokens.typography.label.font,
-		radius = Tokens.radius.md,
-		outlined = true,
-	},
-	pill = {
-		face = Tokens.color.creamPill,
-		faceLight = Tokens.color.featherWhite,
-		lip = Tokens.color.strawDeep,
-		text = Tokens.color.goldDeep,
-		font = Tokens.typography.label.font,
-		radius = Tokens.radius.pill,
-		outlined = false,
-	},
-	-- The big warm call-to-action of the NPC cards: orange face, cream lettering.
-	ember = {
-		face = Tokens.color.ember,
-		faceLight = Color3.fromRGB(255, 168, 96),
-		lip = Tokens.color.emberDeep,
-		text = Tokens.color.featherWhite,
-		font = Tokens.typography.label.font,
-		radius = Tokens.radius.lg,
-		outlined = true,
-	},
-	danger = {
-		face = Tokens.color.ember,
-		faceLight = Color3.fromRGB(246, 150, 104),
-		lip = Tokens.color.emberDeep,
-		text = Tokens.color.featherWhite,
-		font = Tokens.typography.label.font,
-		radius = Tokens.radius.md,
-		outlined = true,
-	},
-	-- Gem purchases and Robux products: the gem purple of the currency itself.
-	gem = {
-		face = Tokens.color.gem,
-		faceLight = Color3.fromRGB(160, 136, 240),
-		lip = Tokens.color.gemDeep,
-		text = Tokens.color.featherWhite,
-		font = Tokens.typography.label.font,
-		radius = Tokens.radius.md,
-		outlined = true,
-	},
-	-- The big "go" action (spin a class, set off): leaf green.
-	success = {
-		face = Tokens.color.leafBright,
-		faceLight = Color3.fromRGB(170, 224, 120),
-		lip = Tokens.color.leafDeep,
-		text = Tokens.color.featherWhite,
-		font = Tokens.typography.label.font,
-		radius = Tokens.radius.md,
-		outlined = true,
-	},
 }
-STYLES.gold = STYLES.primary
 
 -- The lip is what gives the control a thickness. Four pixels was not enough to read as one at any
 -- size the game actually draws buttons at.
@@ -257,7 +278,7 @@ function Button.build(parent: Instance, options: Options): Handle
 	labelPadding.PaddingLeft = UDim.new(0, if options.round then 0 else Tokens.spacing.lg)
 	labelPadding.PaddingRight = UDim.new(0, if options.round then 0 else Tokens.spacing.lg)
 	labelPadding.Parent = label
-	local textOutline = if style.outlined then FrameKit.outline(label, 1.8) else nil
+	local textOutline = if style.outlined then FrameKit.outline(label, 2.6) else nil
 
 	-- Optional image face (station buttons) or leading vector icon.
 	local imageLabel: ImageLabel? = nil
@@ -338,12 +359,12 @@ function Button.build(parent: Instance, options: Options): Handle
 		end
 		outline.Transparency = if style.ghost then (if dim then 0.7 else 0.35) else (if dim then 0.4 else 0)
 		if selected then
-			outline.Color = Tokens.color.tealAccent
+			outline.Color = Tokens.color.goldLight
 			outline.Thickness = Tokens.stroke.frame
 			outline.Transparency = 0
 		else
 			outline.Color = Tokens.color.outline
-			outline.Thickness = Tokens.stroke.bold
+			outline.Thickness = Tokens.depth.keyline
 		end
 		outline.Enabled = imageLabel == nil or selected
 	end
@@ -528,7 +549,7 @@ function Button.build(parent: Instance, options: Options): Handle
 			if textOutline then
 				textOutline.Enabled = style.outlined
 			elseif style.outlined then
-				textOutline = FrameKit.outline(label, 1.8)
+				textOutline = FrameKit.outline(label, 2.6)
 			end
 			applyState()
 		end,

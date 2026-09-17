@@ -20,48 +20,53 @@
 local Tokens = {}
 
 Tokens.color = table.freeze({
-	-- Ink (warm browns) for all text on cream. Deepened so body copy holds at small sizes.
-	inkStrong = Color3.fromRGB(56, 36, 22),
-	ink = Color3.fromRGB(86, 60, 40),
-	inkMuted = Color3.fromRGB(142, 118, 96),
-	outline = Color3.fromRGB(74, 46, 26), -- the keyline: deep cocoa, warm, never black
-	cocoa = Color3.fromRGB(116, 76, 44),
-	-- Cream and feather-white surfaces.
-	cream = Color3.fromRGB(253, 247, 236),
-	creamDeep = Color3.fromRGB(240, 226, 200),
-	creamPill = Color3.fromRGB(255, 244, 206),
-	featherWhite = Color3.fromRGB(255, 253, 248),
-	panel = Color3.fromRGB(254, 249, 239), -- modal / card panel fill
-	panelDeep = Color3.fromRGB(242, 230, 208), -- panel gradient foot
-	surface = Color3.fromRGB(255, 252, 245),
-	surfaceAlt = Color3.fromRGB(248, 238, 220),
-	-- Golden yellow (frames, primary actions, highlights). The spine of the whole thing.
-	straw = Color3.fromRGB(242, 206, 118),
-	strawDeep = Color3.fromRGB(198, 150, 60),
+	-- Rebuilt 17 Sep 2026 to the owner's reference clip: charcoal panels, near-black outlines, white
+	-- lettering with a black stroke, saturated green for every "go" action, red for close and back,
+	-- gold for VIP and prizes, blue for currency, purple for gems and premium. The token NAMES are
+	-- kept so every screen re-skins at once; only the values changed. "ink" is now white on dark.
+	inkStrong = Color3.fromRGB(255, 255, 255),
+	ink = Color3.fromRGB(236, 238, 246),
+	inkMuted = Color3.fromRGB(178, 184, 206),
+	outline = Color3.fromRGB(12, 13, 20), -- the keyline: near-black, thick
+	cocoa = Color3.fromRGB(70, 74, 96), -- mid slate: plates, pills, secondary fills
+	-- Surfaces: charcoal panel, deeper lip, slate cards.
+	cream = Color3.fromRGB(46, 49, 64),
+	creamDeep = Color3.fromRGB(33, 35, 48),
+	creamPill = Color3.fromRGB(59, 62, 82),
+	featherWhite = Color3.fromRGB(255, 255, 255),
+	panel = Color3.fromRGB(46, 49, 64), -- modal / card panel fill
+	panelDeep = Color3.fromRGB(30, 32, 44), -- panel lip / foot
+	surface = Color3.fromRGB(59, 62, 82), -- rows and cards on a panel
+	surfaceAlt = Color3.fromRGB(50, 53, 70),
+	-- Gold: VIP, prizes, highlights.
+	straw = Color3.fromRGB(255, 199, 44),
+	strawDeep = Color3.fromRGB(201, 138, 0),
 	honey = Color3.fromRGB(255, 208, 60),
-	goldLight = Color3.fromRGB(255, 229, 126),
-	gold = Color3.fromRGB(255, 193, 42),
-	goldDeep = Color3.fromRGB(188, 118, 14),
-	-- Teal: small accents only (tabs, selected rings, badges).
-	tealPanel = Color3.fromRGB(34, 124, 142),
-	tealDeep = Color3.fromRGB(18, 86, 102),
-	tealLight = Color3.fromRGB(86, 184, 198),
-	tealAccent = Color3.fromRGB(44, 150, 168),
-	tealTint = Color3.fromRGB(224, 244, 246),
-	sky = Color3.fromRGB(122, 196, 232),
-	skyDeep = Color3.fromRGB(56, 132, 182),
-	leaf = Color3.fromRGB(114, 178, 88),
-	leafBright = Color3.fromRGB(126, 210, 62),
-	leafDeep = Color3.fromRGB(58, 120, 42),
-	ember = Color3.fromRGB(246, 126, 62),
-	emberDeep = Color3.fromRGB(186, 74, 32),
-	gem = Color3.fromRGB(134, 104, 238),
-	gemDeep = Color3.fromRGB(80, 54, 176),
-	overlay = Color3.fromRGB(42, 28, 16),
-	shadow = Color3.fromRGB(62, 40, 22),
-	success = Color3.fromRGB(96, 180, 86),
-	warning = Color3.fromRGB(240, 168, 36),
-	danger = Color3.fromRGB(214, 74, 58),
+	goldLight = Color3.fromRGB(255, 230, 120),
+	gold = Color3.fromRGB(255, 199, 44),
+	goldDeep = Color3.fromRGB(201, 138, 0),
+	-- Teal / blue: currency, shop, selected rings.
+	tealPanel = Color3.fromRGB(36, 150, 170),
+	tealDeep = Color3.fromRGB(20, 96, 120),
+	tealLight = Color3.fromRGB(110, 226, 226),
+	tealAccent = Color3.fromRGB(56, 190, 200),
+	tealTint = Color3.fromRGB(40, 66, 90),
+	sky = Color3.fromRGB(56, 168, 255),
+	skyDeep = Color3.fromRGB(24, 100, 180),
+	-- Green: the "go" colour and claimed states.
+	leaf = Color3.fromRGB(76, 200, 60),
+	leafBright = Color3.fromRGB(150, 240, 60),
+	leafDeep = Color3.fromRGB(34, 140, 26),
+	-- Red: close, back, danger.
+	ember = Color3.fromRGB(240, 64, 64),
+	emberDeep = Color3.fromRGB(160, 26, 26),
+	gem = Color3.fromRGB(150, 84, 240),
+	gemDeep = Color3.fromRGB(92, 40, 170),
+	overlay = Color3.fromRGB(8, 9, 14),
+	shadow = Color3.fromRGB(0, 0, 0),
+	success = Color3.fromRGB(96, 208, 40),
+	warning = Color3.fromRGB(255, 199, 44),
+	danger = Color3.fromRGB(240, 64, 64),
 })
 
 -- Depth: the numbers that make a control an object rather than a rectangle. One place, so a button,
@@ -69,16 +74,16 @@ Tokens.color = table.freeze({
 Tokens.depth = table.freeze({
 	lipPx = 6, -- how much of the dark base shows under the face
 	lipPressedPx = 2, -- ...and what it collapses to when pressed
-	panelLipPx = 9,
-	keyline = 3, -- the dark outline around the whole control
-	keylineThin = 2,
-	rim = 1.5, -- the bright rim just inside the face
-	rimTransparency = 0.25,
+	panelLipPx = 10,
+	keyline = 4, -- the near-black outline around the whole control: thick, like the reference
+	keylineThin = 3,
+	rim = 1.5, -- the faint light rim just inside the face
+	rimTransparency = 0.72,
 	-- A sheen band: the fill returns to its own colour at both ends and lifts only through the middle,
 	-- which reads as a curved surface. A plain top-to-bottom ramp reads as a flat card with a shadow.
-	sheenStops = table.freeze({ 0, 0.34, 0.5, 0.66, 1 }),
-	sheenLift = 0.17, -- how far the middle band moves towards the light colour
-	sheenDrop = 0.06, -- ...and how far the bottom band sinks, so the foot grounds
+	sheenStops = table.freeze({ 0, 0.02, 0.42, 0.7, 1 }),
+	sheenLift = 0.34, -- the top of a face is lit this far towards the light colour (a lime cap on green)
+	sheenDrop = 0.2, -- ...and the foot sinks this far, so every face reads as a glossy ramp
 	innerShadow = 0.82, -- transparency of the soft dark band under a panel header
 })
 
@@ -92,23 +97,25 @@ Tokens.rarity = table.freeze({
 })
 
 Tokens.typography = table.freeze({
-	display = table.freeze({ font = Enum.Font.FredokaOne, size = 34, lineHeight = 1.05 }),
-	title = table.freeze({ font = Enum.Font.FredokaOne, size = 24, lineHeight = 1.1 }),
-	label = table.freeze({ font = Enum.Font.FredokaOne, size = 18, lineHeight = 1.1 }), -- pill labels / station names
+	display = table.freeze({ font = Enum.Font.FredokaOne, size = 40, lineHeight = 1.05 }),
+	title = table.freeze({ font = Enum.Font.FredokaOne, size = 28, lineHeight = 1.1 }),
+	label = table.freeze({ font = Enum.Font.FredokaOne, size = 20, lineHeight = 1.1 }), -- pill labels / station names
 	-- Headings are the display family too. Three families (Fredoka + GothamBold + Gotham) was most of
 	-- why screens did not look like one product; size and weight carry the hierarchy instead.
-	heading = table.freeze({ font = Enum.Font.FredokaOne, size = 19, lineHeight = 1.15 }),
-	body = table.freeze({ font = Enum.Font.GothamMedium, size = 15, lineHeight = 1.3 }),
-	caption = table.freeze({ font = Enum.Font.GothamMedium, size = 13, lineHeight = 1.3 }),
-	numeral = table.freeze({ font = Enum.Font.FredokaOne, size = 21, lineHeight = 1.0 }),
-	minimumBodySize = 13,
+	heading = table.freeze({ font = Enum.Font.FredokaOne, size = 22, lineHeight = 1.15 }),
+	-- One family for everything, the way the reference reads: body copy is the same rounded bold,
+	-- smaller, white with a thin stroke.
+	body = table.freeze({ font = Enum.Font.FredokaOne, size = 17, lineHeight = 1.25 }),
+	caption = table.freeze({ font = Enum.Font.FredokaOne, size = 15, lineHeight = 1.25 }),
+	numeral = table.freeze({ font = Enum.Font.FredokaOne, size = 24, lineHeight = 1.0 }),
+	minimumBodySize = 14,
 })
 
 Tokens.spacing = table.freeze({ xs = 4, sm = 8, md = 12, lg = 16, xl = 24, xxl = 32 })
 
-Tokens.radius = table.freeze({ sm = 8, md = 12, lg = 18, xl = 26, pill = 999 })
+Tokens.radius = table.freeze({ sm = 10, md = 14, lg = 20, xl = 26, pill = 999 })
 
-Tokens.stroke = table.freeze({ hairline = 1, standard = 2, bold = 3, frame = 4 })
+Tokens.stroke = table.freeze({ hairline = 1.5, standard = 3, bold = 4, frame = 5 })
 
 Tokens.shadow = table.freeze({
 	soft = table.freeze({ transparency = 0.86, offset = 3 }),
@@ -236,7 +243,7 @@ Tokens.layout = table.freeze({
 	phoneUiScale = 0.86,
 	tabletUiScale = 0.94,
 	desktopUiScale = 1,
-	stationButtonPx = 64, -- lobby station rail buttons (square, >= tap target)
+	stationButtonPx = 84, -- lobby station rail buttons (square, >= tap target): big, like the reference
 	cardMaxWidthPx = 560,
 	cardMaxHeightFraction = 0.9, -- of the viewport; content scrolls inside
 })

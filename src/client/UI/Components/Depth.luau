@@ -37,17 +37,18 @@ function Depth.shade(base: Color3, amount: number): Color3
 	return mix(base, Tokens.color.outline, -amount)
 end
 
--- The banded sheen. `light` is optional: without one the band is derived from the face, which keeps
--- every caller honest about only needing a single colour to look right.
+-- The glossy ramp (17 Sep 2026, to the reference clip): a lit cap at the top that falls to the
+-- face colour by the upper third, then sinks to a darker foot. `light` is optional: without one the
+-- cap is derived from the face, which keeps every caller honest about only needing one colour.
 function Depth.sheen(face: Color3, light: Color3?): ColorSequence
 	local d = Tokens.depth
 	local peak = light or Depth.shade(face, d.sheenLift)
 	local foot = Depth.shade(face, -d.sheenDrop)
 	local stops = d.sheenStops
 	return ColorSequence.new({
-		ColorSequenceKeypoint.new(stops[1], face),
-		ColorSequenceKeypoint.new(stops[2], face),
-		ColorSequenceKeypoint.new(stops[3], peak),
+		ColorSequenceKeypoint.new(stops[1], peak),
+		ColorSequenceKeypoint.new(stops[2], peak),
+		ColorSequenceKeypoint.new(stops[3], face),
 		ColorSequenceKeypoint.new(stops[4], face),
 		ColorSequenceKeypoint.new(stops[5], foot),
 	})
@@ -111,7 +112,7 @@ function Depth.rim(object: GuiObject, face: Color3, color: Color3?): UIStroke
 		stroke.Parent = object
 	end
 	stroke.Thickness = Tokens.depth.rim
-	stroke.Color = color or Depth.shade(face, 0.45)
+	stroke.Color = color or Color3.new(1, 1, 1)
 	stroke.Transparency = Tokens.depth.rimTransparency
 	return stroke
 end
