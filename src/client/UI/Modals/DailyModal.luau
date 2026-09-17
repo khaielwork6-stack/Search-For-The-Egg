@@ -248,8 +248,8 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		shell.titleLabel.Position = UDim2.fromScale(0.55, 0.5)
 		local glyph = shell.plaque:FindFirstChild("Glyph")
 		if glyph and glyph:IsA("ImageLabel") then
-			glyph.Size = UDim2.fromScale(0.2, 1.12)
-			glyph.Position = UDim2.fromScale(0.11, 0.48)
+			glyph.Size = UDim2.fromScale(0.19, 1.0)
+			glyph.Position = UDim2.fromScale(0.11, 0.5)
 		end
 		local leafLeft = shell.plaque:FindFirstChild("LeafLeft")
 		if leafLeft and leafLeft:IsA("GuiObject") then
@@ -289,7 +289,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	end
 
 	-- Streak strip -------------------------------------------------------------------------------
-	local strip = Fit.frame(container, "Streak", UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.115), z)
+	local strip = Fit.frame(container, "Streak", UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.1), z)
 	local message = Fit.text(strip, "Message", "", {
 		font = Tokens.typography.display.font,
 		color = Tokens.color.inkStrong,
@@ -374,10 +374,10 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	end
 
 	-- Reward grid --------------------------------------------------------------------------------
-	local grid = Fit.frame(container, "Calendar", UDim2.fromScale(0, 0.135), UDim2.fromScale(1, 0.585), z)
+	local grid = Fit.frame(container, "Calendar", UDim2.fromScale(0, 0.115), UDim2.fromScale(1, 0.625), z)
 	local layout = Instance.new("UIGridLayout")
-	layout.CellSize = UDim2.fromScale(0.2365, 0.465)
-	layout.CellPadding = UDim2.fromScale(0.018, 0.07)
+	layout.CellSize = UDim2.fromScale(0.2365, 0.47)
+	layout.CellPadding = UDim2.fromScale(0.018, 0.06)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	layout.VerticalAlignment = Enum.VerticalAlignment.Center
@@ -453,9 +453,12 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			name = "Rays",
 		})
 		if rays then
+			-- Never rotated: a rotated child escapes ClipsDescendants and the burst would spill
+			-- over the parchment. It breathes in transparency instead.
 			rays.AnchorPoint = Vector2.new(0.5, 0.5)
-			rays.Position = UDim2.fromScale(0.5, 0.6)
-			rays.Size = UDim2.fromScale(1.8, 1.8)
+			rays.Position = UDim2.fromScale(0.5, 0.58)
+			rays.Size = UDim2.fromScale(1, 1)
+			rays.ScaleType = Enum.ScaleType.Fit
 			rays.Visible = false
 		end
 
@@ -463,8 +466,8 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		local tag = Instance.new("Frame")
 		tag.Name = "Tag"
 		tag.AnchorPoint = Vector2.new(0.5, 0)
-		tag.Position = UDim2.fromScale(0.5, 0.05)
-		tag.Size = UDim2.fromScale(0.82, 0.17)
+		tag.Position = UDim2.fromScale(0.5, 0.04)
+		tag.Size = UDim2.fromScale(0.82, 0.155)
 		tag.BackgroundColor3 = Tokens.color.strawDeep
 		tag.BorderSizePixel = 0
 		tag.ZIndex = z + 6
@@ -506,13 +509,13 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			outline = 1.2,
 			outlineColor = Tokens.color.featherWhite,
 			zIndex = z + 7,
-			size = UDim2.fromScale(0.9, 0.17),
-			position = UDim2.fromScale(0.5, 0.245),
+			size = UDim2.fromScale(0.9, 0.19),
+			position = UDim2.fromScale(0.5, 0.205),
 			anchor = Vector2.new(0.5, 0),
 		})
 
 		-- Artwork: the painted reward, near half the card tall.
-		local artBox = Fit.frame(face, "ArtBox", UDim2.fromScale(0.5, 0.435), UDim2.fromScale(0.92, 0.4), z + 6, Vector2.new(0.5, 0))
+		local artBox = Fit.frame(face, "ArtBox", UDim2.fromScale(0.5, 0.375), UDim2.fromScale(0.96, 0.43), z + 6, Vector2.new(0.5, 0))
 		local artScale = Instance.new("UIScale")
 		artScale.Parent = artBox
 		local role = artRoleFor(entry.gems or 0, biggest, grand)
@@ -537,8 +540,8 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		local footer = Instance.new("Frame")
 		footer.Name = "Footer"
 		footer.AnchorPoint = Vector2.new(0.5, 1)
-		footer.Position = UDim2.fromScale(0.5, 0.955)
-		footer.Size = UDim2.fromScale(0.84, 0.16)
+		footer.Position = UDim2.fromScale(0.5, 0.96)
+		footer.Size = UDim2.fromScale(0.84, 0.15)
 		footer.BackgroundColor3 = Tokens.color.creamDeep
 		footer.BorderSizePixel = 0
 		footer.ZIndex = z + 6
@@ -568,8 +571,8 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			local pill = Instance.new("Frame")
 			pill.Name = "Jackpot"
 			pill.AnchorPoint = Vector2.new(0.5, 0.5)
-			pill.Position = UDim2.fromScale(0.5, 0.245)
-			pill.Size = UDim2.fromScale(0.62, 0.13)
+			pill.Position = UDim2.fromScale(0.5, 0.235)
+			pill.Size = UDim2.fromScale(0.62, 0.125)
 			pill.BackgroundColor3 = Tokens.color.ember
 			pill.BorderSizePixel = 0
 			pill.ZIndex = z + 9
@@ -597,10 +600,10 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			pill.Parent = face
 			badge = pill
 			-- The amount drops under the badge on this card.
-			amount.Position = UDim2.fromScale(0.5, 0.31)
+			amount.Position = UDim2.fromScale(0.5, 0.3)
 			amount.Size = UDim2.fromScale(0.9, 0.15)
-			artBox.Position = UDim2.fromScale(0.5, 0.455)
-			artBox.Size = UDim2.fromScale(0.94, 0.4)
+			artBox.Position = UDim2.fromScale(0.5, 0.44)
+			artBox.Size = UDim2.fromScale(0.98, 0.37)
 			artHome = artBox.Position
 		end
 
@@ -667,7 +670,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	end
 
 	-- Rule and claim -----------------------------------------------------------------------------
-	local rule = Fit.frame(container, "Rule", UDim2.fromScale(0.5, 0.745), UDim2.fromScale(0.86, 0.06), z, Vector2.new(0.5, 0))
+	local rule = Fit.frame(container, "Rule", UDim2.fromScale(0.5, 0.755), UDim2.fromScale(0.86, 0.055), z, Vector2.new(0.5, 0))
 	local ruleIcon = Icons.clock(rule, 18, { zIndex = z + 2, color = Tokens.color.cocoa })
 	ruleIcon.AnchorPoint = Vector2.new(1, 0.5)
 	ruleIcon.Position = UDim2.fromScale(0.5, 0.5)
@@ -839,11 +842,11 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				cell.raysTween = nil
 			end
 			if live and not motion.reducedMotion then
-				cell.rays.Rotation = 0
+				cell.rays.ImageTransparency = 0.62
 				cell.raysTween = TweenService:Create(
 					cell.rays,
-					TweenInfo.new(16, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1),
-					{ Rotation = 360 }
+					TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+					{ ImageTransparency = 0.8 }
 				)
 				cell.raysTween:Play()
 			end
