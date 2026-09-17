@@ -297,6 +297,10 @@ function SurveyPanel.create(
 			areaLabel.TextTruncate = Enum.TextTruncate.None
 			areaLabel.TextWrapped = true
 			areaLabel.TextScaled = true
+			-- The top of the button: the reading badge owns the bottom strip.
+			areaLabel.AnchorPoint = Vector2.new(0.5, 0)
+			areaLabel.Position = UDim2.fromScale(0.5, 0.08)
+			areaLabel.Size = UDim2.fromScale(1, 0.56)
 			local cap = Instance.new("UITextSizeConstraint")
 			cap.MaxTextSize = 30
 			cap.MinTextSize = 12
