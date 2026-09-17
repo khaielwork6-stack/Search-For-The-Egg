@@ -98,9 +98,8 @@ function LobbyController.new(deps: any): LobbyController
 	-- them, a short white stroked name beneath each - the reference's SHOP / BADGES / STATS column.
 	local rail = Instance.new("Frame")
 	rail.Name = "SideMenu"
-	rail.AnchorPoint = Vector2.new(1, 0.5)
-	-- Centred in the strip under the settings gear, so the top tile never sits beneath it.
-	rail.Position = UDim2.new(1, -Tokens.layout.safeAreaPaddingPx, 0.5, (Tokens.layout.minimumTapTargetPx + Tokens.spacing.md) / 2)
+	rail.AnchorPoint = Vector2.new(1, 0)
+	rail.Position = UDim2.new(1, -Tokens.layout.safeAreaPaddingPx, 0.5, 0) -- layoutRail places it
 	rail.Size = UDim2.fromOffset(Tokens.layout.stationButtonPx + Tokens.spacing.md, 0)
 	rail.AutomaticSize = Enum.AutomaticSize.Y
 	rail.BackgroundTransparency = 1
@@ -121,7 +120,7 @@ function LobbyController.new(deps: any): LobbyController
 		self._titles[id] = title
 	end
 	local labelHeight = Tokens.typography.label.size + Tokens.spacing.sm
-	local slots: { { slot: Frame, button: GuiButton } } = {}
+	local slots: { { slot: Frame, button: GuiButton, label: TextLabel } } = {}
 	for index, entry in ipairs(SIDE_MENU) do
 		self._titles[entry.id] = entry.title
 		local image = AssetManifest.image(entry.image .. ".normal") or AssetManifest.image(entry.image)
@@ -177,21 +176,34 @@ function LobbyController.new(deps: any): LobbyController
 		FrameKit.outline(label, 3)
 		self._buttons[entry.id] = handle
 		self._trove:add(handle.destroy)
-		table.insert(slots, { slot = slot, button = handle.button })
+		table.insert(slots, { slot = slot, button = handle.button, label = label })
 	end
 	-- The column shrinks with the stage: four 84 px tiles overrun a landscape phone, so the tile
 	-- size comes from the height on offer (pre-scale), never below the tap minimum.
 	local function layoutRail()
 		local available = stage.AbsoluteSize.Y / math.max(0.1, SafeArea.scaleOf(stage))
 		local phone = SafeArea.classOf(stage) == "phone"
-		railLayout.Padding = UDim.new(0, if phone then Tokens.spacing.sm else Tokens.spacing.md)
-		local usable = available - (Tokens.layout.minimumTapTargetPx + Tokens.spacing.md) - Tokens.layout.safeAreaPaddingPx * 2
-		local budget = usable - railLayout.Padding.Offset * (#slots - 1)
-		local tile = math.clamp(math.floor(budget / math.max(1, #slots) - labelHeight), math.max(minimumTap, 56), size)
+		local gap = if phone then Tokens.spacing.sm else Tokens.spacing.md
+		local nameHeight = if phone then Tokens.typography.caption.size + Tokens.spacing.xs else labelHeight
+		railLayout.Padding = UDim.new(0, gap)
+		-- The strip under the settings gear, above the bottom safe padding.
+		local gearBottom = Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx + Tokens.spacing.md
+		local usable = available - gearBottom - Tokens.layout.safeAreaPaddingPx
+		local count = math.max(1, #slots)
+		local tile = math.clamp(math.floor((usable - gap * (count - 1)) / count - nameHeight), math.max(minimumTap, 52), size)
 		for _, item in ipairs(slots) do
-			item.slot.Size = UDim2.fromOffset(tile + Tokens.spacing.md, tile + labelHeight)
+			item.slot.Size = UDim2.fromOffset(tile + Tokens.spacing.md, tile + nameHeight)
 			item.button.Size = UDim2.fromOffset(tile, tile)
+			item.label.Size = UDim2.fromOffset(108, nameHeight)
 		end
+		local railHeight = count * (tile + nameHeight) + gap * (count - 1)
+		-- Centred when there is room, otherwise pinned into the strip.
+		local top = math.clamp(
+			available / 2 - railHeight / 2 + gearBottom / 2,
+			gearBottom,
+			math.max(gearBottom, available - Tokens.layout.safeAreaPaddingPx - railHeight)
+		)
+		rail.Position = UDim2.new(1, -Tokens.layout.safeAreaPaddingPx, 0, math.floor(top))
 	end
 	self._trove:add(stage:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutRail))
 	layoutRail()
