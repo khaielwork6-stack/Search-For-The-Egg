@@ -751,7 +751,7 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 			})
 		end
 		if bundle.popular == true then
-			pill(card, "Popular", "POPULAR", UDim2.fromScale(0.86, if best then 0.5 else 0.3), UDim2.fromScale(0.36, 0.11), 5, {
+			pill(card, "Popular", "POPULAR", UDim2.fromScale(0.78, if best then 0.5 else 0.3), UDim2.fromScale(0.36, 0.11), 5, {
 				anchor = Vector2.new(0.5, 0.5),
 				line = Tokens.color.gold,
 			})
