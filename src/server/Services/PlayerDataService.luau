@@ -142,7 +142,9 @@ function PlayerDataService.onPlayerAdded(self: PlayerDataService, player: any, c
 		self._analytics:track("session_start", { migrations = #profile.migrationsApplied, issues = #profile.issues }, userId)
 	end
 	-- Only now is the character allowed to spawn (MASTER_SPEC 5: load before interactive spawn).
-	if type(player.LoadCharacter) == "function" then
+	-- Only when no character exists yet: a character that auto-loaded before the server script set
+	-- CharacterAutoLoads (Studio Play) would otherwise be built twice on join, a full avatar load each.
+	if type(player.LoadCharacter) == "function" and not player.Character then
 		player:LoadCharacter()
 	end
 	return "loaded"
