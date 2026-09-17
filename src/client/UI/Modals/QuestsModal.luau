@@ -151,7 +151,9 @@ function QuestsModal.build(container: ScrollingFrame, api: any, deps: Deps): () 
 			variant = "success",
 			minimumTapTarget = tap,
 			motion = motion,
-			size = UDim2.fromOffset(math.floor(tap * 2.4), math.floor(tap * 0.9)),
+			-- Wide enough for IN PROGRESS at label size; the pill never truncates its own state.
+			size = UDim2.fromOffset(math.floor(tap * 3.3), math.floor(tap * 0.9)),
+			textSize = Tokens.typography.label.size,
 			zIndex = z + 4,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTap)
