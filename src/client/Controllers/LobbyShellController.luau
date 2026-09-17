@@ -11,6 +11,7 @@ local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
+local PerfTrace = require(Shared.Util.PerfTrace)
 local Tokens = require(Shared.Design.Tokens)
 local AssetManifest = require(Shared.Design.AssetManifest)
 local NpcPlate = require(script.Parent.Parent.UI.NpcPlate)
@@ -87,9 +88,13 @@ function LobbyShellController.start(self: LobbyShellController)
 	-- The folder replicates before its children; wait for the server-declared child count.
 	local expected = tonumber(shell:GetAttribute("SFE_ChildCount")) or 0
 	local deadline = os.clock() + 10
+	PerfTrace.label(self._folderName .. ":wait")
 	while #shell:GetChildren() < expected and os.clock() < deadline do
 		task.wait(0.05)
 	end
+	PerfTrace.event(self._folderName .. ":children " .. #shell:GetChildren() .. "/" .. expected)
+	local buildStarted = os.clock()
+	PerfTrace.label(self._folderName .. ":build")
 	local container = Instance.new("Folder")
 	container.Name = self._folderName .. "_Ambient"
 	container.Parent = workspace
@@ -257,6 +262,8 @@ function LobbyShellController.start(self: LobbyShellController)
 			})
 		end
 	end
+	PerfTrace.event(self._folderName .. string.format(":built %.0fms", (os.clock() - buildStarted) * 1000))
+	PerfTrace.label(self._folderName .. ":done")
 	deps.ambient:start()
 	print(
 		string.format(
