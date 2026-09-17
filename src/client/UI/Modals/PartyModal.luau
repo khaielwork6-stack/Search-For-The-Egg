@@ -11,6 +11,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.Feedback)
 local Depth = require(script.Parent.Parent.Components.Depth)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
@@ -75,10 +76,6 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	-- Landscape phones get a shorter card so CREATE stays on screen without scrolling.
 	local compact = SafeArea.classOf(container) == "phone"
 
-	local function toast(text: string, tone: string?)
-		deps.toasts:push(text, tone or "warning")
-	end
-
 	local function failureCopy(result: any): string
 		local message = result.message or result.code
 		if message == "chapter_unavailable" then
@@ -112,8 +109,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			deps.audio:play(successSound or Tokens.sound.uiConfirm)
 			deps.haptics:pulse(0.3, 0.06)
 		else
-			deps.audio:play(Tokens.sound.uiError)
-			toast(failureCopy(result))
+			Feedback.deny("party:" .. tostring(result.message or result.code), failureCopy(result))
 		end
 		return result
 	end
@@ -246,14 +242,14 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			end,
 			onActivated = function()
 				if not unlockedFor(deps.profile, selected.chapter, difficulty) then
-					deps.audio:play(Tokens.sound.uiError)
-					toast(
+					Feedback.deny(
+						"party:locked:" .. selected.chapter .. ":" .. difficulty,
 						string.format(
 							"%s unlocks after %s",
 							DIFFICULTY_LABEL[difficulty],
 							requirementText(cfg, selected.chapter, difficulty)
 						),
-						"info"
+						{ tone = "info" }
 					)
 					return
 				end
@@ -587,13 +583,15 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			hit.Activated:Connect(function()
 				local available = chapter.availableDifficulties and chapter.availableDifficulties.normal == true
 				if not available then
-					deps.audio:play(Tokens.sound.uiError)
-					toast(chapter.displayName .. " opens in a later update", "info")
+					Feedback.deny("party:unavailable:" .. chapterKey, chapter.displayName .. " opens in a later update", { tone = "info" })
 					return
 				end
 				if not unlockedFor(deps.profile, chapterKey, "normal") then
-					deps.audio:play(Tokens.sound.uiError)
-					toast(string.format("%s unlocks after %s", chapter.displayName, requirementText(cfg, chapterKey, "normal")), "info")
+					Feedback.deny(
+						"party:locked:" .. chapterKey .. ":normal",
+						string.format("%s unlocks after %s", chapter.displayName, requirementText(cfg, chapterKey, "normal")),
+						{ tone = "info" }
+					)
 					return
 				end
 				deps.audio:play(Tokens.sound.uiSelect)

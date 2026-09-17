@@ -16,6 +16,7 @@ local Trove = require(Shared.Util.Trove)
 local SafeArea = require(script.Parent.Parent.UI.SafeArea)
 local Button = require(script.Parent.Parent.UI.Components.Button)
 local Toast = require(script.Parent.Parent.UI.Components.Toast)
+local Feedback = require(script.Parent.Parent.UI.Feedback)
 local RoundHud = require(script.Parent.Parent.UI.RoundHud)
 local CarriedStack = require(script.Parent.Parent.UI.CarriedStack)
 local ToolHotbar = require(script.Parent.Parent.UI.ToolHotbar)
@@ -679,12 +680,19 @@ function HUDController.new(deps: any): HUDController
 	end
 	task.delay(12, dropVeil)
 
+	-- Toasts are silent: a notification is read, not heard. The only sound a toast can arrive with is a
+	-- refusal's, and that one is played by Feedback.deny behind its per-reason cooldown.
 	self.toasts = Toast.new(stage, function()
 		return deps.accessibility:motionSettings()
-	end, function(tone)
-		deps.audio:play(if tone == "danger" or tone == "warning" then Tokens.sound.uiError else Tokens.sound.uiToast)
-	end)
+	end, { dedupeSeconds = deps.config.hud.feedback.notificationDedupeSeconds })
 	self._trove:add(self.toasts)
+	Feedback.bind({
+		toasts = self.toasts,
+		play = function(role)
+			deps.audio:play(role)
+		end,
+		config = deps.config,
+	})
 	self.round = RoundHud.new(stage, function()
 		return deps.accessibility:motionSettings()
 	end)
@@ -849,15 +857,8 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 		self:_applyBag(bag)
 	end))
 	-- The sale's bag count-down, cash count-up, crate stream, sounds and popup are one choreography in
-	-- PickupFeedbackController; the HUD only names a Rainbow sale here.
-	self._trove:add(round.sale:Connect(function(sale)
-		if (sale.rainbowCount or 0) > 0 then
-			self.toasts:reward(
-				string.format("%d Rainbow Feather%s sold at 10x", sale.rainbowCount, if sale.rainbowCount == 1 then "" else "s"),
-				sale.rainbowCents or 0
-			)
-		end
-	end))
+	-- PickupFeedbackController, and the SalePopup it ends on names the Rainbow Feathers too. The HUD
+	-- used to add a reward toast for a Rainbow sale on top of that popup: one sale, two notifications.
 	self._trove:add(round.upgrade:Connect(function(result)
 		if result.paidCents then
 			self.round:setCash(result.cashCents, true)

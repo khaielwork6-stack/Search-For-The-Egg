@@ -6,6 +6,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.Feedback)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
 local Tween = require(script.Parent.Parent.Components.Tween)
@@ -133,7 +134,8 @@ function CodesModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			deps.toasts:reward("Code accepted", data.gems)
 			box.Text = ""
 		else
-			deps.audio:play(Tokens.sound.uiError)
+			-- The inline line always says what went wrong; the refusal sound is gated per reason.
+			Feedback.deny("code:" .. tostring(result.message or result.code))
 			if result.code == "rate_limited" then
 				fail("Slow down - the mailbox needs a moment")
 			elseif result.code == "already_done" then

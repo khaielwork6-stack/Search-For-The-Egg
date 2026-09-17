@@ -10,6 +10,7 @@ local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.UI.Feedback)
 local EconomyMath = require(Shared.EconomyMath)
 local SkinCatalog = require(Shared.Domain.SkinCatalog)
 local Trove = require(Shared.Util.Trove)
@@ -567,12 +568,15 @@ function InspectController._render(self: InspectController)
 			hit.Parent = tile
 			session.trove:add(hit.Activated:Connect(function()
 				if not owned then
-					deps.audio:play(Tokens.sound.uiError)
-					deps.hud.toasts:push("Drops from the Moonlit Chest", "info")
+					Feedback.deny("skin_locked", "Drops from the Moonlit Chest", { tone = "info" })
 					return
 				end
 				local result = deps.net:request("InventoryEquip", { category = skin.category, itemId = skin.id })
-				deps.audio:play(if result.ok then Tokens.sound.uiConfirm else Tokens.sound.uiError)
+				if result.ok then
+					deps.audio:play(Tokens.sound.uiConfirm)
+				else
+					Feedback.deny("equip_refused")
+				end
 			end))
 		end
 	end

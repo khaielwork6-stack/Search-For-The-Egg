@@ -16,6 +16,7 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.UI.Feedback)
 local Trove = require(Shared.Util.Trove)
 local EggSense = require(Shared.Domain.EggSense)
 local NpcPlate = require(script.Parent.Parent.UI.NpcPlate)
@@ -616,8 +617,22 @@ function PlumeController.borrow(self: PlumeController): any
 	local result = deps.net:request("PlumeLend", { sessionToken = token })
 	if not result.ok then
 		self._pendingLend = false
-		deps.audio:play(Tokens.sound.uiError)
 		local message = result.message
+		-- One refusal, one voice: Plume says the reasons he has a line for (the toast that repeated
+		-- "Not enough feathers" under his own line is gone); the rest are toasts. Both pass the gate.
+		local shown = Feedback.deny(
+			"plume:" .. tostring(message or result.code),
+			if message == "egg_found"
+					or message == "limit"
+					or message == "active"
+					or message == "insufficient"
+				then nil
+				elseif result.code == "out_of_range" then "Stand at Plume's bench"
+				else "The rod is not available"
+		)
+		if not shown then
+			return result
+		end
 		if message == "egg_found" then
 			self:_say(EggSense.LINES.found)
 		elseif message == "limit" then
@@ -626,9 +641,6 @@ function PlumeController.borrow(self: PlumeController): any
 			self:_say(EggSense.LINES.active)
 		elseif message == "insufficient" then
 			self:_say(EggSense.LINES.insufficient)
-			deps.hud.toasts:push("Not enough feathers", "warning")
-		else
-			deps.hud.toasts:push(if result.code == "out_of_range" then "Stand at Plume's bench" else "The rod is not available", "warning")
 		end
 		return result
 	end

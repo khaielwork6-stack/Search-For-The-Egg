@@ -14,6 +14,7 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.Feedback)
 local Depth = require(script.Parent.Parent.Components.Depth)
 local ClassRoll = require(Shared.Domain.ClassRoll)
 local Tween = require(script.Parent.Parent.Components.Tween)
@@ -1842,8 +1843,7 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 		end
 		local projection = deps.profile.projection
 		if not projection or projection.currencies.gems < cfg.classes.rollGemCost then
-			deps.audio:play(Tokens.sound.uiError)
-			deps.toasts:push("Not enough Gems for a spin", "warning")
+			Feedback.deny("funds:gems", "Not enough Gems for a spin")
 			stopAuto(if auto then "Auto stopped: out of Gems" else nil)
 			return
 		end
@@ -1857,13 +1857,15 @@ function ClassesModal.build(container: ScrollingFrame, api: any, deps: Deps): ()
 			state.rolling = false
 			rollHandle.setPending(false)
 			render()
-			deps.audio:play(Tokens.sound.uiError)
 			local message = if result.code == "insufficient_funds"
 				then "Not enough Gems for a spin"
 				elseif result.code == "rate_limited" then "Spinning too fast"
 				elseif result.message == "not_in_lobby" then "Spins happen between searches"
 				else "Spin unavailable"
-			deps.toasts:push(message, "warning")
+			Feedback.deny(
+				if result.code == "insufficient_funds" then "funds:gems" else "spin:" .. tostring(result.message or result.code),
+				message
+			)
 			stopAuto(if auto then "Auto stopped" else nil)
 			return
 		end

@@ -28,7 +28,6 @@ export type RoundController = typeof(setmetatable(
 		previews: { any }?,
 		eggPosition: Vector3?,
 		_receivedAt: number,
-		_countdownShown: number,
 		phaseChanged: any,
 		snapshot: any,
 		delta: any,
@@ -60,7 +59,6 @@ function RoundController.new(
 		previews = nil,
 		eggPosition = nil,
 		_receivedAt = 0,
-		_countdownShown = -1,
 		phaseChanged = Signal.new(),
 		snapshot = Signal.new(),
 		delta = Signal.new(),
@@ -152,7 +150,6 @@ function RoundController._applyPhase(self: RoundController, phase: string, previ
 		-- The intro normally restores this itself; setting it again here covers a round that left the
 		-- intro phase while a client was still mid-shot.
 		self._audio:setState("Search")
-		self._countdownShown = -1
 	elseif phase == "Searching" then
 		self._modals:setExternalUnlock(false)
 		if previous == "Countdown" then
@@ -203,12 +200,9 @@ function RoundController.countdownRemaining(self: RoundController): number?
 	if not round or round.phase ~= "Countdown" then
 		return nil
 	end
+	-- A read, not an event: no per-second tick sound (owner 17 Sep 2026). The Searching phase still
+	-- opens on the round-start sound in _applyPhase.
 	local remaining = (round.countdownSeconds or 0) - (os.clock() - self._receivedAt)
-	local whole = math.ceil(remaining)
-	if whole ~= self._countdownShown and whole > 0 then
-		self._countdownShown = whole
-		self._audio:play(Tokens.sound.countdownTick)
-	end
 	return math.max(0, remaining)
 end
 

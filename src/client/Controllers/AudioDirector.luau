@@ -38,9 +38,10 @@ export type AudioDirector = typeof(setmetatable(
 -- a placeholder or retuning a mix is a config edit.
 --
 -- Two behaviours the config drives that are worth naming:
---   * `group`: roles that share a group share one cooldown. `ui.error` and `collect.bagFull` are the
---     same denial sound played by a dozen callers, and a single refusal often trips more than one of
---     them; grouping them means one refusal is one sound whoever fires it.
+--   * `group`: roles that share a group share one cooldown. Every ordinary click role shares
+--     `uiClick`, so a press that trips two callers is still one click. (Refusals no longer need a
+--     group: they all play `ui.error` through UI/Feedback.deny, which holds each reason quiet for
+--     five seconds.)
 --   * `looped`: a role meant to run while something is happening (the vac motor) rather than fire
 --     once. `loop` fades those in, refuses to start a second copy on the same part, and fades out.
 
@@ -176,8 +177,8 @@ function AudioDirector.play(self: AudioDirector, role: string, options: { at: Ba
 	end
 	local tuning = self._tuning[role]
 	local now = os.clock()
-	-- Roles in a group share one cooldown, so a refusal that trips both `ui.error` and
-	-- `collect.bagFull` still makes exactly one sound.
+	-- Roles in a group share one cooldown, so a press that trips two click roles still makes exactly
+	-- one sound.
 	local gate = (tuning and tuning.group) or role
 	if tuning and tuning.minGap and tuning.minGap > 0 then
 		local last = self._lastPlayed[gate]

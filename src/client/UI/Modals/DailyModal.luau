@@ -16,6 +16,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.Feedback)
 local Motion = require(Shared.Design.Motion)
 local AssetManifest = require(Shared.Design.AssetManifest)
 local DailyRewards = require(Shared.Domain.DailyRewards)
@@ -677,9 +678,11 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		end
 		if not result.ok then
 			releaseHold()
-			play(Tokens.sound.uiError)
 			pressed.pillLabel.Text = "CLAIM"
-			deps.toasts:push(if result.message == "not_ready" then "The nest is still resting" else "Could not claim right now", "warning")
+			Feedback.deny(
+				"daily:" .. tostring(result.message or result.code),
+				if result.message == "not_ready" then "The nest is still resting" else "Could not claim right now"
+			)
 			return
 		end
 		local data = result.data

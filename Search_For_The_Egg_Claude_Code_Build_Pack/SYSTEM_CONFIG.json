@@ -1700,6 +1700,11 @@
     "neverLogSensitiveData": true
   },
   "hud": {
+    "feedback": {
+      "denialCooldownSeconds": 5,
+      "notificationDedupeSeconds": 1.5,
+      "evidence": "OWNER 17 Sep 2026: denial feedback (not enough money, bag full, still cooling, can't use) spammed a sound and a toast on every press. A refusal now shows and sounds once, then the same reason stays quiet for denialCooldownSeconds - on the client (UI/Feedback.deny, keyed by reason) and on the server for denial events it pushes (keyed by player and reason). A toast whose text matches one shown within notificationDedupeSeconds is merged into it, so one event never builds two notifications."
+    },
     "carriedStack": {
       "maxVisibleFeathers": 18,
       "infiniteCapCount": 200,
@@ -1890,13 +1895,6 @@
         "minGap": 0.08,
         "group": "uiClick"
       },
-      "ui.toast": {
-        "id": "rbxassetid://131661992591924",
-        "volume": 0.5,
-        "speed": 1.0,
-        "variance": 0.02,
-        "minGap": 0.15
-      },
       "ui.error": {
         "id": "rbxassetid://133211074702094",
         "volume": 0.6,
@@ -1978,21 +1976,6 @@
         "minGap": 0.04,
         "evidence": "OWNER 16 Sep 2026: this is the landing transient (played when the feather reaches the bundle, not when the server answers); the reference's strongest transients measured ~11 dB above ours, so it is louder and its pitch spread tighter."
       },
-      "collect.rainbow": {
-        "id": "rbxasset://sounds/electronicpingshort.wav",
-        "volume": 0.7,
-        "speed": 1.6,
-        "variance": 0.04,
-        "minGap": 0.2
-      },
-      "collect.bagFull": {
-        "id": "rbxassetid://133211074702094",
-        "volume": 0.55,
-        "speed": 0.9,
-        "variance": 0.02,
-        "minGap": 0.6,
-        "group": "denial"
-      },
       "sell.arc": {
         "id": "",
         "volume": 0.45,
@@ -2041,13 +2024,6 @@
         "speed": 0.9,
         "variance": 0.02,
         "minGap": 1.0
-      },
-      "round.countdownTick": {
-        "id": "rbxasset://sounds/clickfast.wav",
-        "volume": 0.5,
-        "speed": 1.0,
-        "variance": 0.02,
-        "minGap": 0.3
       },
       "round.countdownGo": {
         "id": "rbxassetid://72264591133889",
@@ -2275,6 +2251,7 @@
     "assumption": "ASSUMED",
     "evidence": "OWNER 15 Sep 2026 supplied six ids: nest rake/shovel 81267530921314 at the contact moment, feather vac 91395529514868 as a managed loop while sucking, dynamite 124256466623788 at the explosion, class result 90853027572825 once the spinner lands, in-round music 130867147321580 (lobby silent), and the upgrade book page flip 114448027739800 once per real page change. The spinner's slap (class.spin) is silenced, tool.rakeSwing and tool.vacSuck are silenced so each tool makes exactly one sound, and ui.error shares a denial throttle group with collect.bagFull so one refusal is one sound whatever fires it. Every id, volume, speed, variance, loop flag and cooldown lives here rather than in code.",
     "introEvidence": "PLACEHOLDER 15 Sep 2026: the owner supplied no ids for the round intro's farm ambience, wind, footsteps, paper rustle or decision sting, so intro.ambience/wind/footstep/paper/sting are silent here rather than guessed. intro.type uses a bundled Roblox click so the subtitle reveal is not silent. Fill these five ids in and the intro picks them up with no code change.",
+    "feedbackEvidence": "OWNER 17 Sep 2026: unapproved feedback sounds removed. round.countdownTick (the per-second tick under the lobby pad countdown and the round countdown) is gone - round.countdownGo and party.ready still mark the start. collect.rainbow (the extra ping layered on a Rainbow Feather pickup, vac award and sale) is gone - a Rainbow pickup sounds like any pickup. ui.toast (a pop on every notification) is gone - toasts are silent. collect.bagFull was the same refusal asset as ui.error under a second role; bag full now goes through UI/Feedback.deny like every other refusal, which plays ui.error once and then holds that reason quiet for hud.feedback.denialCooldownSeconds. The vac's cooled-down ui.confirm chime, the sale popup's ui.confetti pop, the RewardGranted reward.tick and a second egg.chime on the carrier's own claim were callers stacking a sound on an event that already had one, and were removed at the caller.",
     "clickEvidence": "OWNER 15 Sep 2026: one ordinary UI click sound (15675059323) on every click-shaped role, all sharing the uiClick throttle group so two callers for a single press still make exactly one sound. Opening a UI is silent: ui.open has no id. The page flip keeps its own role and its own group so a page turn is never stacked with a click.",
     "fuseEvidence": "OWNER 17 Sep 2026: the charge made a slap when lit - tool.fuseLight was Roblox's stock snap.mp3, a finger snap. It is silent now; the fuse's voice is tool.fuseHiss, a firework fuse sizzle from Roblox's free library (71438605239854, loops while the fuse burns), and tool.blastLow layers a Pro Sound Effects deep boom (9125484367) under the owner's explosion so the blast has a floor.",
     "swordEvidence": "OWNER 15 Sep 2026: sell.arc and tool.throw were both rbxasset://sounds/unsheath.wav - Roblox's stock sword-draw - so selling a bag and throwing a charge each made a sword noise. Both are silenced. The sale still has sell.tick and sell.burst, and a throw still has the fuse and the blast, so neither action lost its voice; it lost a sound that belonged to a different game."

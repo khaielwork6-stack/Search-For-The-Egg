@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.UI.Feedback)
 local EconomyMath = require(Shared.EconomyMath)
 local Trove = require(Shared.Util.Trove)
 local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
@@ -248,8 +249,7 @@ function DisplayController.buy(self: DisplayController, key: string)
 			config = deps.config,
 		}, spec.upgradeId :: string, spec.name)
 		if result == nil then
-			deps.audio:play(Tokens.sound.uiError)
-			deps.hud.toasts:push("Nothing to buy here right now", "warning")
+			Feedback.deny("display:nothing", "Nothing to buy here right now")
 		end
 	end
 	if result and result.ok then

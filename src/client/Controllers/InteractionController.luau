@@ -10,6 +10,7 @@ local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
 local Signal = require(Shared.Util.Signal)
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.UI.Feedback)
 local NpcPlate = require(script.Parent.Parent.UI.NpcPlate)
 
 local InteractionController = {}
@@ -96,11 +97,12 @@ function InteractionController.handle(self: InteractionController, promptName: s
 			deps.audio:play(Tokens.sound.uiConfirm)
 			local result = deps.party:start()
 			if not result.ok then
-				deps.hud.toasts:push(
+				Feedback.deny(
+					"party:" .. tostring(result.message or result.code),
 					if result.message == "destination_locked" or result.message == "not_ready"
 						then "Someone in the party has not unlocked that yet"
 						else "Party is not ready yet",
-					"warning"
+					{ silent = true }
 				)
 				self.stationRequested:Fire("party")
 			end
@@ -118,14 +120,7 @@ function InteractionController.handle(self: InteractionController, promptName: s
 		deps.audio:play(Tokens.sound.uiTap)
 		local result = deps.net:request("SellRequest", { sessionToken = token })
 		if not result.ok then
-			deps.hud.toasts:push(
-				if result.message == "nothing_to_sell"
-					then "Your bag is empty"
-					elseif result.message == "crate_busy" then "The crate is on its way - wait for it to come back"
-					else "Trade unavailable",
-				"warning"
-			)
-			deps.audio:play(Tokens.sound.uiError)
+			Feedback.deny(Feedback.saleReason(result), Feedback.saleText(result))
 		end
 		self.sold:Fire(result)
 		return result
@@ -144,19 +139,17 @@ function InteractionController.handle(self: InteractionController, promptName: s
 		end
 		local result = deps.net:request("EggClaim", { sessionToken = token })
 		if result.ok then
-			deps.audio:play(Tokens.sound.eggChime)
+			-- The chime and the "bring it to the Farmer" banner arrive with the EggCarried event
+			-- (VictoryController.onCarried), which every member gets; playing and toasting here too made
+			-- the carrier hear two chimes and read the news twice.
 			deps.haptics:pulse(0.7, 0.15)
-			if result.data and result.data.carrying then
-				deps.hud.toasts:push("You have the Egg! Take it to the Farmer", "success")
-			end
 		else
-			deps.audio:play(Tokens.sound.uiError)
-			deps.hud.toasts:push(
+			Feedback.deny(
+				"egg_claim:" .. tostring(result.message or result.code),
 				if result.message == "carried"
 					then "Someone already has the Egg"
 					elseif result.code == "out_of_range" then "Get closer to the Egg"
-					else "Could not take the Egg",
-				"warning"
+					else "Could not take the Egg"
 			)
 		end
 		self.claimed:Fire(result)
@@ -189,10 +182,9 @@ function InteractionController.handle(self: InteractionController, promptName: s
 					NpcPlate.sayOn(farmerRoot, line, 2.8)
 				end
 			else
-				deps.audio:play(Tokens.sound.uiError)
-				deps.hud.toasts:push(
-					if result.code == "out_of_range" then "Stand next to the Farmer" else "The Farmer is not ready",
-					"warning"
+				Feedback.deny(
+					"egg_deliver:" .. tostring(result.message or result.code),
+					if result.code == "out_of_range" then "Stand next to the Farmer" else "The Farmer is not ready"
 				)
 			end
 		end
@@ -209,13 +201,13 @@ function InteractionController.startSoloParty(self: InteractionController): any
 	deps.audio:play(Tokens.sound.uiConfirm)
 	local created = deps.net:request("PartyCreate", { chapter = "chapter1", difficulty = "normal" })
 	if not created.ok then
-		deps.hud.toasts:push("Could not form a party", "warning")
+		Feedback.deny("party:" .. tostring(created.message or created.code), "Could not form a party", { silent = true })
 		self.partyRequested:Fire(created)
 		return created
 	end
 	local started = deps.net:request("PartyStart", { partyId = created.data.partyId })
 	if not started.ok then
-		deps.hud.toasts:push("Party is not ready yet", "warning")
+		Feedback.deny("party:" .. tostring(started.message or started.code), "Party is not ready yet", { silent = true })
 	end
 	self.partyRequested:Fire(started)
 	return started

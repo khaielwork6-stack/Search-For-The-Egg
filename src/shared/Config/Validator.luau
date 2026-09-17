@@ -901,6 +901,19 @@ function Validator.validate(raw: any): Report
 		)
 		-- Records per column are capped at PileGrid.MAX_SLOTS (32, one mask bit each); denser configs saturate.
 	end
+	-- Denial / notification spam gates (UI/Feedback, Toast, server sendDenial).
+	local feedback = type(raw.hud) == "table" and raw.hud.feedback or nil
+	check(type(feedback) == "table", "hud.feedback missing")
+	if type(feedback) == "table" then
+		check(
+			isPositiveNumber(feedback.denialCooldownSeconds) and feedback.denialCooldownSeconds <= 60,
+			"hud.feedback.denialCooldownSeconds must be within (0, 60]"
+		)
+		check(
+			isNonNegativeNumber(feedback.notificationDedupeSeconds) and feedback.notificationDedupeSeconds <= 10,
+			"hud.feedback.notificationDedupeSeconds must be within [0, 10]"
+		)
+	end
 	-- Carried feather stack HUD (ASSUMED A-HUD-04)
 	local carried = type(raw.hud) == "table" and raw.hud.carriedStack or nil
 	check(type(carried) == "table", "hud.carriedStack missing")

@@ -30,6 +30,7 @@ local Motion = require(Shared.Design.Motion)
 local AssetManifest = require(Shared.Design.AssetManifest)
 local FeatherLayout = require(Shared.Domain.FeatherLayout)
 local SalePopup = require(script.Parent.Parent.UI.SalePopup)
+local Feedback = require(script.Parent.Parent.UI.Feedback)
 
 local PickupFeedbackController = {}
 PickupFeedbackController.__index = PickupFeedbackController
@@ -386,7 +387,8 @@ function PickupFeedbackController.collected(self: PickupFeedbackController, data
 			deps.audio:play(Tokens.sound.collectRelease)
 			deps.audio:play(Tokens.sound.collectTick)
 			if rainbow then
-				deps.audio:play(Tokens.sound.collectRainbow)
+				-- A Rainbow Feather lands like any feather (its float and bundle say it is special); the
+				-- extra ping it used to layer on the landing was never an assigned sound.
 				deps.haptics:pulse(0.6, 0.12)
 			end
 			deps.haptics:pulse(if toolId == "nestRake" then 0.4 else 0.25, 0.05)
@@ -397,7 +399,8 @@ function PickupFeedbackController.collected(self: PickupFeedbackController, data
 				returnSeconds = pickup.cameraReturnSeconds,
 			})
 			if data.bagFull then
-				deps.audio:play(Tokens.sound.bagFull)
+				-- The pick that filled the bag: the refusal voice, once per window, through the gate.
+				Feedback.deny("bag_full", "Bag full - trade your feathers")
 				deps.haptics:pulse(0.6, 0.12)
 			end
 		elseif index % 3 == 0 then
@@ -645,19 +648,19 @@ function PickupFeedbackController._onSale(self: PickupFeedbackController, sale: 
 	end)
 	-- The total, once the last feather is in.
 	task.delay(if streamed then seconds + 0.3 else 0.1, function()
+		-- One sale, one sound and one card: the burst is the sale's voice (the Rainbow ping and the
+		-- popup's confetti pop that used to stack on it are gone), and the popup names the Rainbow
+		-- Feathers itself rather than a second toast doing it.
 		if sale.finalCents >= 100 then
 			deps.audio:play(Tokens.sound.sellBurst)
 		end
-		if (sale.rainbowCount or 0) > 0 then
-			deps.audio:play(Tokens.sound.collectRainbow)
-		end
 		SalePopup.show(deps.hud.stage, {
 			feathers = count,
+			rainbow = sale.rainbowCount or 0,
 			cents = sale.finalCents,
 			motion = motion,
 			tier = if deps.quality then deps.quality:tier() else nil,
 		})
-		deps.audio:play(Tokens.sound.uiConfetti)
 	end)
 end
 

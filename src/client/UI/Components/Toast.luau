@@ -3,6 +3,11 @@
 -- on the left (green for success, red for a warning) and a vector glyph slide in from above
 -- (Back-out), pop, and shrink away. Non-blocking, inside the safe area at the top-center. Reward
 -- toasts count their amount up only after the server acknowledged the grant, with a coin icon.
+--
+-- This is the game's one notification surface. Toasts are silent (17 Sep 2026: the pop sound on every
+-- notification was removed; a refusal's sound belongs to UI/Feedback.deny, which also lands here), and
+-- a toast whose text matches one pushed within `dedupeSeconds` is merged into it instead of stacking a
+-- second card, so one event can never build two notifications whoever reports it.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
@@ -13,6 +18,7 @@ local FrameKit = require(script.Parent.Frame)
 local Depth = require(script.Parent.Depth)
 local Icons = require(script.Parent.Icons)
 local Skin = require(script.Parent.Skin)
+local CooldownGate = require(Shared.Util.CooldownGate)
 
 local Toast = {}
 Toast.__index = Toast
@@ -24,8 +30,9 @@ export type Toast = typeof(setmetatable(
 		_queue: { { text: string, tone: string, amount: number?, seconds: number? } },
 		_visible: number,
 		_max: number,
-		_onShow: ((tone: string) -> ())?,
+		_dedupe: CooldownGate.CooldownGate,
 		shown: number,
+		merged: number,
 	},
 	Toast
 ))
@@ -39,8 +46,12 @@ local TONES: { [string]: { color: Color3, icon: string } } = {
 }
 
 local HOLD_SECONDS = 2.8
+local DEFAULT_DEDUPE_SECONDS = 1.5
 
-function Toast.new(gui: Instance, motion: () -> Motion.MotionSettings, onShow: ((tone: string) -> ())?): Toast
+export type Options = { dedupeSeconds: number?, clock: (() -> number)? }
+
+function Toast.new(gui: Instance, motion: () -> Motion.MotionSettings, options: Options?): Toast
+	local opts = options or {}
 	local container = Instance.new("Frame")
 	container.Name = "Toasts"
 	container.AnchorPoint = Vector2.new(0.5, 0)
@@ -64,21 +75,47 @@ function Toast.new(gui: Instance, motion: () -> Motion.MotionSettings, onShow: (
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	layout.Parent = container
 	container.Parent = gui
-	return setmetatable(
-		{ _container = container, _motion = motion, _queue = {}, _visible = 0, _max = 3, _onShow = onShow, shown = 0 },
-		Toast
-	)
+	return setmetatable({
+		_container = container,
+		_motion = motion,
+		_queue = {},
+		_visible = 0,
+		_max = 3,
+		_dedupe = CooldownGate.new(opts.dedupeSeconds or DEFAULT_DEDUPE_SECONDS, opts.clock or os.clock),
+		shown = 0,
+		merged = 0,
+	}, Toast)
 end
 
-function Toast.push(self: Toast, text: string, tone: string?, seconds: number?)
+-- Returns false when the text was merged into an identical toast pushed moments ago.
+function Toast.push(self: Toast, text: string, tone: string?, seconds: number?): boolean
+	if not self:_accept(text) then
+		return false
+	end
 	table.insert(self._queue, { text = text, tone = tone or "info", seconds = seconds })
 	self:_drain()
+	return true
+end
+
+function Toast._accept(self: Toast, text: string): boolean
+	if self._dedupe:tryPass(CooldownGate.textKey(text)) then
+		if self.shown % 32 == 31 then
+			self._dedupe:sweep()
+		end
+		return true
+	end
+	self.merged += 1
+	return false
 end
 
 -- Reward toast: the amount counts up from 0 (call only after the server acknowledged the grant).
-function Toast.reward(self: Toast, text: string, amount: number)
+function Toast.reward(self: Toast, text: string, amount: number): boolean
+	if not self:_accept(text) then
+		return false
+	end
 	table.insert(self._queue, { text = text, tone = "reward", amount = amount, seconds = HOLD_SECONDS + 0.8 })
 	self:_drain()
+	return true
 end
 
 function Toast._drain(self: Toast)
@@ -204,9 +241,6 @@ function Toast._drain(self: Toast)
 		label:GetPropertyChangedSignal("TextBounds"):Connect(fit)
 		fit()
 		local shrink = Tween.notify(card, scale, self._motion())
-		if self._onShow then
-			self._onShow(item.tone)
-		end
 		task.delay(item.seconds or HOLD_SECONDS, function()
 			shrink()
 			task.delay(Motion.recipe("notifyShrink", self._motion()).duration + 0.05, function()

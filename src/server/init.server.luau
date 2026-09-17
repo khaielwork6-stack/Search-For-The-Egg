@@ -16,6 +16,7 @@ local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local AssetManifest = require(Shared.Design.AssetManifest)
 local Objectives = require(Shared.Domain.Objectives)
 local Envelope = require(Shared.Net.Envelope)
+local CooldownGate = require(Shared.Util.CooldownGate)
 local RoundReducer = require(Shared.Reducers.RoundReducer)
 
 local Log = require(script.Log)
@@ -175,6 +176,24 @@ local function send(player: any, name: string, payload: { [string]: any })
 		return
 	end
 	registry:fireClient(name, player, payload)
+end
+-- Denial events the server pushes (not request replies, which the remote's own rate limit already
+-- bounds): one per player per reason per `hud.feedback.denialCooldownSeconds`. A client spamming an
+-- input that is refused server-side - the crate's ClickDetector has no request to rate-limit - cannot
+-- make the server fire a refusal back at it on every click. The client gates its feedback the same
+-- way (UI/Feedback), so nothing the player would have seen is lost.
+local denialGate = CooldownGate.new(config.hud.feedback.denialCooldownSeconds, function()
+	return clock:monotonic()
+end)
+local function sendDenial(player: any, name: string, payload: { [string]: any }, reason: string): boolean
+	if typeof(player) ~= "Instance" then
+		return false
+	end
+	if not denialGate:tryPass(tostring((player :: Player).UserId) .. ":" .. reason) then
+		return false
+	end
+	send(player, name, payload)
+	return true
 end
 
 -- 6. Sessions, player data, parties, rounds, gameplay services.
@@ -843,7 +862,12 @@ local function wireCrate()
 			detector.MouseClick:Connect(function(player)
 				local result = selling:sell(player.UserId, nil, { trusted = true, gate = crateGate })
 				if not result.ok then
-					send(player, "SaleResult", { ok = false, code = result.code, message = result.message })
+					sendDenial(
+						player,
+						"SaleResult",
+						{ ok = false, code = result.code, message = result.message },
+						"sale:" .. tostring(result.message or result.code)
+					)
 				end
 			end)
 			detector.Parent = descendant
@@ -1375,6 +1399,7 @@ Players.PlayerRemoving:Connect(function(player)
 	objectives:forget(player.UserId)
 	core:forgetPlayer(player.UserId)
 	security:forget(player.UserId)
+	denialGate:clearPrefix(tostring(player.UserId) .. ":")
 end)
 
 -- 10. Loops: autosave with jitter, service ticks, delta replication, rate-limiter sweeps.
@@ -1419,6 +1444,7 @@ task.spawn(function()
 	while true do
 		task.wait(ServerPolicy.rateLimiterSweepSeconds)
 		core:sweep(ServerPolicy.rateLimiterIdleSeconds)
+		denialGate:sweep()
 	end
 end)
 
