@@ -362,26 +362,27 @@ function PlumeController._stepIdle(self: PlumeController, dt: number, t: number)
 		self._gesture = gesture
 	end
 	-- Rest: right arm down at his side with a slow sway; left forearm across the chest, clipboard up.
-	local rightPitch = -0.08 + math.sin(t * 1.5) * 0.02
+	-- On this rig a positive shoulder pitch swings the arm forward and a positive elbow folds it in.
+	local rightPitch = -0.06 + math.sin(t * 1.5) * 0.02
 	local rightRoll = 0.14 + math.sin(t * 0.9) * 0.02
-	local rightElbow = -0.18
-	local leftPitch, leftRoll, leftElbow = -1.05 + math.sin(t * 1.5) * 0.02, -0.32, -1.5
+	local rightElbow = 0.18
+	local leftPitch, leftYaw, leftRoll, leftElbow = 0.9 + math.sin(t * 1.5) * 0.02, 0.15, 0.1, 1.15
 	if gesture then
 		gesture.t += dt
 		local phase = gesture.t / gesture.duration
 		local blend = math.sin(math.clamp(phase, 0, 1) * math.pi) -- rises, holds, falls
 		if gesture.name == "glasses" then
 			-- Right hand up to the frames; the head tips a touch with it.
-			rightPitch = -0.08 - 2.25 * blend
-			rightElbow = -0.18 - 1.2 * blend
-			rightRoll = 0.14 - 0.25 * blend
+			rightPitch = -0.06 + 2.2 * blend
+			rightElbow = 0.18 + 1.2 * blend
+			rightRoll = 0.14 - 0.2 * blend
 			self._look = { yaw = self._yaw, pitch = -0.1 * blend, until_ = os.clock() + dt * 2 }
 		else
 			-- Eyes down to the clipboard; the right hand comes over and taps a note on it.
-			self._look = { yaw = 0.3, pitch = -0.55, until_ = os.clock() + dt * 2 }
-			rightPitch = -0.08 - 1.15 * blend + math.sin(t * 9) * 0.04 * blend
-			rightElbow = -0.18 - 1.35 * blend
-			rightRoll = 0.14 - 0.45 * blend
+			self._look = { yaw = 0.25, pitch = -0.55, until_ = os.clock() + dt * 2 }
+			rightPitch = -0.06 + 1.0 * blend + math.sin(t * 9) * 0.04 * blend
+			rightElbow = 0.18 + 1.25 * blend
+			rightRoll = 0.14 - 0.4 * blend
 		end
 		if phase >= 1 then
 			self._gesture = nil
@@ -390,7 +391,7 @@ function PlumeController._stepIdle(self: PlumeController, dt: number, t: number)
 	end
 	rShoulder.motor.C0 = rShoulder.base * CFrame.Angles(rightPitch, 0, rightRoll)
 	rElbow.motor.C0 = rElbow.base * CFrame.Angles(rightElbow, 0, 0)
-	lShoulder.motor.C0 = lShoulder.base * CFrame.Angles(leftPitch, 0, leftRoll)
+	lShoulder.motor.C0 = lShoulder.base * CFrame.Angles(leftPitch, leftYaw, leftRoll)
 	lElbow.motor.C0 = lElbow.base * CFrame.Angles(leftElbow, 0, 0)
 end
 

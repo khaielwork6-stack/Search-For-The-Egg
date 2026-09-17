@@ -489,7 +489,9 @@ local function dress(rig: Model)
 	-- hand so the idle carries it to his chest.
 	local leftHand = rig:FindFirstChild("LeftHand") :: BasePart?
 	if leftHand then
-		local grip = leftHand.CFrame * CFrame.new(0.12, -0.25, -0.62) * CFrame.Angles(math.rad(-12), math.rad(90), 0)
+		-- Hand-local grip measured in Studio against the idle's clipboard pose (17 Sep 2026): the board
+		-- sits just past the fingertips, tilted up towards his face.
+		local grip = leftHand.CFrame * CFrame.new(0, -0.7, 0, 0.984, 0.163, 0.075, 0.096, -0.833, 0.545, 0.151, -0.529, -0.835)
 		local board = part(rig, "Clipboard", Vector3.new(1.05, 1.35, 0.08), grip, WALNUT, Enum.Material.Wood)
 		board.CanCollide = false
 		board.CanQuery = false

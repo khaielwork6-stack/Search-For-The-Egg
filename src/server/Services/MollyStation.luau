@@ -22,7 +22,7 @@ MollyStation.PROMPT_NAME = "SFE_MollySurvey"
 MollyStation.PLACEHOLDER_TAG = "SFE_ChapterShell"
 -- OWNER 17 Sep 2026: at 0.62 she was a toy beside her own bench; 0.88 puts her chest over the bench
 -- top with her paws resting on it.
-MollyStation.RIG_SCALE = 0.88
+MollyStation.RIG_SCALE = 0.95
 MollyStation.TILE_PITCH = 1.5 -- tile size plus gap
 MollyStation.TILE_SIZE = 1.36
 
@@ -1192,10 +1192,10 @@ function MollyStation.build(workspaceService: Workspace, folder: Instance, layou
 	station.Parent = folder
 	-- Molly stands on a step box behind the bench, between the map and the machine, chest above the
 	-- bench top so she reads from the players' side.
-	local stepAt = base * CFrame.new(0.3, 0, 3.1)
-	part(station, "StepBox", Vector3.new(2.2, 0.7, 2.2), stepAt * CFrame.new(0, 0.35, 0), OAK_DEEP, Enum.Material.WoodPlanks, true)
-	part(station, "StepBoxBand", Vector3.new(2.26, 0.12, 2.26), stepAt * CFrame.new(0, 0.3, 0), IRON, Enum.Material.Metal)
-	MollyStation.spawnMolly(workspaceService, folder, stepAt * CFrame.new(0, 0.7, 0))
+	local stepAt = base * CFrame.new(0.3, 0, 2.8)
+	part(station, "StepBox", Vector3.new(2.2, 0.4, 2.2), stepAt * CFrame.new(0, 0.2, 0), OAK_DEEP, Enum.Material.WoodPlanks, true)
+	part(station, "StepBoxBand", Vector3.new(2.26, 0.1, 2.26), stepAt * CFrame.new(0, 0.18, 0), IRON, Enum.Material.Metal)
+	MollyStation.spawnMolly(workspaceService, folder, stepAt * CFrame.new(0, 0.4, 0))
 	return station
 end
 
