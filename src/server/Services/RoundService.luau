@@ -11,7 +11,7 @@ local RoundReducer = require(Shared.Reducers.RoundReducer)
 local SessionReducer = require(Shared.Reducers.SessionReducer)
 local WeightedRandom = require(Shared.WeightedRandom)
 local PileGrid = require(Shared.Domain.PileGrid)
-local NestClues = require(Shared.Domain.NestClues)
+local EggSense = require(Shared.Domain.EggSense)
 local NestSurvey = require(Shared.Domain.NestSurvey)
 local PileSurface = require(Shared.Domain.PileSurface)
 local EggNodes = require(Shared.Domain.EggNodes)
@@ -60,7 +60,7 @@ export type Runtime = {
 	commitPending: boolean,
 	resultsShownAt: number?,
 	returnVotes: { [number]: string },
-	clues: NestClues.State?, -- Professor Plume's unlocked clues; owned by ClueService, reset with the round
+	plume: EggSense.State?, -- Professor Plume's rod loan book; owned by ClueService, reset with the round
 	survey: NestSurvey.State?, -- Molly's readings (up to three); owned by SurveyService, reset with the round
 }
 
@@ -552,8 +552,8 @@ function RoundService.project(self: RoundService, roundId: string, includePile: 
 		projection.introEndsInMs = math.floor(math.max(0, runtime.cutsceneDeadline - self._clock:monotonic()) * 1000 + 0.5)
 	end
 	projection.removedFraction = PileGrid.removedFraction(runtime.grid)
-	-- Clues are broad bands and fixed words only; the projection never carries the Egg's place.
-	projection.clues = NestClues.project(self._config, runtime.clues)
+	-- The rod loan book: counters, prices and who holds a live rod. Never the Egg's place.
+	projection.plume = EggSense.project(self._config, runtime.plume, self._clock:monotonic())
 	-- Squares and categories only; the Egg's cell appears solely in a tier-3 pin reading.
 	projection.survey = NestSurvey.project(self._config, runtime.survey)
 	if includePile then

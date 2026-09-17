@@ -215,6 +215,9 @@ Tokens.sound = table.freeze({
 	vacMotor = "tool.vacMotor",
 	vacSuck = "tool.vacSuck",
 	chickChirp = "tool.chickChirp",
+	-- Egg Sense rod: the Geiger tick that quickens near the Egg, and the lock chime at full heat.
+	rodTick = "tool.rodTick",
+	rodLock = "tool.rodLock",
 })
 
 -- Input prompt glyph keys per input mode; prompts swap without rebuilding UI.

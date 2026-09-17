@@ -44,6 +44,7 @@ export type ToolService = typeof(setmetatable(
 		deposited: any, -- (userId, runtime, sale) Scout Chick deposits
 		overheated: any, -- (userId, runtime)
 		granted: any, -- (userId, runtime, toolId, source)
+		revoked: any, -- (userId, runtime, toolId, reason) a timed loan taken back
 		stats: {
 			equips: number,
 			charges: number,
@@ -59,6 +60,7 @@ export type ToolService = typeof(setmetatable(
 			bundlesExpired: number,
 			ticks: number,
 			rejected: number,
+			revoked: number,
 		},
 	},
 	ToolService
@@ -109,6 +111,7 @@ function ToolService.new(
 		deposited = Signal.new(),
 		overheated = Signal.new(),
 		granted = Signal.new(),
+		revoked = Signal.new(),
 		stats = {
 			equips = 0,
 			charges = 0,
@@ -124,6 +127,7 @@ function ToolService.new(
 			bundlesExpired = 0,
 			ticks = 0,
 			rejected = 0,
+			revoked = 0,
 		},
 	}, ToolService)
 end
@@ -268,6 +272,92 @@ function ToolService.grantOneRound(self: ToolService, userId: number, toolId: st
 	return true
 end
 
+-- Timed loan (Professor Plume's Egg Sense rod): the tool is owned for `seconds`, equipped at once,
+-- and taken back by `tick` when the time is up, or sooner on death, leaving or the round ending.
+-- A second loan while one is live simply extends the first; nothing is ever owned twice.
+function ToolService.grantTimed(self: ToolService, userId: number, toolId: string, seconds: number, source: string): boolean
+	local runtime = self._rounds:roundOf(userId)
+	if not runtime or not ToolSpecs.isLentTool(toolId) or not (seconds > 0) then
+		return false
+	end
+	local state = runtime.players[userId]
+	if not state then
+		return false
+	end
+	local now = self._clock:monotonic()
+	local rt = state.toolRuntime[toolId]
+	local fresh = not state.roundTools[toolId] or rt == nil
+	state.roundTools[toolId] = true
+	state.toolRuntime[toolId] = { expiresAt = now + seconds, activeSeconds = seconds, grantedAt = now }
+	if fresh then
+		track(self, "tool_acquired", { chapter = runtime.state.chapter, tool = toolId, source = source }, userId)
+		self.granted:Fire(userId, runtime, toolId, source)
+	end
+	self.event:Fire(runtime.state.roundId, {
+		kind = "tools_granted",
+		tools = { toolId },
+		userId = userId,
+		expiresInMs = math.floor(seconds * 1000 + 0.5),
+		equipped = true,
+	}, userId)
+	self:equip(userId, toolId)
+	return true
+end
+
+-- Seconds a timed loan has left, or nil when the player holds no live loan of that tool.
+function ToolService.timedRemaining(self: ToolService, userId: number, toolId: string): number?
+	local runtime = self._rounds:roundOf(userId)
+	local state = runtime and runtime.players[userId]
+	if not runtime or not state or not state.roundTools[toolId] then
+		return nil
+	end
+	local rt = state.toolRuntime[toolId]
+	if not rt or type(rt.expiresAt) ~= "number" then
+		return nil
+	end
+	local remaining = rt.expiresAt - self._clock:monotonic()
+	return if remaining > 0 then remaining else nil
+end
+
+-- Takes a lent tool back: ownership and its runtime go, the hand comes back up if it was equipped,
+-- and the owner hears why. Nothing happens when the player does not hold it.
+function ToolService._revokeTimed(self: ToolService, runtime: any, userId: number, state: any, toolId: string, reason: string): boolean
+	if not state.roundTools[toolId] then
+		return false
+	end
+	state.roundTools[toolId] = nil
+	state.toolRuntime[toolId] = nil
+	local wasEquipped = state.equippedTool == toolId
+	if wasEquipped then
+		state.equippedTool = "hand"
+		self.event:Fire(runtime.state.roundId, { kind = "tool_equipped", userId = userId, toolId = "hand" })
+	end
+	self.stats.revoked += 1
+	track(self, "tool_revoked", { chapter = runtime.state.chapter, tool = toolId, reason = reason }, userId)
+	self.event:Fire(
+		runtime.state.roundId,
+		{ kind = "tools_revoked", tools = { toolId }, userId = userId, reason = reason, wasEquipped = wasEquipped },
+		userId
+	)
+	self.revoked:Fire(userId, runtime, toolId, reason)
+	return true
+end
+
+function ToolService._revokeAllTimed(self: ToolService, runtime: any, userId: number, state: any, reason: string)
+	for _, toolId in ipairs(ToolSpecs.LENT_TOOL_IDS) do
+		self:_revokeTimed(runtime, userId, state, toolId, reason)
+	end
+end
+
+function ToolService._tickTimed(self: ToolService, runtime: any, userId: number, state: any, now: number)
+	for _, toolId in ipairs(ToolSpecs.LENT_TOOL_IDS) do
+		local rt = state.toolRuntime[toolId]
+		if state.roundTools[toolId] and (rt == nil or type(rt.expiresAt) ~= "number" or now >= rt.expiresAt) then
+			self:_revokeTimed(runtime, userId, state, toolId, "expired")
+		end
+	end
+end
+
 -- Equip: server records the active tool; discrete actions are refused for an unequipped tool.
 function ToolService.equip(self: ToolService, userId: number, toolId: string): Envelope.Envelope<any>
 	local runtime = self._rounds:roundOf(userId)
@@ -278,7 +368,7 @@ function ToolService.equip(self: ToolService, userId: number, toolId: string): E
 	if not state then
 		return reject(self, Envelope.Codes.INVALID_STATE, "no_state")
 	end
-	if toolId ~= "hand" and (not ToolSpecs.isTool(toolId) or not state.roundTools[toolId]) then
+	if toolId ~= "hand" and (not ToolSpecs.isEquippable(toolId) or not state.roundTools[toolId]) then
 		return reject(self, Envelope.Codes.NOT_AUTHORIZED, "tool")
 	end
 	if state.equippedTool == "featherVac" and toolId ~= "featherVac" then
@@ -1095,6 +1185,7 @@ function ToolService.tick(self: ToolService): number
 		for userId, state in pairs(runtime.players) do
 			self:_tickVac(runtime, userId, state, dt, now)
 			self:_tickChick(runtime, userId, state, dt)
+			self:_tickTimed(runtime, userId, state, now)
 		end
 		for _, bundleId in ipairs(RoundAwards.expireBundles(runtime, now)) do
 			self.stats.bundlesExpired += 1
@@ -1114,6 +1205,7 @@ function ToolService.onDeath(self: ToolService, userId: number)
 	end
 	self:_stopVac(runtime, userId, state, "death")
 	self:_recallChick(runtime, userId, state, "death")
+	self:_revokeAllTimed(runtime, userId, state, "death")
 end
 
 function ToolService.onLeave(self: ToolService, userId: number)
@@ -1124,12 +1216,14 @@ function ToolService.onLeave(self: ToolService, userId: number)
 	end
 	self:_stopVac(runtime, userId, state, "left")
 	self:_recallChick(runtime, userId, state, "left")
+	self:_revokeAllTimed(runtime, userId, state, "left")
 end
 
-function ToolService.onRoundEnded(_self: ToolService, runtime: any)
+function ToolService.onRoundEnded(self: ToolService, runtime: any)
 	table.clear(runtime.charges)
 	table.clear(runtime.bundles)
-	for _, state in pairs(runtime.players) do
+	for userId, state in pairs(runtime.players) do
+		self:_revokeAllTimed(runtime, userId, state, "round_ended")
 		table.clear(state.toolRuntime)
 	end
 end
@@ -1164,6 +1258,7 @@ function ToolService.inspect(self: ToolService, userId: number): { [string]: any
 		permanentTools = table.clone(state.permanentTools),
 		toolLevels = state.toolLevels,
 		vac = state.toolRuntime.featherVac,
+		eggSense = state.toolRuntime.eggSense and { remaining = self:timedRemaining(userId, "eggSense") } or nil,
 		chick = chick and { active = chick.active, trips = chick.trips, units = units } or nil,
 		charges = charges,
 		bundles = bundles,

@@ -1,31 +1,25 @@
 --!strict
 -- Professor Plume on the client. Owns everything the player sees of him: the nameplate, the outline
 -- while his prompt is in reach, the idle (writing, examining, adjusting his glasses, looking at
--- whoever walks up), the clue board's words, his conversation card, the trade request, and the
--- analysis sequence after a successful trade (feathers fly from the carried bundle into the prism,
--- the machine runs, Plume stamps a card, the clue is read out, the party is told).
+-- whoever walks up), the loan board's rows, his conversation card, the loan request, and the
+-- hand-over beat after a successful loan (Plume reaches out, the rod flies from his hand into the
+-- player's, the viewmodel rises to meet it, the party is told).
 --
 -- The rig arrives from the server fully anchored. This controller unanchors the limbs locally and
 -- drives the Motor6D C0s itself, so the pose is a local matter and the server never moves a thing.
--- Everything the sequence takes (input, camera, the cursor) is handed back through one trove with
--- a watchdog behind it, so no path - respawn, round end, a lost tween - leaves the player stuck.
+-- Everything the hand-over takes is handed back through one trove with a watchdog behind it, so no
+-- path - respawn, round end, a lost tween - leaves anything behind.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
-local Motion = require(Shared.Design.Motion)
-local AssetManifest = require(Shared.Design.AssetManifest)
 local Trove = require(Shared.Util.Trove)
-local NestClues = require(Shared.Domain.NestClues)
+local EggSense = require(Shared.Domain.EggSense)
 local NpcPlate = require(script.Parent.Parent.UI.NpcPlate)
 local PlumeCard = require(script.Parent.Parent.UI.PlumeCard)
-local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
-local Depth = require(script.Parent.Parent.UI.Components.Depth)
-local Confetti = require(script.Parent.Parent.UI.Components.Confetti)
 
 local PlumeController = {}
 PlumeController.__index = PlumeController
@@ -33,18 +27,14 @@ PlumeController.__index = PlumeController
 PlumeController.ARENA_NAME = "SFE_Chapter1"
 PlumeController.MODEL_NAME = "ProfessorPlume"
 PlumeController.STATION_NAME = "PlumeStation"
-PlumeController.PROMPT_NAME = "SFE_PlumeAnalyze"
+PlumeController.PROMPT_NAME = "SFE_PlumeBorrow"
 PlumeController.NPC_NAME = "Professor Plume"
 
 local LOOK_RANGE = 16
-local FEATHER_STAGGER = 0.14
-local FEATHER_FLIGHT = 0.62
-local CARD_HOLD = 2.8
-local BANNER_HOLD = 2.0
-local WATCHDOG_GRACE = 4
-local PARCHMENT = Color3.fromRGB(246, 232, 196)
-local STAMP = Color3.fromRGB(196, 52, 44)
-local PAGE_BLUE = Color3.fromRGB(40, 104, 172)
+local SAY_RANGE = 26
+local HAND_OVER_SECONDS = 0.55
+local WATCHDOG_GRACE = 3
+local ROD_WOOD = Color3.fromRGB(122, 82, 46)
 
 export type PlumeController = typeof(setmetatable(
 	{} :: {
@@ -62,18 +52,16 @@ export type PlumeController = typeof(setmetatable(
 		_pitch: number,
 		_sequence: { trove: Trove.Trove, done: boolean }?,
 		_modalOpen: boolean,
-		_card: { trove: Trove.Trove, handle: any, selected: string? }?,
-		_pendingAnalyze: boolean,
-		_deferredUnlock: any?,
+		_card: { trove: Trove.Trove, handle: any }?,
+		_pendingLend: boolean,
 		stats: {
 			opens: number,
 			refused: number,
-			analyses: number,
-			sequences: number,
-			banners: number,
+			loans: number,
+			handOvers: number,
+			notices: number,
 			boardUpdates: number,
 			restored: number,
-			feathersFlown: number,
 		},
 	},
 	PlumeController
@@ -93,6 +81,7 @@ function PlumeController.new(deps: {
 	config: { [string]: any },
 	dialogue: any,
 	interaction: any,
+	tools: any?,
 }): PlumeController
 	local self = setmetatable({
 		_deps = deps,
@@ -110,9 +99,8 @@ function PlumeController.new(deps: {
 		_sequence = nil,
 		_modalOpen = false,
 		_card = nil,
-		_pendingAnalyze = false,
-		_deferredUnlock = nil,
-		stats = { opens = 0, refused = 0, analyses = 0, sequences = 0, banners = 0, boardUpdates = 0, restored = 0, feathersFlown = 0 },
+		_pendingLend = false,
+		stats = { opens = 0, refused = 0, loans = 0, handOvers = 0, notices = 0, boardUpdates = 0, restored = 0 },
 	}, PlumeController)
 
 	-- The prompt routes here from the InteractionController, which already refuses while a
@@ -120,8 +108,8 @@ function PlumeController.new(deps: {
 	self._trove:add(deps.interaction.plumeRequested:Connect(function()
 		self:interact()
 	end))
-	self._trove:add(deps.net:on("ClueUnlocked", function(payload)
-		self:_onUnlocked(payload)
+	self._trove:add(deps.net:on("PlumeLent", function(payload)
+		self:_onLent(payload)
 	end))
 	self._trove:add(deps.round.snapshot:Connect(function()
 		self:_applyBoard()
@@ -132,6 +120,14 @@ function PlumeController.new(deps: {
 		end
 		self:_applyBoard()
 	end))
+	if deps.tools and deps.tools.rodChanged then
+		self._trove:add(deps.tools.rodChanged:Connect(function(active)
+			self:_applyBoard()
+			if not active and deps.round:phase() == "Searching" and self:_playerNear(SAY_RANGE) then
+				self:_say(EggSense.LINES.expired)
+			end
+		end))
+	end
 	local player = Players.LocalPlayer
 	if player then
 		self._trove:add(player.CharacterAdded:Connect(function()
@@ -297,10 +293,23 @@ function PlumeController._setHighlighted(self: PlumeController, on: boolean)
 	end
 end
 
+-- True when the local character is within `range` studs of Plume.
+function PlumeController._playerNear(self: PlumeController, range: number): boolean
+	local rig = self._rig
+	local character = Players.LocalPlayer and Players.LocalPlayer.Character
+	local root = rig and rig:FindFirstChild("HumanoidRootPart")
+	local mine = character and character:FindFirstChild("HumanoidRootPart")
+	if not (root and root:IsA("BasePart") and mine and mine:IsA("BasePart")) then
+		return false
+	end
+	return (root.Position - mine.Position).Magnitude <= range
+end
+
 -- One idle step. Head follows the nearest player in range, otherwise drifts between the notes and
 -- the board; the left hand holds the clipboard at his chest and the right hangs at his side; every
--- so often the right hand comes up to the glasses, or he looks down and taps the clipboard.
--- Nothing reaches forward across the bench. Reduced motion keeps only the slow head-turn.
+-- so often the right hand comes up to the glasses, or he looks down and taps the clipboard;
+-- during a hand-over the right arm reaches out with the rod. Nothing else reaches across the
+-- bench. Reduced motion keeps only the slow head-turn.
 function PlumeController._stepIdle(self: PlumeController, dt: number, t: number)
 	local rig = self._rig
 	if not rig then
@@ -377,6 +386,11 @@ function PlumeController._stepIdle(self: PlumeController, dt: number, t: number)
 			rightElbow = 0.18 + 1.2 * blend
 			rightRoll = 0.14 - 0.2 * blend
 			self._look = { yaw = self._yaw, pitch = -0.1 * blend, until_ = os.clock() + dt * 2 }
+		elseif gesture.name == "handOver" then
+			-- The right arm comes up and out toward the player, elbow straight, holding the rod.
+			rightPitch = -0.06 + 1.45 * blend
+			rightElbow = 0.18 * (1 - blend)
+			rightRoll = 0.14 - 0.3 * blend
 		else
 			-- Eyes down to the clipboard; the right hand comes over and taps a note on it.
 			self._look = { yaw = 0.25, pitch = -0.55, until_ = os.clock() + dt * 2 }
@@ -395,8 +409,30 @@ function PlumeController._stepIdle(self: PlumeController, dt: number, t: number)
 	lElbow.motor.C0 = lElbow.base * CFrame.Angles(leftElbow, 0, 0)
 end
 
--- The parchment board shows this party's clues. Written locally from the round snapshot, so
--- every member sees the same words and a server with two parties never crosses them.
+-- What the round snapshot says about the party's loans, and whether this player holds the rod.
+function PlumeController._loanState(self: PlumeController): { count: number, usesLeft: number, cost: number?, active: boolean }
+	local deps = self._deps
+	local round = deps.round.round
+	local plume = round and round.plume
+	local count = plume and plume.count or 0
+	local cost = EggSense.nextCost(deps.config, count)
+	local active = false
+	if deps.tools and deps.tools.rodState then
+		active = deps.tools:rodState().active == true
+	end
+	if not active and plume and type(plume.active) == "table" then
+		local me = Players.LocalPlayer and Players.LocalPlayer.UserId
+		for _, entry in ipairs(plume.active) do
+			if entry.userId == me and (entry.remainingMs or 0) > 0 then
+				active = true
+			end
+		end
+	end
+	return { count = count, usesLeft = math.max(0, EggSense.maxUses(deps.config) - count), cost = cost, active = active }
+end
+
+-- The parchment board shows this party's loans. Written locally from the round snapshot, so every
+-- member sees the same numbers and a server with two parties never crosses them.
 function PlumeController._applyBoard(self: PlumeController)
 	local station = self._station
 	if not station then
@@ -408,39 +444,48 @@ function PlumeController._applyBoard(self: PlumeController)
 		return
 	end
 	local round = self._deps.round.round
-	local clues = if round and round.phase ~= "Returning" then round.clues else nil
-	local unlocked = clues and clues.unlocked or {}
-	for _, category in ipairs(NestClues.CATEGORIES) do
-		local rowName = if category == "direction" then "Direction" else "Depth"
+	local live = round ~= nil and round.phase ~= "Returning"
+	local loans = self:_loanState()
+	local anyActive = false
+	local plume = round and round.plume
+	if live and plume and type(plume.active) == "table" then
+		anyActive = #plume.active > 0
+	end
+	local rows = {
+		Loans = if live then string.format("%d OF %d", loans.usesLeft, EggSense.maxUses(self._deps.config)) else "-",
+		Cost = if not live then "-" elseif loans.cost then string.format("%d FEATHERS", loans.cost) else "NONE LEFT",
+	}
+	for rowName, text in pairs(rows) do
 		local row = gui:FindFirstChild(rowName)
 		local value = row and row:FindFirstChild("Value")
 		local stamp = row and row:FindFirstChild("Stamp")
-		if value and value:IsA("TextLabel") and stamp and stamp:IsA("TextLabel") then
-			local entry = unlocked[category]
-			local text = if entry then tostring(entry.title) else "UNKNOWN"
+		if value and value:IsA("TextLabel") then
 			if value.Text ~= text then
 				self.stats.boardUpdates += 1
 			end
 			value.Text = text
-			value.TextColor3 = if entry then Color3.fromRGB(70, 46, 28) else Color3.fromRGB(150, 130, 100)
-			stamp.Visible = entry ~= nil
+			value.TextColor3 = if live then Color3.fromRGB(70, 46, 28) else Color3.fromRGB(150, 130, 100)
+		end
+		if stamp and stamp:IsA("TextLabel") then
+			stamp.Visible = rowName == "Loans" and anyActive
 		end
 	end
 end
 
 function PlumeController.isBusy(self: PlumeController): boolean
-	return self._sequence ~= nil or self._modalOpen or self._pendingAnalyze
+	return self._sequence ~= nil or self._modalOpen or self._pendingLend
 end
 
 -- Plume's short lines go over his head, never into a panel.
-local function say(rig: Model?, line: string)
+function PlumeController._say(self: PlumeController, line: string)
+	local rig = self._rig
 	local root = rig and rig:FindFirstChild("HumanoidRootPart")
 	if root then
 		NpcPlate.sayOn(root, line, 3.2)
 	end
 end
 
--- The prompt press. One card at a time; while the machine runs, nothing.
+-- The prompt press. One card at a time; while the rod is being handed over, nothing.
 function PlumeController.interact(self: PlumeController): boolean
 	local deps = self._deps
 	if self:isBusy() then
@@ -452,55 +497,46 @@ function PlumeController.interact(self: PlumeController): boolean
 		self.stats.refused += 1
 		return false
 	end
-	local rig = self._rig
 	local phase = deps.round:phase()
 	if phase ~= "Searching" then
 		if phase == "EggRevealed" then
-			say(rig, NestClues.LINES.found)
+			self:_say(EggSense.LINES.found)
 		end
 		self.stats.refused += 1
 		return false
 	end
-	local round = deps.round.round
-	local clues = round and round.clues
-	local count = clues and clues.count or 0
-	local carried = deps.round.player and deps.round.player.carriedRainbow or 0
+	local loans = self:_loanState()
+	local carried = deps.round.player and deps.round.player.carriedStandard or 0
 	self.stats.opens += 1
 	deps.audio:play(Tokens.sound.uiOpen)
-	say(rig, NestClues.lineFor(deps.config, count, carried, false))
+	self:_say(EggSense.lineFor(deps.config, loans.count, carried, false, loans.active))
 	return self:_openCard()
 end
 
 function PlumeController._cardState(self: PlumeController): PlumeCard.State
 	local deps = self._deps
-	local card = self._card
-	local round = deps.round.round
-	local clues = round and round.clues
-	local count = clues and clues.count or 0
-	local unlocked = clues and clues.unlocked or {}
-	local cost = NestClues.nextCost(deps.config, count)
-	local carried = deps.round.player and deps.round.player.carriedRainbow or 0
-	local selected = card and card.selected or nil
-	if selected and unlocked[selected] then
-		selected = nil
-	end
-	if not selected then
-		for _, category in ipairs(NestClues.CATEGORIES) do
-			if not unlocked[category] then
-				selected = category
-				break
-			end
-		end
-	end
-	if card then
-		card.selected = selected
+	local loans = self:_loanState()
+	local carried = deps.round.player and deps.round.player.carriedStandard or 0
+	local searching = deps.round:phase() == "Searching"
+	local reason: string? = nil
+	if not searching then
+		reason = "phase"
+	elseif loans.active then
+		reason = "active"
+	elseif loans.cost == nil then
+		reason = "limit"
+	elseif carried < loans.cost then
+		reason = "insufficient"
 	end
 	return {
 		carried = carried,
-		cost = cost,
-		unlocked = unlocked,
-		selected = selected,
-		canGet = cost ~= nil and selected ~= nil and carried >= cost and deps.round:phase() == "Searching",
+		cost = loans.cost,
+		usesLeft = loans.usesLeft,
+		maxUses = EggSense.maxUses(deps.config),
+		activeSeconds = deps.config.plume.rod.activeSeconds,
+		active = loans.active,
+		canBorrow = reason == nil,
+		reason = reason,
 	}
 end
 
@@ -511,7 +547,7 @@ function PlumeController._openCard(self: PlumeController): boolean
 	if not player or self._card then
 		return false
 	end
-	local session = { trove = Trove.new(), handle = nil, selected = nil }
+	local session = { trove = Trove.new(), handle = nil }
 	self._card = session
 	self._modalOpen = true
 	deps.input:setSuspended(true)
@@ -532,19 +568,8 @@ function PlumeController._openCard(self: PlumeController): boolean
 		player:WaitForChild("PlayerGui"),
 		{ audio = deps.audio, accessibility = deps.accessibility, config = deps.config },
 		{
-			onGetClue = function(category)
-				self:analyze(category)
-			end,
-			onSelect = function(category)
-				local state = self:_cardState()
-				if state.unlocked[category] then
-					return
-				end
-				deps.audio:play(Tokens.sound.uiSelect)
-				session.selected = category
-				if session.handle then
-					session.handle.setState(self:_cardState())
-				end
+			onBorrow = function()
+				self:borrow()
 			end,
 			onClose = function()
 				self:_closeCard()
@@ -576,92 +601,107 @@ function PlumeController._closeCard(self: PlumeController)
 	session.trove:destroy()
 end
 
--- The trade request. Returns the envelope; a success starts the sequence once the card closes.
-function PlumeController.analyze(self: PlumeController, category: string): any
+-- The loan request. Returns the envelope; a success closes the card and plays the hand-over.
+function PlumeController.borrow(self: PlumeController): any
 	local deps = self._deps
 	local token = deps.round:sessionToken()
 	if not token then
 		return { ok = false, code = "invalid_state", message = "no_session" }
 	end
-	if self._sequence or self._pendingAnalyze then
+	if self._sequence or self._pendingLend then
 		self.stats.refused += 1
 		return { ok = false, code = "invalid_state", message = "busy" }
 	end
-	self._pendingAnalyze = true
-	local result = deps.net:request("ClueAnalyze", { sessionToken = token, category = category })
+	self._pendingLend = true
+	local result = deps.net:request("PlumeLend", { sessionToken = token })
 	if not result.ok then
-		self._pendingAnalyze = false
+		self._pendingLend = false
 		deps.audio:play(Tokens.sound.uiError)
 		local message = result.message
-		local rig = self._rig
 		if message == "egg_found" then
-			say(rig, NestClues.LINES.found)
+			self:_say(EggSense.LINES.found)
+		elseif message == "limit" then
+			self:_say(EggSense.LINES.limit)
+		elseif message == "active" then
+			self:_say(EggSense.LINES.active)
+		elseif message == "insufficient" then
+			self:_say(EggSense.LINES.insufficient)
+			deps.hud.toasts:push("Not enough feathers", "warning")
 		else
-			deps.hud.toasts:push(
-				if message == "insufficient"
-					then "Not enough Rainbow Feathers"
-					elseif message == "already_analyzed" then "That clue is already on the board"
-					elseif message == "limit" then "Plume has told you everything he can"
-					elseif result.code == "out_of_range" then "Stand at Plume's bench"
-					else "Analysis unavailable",
-				"warning"
-			)
+			deps.hud.toasts:push(if result.code == "out_of_range" then "Stand at Plume's bench" else "The rod is not available", "warning")
 		end
 		return result
 	end
-	self.stats.analyses += 1
+	self.stats.loans += 1
 	deps.haptics:pulse(0.4, 0.12)
 	local data = result.data
-	-- The response carries the round's clue table; the Book, the board and the card read it from
-	-- the round state, so it lands there now rather than with the next snapshot.
-	if deps.round.round and data and data.clues then
-		deps.round.round.clues = data.clues
+	-- The response carries the round's loan book; the Book, the board and the card read it from the
+	-- round state, so it lands there now rather than with the next snapshot.
+	if deps.round.round and data and data.plume then
+		deps.round.round.plume = data.plume
 	end
-	-- The response carries the payer's projection with the feathers already gone; the HUD binds to
-	-- playerChanged, so the bundle thins now, before the first feather has left it.
+	-- The response carries the borrower's projection with the feathers already gone and the rod in
+	-- hand; the HUD binds to playerChanged, so the bundle thins now.
 	if data and data.player then
 		deps.round.player = data.player
 		deps.round.playerChanged:Fire(data.player)
 	end
-	-- The card gives way to the sequence; nothing else may own the screen while the machine runs.
 	self:_closeCard()
-	-- `_pendingAnalyze` holds until the sequence has taken over, so the party event that lands in
-	-- the frame between the response and the deferred start is kept for the sequence to read out.
+	self:_say(EggSense.LINES.lend)
 	task.defer(function()
-		self:_runSequence(data)
-		self._pendingAnalyze = false
+		self:_handOver(data)
+		self._pendingLend = false
 	end)
 	return result
 end
 
--- A rainbow feather for the flight, the same template the bundle and the pile use.
-local function makeFlyingFeather(index: number): BasePart
-	local template = AssetManifest.model("feather")
-	local part: BasePart
-	if template and template:IsA("BasePart") then
-		part = template:Clone() :: BasePart
-	else
-		part = Instance.new("Part")
+-- A small rod for the flight from Plume's hand to the camera: the same silhouette as the viewmodel.
+local function makeFlyingRod(): Model
+	local model = Instance.new("Model")
+	model.Name = "SFE_PlumeRod"
+	local function piece(name: string, size: Vector3, offset: CFrame, color: Color3, material: Enum.Material): Part
+		local part = Instance.new("Part")
+		part.Name = name
+		part.Anchored = true
+		part.CanCollide = false
+		part.CanQuery = false
+		part.CanTouch = false
+		part.CastShadow = false
+		part.Size = size
+		part.CFrame = offset
+		part.Color = color
+		part.Material = material
+		part.Parent = model
+		return part
 	end
-	part.Name = "SFE_PlumeFeather" .. index
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanQuery = false
-	part.CanTouch = false
-	part.CastShadow = false
-	part.Material = Enum.Material.Neon
-	part.Color = Color3.fromHSV((index * 0.17) % 1, 0.35, 1)
-	part.Size = Vector3.new(0.5, 1.3, 0.12)
-	local motes = Instance.new("ParticleEmitter")
-	motes.Rate = 8
-	motes.Lifetime = NumberRange.new(0.4, 0.8)
-	motes.Speed = NumberRange.new(0.2, 0.5)
-	motes.Size = NumberSequence.new(0.12, 0)
-	motes.Transparency = NumberSequence.new(0.2, 1)
-	motes.LightEmission = 0.9
-	motes.Color = ColorSequence.new(Color3.fromRGB(255, 240, 255))
-	motes.Parent = part
-	return part
+	local shaft = piece(
+		"Shaft",
+		Vector3.new(0.9, 0.09, 0.09),
+		CFrame.new(0, 0.45, 0) * CFrame.Angles(0, 0, math.rad(90)),
+		ROD_WOOD,
+		Enum.Material.Wood
+	)
+	shaft.Shape = Enum.PartType.Cylinder
+	model.PrimaryPart = shaft
+	for _, side in ipairs({ -1, 1 }) do
+		local prong = piece(
+			"Prong",
+			Vector3.new(0.42, 0.07, 0.07),
+			CFrame.new(0, 0.9, 0) * CFrame.Angles(0, 0, side * math.rad(26)) * CFrame.new(0, 0.21, 0) * CFrame.Angles(0, 0, math.rad(90)),
+			ROD_WOOD,
+			Enum.Material.Wood
+		)
+		prong.Shape = Enum.PartType.Cylinder
+	end
+	local crystal =
+		piece("Crystal", Vector3.new(0.24, 0.24, 0.24), CFrame.new(0, 1.22, 0), Color3.fromRGB(120, 190, 255), Enum.Material.Neon)
+	crystal.Shape = Enum.PartType.Ball
+	local light = Instance.new("PointLight")
+	light.Color = crystal.Color
+	light.Brightness = 1.2
+	light.Range = 5
+	light.Parent = crystal
+	return model
 end
 
 local function bezier(a: Vector3, b: Vector3, c: Vector3, t: number): Vector3
@@ -669,15 +709,14 @@ local function bezier(a: Vector3, b: Vector3, c: Vector3, t: number): Vector3
 	return a * (u * u) + b * (2 * u * t) + c * (t * t)
 end
 
--- The analysis sequence for the payer. Every resource it takes is returned by `session.trove`.
-function PlumeController._runSequence(self: PlumeController, data: any)
+-- The hand-over for the borrower. Plume reaches out; the rod leaves his hand and flies into the
+-- camera, where the viewmodel is already rising to meet it. Every resource it takes is returned by
+-- `session.trove`; the watchdog guarantees that.
+function PlumeController._handOver(self: PlumeController, _data: any)
 	local deps = self._deps
-	local rig, station = self._rig, self._station
+	local rig = self._rig
 	local camera = workspace.CurrentCamera
-	local player = Players.LocalPlayer
-	if not (rig and station and camera and player) then
-		-- No world to stage it in: the clue still lands (the board and the Book read the snapshot).
-		self:_announce(data)
+	if not (rig and camera) then
 		return
 	end
 	if self._sequence then
@@ -685,381 +724,64 @@ function PlumeController._runSequence(self: PlumeController, data: any)
 	end
 	local session = { trove = Trove.new(), done = false }
 	self._sequence = session
-	self.stats.sequences += 1
-	local motion = deps.accessibility:motionSettings()
-	local reduced = motion.reducedMotion
-	local cfg = deps.config
-	local analyzeSeconds = if reduced then math.min(0.8, cfg.clues.analyzeSeconds) else cfg.clues.analyzeSeconds
-
-	-- Controls and cursor.
-	deps.input:setSuspended(true)
-	deps.modals:setExternalUnlock(true)
-	session.trove:add(function()
-		deps.modals:setExternalUnlock(false)
-		deps.input:setSuspended(deps.modals:isBlocking())
-	end)
-
-	-- Camera: a three-quarter shot of Plume and the bench from the players' side.
-	local anchor = station.PrimaryPart or station:FindFirstChild("PlumeAnchor")
-	local base = if anchor and anchor:IsA("BasePart") then anchor.CFrame else rig:GetPivot()
-	local focus = base.Position + Vector3.new(0, 0.2, 0)
-	local eye = (base * CFrame.new(4.6, 3.4, -8.8)).Position
-	local baseline = { type = camera.CameraType, cframe = camera.CFrame }
-	camera.CameraType = Enum.CameraType.Scriptable
-	local inSeconds = if reduced then 0.05 else 0.5
-	TweenService
-		:Create(camera, TweenInfo.new(inSeconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = CFrame.lookAt(eye, focus) })
-		:Play()
-	session.trove:add(function()
-		local back = TweenService:Create(
-			camera,
-			TweenInfo.new(if reduced then 0.05 else 0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
-			{ CFrame = baseline.cframe }
-		)
-		local released = false
-		local function release()
-			if released then
-				return
-			end
-			released = true
-			camera.CameraType = baseline.type
-			self.stats.restored += 1
-		end
-		back.Completed:Once(release)
-		back:Play()
-		task.delay(1.2, release) -- Completed never fires on a cancelled tween; this is the floor
-	end)
-
-	-- The machine.
-	local chamber = station:FindFirstChild("PrismChamber") :: BasePart?
-	local core = chamber and chamber:FindFirstChild("PrismCore") :: Attachment?
-	local intake = chamber and chamber:FindFirstChild("Intake") :: Attachment?
-	local light = chamber and chamber:FindFirstChild("PrismLight") :: PointLight?
-	local ring = station:FindFirstChild("Refractor") :: BasePart?
-	local prismA = station:FindFirstChild("PrismHalfA") :: BasePart?
-	local prismB = station:FindFirstChild("PrismHalfB") :: BasePart?
-	local target = if core then core.WorldPosition else base.Position + Vector3.new(0, 4, 0)
-	local mouth = if intake then intake.WorldPosition else target
-	local ringBase = ring and ring.CFrame
-	local lightBase = light and light.Brightness or 0
-	local prismColor = prismA and prismA.Color
-	session.trove:add(function()
-		if ring and ringBase then
-			ring.CFrame = ringBase
-		end
-		if light then
-			light.Brightness = lightBase
-			light.Color = Color3.fromRGB(236, 208, 255)
-		end
-		if prismA and prismColor then
-			prismA.Color = prismColor
-		end
-		if prismB and prismColor then
-			prismB.Color = prismColor
-		end
-	end)
-
-	-- Feathers: one at a time from the carried bundle into the intake. The bag itself already
-	-- shows the new count (the response carried the player projection), so these are the ones
-	-- that left it.
-	local count = math.max(1, tonumber(data and data.cost) or 1)
-	local origin = deps.hud:carriedStackWorldPoint()
-	if not origin then
-		local character = player.Character
-		local root = character and character:FindFirstChild("HumanoidRootPart")
-		origin = if root and root:IsA("BasePart") then root.Position + Vector3.new(0, 1.5, 0) else base.Position + Vector3.new(0, 3, -3)
-	end
-	local origin2 = origin :: Vector3
-	local flightSeconds = if reduced then 0.2 else FEATHER_FLIGHT
-	local stagger = if reduced then 0.05 else FEATHER_STAGGER
-	local flying = 0
-	for index = 1, count do
-		task.delay((index - 1) * stagger, function()
-			if session.done then
-				return
-			end
-			local feather = makeFlyingFeather(index)
-			feather.Parent = workspace
-			session.trove:add(feather)
-			flying += 1
-			self.stats.feathersFlown += 1
-			deps.audio:play(Tokens.sound.collectRainbow, { pitchVariance = 0.08 })
-			local startAt = os.clock()
-			local control = (origin2 + mouth) / 2 + Vector3.new(0, 2.5, 0)
-			local conn: RBXScriptConnection
-			conn = RunService.RenderStepped:Connect(function()
-				local t = math.min(1, (os.clock() - startAt) / flightSeconds)
-				local eased = 1 - (1 - t) * (1 - t)
-				local position = bezier(origin2, control, if t < 0.85 then mouth else target, eased)
-				feather.CFrame = CFrame.new(position) * CFrame.Angles(t * 9, t * 5, 0)
-				feather.Size = Vector3.new(0.5, 1.3, 0.12) * (1 - 0.6 * math.max(0, t - 0.8) / 0.2)
-				if t >= 1 then
-					conn:Disconnect()
-					feather:Destroy()
-					flying -= 1
-					if light then
-						light.Brightness = math.min(3, light.Brightness + 0.5)
-					end
-				end
-			end)
-			session.trove:add(conn)
-		end)
-	end
-	local featherPhase = (count - 1) * stagger + flightSeconds + 0.1
-
-	-- Machine spin after the last feather is in.
-	local spinStart = os.clock() + featherPhase
-	local spinEnd = spinStart + analyzeSeconds
-	local hum: Sound? = nil
-	task.delay(featherPhase, function()
+	self.stats.handOvers += 1
+	local reduced = deps.accessibility:motionSettings().reducedMotion
+	local seconds = if reduced then 0.15 else HAND_OVER_SECONDS
+	-- Plume looks at the player and reaches out with the rod.
+	self._gesture = { name = "handOver", t = 0, duration = if reduced then 0.4 else 1.3 }
+	local hand = rig:FindFirstChild("RightHand") or rig:FindFirstChild("RightLowerArm")
+	local from = if hand and hand:IsA("BasePart")
+		then hand.Position + Vector3.new(0, 0.3, 0)
+		else rig:GetPivot().Position + Vector3.new(0, 2, 0)
+	local rod = makeFlyingRod()
+	rod:PivotTo(CFrame.new(from))
+	rod.Parent = workspace
+	session.trove:add(rod)
+	deps.audio:play(Tokens.sound.uiConfirm)
+	deps.audio:play(Tokens.sound.rodLock)
+	local startAt = os.clock()
+	local conn: RBXScriptConnection
+	conn = RunService.RenderStepped:Connect(function()
 		if session.done then
 			return
 		end
-		hum = deps.audio:play(Tokens.sound.stationHum, { at = chamber :: any })
-		deps.haptics:pulse(0.25, 0.15)
-		-- Plume watches the chamber while it works.
-		self._look = { yaw = -0.5, pitch = -0.35, until_ = spinEnd + 0.6 }
-	end)
-	session.trove:add(RunService.RenderStepped:Connect(function()
-		local now = os.clock()
-		if now < spinStart then
-			return
-		end
-		local u = math.min(1, (now - spinStart) / math.max(0.01, analyzeSeconds))
-		local speed = math.sin(u * math.pi) * 14 -- winds up and down
-		if ring and ringBase then
-			ring.CFrame = ringBase * CFrame.Angles((now - spinStart) * speed, 0, 0)
-		end
-		local hue = (now * 0.6) % 1
-		local rainbow = Color3.fromHSV(hue, 0.55, 1)
-		if light then
-			light.Brightness = 0.35 + 2.4 * math.sin(u * math.pi)
-			light.Color = rainbow
-		end
-		if prismA and prismB then
-			prismA.Color = rainbow
-			prismB.Color = Color3.fromHSV((hue + 0.33) % 1, 0.55, 1)
-		end
-	end))
-	session.trove:add(function()
-		if hum then
-			hum:Stop()
+		local t = math.min(1, (os.clock() - startAt) / seconds)
+		local eased = 1 - (1 - t) * (1 - t)
+		-- The destination tracks the camera so a turning player still catches it low right.
+		local to = (camera.CFrame * CFrame.new(0.42, -0.62, -0.7)).Position
+		local control = (from + to) / 2 + Vector3.new(0, 1.2, 0)
+		local position = bezier(from, control, to, eased)
+		rod:PivotTo(CFrame.new(position) * CFrame.Angles(0, t * 4, t * 2))
+		if t >= 1 then
+			conn:Disconnect()
+			rod:Destroy()
+			deps.haptics:pulse(0.35, 0.08)
+			self:_finishSequence("complete")
 		end
 	end)
-
-	-- Plume examines the reading, then stamps a card on the bench.
-	local stampAt = featherPhase + analyzeSeconds
-	task.delay(stampAt, function()
-		if session.done then
-			return
-		end
-		self._look = { yaw = 0.25, pitch = -0.55, until_ = os.clock() + 1.4 }
-		self._gesture = { name = "examine", t = 0.9, duration = 2.6 }
-		deps.audio:play(Tokens.sound.introPaper)
-		task.delay(0.45, function()
-			if session.done then
-				return
-			end
-			-- The card lands on the bench with a stamp on it.
-			local benchTop = station:FindFirstChild("BenchTop") :: BasePart?
-			if benchTop then
-				local card = Instance.new("Part")
-				card.Name = "SFE_ClueCard"
-				card.Anchored = true
-				card.CanCollide = false
-				card.CanQuery = false
-				card.Size = Vector3.new(1.0, 0.03, 1.3)
-				card.Color = PARCHMENT
-				card.Material = Enum.Material.Fabric
-				card.CFrame = benchTop.CFrame * CFrame.new(-0.2, benchTop.Size.Y / 2 + 0.6, -0.6) * CFrame.Angles(0, math.rad(6), 0)
-				card.Parent = workspace
-				session.trove:add(card)
-				local stamp = Instance.new("Part")
-				stamp.Anchored = true
-				stamp.CanCollide = false
-				stamp.CanQuery = false
-				stamp.Size = Vector3.new(0.6, 0.02, 0.28)
-				stamp.Color = STAMP
-				stamp.Material = Enum.Material.SmoothPlastic
-				stamp.CFrame = card.CFrame * CFrame.new(0.05, 0.03, 0.25) * CFrame.Angles(0, math.rad(-10), 0)
-				stamp.Parent = card
-				TweenService:Create(card, TweenInfo.new(if reduced then 0.05 else 0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-					CFrame = card.CFrame * CFrame.new(0, -0.58, 0),
-				}):Play()
-			end
-			deps.audio:play(Tokens.sound.uiConfirm)
-			deps.camera:impulse(0.08)
-			deps.haptics:pulse(0.5, 0.08)
-		end)
-	end)
-
-	-- The clue card on screen, then the party-wide banner, then everything is handed back.
-	local revealAt = stampAt + 0.75
-	task.delay(revealAt, function()
-		if session.done then
-			return
-		end
-		self:_showCard(session, data)
-	end)
-	local bannerAt = revealAt + CARD_HOLD
-	task.delay(bannerAt, function()
-		if session.done then
-			return
-		end
-		self:_banner(data)
-	end)
-	task.delay(bannerAt + 0.6, function()
-		self:_finishSequence("complete")
-	end)
-	-- The watchdog: whatever else happens, the player gets the screen back.
-	task.delay(bannerAt + 0.6 + WATCHDOG_GRACE, function()
+	session.trove:add(conn)
+	-- The watchdog: whatever else happens, nothing of the hand-over is left in the world.
+	task.delay(seconds + WATCHDOG_GRACE, function()
 		if self._sequence == session then
 			self:_finishSequence("watchdog")
 		end
 	end)
 end
 
--- The parchment card with the stamped band.
-function PlumeController._showCard(self: PlumeController, session: { trove: Trove.Trove, done: boolean }, data: any)
-	local deps = self._deps
-	local stage = deps.hud.stage
-	if not stage then
-		return
-	end
-	local motion = deps.accessibility:motionSettings()
-	local z = Tokens.zIndex.toast + 3
-	local card = Instance.new("Frame")
-	card.Name = "SFE_ClueCard"
-	card.AnchorPoint = Vector2.new(0.5, 0.5)
-	card.Position = UDim2.fromScale(0.5, 0.42)
-	card.Size = UDim2.fromOffset(380, 172)
-	card.ZIndex = z
-	Depth.panel(card, PARCHMENT, { radius = Tokens.radius.md })
-	local scale = Instance.new("UIScale")
-	scale.Scale = 0.7
-	scale.Parent = card
-	local pad = Instance.new("UIPadding")
-	pad.PaddingTop = UDim.new(0, Tokens.spacing.md)
-	pad.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
-	pad.PaddingRight = UDim.new(0, Tokens.spacing.lg)
-	pad.PaddingBottom = UDim.new(0, Tokens.spacing.md)
-	pad.Parent = card
-	local label = FrameKit.text(card, "Category", tostring(NestClues.LABELS[data.category] or "CLUE"), "caption", {
-		zIndex = z + 1,
-		color = Tokens.color.inkMuted,
-	})
-	label.Position = UDim2.fromOffset(0, 0)
-	local title = FrameKit.text(card, "Title", tostring(data.title), "display", { zIndex = z + 1, color = PAGE_BLUE })
-	title.Position = UDim2.fromOffset(0, Tokens.typography.caption.size + Tokens.spacing.xs)
-	title.Size = UDim2.new(1, 0, 0, Tokens.typography.display.size + 4)
-	title.TextSize = Tokens.typography.display.size - 4
-	local text = FrameKit.text(card, "Text", tostring(data.text), "body", { zIndex = z + 1, color = Tokens.color.inkStrong, wrap = true })
-	text.Position =
-		UDim2.fromOffset(0, Tokens.typography.caption.size + Tokens.spacing.xs + Tokens.typography.display.size + Tokens.spacing.sm)
-	text.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size * 3)
-	text.TextYAlignment = Enum.TextYAlignment.Top
-	local stamp = FrameKit.badge(card, "Stamp", "ANALYZED", STAMP, z + 2)
-	stamp.AnchorPoint = Vector2.new(1, 0)
-	stamp.Position = UDim2.fromScale(1, 0)
-	stamp.Rotation = -8
-	local stampScale = Instance.new("UIScale")
-	stampScale.Scale = 2.2
-	stampScale.Parent = stamp
-	stamp.Visible = false
-	card.Parent = stage
-	session.trove:add(card)
-	TweenService:Create(scale, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeBack), { Scale = 1 }):Play()
-	task.delay(if motion.reducedMotion then 0.05 else 0.35, function()
-		if session.done or not stamp.Parent then
-			return
-		end
-		stamp.Visible = true
-		deps.audio:play(Tokens.sound.rewardLand)
-		TweenService:Create(stampScale, TweenInfo.new(Motion.duration("quick", motion), Tokens.motion.easeBack), { Scale = 1 }):Play()
-	end)
-end
-
--- The party-wide line across the top of the screen.
-function PlumeController._banner(self: PlumeController, data: any)
-	local deps = self._deps
-	local stage = deps.hud.stage
-	if not stage then
-		return
-	end
-	self.stats.banners += 1
-	local motion = deps.accessibility:motionSettings()
-	local label = Instance.new("TextLabel")
-	label.Name = "SFE_ClueBanner"
-	label.AnchorPoint = Vector2.new(0.5, 0)
-	label.Position = UDim2.fromScale(0.5, 0.16)
-	label.Size = UDim2.new(0.9, 0, 0, 64)
-	label.BackgroundTransparency = 1
-	label.Font = Tokens.typography.display.font
-	label.TextSize = Tokens.typography.display.size - 2
-	label.TextScaled = false
-	label.TextColor3 = Tokens.color.goldLight
-	label.TextStrokeTransparency = 0.2
-	label.TextStrokeColor3 = Tokens.color.outline
-	label.Text = "PROFESSOR PLUME DISCOVERED A CLUE!"
-	label.TextTransparency = 1
-	label.ZIndex = Tokens.zIndex.toast + 2
-	label.Parent = stage
-	local constraint = Instance.new("UISizeConstraint")
-	constraint.MaxSize = Vector2.new(760, 64)
-	constraint.Parent = label
-	local scale = Instance.new("UIScale")
-	scale.Scale = 0.8
-	scale.Parent = label
-	TweenService:Create(label, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeOut), { TextTransparency = 0 }):Play()
-	TweenService:Create(scale, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeBack), { Scale = 1 }):Play()
-	Confetti.burst(stage, {
-		origin = UDim2.fromScale(0.5, 0.2),
-		count = 18,
-		spread = 200,
-		motion = motion,
-		tier = deps.quality and deps.quality:tier() or nil,
-		zIndex = Tokens.zIndex.toast + 3,
-	})
-	deps.audio:play(Tokens.sound.eggChime)
-	if data and data.text then
-		deps.hud.toasts:push(tostring(data.text), "success", 4)
-	end
-	task.delay(BANNER_HOLD, function()
-		if label.Parent then
-			local out = TweenService:Create(
-				label,
-				TweenInfo.new(Motion.duration("quick", motion)),
-				{ TextTransparency = 1, TextStrokeTransparency = 1 }
-			)
-			out:Play()
-			out.Completed:Once(function()
-				label:Destroy()
-			end)
-		end
-	end)
-	self._trove:add(label)
-end
-
--- What a member who did not pay sees; and what the payer sees if the stage is missing.
-function PlumeController._announce(self: PlumeController, data: any)
-	self:_banner(data)
-	self:_applyBoard()
-end
-
-function PlumeController._onUnlocked(self: PlumeController, payload: any)
+-- What a member who did not borrow sees.
+function PlumeController._onLent(self: PlumeController, payload: any)
 	local me = Players.LocalPlayer and Players.LocalPlayer.UserId
 	local round = self._deps.round.round
-	if round and payload.clues and round.roundId == payload.roundId then
-		round.clues = payload.clues
+	if round and payload.plume and round.roundId == payload.roundId then
+		round.plume = payload.plume
 	end
-	-- The payer's own sequence reads the clue out at its end; the event arrives before the
-	-- response does, so it is held rather than shown twice.
-	if payload.byUserId == me and (self._pendingAnalyze or self._sequence) then
-		self._deferredUnlock = payload
+	self:_applyBoard()
+	if payload.byUserId == me then
 		return
 	end
+	self.stats.notices += 1
 	self._deps.audio:play(Tokens.sound.stationChime)
-	self:_announce(payload)
+	self._deps.hud.toasts:push(string.format("%s borrowed the Egg Sense Rod", tostring(payload.byName or "A forager")), "info")
 end
 
 function PlumeController._finishSequence(self: PlumeController, reason: string)
@@ -1069,14 +791,13 @@ function PlumeController._finishSequence(self: PlumeController, reason: string)
 	end
 	session.done = true
 	self._sequence = nil
-	self._deferredUnlock = nil
-	self._look = nil
 	session.trove:destroy()
+	self.stats.restored += 1
 	self:_applyBoard()
 	local _ = reason
 end
 
--- Dismisses whatever Plume has up: the card, or the sequence.
+-- Dismisses whatever Plume has up: the card, or the hand-over.
 function PlumeController.skip(self: PlumeController)
 	self:_closeCard()
 	self:_finishSequence("skip")
@@ -1096,6 +817,7 @@ function PlumeController.status(self: PlumeController): { [string]: any }
 	for _, highlight in ipairs(self._highlights) do
 		highlighted = highlighted or highlight.Enabled
 	end
+	local loans = self:_loanState()
 	return {
 		rig = self._rig ~= nil,
 		station = self._station ~= nil,
@@ -1110,8 +832,11 @@ function PlumeController.status(self: PlumeController): { [string]: any }
 		busy = self:isBusy(),
 		sequence = self._sequence ~= nil,
 		modalOpen = self._modalOpen,
-		boardDirection = rowText("Direction"),
-		boardDepth = rowText("Depth"),
+		boardLoans = rowText("Loans"),
+		boardCost = rowText("Cost"),
+		usesLeft = loans.usesLeft,
+		nextCost = loans.cost,
+		rodActive = loans.active,
 		cameraType = tostring(camera and camera.CameraType),
 		stats = table.clone(self.stats),
 	}

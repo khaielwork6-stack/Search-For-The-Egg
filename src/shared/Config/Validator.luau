@@ -250,7 +250,19 @@ function Validator.validate(raw: any): Report
 				type(tool) == "table" and type(tool.displayName) == "string" and #tool.displayName > 0,
 				"tools." .. tostring(toolId) .. ".displayName missing"
 			)
-			if type(tool) == "table" then
+			-- A lent tool (Professor Plume's Egg Sense rod) is never bought or upgraded: it carries no
+			-- price and no upgrade paths, and must never grow them by accident.
+			local lent = type(tool) == "table" and tool.lent == true
+			if lent then
+				check(
+					tool.softCashPrice == nil and tool.softGemPrice == nil and tool.oneRoundRobux == nil and tool.permanentRobux == nil,
+					"tools." .. tostring(toolId) .. " is lent and must carry no price"
+				)
+				check(
+					type(raw.toolUpgrades) ~= "table" or raw.toolUpgrades[toolId] == nil,
+					"toolUpgrades." .. tostring(toolId) .. " must not exist for a lent tool"
+				)
+			elseif type(tool) == "table" then
 				check(
 					isPositiveNumber(tool.oneRoundRobux) and isPositiveNumber(tool.permanentRobux),
 					"tools." .. tostring(toolId) .. " robux prices must be > 0"
@@ -264,7 +276,7 @@ function Validator.validate(raw: any): Report
 					"tools." .. tostring(toolId) .. ".permanentIncludesMaxUpgrades must be boolean"
 				)
 			end
-			if type(raw.toolUpgrades) == "table" then
+			if not lent and type(raw.toolUpgrades) == "table" then
 				check(type(raw.toolUpgrades[toolId]) == "table", "toolUpgrades." .. tostring(toolId) .. " missing")
 			end
 		end
@@ -1020,33 +1032,64 @@ function Validator.validate(raw: any): Report
 		end
 	end
 
-	-- Clues (Professor Plume)
-	check(type(raw.clues) == "table", "clues missing")
-	if type(raw.clues) == "table" then
-		local clues = raw.clues
-		check(type(clues.costsRainbow) == "table" and #clues.costsRainbow > 0, "clues.costsRainbow must list at least one cost")
-		if type(clues.costsRainbow) == "table" then
-			for index, cost in ipairs(clues.costsRainbow) do
-				check(isPositiveNumber(cost) and cost == math.floor(cost), "clues.costsRainbow[" .. index .. "] must be a positive integer")
+	-- Professor Plume and the Egg Sense rod
+	check(type(raw.plume) == "table", "plume missing")
+	if type(raw.plume) == "table" then
+		local plume = raw.plume
+		check(type(plume.costsStandard) == "table" and #plume.costsStandard > 0, "plume.costsStandard must list at least one cost")
+		if type(plume.costsStandard) == "table" then
+			local last = 0
+			for index, cost in ipairs(plume.costsStandard) do
+				check(
+					isPositiveNumber(cost) and cost == math.floor(cost),
+					"plume.costsStandard[" .. index .. "] must be a positive integer"
+				)
+				check(type(cost) == "number" and cost >= last, "plume.costsStandard must never get cheaper")
+				last = if type(cost) == "number" then cost else last
 			end
 		end
 		check(
-			isPositiveNumber(clues.maxPerRound) and clues.maxPerRound == math.floor(clues.maxPerRound),
-			"clues.maxPerRound must be a positive integer"
-		)
-		check(isPositiveNumber(clues.stationRangeStuds), "clues.stationRangeStuds must be > 0")
-		check(isPositiveNumber(clues.analyzeSeconds), "clues.analyzeSeconds must be > 0")
-		check(
-			type(clues.direction) == "table" and isPositiveNumber(clues.direction.sideFraction) and clues.direction.sideFraction < 1,
-			"clues.direction.sideFraction must be within (0, 1)"
+			isPositiveNumber(plume.maxPerRound) and plume.maxPerRound == math.floor(plume.maxPerRound),
+			"plume.maxPerRound must be a positive integer"
 		)
 		check(
-			type(clues.depth) == "table"
-				and isPositiveNumber(clues.depth.outerMaxFraction)
-				and isPositiveNumber(clues.depth.coreMinFraction)
-				and clues.depth.outerMaxFraction < clues.depth.coreMinFraction
-				and clues.depth.coreMinFraction < 1,
-			"clues.depth fractions must satisfy 0 < outerMaxFraction < coreMinFraction < 1"
+			type(plume.costsStandard) ~= "table" or type(plume.maxPerRound) ~= "number" or #plume.costsStandard >= plume.maxPerRound,
+			"plume.costsStandard must list a cost for every loan up to maxPerRound"
+		)
+		check(isPositiveNumber(plume.stationRangeStuds), "plume.stationRangeStuds must be > 0")
+		check(type(plume.rod) == "table", "plume.rod missing")
+		if type(plume.rod) == "table" then
+			local rod = plume.rod
+			check(isPositiveNumber(rod.activeSeconds), "plume.rod.activeSeconds must be > 0")
+			check(isPositiveNumber(rod.radiusStuds), "plume.rod.radiusStuds must be > 0")
+			check(
+				isPositiveNumber(rod.minTickHz)
+					and isPositiveNumber(rod.maxTickHz)
+					and rod.minTickHz < rod.maxTickHz
+					and rod.maxTickHz <= 30,
+				"plume.rod tick rates must satisfy 0 < minTickHz < maxTickHz <= 30"
+			)
+			for _, key in ipairs({ "warmColor", "coldColor" }) do
+				local color = rod[key]
+				local okColor = type(color) == "table" and #color == 3
+				if okColor then
+					for _, channel in ipairs(color) do
+						okColor = okColor and isNonNegativeNumber(channel) and channel <= 255 and channel == math.floor(channel)
+					end
+				end
+				check(okColor, "plume.rod." .. key .. " must be three integer channels within [0, 255]")
+			end
+			check(isNonNegativeNumber(rod.hapticsMax) and rod.hapticsMax <= 1, "plume.rod.hapticsMax must be within [0, 1]")
+			check(isPositiveNumber(rod.aimRateHz) and rod.aimRateHz <= 30, "plume.rod.aimRateHz must be within (0, 30]")
+		end
+		check(
+			type(raw.tools) == "table" and type(raw.tools.eggSense) == "table" and raw.tools.eggSense.lent == true,
+			"tools.eggSense must exist and be lent"
+		)
+		local roles = type(raw.audio) == "table" and raw.audio.roles
+		check(
+			type(roles) == "table" and type(roles["tool.rodTick"]) == "table" and type(roles["tool.rodLock"]) == "table",
+			"audio.roles must define tool.rodTick and tool.rodLock for the Egg Sense rod"
 		)
 	end
 

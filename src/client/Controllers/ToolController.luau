@@ -3,8 +3,10 @@
 -- tool, and Primary-action intents per tool. Hand / Nest Rake send CollectAction (hold-to-gather
 -- repeats at the server cooldown once the hold path is unlocked); Confetti Charge sends a throw;
 -- Feather Vac sends begin on press and end on release/cancel/focus loss; Scout Chick toggles
--- deploy/recall. Overflow bundles are gathered by walking over them. The server decides every
--- yield, timer, and roll; this controller only animates the feedback envelope.
+-- deploy/recall; the Egg Sense rod (a timed loan from Professor Plume) samples the crosshair point
+-- at its aim rate and ticks, glows and pulses by the heat the server returns. Overflow bundles are
+-- gathered by walking over them. The server decides every yield, timer, and roll; this controller
+-- only animates the feedback envelope.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -15,6 +17,7 @@ local Trove = require(Shared.Util.Trove)
 local Signal = require(Shared.Util.Signal)
 local Tokens = require(Shared.Design.Tokens)
 local ToolSpecs = require(Shared.Domain.ToolSpecs)
+local EggSense = require(Shared.Domain.EggSense)
 
 local ToolController = {}
 ToolController.__index = ToolController
@@ -39,6 +42,12 @@ export type ToolController = typeof(setmetatable(
 		_chargeReadyAt: number,
 		_lastGatherAt: number,
 		_vac: { heat: number, runtimeSeconds: number, coolingSeconds: number, overheated: boolean },
+		_rod: { expiresAt: number, heat: number, generation: number }?,
+		_rodAimInFlight: boolean,
+		_rodAimAt: number,
+		_rodStatusAt: number,
+		_rodLockAt: number,
+		_rodGeneration: number,
 		collected: any,
 		rejected: any,
 		equippedChanged: any,
@@ -47,6 +56,8 @@ export type ToolController = typeof(setmetatable(
 		chargeThrown: any, -- (data) throw accepted by the server
 		chargeExtinguished: any, -- throw refused or cancelled
 		vacChanged: any, -- (running: boolean)
+		rodChanged: any, -- (active: boolean) the Egg Sense rod picked up or taken back
+		rodHeat: any, -- (heat: number) every reading the server answers
 		_chargeLitAt: number?,
 		_lastAimAt: number,
 		_aimInFlight: boolean,
@@ -65,6 +76,8 @@ export type ToolController = typeof(setmetatable(
 			chickToggles: number,
 			gathers: number,
 			holdRepeats: number,
+			rodReadings: number,
+			rodTicks: number,
 		},
 	},
 	ToolController
@@ -108,6 +121,12 @@ function ToolController.new(deps: {
 		_chargeReadyAt = 0,
 		_lastGatherAt = 0,
 		_vac = { heat = 0, runtimeSeconds = 1, coolingSeconds = 1, overheated = false },
+		_rod = nil,
+		_rodAimInFlight = false,
+		_rodAimAt = 0,
+		_rodStatusAt = 0,
+		_rodLockAt = 0,
+		_rodGeneration = 0,
 		collected = Signal.new(),
 		rejected = Signal.new(),
 		equippedChanged = Signal.new(),
@@ -116,6 +135,8 @@ function ToolController.new(deps: {
 		chargeThrown = Signal.new(),
 		chargeExtinguished = Signal.new(),
 		vacChanged = Signal.new(),
+		rodChanged = Signal.new(),
+		rodHeat = Signal.new(),
 		_chargeLitAt = nil,
 		_lastAimAt = 0,
 		_aimInFlight = false,
@@ -132,6 +153,8 @@ function ToolController.new(deps: {
 			chickToggles = 0,
 			gathers = 0,
 			holdRepeats = 0,
+			rodReadings = 0,
+			rodTicks = 0,
 		},
 	}, ToolController)
 
@@ -142,6 +165,7 @@ function ToolController.new(deps: {
 			self:_stopHold()
 			self:_setVacRunning(false)
 			self._chickActive = false
+			self:_stopRod("phase")
 		end
 		self:_resetActionState("phase")
 		if phase == "Cutscene" then
@@ -173,7 +197,7 @@ function ToolController.new(deps: {
 			return
 		end
 		local key = input.KeyCode
-		local numbers = { Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four, Enum.KeyCode.Five }
+		local numbers = { Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four, Enum.KeyCode.Five, Enum.KeyCode.Six }
 		local index = table.find(numbers, key)
 		if index then
 			local toolId = hotbar:toolAtIndex(index)
@@ -235,7 +259,32 @@ function ToolController.new(deps: {
 		if payload.kind == "tools_granted" then
 			for _, toolId in ipairs(payload.tools) do
 				self._owned[toolId] = true
-				deps.hud.toasts:push((deps.config.tools[toolId] and deps.config.tools[toolId].displayName or toolId) .. " ready", "success")
+				if toolId == "eggSense" then
+					-- Plume's loan: the rod comes up into the hand at once and its clock starts here.
+					local seconds = if payload.expiresInMs then payload.expiresInMs / 1000 else deps.config.plume.rod.activeSeconds
+					self:_startRod(os.clock() + seconds)
+				else
+					deps.hud.toasts:push(
+						(deps.config.tools[toolId] and deps.config.tools[toolId].displayName or toolId) .. " ready",
+						"success"
+					)
+				end
+			end
+			self:_refreshHotbar()
+			if payload.equipped and table.find(payload.tools, "eggSense") then
+				self:_applyEquipped("eggSense")
+			end
+		elseif payload.kind == "tools_revoked" then
+			-- A timed loan taken back (expired, death, leaving, the round ending): the slot goes, the
+			-- hand comes back up if the tool was in it, and everything the rod drove goes quiet.
+			for _, toolId in ipairs(payload.tools) do
+				self._owned[toolId] = nil
+				if toolId == "eggSense" then
+					self:_stopRod(payload.reason or "revoked")
+				end
+				if self._equipped == toolId then
+					self:_applyEquipped("hand")
+				end
 			end
 			self:_refreshHotbar()
 		elseif payload.kind == "chick_deposit" then
@@ -282,7 +331,28 @@ function ToolController._syncFromPlayer(self: ToolController, player: { [string]
 	if chick then
 		self._chickActive = chick.active == true
 	end
+	-- The rod's clock is the server's; a snapshot that shows the loan without a local clock (a
+	-- rejoin, a missed event) starts a full-length one, and the server's revoke still ends it.
+	if owned.eggSense and not self._rod then
+		self:_startRod(os.clock() + self._deps.config.plume.rod.activeSeconds)
+	elseif not owned.eggSense and self._rod then
+		self:_stopRod("snapshot")
+	end
 	self:_refreshHotbar()
+end
+
+-- Records the equipped tool locally without a request (the server already made it so).
+function ToolController._applyEquipped(self: ToolController, toolId: string)
+	if toolId == self._equipped then
+		return
+	end
+	self:_stopHold()
+	self._equipped = toolId
+	self:_setVacRunning(false)
+	self:_resetActionState("equip")
+	self._deps.hud.hotbar:setEquipped(toolId)
+	self:_refreshStatus()
+	self.equippedChanged:Fire(toolId)
 end
 
 function ToolController._refreshHotbar(self: ToolController)
@@ -303,6 +373,24 @@ end
 function ToolController._refreshStatus(self: ToolController)
 	local hotbar = self._deps.hud.hotbar
 	local hud = self._deps.hud
+	-- The heat meter has one owner at a time: the rod while it is in the hand, else the vac.
+	local rod = self._rod
+	local rodInHand = rod ~= nil and self._equipped == "eggSense" and self._enabled
+	if rodInHand and hud.setRodHeat then
+		hud:setRodHeat((rod :: any).heat, (rod :: any).expiresAt - os.clock())
+	elseif hud.setRodHeat then
+		hud:setRodHeat(nil)
+	end
+	if rod then
+		local remaining = math.max(0, rod.expiresAt - os.clock())
+		local active = self._deps.config.plume.rod.activeSeconds
+		hotbar:setStatus(
+			"eggSense",
+			if active > 0 then remaining / active else 0,
+			string.format("%ds", math.ceil(remaining)),
+			if EggSense.isLocked(rod.heat) then "success" elseif remaining < 5 then "warning" else "info"
+		)
+	end
 	if self._owned.featherVac then
 		local fraction = if self._vac.runtimeSeconds > 0 then self._vac.heat / self._vac.runtimeSeconds else 0
 		local text = if self._vac.overheated then "Overheated" elseif self._vacRunning then "Pulling" else "Ready"
@@ -312,7 +400,7 @@ function ToolController._refreshStatus(self: ToolController)
 			text,
 			if self._vac.overheated then "danger" elseif fraction > 0.7 then "warning" else "info"
 		)
-		if hud.setHeat then
+		if hud.setHeat and not rodInHand then
 			hud:setHeat(
 				fraction,
 				if self._equipped ~= "featherVac" or not self._enabled
@@ -322,7 +410,7 @@ function ToolController._refreshStatus(self: ToolController)
 					else "idle"
 			)
 		end
-	elseif hud.setHeat then
+	elseif hud.setHeat and not rodInHand then
 		hud:setHeat(0, "hidden")
 	end
 	if self._owned.confettiCharge then
@@ -415,6 +503,25 @@ function ToolController._render(self: ToolController, dt: number)
 		-- Bag-full stops come from the server's vac_state (its capacity is the truth); a stale local
 		-- projection must never cut the suction short.
 	end
+	-- Egg Sense rod: sample the crosshair point at the rod's aim rate while it is in the hand. The
+	-- reply's heat drives the tick loop, the viewmodel and the HUD; nothing here yields.
+	local rod = self._rod
+	if rod then
+		if now >= rod.expiresAt then
+			-- The server's revoke is the truth; this only stops the clock from reading below zero.
+			self:_stopRod("expired_local")
+		elseif self._equipped == "eggSense" then
+			local interval = 1 / math.max(1, self._deps.config.plume.rod.aimRateHz or 8)
+			if not self._rodAimInFlight and now - self._rodAimAt >= interval then
+				self._rodAimAt = now
+				self:_sendRodAim()
+			end
+			if now - self._rodStatusAt >= 0.25 then
+				self._rodStatusAt = now
+				self:_refreshStatus()
+			end
+		end
+	end
 	-- Local heat interpolation between authoritative vac events (the server owns the real value).
 	if self._owned.featherVac and self._vac.runtimeSeconds > 0 then
 		if self._vacRunning then
@@ -461,8 +568,168 @@ function ToolController.equip(self: ToolController, toolId: string): boolean
 	self._deps.hud.hotbar:setEquipped(toolId)
 	self._deps.audio:play(Tokens.sound.uiTap)
 	self._deps.haptics:pulse(0.15, 0.03)
+	self:_refreshStatus()
 	self.equippedChanged:Fire(toolId)
 	return true
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- Egg Sense rod
+-- ---------------------------------------------------------------------------------------------
+
+-- The world point under the crosshair: the first feather record the centre ray meets, else the
+-- first solid surface (the sand under the nest counts; the rod reads anywhere on the mound).
+function ToolController._rodAimPoint(self: ToolController): Vector3?
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return nil
+	end
+	local origin = camera.CFrame.Position
+	local direction = camera.CFrame.LookVector
+	local pile = self._deps.pile
+	local target = pile and pile.resolveTarget and pile:resolveTarget(origin, direction)
+	if target and target.position then
+		return target.position
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local exclude: { Instance } = { camera }
+	local character = Players.LocalPlayer.Character
+	if character then
+		table.insert(exclude, character)
+	end
+	for _, name in ipairs({ "SFE_VFX", "SFE_ToolVisuals" }) do
+		local folder = workspace:FindFirstChild(name)
+		if folder then
+			table.insert(exclude, folder)
+		end
+	end
+	params.FilterDescendantsInstances = exclude
+	local range = self._deps.config.interaction.defaultRangeStuds + self._deps.config.plume.rod.radiusStuds
+	local result = workspace:Raycast(origin, direction * range, params)
+	return result and result.Position or nil
+end
+
+-- One reading, off the render thread. A refusal that says the loan is over ends the rod here;
+-- any other refusal (out of the mound, rate limited) simply reads cold.
+function ToolController._sendRodAim(self: ToolController)
+	local token = self._deps.round:sessionToken()
+	local point = self:_rodAimPoint()
+	local rod = self._rod
+	if not token or not rod then
+		return
+	end
+	if not point then
+		self:_applyRodHeat(0)
+		return
+	end
+	local generation = rod.generation
+	self._rodAimInFlight = true
+	task.spawn(function()
+		local ok, result = pcall(function()
+			return self._deps.net:request("RodAim", { sessionToken = token, x = point.X, y = point.Y, z = point.Z })
+		end)
+		self._rodAimInFlight = false
+		if not ok or type(result) ~= "table" or not self._rod or self._rod.generation ~= generation then
+			return
+		end
+		if result.ok and result.data then
+			self.stats.rodReadings += 1
+			self:_applyRodHeat(tonumber(result.data.heat) or 0)
+		elseif result.message == "inactive" or result.message == "egg_found" then
+			self:_stopRod(result.message)
+		elseif result.code ~= "rate_limited" then
+			self:_applyRodHeat(0)
+		end
+	end)
+end
+
+function ToolController._applyRodHeat(self: ToolController, heat: number)
+	local rod = self._rod
+	if not rod then
+		return
+	end
+	local h = EggSense.quantise(heat)
+	local locked = EggSense.isLocked(h) and not EggSense.isLocked(rod.heat)
+	rod.heat = h
+	if locked then
+		local now = os.clock()
+		if now - self._rodLockAt > 0.5 then
+			self._rodLockAt = now
+			self._deps.audio:play(Tokens.sound.rodLock)
+		end
+	end
+	pcall(function()
+		self.rodHeat:Fire(h)
+	end)
+end
+
+-- Starts (or restarts) the loan clock and the one tick thread. The thread reschedules itself from
+-- the live heat, so a warmer reading quickens the next tick without any per-frame audio.
+function ToolController._startRod(self: ToolController, expiresAt: number)
+	local deps = self._deps
+	local fresh = self._rod == nil
+	self._rodGeneration += 1
+	local generation = self._rodGeneration
+	self._rod = { expiresAt = expiresAt, heat = 0, generation = generation }
+	self._rodAimAt = 0
+	self._rodStatusAt = 0
+	if fresh then
+		deps.hud.toasts:push(string.format("Egg Sense Rod - %ds", math.ceil(expiresAt - os.clock())), "success")
+		deps.haptics:pulse(0.3, 0.08)
+		pcall(function()
+			self.rodChanged:Fire(true)
+		end)
+	end
+	task.spawn(function()
+		while true do
+			local rod = self._rod
+			if not rod or rod.generation ~= generation then
+				return
+			end
+			local inHand = self._equipped == "eggSense" and self._enabled
+			if inHand then
+				local rodCfg = deps.config.plume.rod
+				self.stats.rodTicks += 1
+				deps.audio:play(Tokens.sound.rodTick, { pitchVariance = 0.08 + 0.1 * rod.heat })
+				deps.haptics:pulse(rod.heat * (rodCfg.hapticsMax or 0.6), 0.05)
+				task.wait(EggSense.tickIntervalFor(deps.config, rod.heat))
+			else
+				task.wait(0.2)
+			end
+		end
+	end)
+	self:_refreshStatus()
+end
+
+function ToolController._stopRod(self: ToolController, reason: string)
+	local rod = self._rod
+	if not rod then
+		return
+	end
+	self._rod = nil
+	self._rodGeneration += 1 -- orphans the tick thread and any reading still in flight
+	self._rodAimInFlight = false
+	local hud = self._deps.hud
+	if hud.setRodHeat then
+		hud:setRodHeat(nil)
+	end
+	hud.hotbar:setStatus("eggSense", nil, "", "info")
+	if reason == "expired" or reason == "expired_local" or reason == "inactive" then
+		hud.toasts:push("The Egg Sense Rod went cold", "info")
+	end
+	pcall(function()
+		self.rodChanged:Fire(false)
+	end)
+	self:_refreshStatus()
+end
+
+function ToolController.rodState(self: ToolController): { active: boolean, heat: number, remaining: number }
+	local rod = self._rod
+	if not rod then
+		return { active = false, heat = 0, remaining = 0 }
+	end
+	return { active = true, heat = rod.heat, remaining = math.max(0, rod.expiresAt - os.clock()) }
 end
 
 local function aimRay(aimTarget: Vector3?): (Vector3?, Vector3?, string?)
@@ -708,6 +975,11 @@ function ToolController.onPrimaryBegin(self: ToolController)
 		else
 			self:beginAction()
 		end
+	elseif toolId == "eggSense" then
+		-- The rod has no action: it reads wherever it is pointed. A press just answers on the reticle.
+		if self._deps.hud.reticlePunch then
+			self._deps.hud:reticlePunch()
+		end
 	end
 end
 
@@ -917,12 +1189,14 @@ function ToolController.status(self: ToolController): { [string]: any }
 		chargeLit = self._chargeLitAt ~= nil,
 		chargeReadyIn = math.max(0, self._chargeReadyAt - os.clock()),
 		holdEnabled = self:_holdEnabled(),
+		rod = self:rodState(),
 		stats = table.clone(self.stats),
 	}
 end
 
 function ToolController.destroy(self: ToolController)
 	self:setEnabled(false)
+	self:_stopRod("destroy")
 	self._trove:destroy()
 	self.collected:Destroy()
 	self.rejected:Destroy()
@@ -932,8 +1206,11 @@ function ToolController.destroy(self: ToolController)
 	self.chargeThrown:Destroy()
 	self.chargeExtinguished:Destroy()
 	self.vacChanged:Destroy()
+	self.rodChanged:Destroy()
+	self.rodHeat:Destroy()
 end
 
 ToolController.TOOL_IDS = ToolSpecs.TOOL_IDS
+ToolController.ALL_TOOL_IDS = ToolSpecs.ALL_TOOL_IDS
 
 return ToolController

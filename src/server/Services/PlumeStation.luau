@@ -1,9 +1,9 @@
 --!strict
 -- Professor Plume and his investigation station: a polished bench between the Farmer and the
 -- mound with the Rainbow Feather prism analyzer, a magnifying glass, eggshell samples, notes, and
--- the parchment clue board behind it. Everything is built from parts at boot and anchored; the
--- client PlumeController owns the idle motion, the highlight, the board text and the analysis
--- sequence, so nothing here moves on its own and nothing here needs a script.
+-- the parchment loan board behind it. Everything is built from parts at boot and anchored; the
+-- client PlumeController owns the idle motion, the highlight, the board text and the hand-over
+-- beat, so nothing here moves on its own and nothing here needs a script.
 --
 -- Plume's rig is a clone of the owner's Cow Boy (the same source as the Farmer), with the Toolbox
 -- accessories, clothing and every script removed, recoloured tawny with a cream chest, and dressed
@@ -16,7 +16,7 @@ local PlumeStation = {}
 
 PlumeStation.MODEL_NAME = "ProfessorPlume"
 PlumeStation.STATION_NAME = "PlumeStation"
-PlumeStation.PROMPT_NAME = "SFE_PlumeAnalyze"
+PlumeStation.PROMPT_NAME = "SFE_PlumeBorrow"
 PlumeStation.PLACEHOLDER_TAG = "SFE_ChapterShell"
 
 local WALNUT = Color3.fromRGB(92, 58, 34)
@@ -340,7 +340,7 @@ local function buildNotes(station: Model, base: CFrame, tableTop: number)
 	vane.CastShadow = false
 end
 
--- The parchment clue board on its easel behind the bench. The client writes the clue rows.
+-- The parchment loan board on its easel behind the bench. The client writes the rows.
 local function buildBoard(station: Model, base: CFrame)
 	-- OWNER 17 Sep 2026: the easel stands at the bench's right end and Plume at its left, so his arms
 	-- never cross the board and nothing covers the clues.
@@ -365,7 +365,7 @@ local function buildBoard(station: Model, base: CFrame)
 	local frame =
 		part(station, "ClueBoardFrame", Vector3.new(5.3, 4.0, 0.12), origin * CFrame.new(0, 4.6, -0.02) * lean, WALNUT, Enum.Material.Wood)
 	frame.CastShadow = false
-	-- Pins, thread and a crossed-out corner; the board should read as worked on before any clue.
+	-- Pins, thread and a crossed-out corner; the board should read as worked on before any loan.
 	local pinSpots = { { -1.9, 1.35 }, { 1.4, 1.5 }, { -1.5, -1.2 }, { 1.9, -0.9 } }
 	for i, spot in ipairs(pinSpots) do
 		local pin = part(
@@ -408,7 +408,7 @@ local function buildBoard(station: Model, base: CFrame)
 	gui.PixelsPerStud = 80
 	gui.LightInfluence = 0.7
 	gui.Parent = board
-	textLabel(gui, "Title", "NEST CLUES", UDim2.new(0.6, 0, 0, 56), UDim2.fromScale(0.04, 0.03), Enum.Font.FredokaOne, 44, INK)
+	textLabel(gui, "Title", "EGG SENSE ROD", UDim2.new(0.6, 0, 0, 56), UDim2.fromScale(0.04, 0.03), Enum.Font.FredokaOne, 44, INK)
 	local sketch = Instance.new("Frame")
 	sketch.Name = "MoundSketch"
 	sketch.AnchorPoint = Vector2.new(1, 0)
@@ -429,7 +429,8 @@ local function buildBoard(station: Model, base: CFrame)
 		textLabel(gui, "SketchBarn", "barn", UDim2.fromOffset(70, 22), UDim2.new(0.97, -190, 0.06, 26), Enum.Font.GothamMedium, 18, INK)
 	barnTag.TextXAlignment = Enum.TextXAlignment.Right
 	textLabel(gui, "SketchFence", "fence", UDim2.fromOffset(70, 22), UDim2.new(0.97, 4, 0.06, 26), Enum.Font.GothamMedium, 18, INK)
-	local rows = { { "Direction", "DIRECTION" }, { "Depth", "DEPTH" } }
+	-- Two rows the client keeps current from the round snapshot: loans left, and the next price.
+	local rows = { { "Loans", "LOANS LEFT" }, { "Cost", "NEXT LOAN" } }
 	for i, row in ipairs(rows) do
 		local y = 0.36 + (i - 1) * 0.27
 		local rowFrame = Instance.new("Frame")
@@ -446,7 +447,7 @@ local function buildBoard(station: Model, base: CFrame)
 		local value = textLabel(
 			rowFrame,
 			"Value",
-			"UNKNOWN",
+			"-",
 			UDim2.fromScale(0.54, 1),
 			UDim2.fromScale(0.44, 0),
 			Enum.Font.FredokaOne,
@@ -457,7 +458,7 @@ local function buildBoard(station: Model, base: CFrame)
 		local stamp = textLabel(
 			rowFrame,
 			"Stamp",
-			"ANALYZED",
+			"ON LOAN",
 			UDim2.fromScale(0.3, 0.5),
 			UDim2.fromScale(0.66, 0.5),
 			Enum.Font.FredokaOne,
@@ -730,10 +731,10 @@ function PlumeStation.build(workspaceService: Workspace, folder: Instance, layou
 	anchor:SetAttribute("SFE_NpcRole", "Nest forensics")
 	local p = Instance.new("ProximityPrompt")
 	p.Name = PlumeStation.PROMPT_NAME
-	p.ActionText = "ANALYZE CLUES"
+	p.ActionText = "BORROW EGG SENSE"
 	p.ObjectText = "Professor Plume"
 	p.HoldDuration = 0
-	p.MaxActivationDistance = config.clues.stationRangeStuds
+	p.MaxActivationDistance = config.plume.stationRangeStuds
 	p.RequiresLineOfSight = false
 	p.Style = Enum.ProximityPromptStyle.Custom
 	p.KeyboardKeyCode = Enum.KeyCode.E

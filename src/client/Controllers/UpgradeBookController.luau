@@ -24,7 +24,7 @@ local Confetti = require(script.Parent.Parent.UI.Components.Confetti)
 local UpgradeActions = require(script.Parent.Parent.UI.UpgradeActions)
 local UpgradeCopy = require(script.Parent.Parent.UI.UpgradeCopy)
 local Depth = require(script.Parent.Parent.UI.Components.Depth)
-local NestClues = require(Shared.Domain.NestClues)
+local EggSense = require(Shared.Domain.EggSense)
 local NestSurvey = require(Shared.Domain.NestSurvey)
 
 local UpgradeBookController = {}
@@ -576,60 +576,57 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 	story.Position = UDim2.fromOffset(0, Tokens.typography.display.size + Tokens.spacing.md)
 	story.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size * 5)
 	story.TextYAlignment = Enum.TextYAlignment.Top
-	-- NEST CLUES: what Professor Plume has read from the feathers this round. Two rows, UNKNOWN in
-	-- fog until a clue is bought, then the stamped band. The data is the round snapshot's `clues`,
-	-- so a member who paid nothing and a member who joined late read the same rows.
+	-- NEST INTEL: Professor Plume's rod loans and Molly's survey this round. One row each; the
+	-- data is the round snapshot's `plume` and `survey`, so a member who paid nothing and a member
+	-- who joined late read the same rows.
 	local round = deps.round.round
-	local clues = round and round.clues
-	local unlocked = clues and clues.unlocked or {}
+	local plume = round and round.plume
+	local usesLeft = if plume then (plume.usesLeft or 0) else EggSense.maxUses(deps.config)
+	local nextCost = if plume then plume.nextCost else EggSense.nextCost(deps.config, 0)
 	local cluesTop = Tokens.typography.display.size + Tokens.spacing.md + Tokens.typography.body.size * 5 + Tokens.spacing.md
-	local cluesTitle = FrameKit.text(right, "CluesTitle", "NEST CLUES", "title", { zIndex = z, color = PAGE_BLUE })
+	local cluesTitle = FrameKit.text(right, "CluesTitle", "NEST INTEL", "title", { zIndex = z, color = PAGE_BLUE })
 	cluesTitle.Position = UDim2.fromOffset(0, cluesTop)
 	cluesTitle.Size = UDim2.new(1, 0, 0, Tokens.typography.title.size + 2)
 	local rowHeight = tap - 4
-	for index, category in ipairs(NestClues.CATEGORIES) do
-		local entry = unlocked[category]
-		local row = Instance.new("Frame")
-		row.Name = "Clue_" .. category
-		row.Position =
-			UDim2.fromOffset(0, cluesTop + Tokens.typography.title.size + Tokens.spacing.sm + (index - 1) * (rowHeight + Tokens.spacing.xs))
-		row.Size = UDim2.new(1, 0, 0, rowHeight)
-		row.BackgroundColor3 = if entry then Tokens.color.creamPill else Tokens.color.creamDeep
-		row.BackgroundTransparency = if entry then 0 else 0.35
-		row.BorderSizePixel = 0
-		row.ZIndex = z
-		local rowCorner = Instance.new("UICorner")
-		rowCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
-		rowCorner.Parent = row
-		Depth.keyline(row, Tokens.stroke.hairline + 0.5, if entry then Tokens.color.gold else Tokens.color.strawDeep)
-		row.Parent = right
-		local label = FrameKit.text(row, "Label", NestClues.LABELS[category], "heading", { zIndex = z + 1, color = Tokens.color.inkStrong })
-		label.AnchorPoint = Vector2.new(0, 0.5)
-		label.Position = UDim2.new(0, Tokens.spacing.md, 0.5, 0)
-		label.Size = UDim2.new(0.45, 0, 0, Tokens.typography.heading.size + 2)
-		local value = FrameKit.text(row, "Value", if entry then tostring(entry.title) else "UNKNOWN", "heading", {
+	local rodRow = Instance.new("Frame")
+	rodRow.Name = "Clue_rod"
+	rodRow.Position = UDim2.fromOffset(0, cluesTop + Tokens.typography.title.size + Tokens.spacing.sm)
+	rodRow.Size = UDim2.new(1, 0, 0, rowHeight)
+	rodRow.BackgroundColor3 = if usesLeft > 0 then Tokens.color.creamPill else Tokens.color.creamDeep
+	rodRow.BackgroundTransparency = if usesLeft > 0 then 0 else 0.35
+	rodRow.BorderSizePixel = 0
+	rodRow.ZIndex = z
+	local rodCorner = Instance.new("UICorner")
+	rodCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
+	rodCorner.Parent = rodRow
+	Depth.keyline(rodRow, Tokens.stroke.hairline + 0.5, if usesLeft > 0 then Tokens.color.gold else Tokens.color.strawDeep)
+	rodRow.Parent = right
+	local rodLabel = FrameKit.text(rodRow, "Label", "EGG SENSE", "heading", { zIndex = z + 1, color = Tokens.color.inkStrong })
+	rodLabel.AnchorPoint = Vector2.new(0, 0.5)
+	rodLabel.Position = UDim2.new(0, Tokens.spacing.md, 0.5, 0)
+	rodLabel.Size = UDim2.new(0.4, 0, 0, Tokens.typography.heading.size + 2)
+	local rodValue = FrameKit.text(
+		rodRow,
+		"Value",
+		if nextCost then string.format("%d LEFT - NEXT %d", usesLeft, nextCost) else "NO LOANS LEFT",
+		"heading",
+		{
 			zIndex = z + 1,
-			color = if entry then PAGE_BLUE else Tokens.color.inkMuted,
+			color = if nextCost then PAGE_BLUE else Tokens.color.inkMuted,
 			align = Enum.TextXAlignment.Right,
-		})
-		value.AnchorPoint = Vector2.new(1, 0.5)
-		value.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, 0)
-		value.Size = UDim2.new(0.55, -Tokens.spacing.md, 0, Tokens.typography.heading.size + 2)
-		if entry then
-			local stamp = FrameKit.badge(row, "Stamp", "ANALYZED", Color3.fromRGB(196, 52, 44), z + 2)
-			stamp.AnchorPoint = Vector2.new(0.5, 0.5)
-			stamp.Position = UDim2.fromScale(0.5, 0.5)
-			stamp.Rotation = -8
-			stamp.TextSize = Tokens.typography.caption.size - 2
-		end
-	end
+		}
+	)
+	rodValue.AnchorPoint = Vector2.new(1, 0.5)
+	rodValue.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, 0)
+	rodValue.Size = UDim2.new(0.6, -Tokens.spacing.md, 0, Tokens.typography.heading.size + 2)
+	rodValue.TextSize = Tokens.typography.heading.size - 2
 	-- Molly's survey: the party's latest reading of the round (of up to three), or NOT RUN.
 	local surveyState = round and round.survey
 	local survey = surveyState and surveyState.latest
 	local surveyRow = Instance.new("Frame")
 	surveyRow.Name = "Clue_survey"
 	surveyRow.Position =
-		UDim2.fromOffset(0, cluesTop + Tokens.typography.title.size + Tokens.spacing.sm + 2 * (rowHeight + Tokens.spacing.xs))
+		UDim2.fromOffset(0, cluesTop + Tokens.typography.title.size + Tokens.spacing.sm + 1 * (rowHeight + Tokens.spacing.xs))
 	surveyRow.Size = UDim2.new(1, 0, 0, rowHeight)
 	surveyRow.BackgroundColor3 = if survey then Tokens.color.creamPill else Tokens.color.creamDeep
 	surveyRow.BackgroundTransparency = if survey then 0 else 0.35

@@ -376,12 +376,17 @@ local tools = ToolService.new({
 })
 local egg =
 	EggService.new({ config = config, rounds = rounds, clock = clock, getCharacterPosition = getCharacterPosition, analytics = analytics })
--- Professor Plume: Rainbow Feathers for a clue, shared by the round.
+-- Professor Plume: normal feathers for a timed loan of the Egg Sense rod; the loan count is the round's.
 local clues = ClueService.new({
 	config = config,
 	rounds = rounds,
 	sessions = sessions,
+	tools = tools,
+	clock = clock,
 	getCharacterPosition = getCharacterPosition,
+	getEggPosition = function(runtime)
+		return egg:position(runtime)
+	end,
 	analytics = analytics,
 })
 -- Molly the Mole: crates of normal feathers for the party's three narrowing surveys of the round.
@@ -1154,17 +1159,20 @@ end)
 registry:onRequest("EggDeliver", function(player, payload)
 	return egg:deliver(player.UserId, payload.sessionToken)
 end)
-registry:onRequest("ClueAnalyze", function(player, payload)
-	local result = clues:analyze(player.UserId, payload)
+registry:onRequest("PlumeLend", function(player, payload)
+	local result = clues:lend(player.UserId, payload)
 	local runtime = rounds:roundOf(player.UserId)
 	if result.ok and runtime then
-		-- The payer's bag changed; the same snapshot shape the HUD already binds to carries it, and
-		-- the previews push covers a client that reached the remote by some path other than the card.
+		-- The borrower's bag and hand changed; the same snapshot shape the HUD already binds to
+		-- carries both, and the previews push covers a client that reached the remote some other way.
 		local data = result.data :: any
 		data.player = projectPlayerFor(runtime.state.roundId, player.UserId)
 		pushPreviews(player)
 	end
 	return result
+end)
+registry:onRequest("RodAim", function(player, payload)
+	return clues:aim(player.UserId, payload)
 end)
 registry:onRequest("SurveyRequest", function(player, payload)
 	local result = surveys:survey(player.UserId, payload)
@@ -1211,22 +1219,20 @@ surveys.selected:Connect(function(runtime, userId, region, sub, tier)
 		end
 	end
 end)
--- A clue belongs to the whole party: everyone hears the discovery and the words, with the payer's
--- name for the banner. The payer's own client sequences the reveal after its machine has run.
-clues.unlocked:Connect(function(runtime, userId, entry, projection)
-	local payer = playerData:playerOf(userId)
-	local payerName = if payer and typeof(payer) == "Instance" then (payer :: Player).DisplayName else "A forager"
+-- A loan is the whole party's: everyone learns how many are left and what the next one costs, with
+-- the borrower's name for the notice. The rod itself reaches only the borrower, through ToolEvent.
+clues.lent:Connect(function(runtime, userId, projection)
+	local borrower = playerData:playerOf(userId)
+	local borrowerName = if borrower and typeof(borrower) == "Instance" then (borrower :: Player).DisplayName else "A forager"
 	for _, member in ipairs(memberPlayers(runtime.state.members)) do
-		send(member, "ClueUnlocked", {
+		send(member, "PlumeLent", {
 			roundId = runtime.state.roundId,
-			category = entry.category,
-			band = entry.band,
-			title = entry.title,
-			text = entry.text,
+			usesLeft = projection.usesLeft,
+			nextCost = projection.nextCost,
+			activeSeconds = projection.activeSeconds,
 			byUserId = userId,
-			byName = payerName,
-			order = entry.order,
-			clues = projection,
+			byName = borrowerName,
+			plume = projection,
 		})
 	end
 end)
