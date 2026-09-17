@@ -86,6 +86,8 @@ local ToolService = require(script.Services.ToolService)
 local EggService = require(script.Services.EggService)
 local ClueService = require(script.Services.ClueService)
 local SurveyService = require(script.Services.SurveyService)
+local AnnouncementService = require(script.Services.AnnouncementService)
+local RoundAnnouncements = require(script.Services.RoundAnnouncements)
 local VictoryService = require(script.Services.VictoryService)
 local ObjectiveService = require(script.Services.ObjectiveService)
 local ClassService = require(script.Services.ClassService)
@@ -789,9 +791,31 @@ rounds.deltaFlushed:Connect(function(roundId, delta)
 	end
 end)
 
+-- Big centre-top announcements: rare round moments only (first Rainbow Feather, Plume ready, the
+-- Egg uncovered / carried / returned), to the round's present players. Bound to the Egg's signals
+-- before the handlers below, so the notice leaves ahead of the phase change it belongs to.
+local announcements = AnnouncementService.new({
+	send = send,
+	getPlayers = function()
+		return Players:GetPlayers()
+	end,
+	clock = clock,
+})
+local roundAnnouncements = RoundAnnouncements.new({
+	config = config,
+	announcements = announcements,
+	playerOf = function(userId: number)
+		local player = playerData:playerOf(userId)
+		return if player and typeof(player) == "Instance" then player else nil
+	end,
+	nameOf = displayNameOf,
+})
+roundAnnouncements:bindEgg(egg)
+
 local function onFeathersAwarded(userId: number, runtime: any, result: any)
 	if type(result) == "table" then
 		pileTerrain:onAwarded(runtime, result)
+		roundAnnouncements:onAwarded(userId, runtime, result)
 	end
 	if egg:checkReveal(runtime) then
 		return

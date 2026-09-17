@@ -48,6 +48,9 @@ local ObjectiveController = require(Controllers.ObjectiveController)
 local VictoryController = require(Controllers.VictoryController)
 local PartyController = require(Controllers.PartyController)
 local LobbyController = require(Controllers.LobbyController)
+local CelebrationController = require(Controllers.CelebrationController)
+local RainbowFeatherController = require(Controllers.RainbowFeatherController)
+local AnnouncementBanner = require(script.UI.AnnouncementBanner)
 
 local player = Players.LocalPlayer
 local bootStarted = os.clock()
@@ -146,6 +149,47 @@ PerfTrace.mark("round")
 local round = trove:add(
 	RoundController.new({ net = net, profile = profile, modals = modals, accessibility = accessibility, audio = audio, config = config })
 )
+-- Big moments: pooled celebration effects any controller can call, and the one centre-top banner the
+-- server's Announcement event (or a controller, locally) puts the round's rare notices on.
+PerfTrace.mark("celebration")
+local celebration = trove:add(CelebrationController.new({
+	quality = quality,
+	accessibility = accessibility,
+	camera = camera,
+	audio = audio,
+	hud = hud,
+}))
+local announcements = trove:add(AnnouncementBanner.new(hud.stage, {
+	motion = function()
+		return accessibility:motionSettings()
+	end,
+	tier = function()
+		return quality:tier()
+	end,
+	topPx = function()
+		return hud:objectiveBottomPx()
+	end,
+	onSpace = function(px)
+		hud.toasts:setOffset(px)
+	end,
+}))
+trove:add(net:on("Announcement", function(payload)
+	announcements:show(payload)
+end))
+trove:add(round.phaseChanged:Connect(function(phase)
+	if phase == "Returning" or phase == "Abandoned" or phase == "Cutscene" then
+		announcements:clear()
+	end
+end))
+-- Rainbow Feathers: the landing celebration and the Plume progress pill beside the bag.
+PerfTrace.mark("rainbow")
+local rainbow = trove:add(RainbowFeatherController.new({
+	net = net,
+	round = round,
+	hud = hud,
+	celebration = celebration,
+	config = config,
+}))
 PerfTrace.mark("pile")
 local pile = trove:add(
 	PileVisualController.new({ round = round, quality = quality, accessibility = accessibility, vfx = vfx, audio = audio, config = config })
@@ -179,6 +223,7 @@ local pickupFeedback = trove:add(PickupFeedbackController.new({
 	round = round,
 	crate = crateRun,
 	config = config,
+	rainbow = rainbow,
 }))
 PerfTrace.mark("tools")
 local tools = trove:add(ToolController.new({
@@ -263,6 +308,7 @@ local victory = trove:add(VictoryController.new({
 	haptics = haptics,
 	accessibility = accessibility,
 	config = config,
+	celebration = celebration,
 }))
 hud:bindRound(round, interaction)
 -- The round intro. It owns the intro phase: camera, HUD, input and the avatar on screen, and it
@@ -525,6 +571,12 @@ local container = {
 	victory = victory,
 	party = party,
 	lobbyMeta = lobbyMeta,
+	-- Shared presentation for big moments (other controllers call these directly):
+	--   announcements:show({ kind, text, sub?, tone?, userId?, position? })
+	--   celebration:goldenRipple / burst / cameraPunch / musicDip / screenFlash / confetti / carrierGlow
+	celebration = celebration,
+	announcements = announcements,
+	rainbow = rainbow,
 	trove = trove,
 	snapshot = function()
 		return {

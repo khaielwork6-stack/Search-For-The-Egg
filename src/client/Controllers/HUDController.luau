@@ -702,11 +702,17 @@ function HUDController.new(deps: any): HUDController
 		local reserved = (Tokens.layout.safeAreaPaddingPx + 200) * 2
 		local natural = 500
 		local factor = math.clamp((width - reserved) / natural, 0.6, 1)
-		for _, bandScale in ipairs(bandScales) do
-			bandScale.Scale = factor
-		end
+		-- The strip is wider while the Plume pill shows; only the strip gives way for it.
+		local plume = self.round.root:FindFirstChild("Plume")
+		local stripNatural = if plume and plume:IsA("GuiObject") and plume.Visible then natural + 180 else natural
+		bandScales[1].Scale = math.clamp((width - reserved) / stripNatural, 0.6, 1)
+		bandScales[2].Scale = factor
 	end
 	fitBand()
+	local plumeChip = self.round.root:FindFirstChild("Plume")
+	if plumeChip then
+		self._trove:add(plumeChip:GetPropertyChangedSignal("Visible"):Connect(fitBand))
+	end
 	self._trove:add(stage:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitBand))
 	self._trove:add(SafeArea.overrideChanged:Connect(fitBand))
 	self._trove:add(deps.input.modeChanged:Connect(function(mode)
@@ -957,6 +963,15 @@ function HUDController.carriedStackWorldPoint(self: HUDController): Vector3?
 	local centre = self.carriedStack:screenCentre()
 	local ray = camera:ViewportPointToRay(centre.X, centre.Y + self.gui.AbsolutePosition.Y, 0)
 	return ray.Origin + ray.Direction.Unit * 2.2
+end
+
+-- Stage-pixel y just under the objective pill (where the AnnouncementBanner hangs).
+function HUDController.objectiveBottomPx(self: HUDController): number
+	local pill = self._labels.banner and self._labels.banner.Parent
+	if pill and pill:IsA("GuiObject") then
+		return pill.Position.Y.Offset + pill.Size.Y.Offset + Tokens.spacing.sm + 2
+	end
+	return Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx + Tokens.spacing.sm
 end
 
 function HUDController.setObjective(self: HUDController, title: string, detail: string?)
