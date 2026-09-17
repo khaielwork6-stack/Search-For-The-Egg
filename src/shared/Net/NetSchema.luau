@@ -125,7 +125,14 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		request("ToolEquip", Schema.object({ toolId = Schema.id() }), uiRate, 3),
 		request(
 			"ToolActionBegin",
-			Schema.object({ sessionToken = TOKEN, toolId = Schema.id(), origin = Schema.vector3(), direction = Schema.vector3(2) }),
+			Schema.object({
+				sessionToken = TOKEN,
+				toolId = Schema.id(),
+				origin = Schema.vector3(),
+				direction = Schema.vector3(2),
+				-- The record under the reticle: a hint the server validates, never trusted.
+				featherId = Schema.optional(Schema.number({ min = 0, max = 1e9, integer = true })),
+			}),
 			toolRate,
 			3,
 			512
@@ -134,7 +141,14 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		-- Continuous tools re-aim from the reticle while held (the vac follows the player's aim).
 		request(
 			"ToolActionAim",
-			Schema.object({ sessionToken = TOKEN, toolId = Schema.id(), origin = Schema.vector3(), direction = Schema.vector3(2) }),
+			Schema.object({
+				sessionToken = TOKEN,
+				toolId = Schema.id(),
+				origin = Schema.vector3(),
+				direction = Schema.vector3(2),
+				-- The record under the reticle: a hint the server validates, never trusted.
+				featherId = Schema.optional(Schema.number({ min = 0, max = 1e9, integer = true })),
+			}),
 			toolRate,
 			3,
 			512

@@ -553,17 +553,27 @@ function ToolVisualController._vacPull(self: ToolVisualController, payload: { [s
 		local point = if self._nozzleProvider then self._nozzleProvider(userId) else nil
 		return point or characterPoint(userId, Vector3.new(0.5, -0.4, -1.4)) or hit
 	end
+	-- Exactly the records the server pulled, in its surface-first order (older payloads: by cell).
+	local list: { number } = {}
+	if type(payload.featherIds) == "table" then
+		for _, featherId in ipairs(payload.featherIds) do
+			table.insert(list, featherId)
+		end
+	else
+		for _, removal in ipairs(payload.cells or {}) do
+			for _, slot in ipairs(removal.slots or {}) do
+				table.insert(list, FeatherLayout.featherId(removal.index, slot))
+			end
+		end
+	end
 	local index = 0
 	self.stats.pulls += 1
-	for _, removal in ipairs(payload.cells or {}) do
-		for _, slot in ipairs(removal.slots or {}) do
-			local featherId = FeatherLayout.featherId(removal.index, slot)
-			self.stats.pulledFeathers += 1
-			task.delay(index * stagger, function()
-				pile:collectFeather(featherId, hit, nozzle, { pullSeconds = pullSeconds, quiet = true })
-			end)
-			index += 1
-		end
+	for _, featherId in ipairs(list) do
+		self.stats.pulledFeathers += 1
+		task.delay(index * stagger, function()
+			pile:collectFeather(featherId, hit, nozzle, { pullSeconds = pullSeconds, quiet = true })
+		end)
+		index += 1
 	end
 	if index > 0 then
 		self._deps.vfx:burst("wind", hit + Vector3.new(0, 0.4, 0), 0.15)

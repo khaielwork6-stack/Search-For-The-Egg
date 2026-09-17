@@ -11,6 +11,7 @@ return function(describe, it, expect)
 	local ChapterLayout = require(Shared.Domain.ChapterLayout)
 	local ToolSpecs = require(Shared.Domain.ToolSpecs)
 	local PileGrid = require(Shared.Domain.PileGrid)
+	local FeatherLayout = require(Shared.Domain.FeatherLayout)
 	local EconomyMath = require(Shared.EconomyMath)
 	local ModifierResolver = require(Shared.ModifierResolver)
 	local GameplayHarness = require(ServerStorage.Tests.Helpers.GameplayHarness)
@@ -230,7 +231,7 @@ return function(describe, it, expect)
 	end)
 
 	describe("Nest Rake", function()
-		it("sweeps a 3x3 neighbourhood once per action for the configured yield, then cools down", function()
+		it("sweeps the exposed top layer around the strike once per action for the configured yield, then cools down", function()
 			local h = harness()
 			h.join(1)
 			local _, runtime = h.startRound({ 1 })
@@ -244,6 +245,10 @@ return function(describe, it, expect)
 			local wrongTool = h.collectAt(1, runtime, mx, mz, "hand")
 			expect(wrongTool.message).toBe("not_equipped")
 			local before = gridSum(runtime.grid)
+			local basesBefore = {}
+			for index, cell in ipairs(runtime.grid.cells) do
+				basesBefore[index] = cell.remaining
+			end
 			local sweep = h.collectAt(1, runtime, mx, mz, "nestRake")
 			expect(sweep.ok).toBe(true)
 			local spec = h.collection:spec(runtime, 1, "nestRake")
@@ -251,14 +256,25 @@ return function(describe, it, expect)
 			expect(sweep.data.awarded).toBe(spec.amount)
 			expect(before - gridSum(runtime.grid)).toBe(spec.amount)
 			expect(#sweep.data.cells).toBeGreaterThan(1)
-			expect(#sweep.data.cells).toBeLessThanOrEqual(9)
+			-- The response names exactly the records removed, strike first.
+			expect(#sweep.data.featherIds).toBe(spec.amount)
+			local reach = math.ceil((spec.radiusStuds + runtime.grid.cellSize) / runtime.grid.cellSize)
 			local seen = {}
+			local named = {}
+			for _, id in ipairs(sweep.data.featherIds) do
+				named[id] = true
+			end
 			for _, removal in ipairs(sweep.data.cells) do
 				expect(seen[removal.index]).toBeNil()
 				seen[removal.index] = true
 				local cell = runtime.grid.cells[removal.index]
-				expect(math.abs(cell.x - mx)).toBeLessThanOrEqual(1)
-				expect(math.abs(cell.z - mz)).toBeLessThanOrEqual(1)
+				expect(math.abs(cell.x - mx)).toBeLessThanOrEqual(reach)
+				expect(math.abs(cell.z - mz)).toBeLessThanOrEqual(reach)
+				-- Surface first: a fresh mound gives up its top record per column before anything under it.
+				expect(removal.removed).toBe(1)
+				expect(removal.slots[1]).toBe(cell.base)
+				expect(basesBefore[removal.index]).toBe(cell.base)
+				expect(named[FeatherLayout.featherId(removal.index, removal.slots[1])]).toBe(true)
 			end
 			expect(sweep.data.cooldownMs).toBe(math.floor(cfg.toolUpgrades.nestRake.cooldown[1].seconds * 1000))
 			-- Cooldown: an immediate second sweep is rate limited and removes nothing.
@@ -269,6 +285,52 @@ return function(describe, it, expect)
 			expect(before - gridSum(runtime.grid)).toBe(spec.amount)
 			expect(state.carriedStandard).toBe(spec.amount)
 			expect(h.analyticsAdapter:countOf("tool_action")).toBe(1)
+		end)
+
+		it("strikes the record under the reticle first and never a buried record the client names", function()
+			local h = harness()
+			h.join(1)
+			h.setEntitlement(1, "infiniteBag", true)
+			local _, runtime = h.startRound({ 1 })
+			acquire(h, 1, "nestRake")
+			h.equip(1, "nestRake")
+			local mx, mz = runtime.grid.width // 2, runtime.grid.depth // 2
+			local cell = PileGrid.get(runtime.grid, mx, mz)
+			local origin, direction, topId = h.aimAt(1, runtime, mx, mz)
+			local buriedId = FeatherLayout.featherId(cell.index, cell.base - 3)
+			h.clock:advance(1)
+			-- A hint naming a record under the coat is ignored: the strike is still the surface.
+			local refused = h.collection:collect(
+				1,
+				{ sessionToken = h.token(1), origin = origin, direction = direction, toolId = "nestRake", featherId = buriedId }
+			)
+			expect(refused.ok).toBe(true)
+			expect(table.find(refused.data.featherIds, buriedId)).toBeNil()
+			expect(PileGrid.isTaken(cell, cell.base - 3)).toBe(false)
+			-- Aim at the next record down that column, now the surface: it is taken first.
+			local nextSlot = PileGrid.topSlot(cell)
+			origin, direction, topId = h.aimAt(1, runtime, mx, mz)
+			expect(topId).toBe(FeatherLayout.featherId(cell.index, nextSlot))
+			h.clock:advance(1)
+			local sweep = h.collection:collect(
+				1,
+				{ sessionToken = h.token(1), origin = origin, direction = direction, toolId = "nestRake", featherId = topId }
+			)
+			expect(sweep.ok).toBe(true)
+			expect(sweep.data.featherIds[1]).toBe(topId)
+			-- The ids and the per-cell removals describe the same records, and every one left the grid.
+			local fromCells = {}
+			for _, removal in ipairs(sweep.data.cells) do
+				for _, slot in ipairs(removal.slots) do
+					fromCells[FeatherLayout.featherId(removal.index, slot)] = true
+				end
+			end
+			for _, id in ipairs(sweep.data.featherIds) do
+				expect(fromCells[id]).toBe(true)
+				local index, slot = FeatherLayout.decode(id)
+				expect(PileGrid.isTaken(runtime.grid.cells[index], slot)).toBe(true)
+			end
+			expect(#sweep.data.featherIds).toBe(sweep.data.removed)
 		end)
 
 		it("overflow policy: the bag is clamped and the remainder becomes a short-lived world bundle", function()
@@ -577,6 +639,17 @@ return function(describe, it, expect)
 			h.advanceTools(1)
 			local pulls = h.eventsOfKind("vac_pull")
 			expect(#pulls).toBeGreaterThan(0)
+			-- Every pull names exactly the records it removed.
+			for _, pull in ipairs(pulls) do
+				local count = 0
+				for _, removal in ipairs(pull.cells) do
+					for _, slot in ipairs(removal.slots) do
+						count += 1
+						expect(table.find(pull.featherIds, FeatherLayout.featherId(removal.index, slot))).toBeTruthy()
+					end
+				end
+				expect(#pull.featherIds).toBe(count)
+			end
 			local spec = h.collection:spec(runtime, 1, "featherVac")
 			local total = 0
 			for _, pull in ipairs(pulls) do

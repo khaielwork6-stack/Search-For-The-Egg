@@ -16,6 +16,7 @@ local Envelope = require(Shared.Net.Envelope)
 local Signal = require(Shared.Util.Signal)
 local FeatherLayout = require(Shared.Domain.FeatherLayout)
 local PileSurface = require(Shared.Domain.PileSurface)
+local PileTargeting = require(Shared.Domain.PileTargeting)
 local RoundModifiers = require(script.Parent.RoundModifiers)
 local RoundAwards = require(script.Parent.RoundAwards)
 
@@ -49,7 +50,12 @@ export type Aim = {
 	cz: number,
 	minCorner: Vector3,
 	layout: any,
+	featherId: number?, -- the record the aim ray strikes (tool aims resolved against the records)
 }
+
+-- The rake's sight lines also start from its head, this far above the struck record: the tines see
+-- the surface they drag across, not only what the player's eye does.
+local RAKE_HEAD_LIFT_STUDS = 1.5
 
 function CollectionService.new(options: {
 	config: { [string]: any },
@@ -184,6 +190,132 @@ function CollectionService.resolveAim(
 	return { hit = hit, cx = cx, cz = cz, minCorner = minCorner, layout = layout }, nil, nil
 end
 
+-- The seat field: the mound as first built (every cell full). Records are seated on it by slot and
+-- never move, exactly as the client seats them. Cached per round grid.
+function CollectionService.seatField(self: CollectionService, runtime: any): PileSurface.Field
+	local grid = runtime.grid
+	local seatField = if runtime.seatFieldGrid == grid then runtime.seatField else nil
+	if not seatField then
+		local snapshot = PileGrid.snapshot(grid)
+		seatField = PileSurface.buildField(self._config, {
+			width = grid.width,
+			depth = grid.depth,
+			cellSize = grid.cellSize,
+			remaining = table.clone(snapshot.base),
+			base = snapshot.base,
+		}, ChapterLayout[runtime.state.chapter])
+		runtime.seatField = seatField
+		runtime.seatFieldGrid = grid
+		runtime.seatCache = { seats = {}, steps = {} }
+	end
+	return seatField :: PileSurface.Field
+end
+
+-- A fresh surface-first targeting model over the live grid (one per tool use).
+function CollectionService.targetingModel(self: CollectionService, runtime: any): PileTargeting.Model
+	local grid = runtime.grid
+	local layout = ChapterLayout[runtime.state.chapter]
+	local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
+	local seatField = self:seatField(runtime)
+	return PileTargeting.newModel(self._config, grid, seatField, minCorner, nil, runtime.seatCache)
+end
+
+-- Aim for the area tools (Nest Rake, Feather Vac): the strike is the record the player can see on the
+-- aim ray - the client's reticle record when the server agrees it is on the ray and in sight, else
+-- the first record the ray enters - never a point on the smoothed surface, which after digging sits
+-- studs above or below the drawn records. A ray that meets no record falls back to `resolveAim`
+-- (bare floor, harness aims). Origin plausibility and range are validated either way.
+function CollectionService.resolveToolAim(
+	self: CollectionService,
+	runtime: any,
+	characterPosition: Vector3,
+	origin: any,
+	direction: any,
+	hintFeatherId: any,
+	model: PileTargeting.Model?
+): (Aim?, string?, string?)
+	local config = self._config
+	local interaction = config.interaction
+	if typeof(origin) ~= "Vector3" or typeof(direction) ~= "Vector3" then
+		return nil, Envelope.Codes.INVALID_PAYLOAD, "aim"
+	end
+	if (origin - characterPosition).Magnitude > interaction.serverPositionToleranceStuds then
+		return nil, Envelope.Codes.OUT_OF_RANGE, "origin"
+	end
+	if direction.Magnitude < 0.01 then
+		return nil, Envelope.Codes.INVALID_PAYLOAD, "direction"
+	end
+	local range = interaction.defaultRangeStuds
+	local targeting = model or self:targetingModel(runtime)
+	local hit: PileTargeting.Hit? = nil
+	if type(hintFeatherId) == "number" then
+		hit = PileTargeting.validateHint(targeting, hintFeatherId, origin, direction.Unit, range * 2, interaction.aimMissToleranceStuds)
+	end
+	if not hit then
+		hit = PileTargeting.firstHit(targeting, origin, direction.Unit, range * 2)
+	end
+	if not hit then
+		return CollectionService.resolveAim(config, runtime, characterPosition, origin, direction)
+	end
+	local point = hit.point
+	local flat = Vector3.new(point.X - characterPosition.X, 0, point.Z - characterPosition.Z)
+	if flat.Magnitude > range then
+		return nil, Envelope.Codes.OUT_OF_RANGE, "range"
+	end
+	local layout = ChapterLayout[runtime.state.chapter]
+	local cell = runtime.grid.cells[hit.cellIndex]
+	local aim: Aim = {
+		hit = point,
+		cx = cell.x,
+		cz = cell.z,
+		minCorner = Vector3.new(targeting.minX, layout.nestBaseY, targeting.minZ),
+		layout = layout,
+		featherId = hit.featherId,
+	}
+	return aim, nil, nil
+end
+
+-- One surface-first selection for an area tool use: the exact records it takes, in order.
+function CollectionService.selectRecords(
+	self: CollectionService,
+	model: PileTargeting.Model,
+	spec: any,
+	origin: Vector3,
+	direction: Vector3,
+	amount: number,
+	fallbackPoint: Vector3?,
+	hintFeatherId: any
+): PileTargeting.Selection
+	local interaction = self._config.interaction
+	local grid = model.grid
+	local sweep = spec.toolId == "nestRake" and spec.halfWidthStuds ~= nil
+	return PileTargeting.select(model, {
+		origin = origin,
+		direction = direction,
+		maxDistance = interaction.defaultRangeStuds * 2,
+		amount = amount,
+		perCellCap = spec.perCellCap,
+		shape = if sweep then "sweep" else "cone",
+		radiusStuds = spec.radiusStuds or grid.cellSize,
+		halfWidthStuds = spec.halfWidthStuds,
+		aheadStuds = spec.aheadStuds,
+		reachStuds = spec.reachStuds,
+		fallbackPoint = fallbackPoint,
+		hintFeatherId = if type(hintFeatherId) == "number" then hintFeatherId else nil,
+		hintToleranceStuds = interaction.aimMissToleranceStuds,
+		headLiftStuds = if spec.toolId == "nestRake" then RAKE_HEAD_LIFT_STUDS else nil,
+	})
+end
+
+-- Removes exactly a selection's records from the grid: (removals per cell, total).
+function CollectionService.removeSelection(_self: CollectionService, grid: any, selection: PileTargeting.Selection): ({ any }, number)
+	local records = table.create(#selection.records)
+	for i, record in ipairs(selection.records) do
+		records[i] = { cell = grid.cells[record.index], slot = record.slot }
+	end
+	return PileGrid.removeRecords(grid, records)
+end
+
 -- Common gate for gameplay requests: round, token, phase, alive, character.
 function CollectionService.gate(self: CollectionService, userId: number, token: any): (any?, any?, Vector3?, string?, string?)
 	local runtime = self._rounds:roundOf(userId)
@@ -223,19 +355,7 @@ function CollectionService.featherPosition(
 	local layout = ChapterLayout[runtime.state.chapter]
 	-- Seats come from the mound as first built (every cell full), exactly as the client seats them,
 	-- and each record sits a fixed depth below that surface by slot: a pick never moves a seat.
-	local seatField = if runtime.seatFieldGrid == grid then runtime.seatField else nil
-	if not seatField then
-		local snapshot = PileGrid.snapshot(grid)
-		seatField = PileSurface.buildField(config, {
-			width = grid.width,
-			depth = grid.depth,
-			cellSize = grid.cellSize,
-			remaining = table.clone(snapshot.base),
-			base = snapshot.base,
-		}, layout)
-		runtime.seatField = seatField
-		runtime.seatFieldGrid = grid
-	end
+	local seatField = self:seatField(runtime)
 	local corner = minCorner or ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
 	local placement = FeatherLayout.placement(config.pile.visual, cell.index, slot, grid.cellSize)
 	local position = FeatherLayout.worldPosition(seatField, corner, cell.x, cell.z, placement)
@@ -412,8 +532,9 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 	if toolId == "hand" then
 		return self:_collectFeather(userId, runtime, state, characterPosition, payload, now)
 	end
+	local model = self:targetingModel(runtime)
 	local aim, aimCode, aimMessage =
-		CollectionService.resolveAim(self._config, runtime, characterPosition, payload.origin, payload.direction)
+		self:resolveToolAim(runtime, characterPosition, payload.origin, payload.direction, payload.featherId, model)
 	if not aim then
 		return reject(self, aimCode :: string, aimMessage)
 	end
@@ -428,50 +549,17 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 	end
 	local grid = runtime.grid
 	local spec = self:spec(runtime, userId, toolId)
-	-- The sweep is a disc around the strike point; a strike on bare ground re-centres on the
-	-- nearest feathers within reach so a dug hole never leaves the rake swinging at nothing.
-	local localX, localZ = aim.hit.X - aim.minCorner.X, aim.hit.Z - aim.minCorner.Z
-	local radiusStuds = spec.radiusStuds or grid.cellSize
-	local cells = PileGrid.cellsWithinStuds(grid, localX, localZ, radiusStuds)
-	if #cells == 0 and spec.reachStuds then
-		local nearest = PileGrid.cellsWithinStuds(grid, localX, localZ, spec.reachStuds)[1]
-		if nearest then
-			localX, localZ = PileGrid.cellCenter(grid, nearest)
-			cells = PileGrid.cellsWithinStuds(grid, localX, localZ, radiusStuds)
-		end
-	end
-	if #cells == 0 then
+	-- Surface first (PileTargeting): the sweep strikes the record under the reticle, then drags
+	-- through the exposed records of its fan - top layer first, never a record hidden under or behind
+	-- another. A strike on bare ground takes the nearest exposed records within reach. The response
+	-- carries exactly these records, and the client animates exactly these.
+	local selection = self:selectRecords(model, spec, payload.origin, payload.direction.Unit, spec.amount, aim.hit, payload.featherId)
+	if #selection.records == 0 or not selection.strike then
 		return reject(self, Envelope.Codes.NOT_FOUND, "no_feathers")
 	end
-	-- The rake's contact is a narrow fan along the swing: the tines land at the strike and drag
-	-- back toward the player, so cells beside the line or well ahead of it stay untouched.
-	if spec.halfWidthStuds then
-		local flat = Vector3.new(payload.direction.X, 0, payload.direction.Z)
-		if flat.Magnitude > 0.01 then
-			local dir = flat.Unit
-			local fan = {}
-			for _, cell in ipairs(cells) do
-				local cx, cz = PileGrid.cellCenter(grid, cell)
-				local vx, vz = cx - localX, cz - localZ
-				local along = vx * dir.X + vz * dir.Z
-				local lateral = math.abs(vx * dir.Z - vz * dir.X)
-				if lateral <= spec.halfWidthStuds and along <= (spec.aheadStuds or 0.35) and along >= -radiusStuds then
-					table.insert(fan, cell)
-				end
-			end
-			if #fan > 0 then
-				cells = fan
-			end
-		end
-	end
 	-- Atomic removal + award (single-threaded server; no yields between these lines).
-	-- Hand: removes only what fits (nothing wasted). Rake: removes the full sweep; overflow bundles.
-	local amount = spec.amount
-	if toolId == "hand" then
-		amount = math.min(amount, if free == math.huge then amount else free)
-	end
-	local weights = PileGrid.focusWeights(grid, cells, localX, localZ, radiusStuds, spec.focusWeight or 0.6)
-	local removals, removed = PileGrid.removeFocused(grid, cells, weights, amount, spec.perCellCap)
+	-- Rake: removes the full sweep; overflow bundles.
+	local removals, removed = self:removeSelection(grid, selection)
 	local cellsCleared = 0
 	for _, removal in ipairs(removals) do
 		self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining, removal.mask)
@@ -493,16 +581,12 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 	state.cooldownUntil = now + cooldown
 	self.stats.accepted += 1
 
-	local primary = cells[1]
-	-- The strike point is the exact surface point the player targeted (clamped into the awarded
-	-- cell; the re-centred cell when the strike was bare), so every client effect and the terrain
-	-- carve originate where the feathers actually left.
-	local worldX, worldZ = PileGrid.cellCenter(grid, primary)
-	local cellHalf = grid.cellSize / 2
-	local strikeX = math.clamp(aim.minCorner.X + localX, aim.minCorner.X + worldX - cellHalf, aim.minCorner.X + worldX + cellHalf)
-	local strikeZ = math.clamp(aim.minCorner.Z + localZ, aim.minCorner.Z + worldZ - cellHalf, aim.minCorner.Z + worldZ + cellHalf)
-	local strikeY = math.max(aim.layout.nestBaseY, aim.hit.Y)
-	local hitWorld = Vector3.new(strikeX, aim.layout.nestBaseY, strikeZ)
+	local primary = grid.cells[selection.records[1].index]
+	-- The strike point is the record the sweep struck, so every client effect and the terrain re-seat
+	-- originate where the feathers actually left.
+	local strike = selection.strike :: Vector3
+	local strikeY = math.max(aim.layout.nestBaseY, strike.Y)
+	local hitWorld = Vector3.new(strike.X, aim.layout.nestBaseY, strike.Z)
 	local bundle = nil
 	if award.overflowStandard > 0 then
 		bundle = RoundAwards.dropBundle(
@@ -541,6 +625,7 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 		remaining = primary.remaining,
 		base = primary.base,
 		cells = removals,
+		featherIds = selection.featherIds,
 		cooldownMs = math.floor(cooldown * 1000),
 		hitX = hitWorld.X,
 		hitY = strikeY,
