@@ -213,7 +213,7 @@ function ModalController.open(
 	blocking: boolean,
 	build: (container: ScrollingFrame, api: Api) -> (() -> ())?,
 	title: string?,
-	options: { wide: boolean?, compact: boolean?, icon: string? }?
+	options: { wide: boolean?, compact: boolean?, hero: boolean?, icon: string? }?
 ): (boolean, string?)
 	local next, err = ModalReducer.open(self._state, { id = id, priority = priority, blocking = blocking })
 	if not next then
@@ -230,6 +230,7 @@ function ModalController.open(
 		minimumTapTarget = minimumTap,
 		wide = options and options.wide or false,
 		compact = options and options.compact or false,
+		hero = options and options.hero or false,
 		icon = options and options.icon or nil,
 	})
 	local initialFocus: GuiObject? = nil

@@ -353,6 +353,7 @@ function LobbyController.open(self: LobbyController, id: string): boolean
 		toasts = deps.hud.toasts,
 		leaderboards = self.leaderboards,
 		modals = deps.modals,
+		hud = deps.hud,
 		quality = deps.quality,
 		entitlements = function()
 			local projection = deps.profile.projection
@@ -389,6 +390,7 @@ function LobbyController.open(self: LobbyController, id: string): boolean
 		self._titles[id] or id,
 		{
 			wide = id == "classes" or id == "stats" or id == "party" or id == "gems" or id == "shop",
+			hero = id == "daily",
 			icon = "header." .. (if id == "gems" then "shop" else id),
 		}
 	)

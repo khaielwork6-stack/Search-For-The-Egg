@@ -43,6 +43,9 @@ local PAPER_DEEP = Color3.fromRGB(226, 208, 170)
 -- Card geometry per size class: the Scale box it may fill and the aspect it keeps inside it.
 local GEOMETRY = {
 	wide = { box = Vector2.new(0.94, 0.9), aspect = 1.72, maxWidth = 1700 },
+	-- A hero screen (the Daily Nest): most of the viewport, squarer than wide, so eight reward cards
+	-- and one big claim button all get real height.
+	hero = { box = Vector2.new(0.86, 0.8), aspect = 1.6, maxWidth = 1500 },
 	regular = { box = Vector2.new(0.62, 0.88), aspect = 1.18, maxWidth = 760 },
 	compact = { box = Vector2.new(0.5, 0.72), aspect = 1.0, maxWidth = 520 },
 }
@@ -64,12 +67,17 @@ function ModalShell.create(
 		minimumTapTarget: number?,
 		wide: boolean?,
 		compact: boolean?,
+		hero: boolean?,
 		ambient: boolean?,
 		icon: string?,
 	}
 ): Shell
 	local tap = options.minimumTapTarget or Tokens.layout.minimumTapTargetPx
-	local geometry = if options.wide then GEOMETRY.wide elseif options.compact then GEOMETRY.compact else GEOMETRY.regular
+	local geometry = if options.hero
+		then GEOMETRY.hero
+		elseif options.wide then GEOMETRY.wide
+		elseif options.compact then GEOMETRY.compact
+		else GEOMETRY.regular
 	local z = Tokens.zIndex.modal
 	-- Phones: the responsive stage shrinks offset-based HUD; a Scale-based card wants the whole
 	-- screen instead, so a holder cancels the stage scale and the card fills its box.
@@ -83,6 +91,9 @@ function ModalShell.create(
 	root.BackgroundTransparency = 1
 	root.BorderSizePixel = 0
 	root.ZIndex = z
+	-- A blocking modal's backdrop swallows clicks: a press beside the card must never reach a prompt
+	-- or a station in the world behind it.
+	root.Active = options.blocking
 	root.Parent = gui
 
 	local holder = Instance.new("Frame")
@@ -221,7 +232,7 @@ function ModalShell.create(
 	plaque.Name = "Plaque"
 	plaque.AnchorPoint = Vector2.new(0.5, 0.5)
 	plaque.Position = UDim2.fromScale(0.5, 0.52)
-	plaque.Size = UDim2.fromScale(if options.wide then 0.4 elseif options.compact then 0.78 else 0.62, 0.9)
+	plaque.Size = UDim2.fromScale(if options.wide or options.hero then 0.4 elseif options.compact then 0.78 else 0.62, 0.9)
 	plaque.BackgroundTransparency = 1
 	plaque.ZIndex = 2
 	plaque.Parent = header
@@ -362,8 +373,13 @@ function ModalShell.create(
 		local boxHeight = if phone then 0.97 else geometry.box.Y
 		local boxWidth = if phone then 0.97 else geometry.box.X
 		if content.AutomaticCanvasSize == Enum.AutomaticSize.None then
-			if aspect.Parent ~= card then
+			-- A hero card on a phone takes the whole landscape viewport; the aspect lock would give
+			-- back a third of the width for nothing.
+			local wantAspect = not (options.hero and phone)
+			if wantAspect and aspect.Parent ~= card then
 				aspect.Parent = card
+			elseif not wantAspect and aspect.Parent then
+				aspect.Parent = nil
 			end
 			maxSize.MaxSize = Vector2.new(geometry.maxWidth, geometry.maxWidth / geometry.aspect)
 			card.Size = UDim2.fromScale(boxWidth, boxHeight)

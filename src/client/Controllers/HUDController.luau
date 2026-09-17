@@ -40,6 +40,8 @@ export type HUDController = typeof(setmetatable(
 		_labels: { [string]: any },
 		_displayed: { [string]: number },
 		_chipScales: { [string]: UIScale },
+		_currencyHolds: { [string]: number },
+		_pendingCurrency: { [string]: number },
 		_promptWanted: boolean,
 		_bookOpener: (() -> ())?,
 		_infiniteBag: boolean?,
@@ -83,6 +85,8 @@ function HUDController.new(deps: any): HUDController
 		_labels = {},
 		_displayed = {},
 		_chipScales = {},
+		_currencyHolds = {},
+		_pendingCurrency = {},
 		_promptWanted = false,
 		_bookOpener = nil,
 		_timerConnection = nil,
@@ -690,27 +694,40 @@ function HUDController.new(deps: any): HUDController
 		local chipFrame = label.Parent and label.Parent.Parent
 		self._chipScales[key] = (chipFrame and chipFrame:FindFirstChildOfClass("UIScale")) :: UIScale
 	end
+	local function applyCurrency(key: string, target: number)
+		local label = chipLabels[key]
+		if not label then
+			return
+		end
+		local previous = self._displayed[key]
+		if previous == nil or previous == target then
+			self._displayed[key] = target
+			label.Text = tostring(target)
+		else
+			local motion = deps.accessibility:motionSettings()
+			Tween.countUp(previous, target, motion, function(value)
+				label.Text = tostring(value)
+			end)
+			self._displayed[key] = target
+			local scale = self._chipScales[key]
+			if target > previous and scale then
+				scale.Scale = 1.12
+				Tween.scale(scale, "release", motion, 1)
+			end
+		end
+	end
+	self._applyCurrency = applyCurrency
 	local function refreshProfile(projection)
 		if not projection then
 			return
 		end
-		for key, label in pairs(chipLabels) do
+		for key in pairs(chipLabels) do
 			local target = projection.currencies[key] or 0
-			local previous = self._displayed[key]
-			if previous == nil or previous == target then
-				self._displayed[key] = target
-				label.Text = tostring(target)
+			-- A reward animation in flight parks the chip: the count-up runs when the gems land.
+			if (self._currencyHolds[key] or 0) > 0 then
+				self._pendingCurrency[key] = target
 			else
-				local motion = deps.accessibility:motionSettings()
-				Tween.countUp(previous, target, motion, function(value)
-					label.Text = tostring(value)
-				end)
-				self._displayed[key] = target
-				local scale = self._chipScales[key]
-				if target > previous and scale then
-					scale.Scale = 1.12
-					Tween.scale(scale, "release", motion, 1)
-				end
+				applyCurrency(key, target)
 			end
 		end
 	end
@@ -802,6 +819,35 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 			self:openUpgrades(round)
 		end
 	end))
+end
+
+-- Parks a currency chip while a reward animation flies towards it; `releaseCurrency` then applies
+-- the newest acknowledged balance with the usual count-up. Holds nest, and are never predicted:
+-- the value shown is always one the server sent.
+function HUDController.holdCurrency(self: HUDController, key: string)
+	self._currencyHolds[key] = (self._currencyHolds[key] or 0) + 1
+end
+
+function HUDController.releaseCurrency(self: HUDController, key: string)
+	local holds = (self._currencyHolds[key] or 0) - 1
+	self._currencyHolds[key] = math.max(0, holds)
+	if holds <= 0 then
+		local pending = self._pendingCurrency[key]
+		self._pendingCurrency[key] = nil
+		if pending ~= nil and self._applyCurrency then
+			self._applyCurrency(key, pending)
+		end
+	end
+end
+
+-- Screen-space centre of a currency chip (absolute pixels), for animations that fly to it.
+function HUDController.currencyChipPoint(self: HUDController, key: string): Vector2?
+	local label = if key == "gems" then self._labels.gems else self._labels.tokens
+	local chipFrame = label and label.Parent and label.Parent.Parent
+	if not chipFrame or not chipFrame:IsA("GuiObject") or not self.gui.Enabled then
+		return nil
+	end
+	return chipFrame.AbsolutePosition + chipFrame.AbsoluteSize * 0.5
 end
 
 -- Reward celebration after a server-acknowledged grant (RewardGranted): rotation punch on the chip.
