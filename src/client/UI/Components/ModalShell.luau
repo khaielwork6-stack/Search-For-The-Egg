@@ -42,6 +42,8 @@ local GEOMETRY = {
 	compact = { box = Vector2.new(0.44, 0.58), aspect = 1.2, maxWidth = 640 },
 }
 -- The title floats above the panel: this much of the card's height, hanging over the top edge.
+local PHONE_H = 0.76 -- phone card height (of the screen)
+local PHONE_Y = 0.57 -- phone card centre: top edge at 0.19, title above it
 local TITLE_HEIGHT = 0.13
 -- Widest card a row-based builder (Party, Codes...) gets; their rows were drawn for it.
 local LIST_MAX_WIDTH = 1040
@@ -111,8 +113,13 @@ function ModalShell.create(
 	local card = Instance.new("Frame")
 	card.Name = "Card"
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
-	card.Position = UDim2.fromScale(0.5, 0.52)
-	card.Size = if phone then UDim2.fromScale(0.9, 0.86) else UDim2.fromScale(geometry.box.X, geometry.box.Y)
+	-- Phones: the title floats above the card and the X straddles its top edge, so the card leaves the
+	-- top ~17% of a landscape phone free for them (0.86 tall pushed both off the screen).
+	local function cardY(): number
+		return if phone then PHONE_Y else 0.52
+	end
+	card.Position = UDim2.fromScale(0.5, cardY())
+	card.Size = if phone then UDim2.fromScale(0.9, PHONE_H) else UDim2.fromScale(geometry.box.X, geometry.box.Y)
 	card.BackgroundTransparency = 1
 	card.BorderSizePixel = 0
 	card.ZIndex = z + 1
@@ -322,7 +329,10 @@ function ModalShell.create(
 		end
 		readDevice()
 		holderScale.Scale = if phone and stageScale > 0 then 1 / stageScale else 1
-		local boxHeight = if phone then 0.86 else geometry.box.Y
+		local boxHeight = if phone then PHONE_H else geometry.box.Y
+		if math.abs(card.Position.Y.Scale - cardY()) > 0.001 then
+			card.Position = UDim2.new(0.5, 0, cardY(), card.Position.Y.Offset) -- the device class changed
+		end
 		local boxWidth = if phone then 0.9 else geometry.box.X
 		if content.AutomaticCanvasSize == Enum.AutomaticSize.None then
 			-- A hero card on a phone takes the whole landscape viewport; the aspect lock would give
@@ -387,9 +397,9 @@ function ModalShell.create(
 		open = function()
 			local openRecipe = Motion.recipe("panelOpen", motion)
 			cardScale.Scale = openRecipe.fromScale or 0.82
-			card.Position = UDim2.new(0.5, 0, 0.52, Motion.amplitude(18, motion))
+			card.Position = UDim2.new(0.5, 0, cardY(), Motion.amplitude(18, motion))
 			TweenService:Create(cardScale, Motion.tweenInfo(openRecipe), { Scale = 1 }):Play()
-			TweenService:Create(card, Motion.tweenInfo(openRecipe), { Position = UDim2.fromScale(0.5, 0.52) }):Play()
+			TweenService:Create(card, Motion.tweenInfo(openRecipe), { Position = UDim2.fromScale(0.5, cardY()) }):Play()
 			relayout()
 		end,
 		close = function(onClosed)
@@ -399,7 +409,8 @@ function ModalShell.create(
 			local fade = TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = 1 })
 			fade:Play()
 			TweenService:Create(cardScale, Motion.tweenInfo(closeRecipe), { Scale = closeRecipe.toScale or 0.86 }):Play()
-			TweenService:Create(card, Motion.tweenInfo(closeRecipe), { Position = UDim2.new(0.5, 0, 0.52, Motion.amplitude(12, motion)) })
+			TweenService
+				:Create(card, Motion.tweenInfo(closeRecipe), { Position = UDim2.new(0.5, 0, cardY(), Motion.amplitude(12, motion)) })
 				:Play()
 			fade.Completed:Once(function()
 				root:Destroy()
