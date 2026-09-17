@@ -47,11 +47,16 @@ return function(describe, it, expect)
 		it("is free until a run starts, busy for the whole run, and free again when the schedule fires", function()
 			local clock = fakeClock()
 			local fired = nil
+			local respawnFired = nil
 			local crate = CrateService.new({
 				config = cfg,
 				clock = clock,
 				schedule = function(seconds, callback)
-					fired = { seconds = seconds, callback = callback }
+					if respawnFired == nil then
+						respawnFired = { seconds = seconds, callback = callback }
+					else
+						fired = { seconds = seconds, callback = callback }
+					end
 				end,
 			})
 			expect(crate:gate()).toBeNil()
@@ -67,7 +72,9 @@ return function(describe, it, expect)
 			local refused = crate:gate()
 			expect(refused.ok).toBe(false)
 			expect(refused.message).toBe("crate_busy")
+			-- Two timers per run: the fresh crate's respawn, then the sold crate's ride end.
 			expect(fired.seconds).toBeCloseTo(crate:totalSeconds("chapter1"), 1e-9)
+			expect(respawnFired.seconds).toBeCloseTo(cfg.selling.crate.respawnSeconds, 1e-9)
 			-- The gate holds for the sell cooldown, not the whole ride: the schedule has not fired.
 			local cooldown = cfg.selling.crate.sellCooldownSeconds
 			clock.advance(cooldown - 0.01)
@@ -79,6 +86,12 @@ return function(describe, it, expect)
 			crate.runFinished:Connect(function()
 				finished += 1
 			end)
+			local respawned = 0
+			crate.crateRespawned:Connect(function()
+				respawned += 1
+			end)
+			respawnFired.callback()
+			expect(respawned).toBe(1)
 			fired.callback()
 			expect(finished).toBe(1)
 			expect(crate:gate()).toBeNil()
@@ -96,13 +109,21 @@ return function(describe, it, expect)
 					table.insert(callbacks, callback)
 				end,
 			})
+			local finished = {}
+			crate.runFinished:Connect(function(_, runId)
+				table.insert(finished, runId)
+			end)
 			crate:start("r", "chapter1", 1, 1)
 			crate:reset()
 			crate:start("r", "chapter1", 1, 1)
+			-- Run 1's respawn and finish timers were retired by the reset; run 2's still fire.
 			callbacks[1]()
-			expect(crate:isBusy()).toBe(true)
 			callbacks[2]()
-			expect(crate:isBusy()).toBe(false)
+			expect(#finished).toBe(0)
+			callbacks[3]()
+			callbacks[4]()
+			expect(#finished).toBe(1)
+			expect(finished[1]).toBe(3)
 		end)
 	end)
 

@@ -33,6 +33,9 @@ local IntroOverlay = require(script.Parent.Parent.UI.IntroOverlay)
 -- enough that a slow frame or a loading hitch never trips it, short enough that a player who does
 -- hit it is not standing still for long.
 local STALL_GRACE_SECONDS = 3
+-- The black holds this long at most for the feather coat to finish building before the first shot
+-- opens; the coat joins the workspace in one frame, so a viewer never sees the mound assemble.
+local PILE_WAIT_SECONDS = 4
 
 local IntroCinematicController = {}
 IntroCinematicController.__index = IntroCinematicController
@@ -46,6 +49,7 @@ export type Deps = {
 	hud: any,
 	audio: any,
 	accessibility: any,
+	pile: any?,
 }
 
 export type IntroCinematicController = typeof(setmetatable(
@@ -56,6 +60,7 @@ export type IntroCinematicController = typeof(setmetatable(
 		_playedRounds: { [string]: boolean },
 		finished: Signal.Signal<string>,
 		stats: {
+			pileWaitSeconds: number,
 			plays: number,
 			skips: number,
 			failures: number,
@@ -88,7 +93,18 @@ function IntroCinematicController.new(deps: Deps): IntroCinematicController
 		_session = nil,
 		_playedRounds = {},
 		finished = Signal.new(),
-		stats = { plays = 0, skips = 0, failures = 0, frameFailures = 0, stalls = 0, missing = {}, ticks = 0, stage = "idle", lastT = 0 },
+		stats = {
+			plays = 0,
+			skips = 0,
+			failures = 0,
+			frameFailures = 0,
+			stalls = 0,
+			missing = {},
+			ticks = 0,
+			stage = "idle",
+			lastT = 0,
+			pileWaitSeconds = 0,
+		},
 	}, IntroCinematicController)
 	return self
 end
@@ -503,6 +519,19 @@ function IntroCinematicController._run(self: IntroCinematicController, session: 
 	self:_takeOver(session)
 	self.stats.stage = "takeover"
 	overlay.setFade(1, 0)
+	-- Behind the black: wait for the mound. The coat is placed over a few dozen frames and parented
+	-- in one; opening the shot before that would show it appear.
+	local pile = deps.pile
+	if pile and pile.isBuilt then
+		local waitedFrom = os.clock()
+		while not pile:isBuilt() and os.clock() - waitedFrom < PILE_WAIT_SECONDS do
+			if self._session ~= session or session.finishing then
+				return
+			end
+			task.wait(0.05)
+		end
+		self.stats.pileWaitSeconds = os.clock() - waitedFrom
+	end
 	overlay.setFade(0, intro.fadeInSeconds)
 	-- The bars ride in with the picture. Setting them before the fade lifts means they are already at
 	-- full height when the first frame appears, which reads as a hard edge rather than a shot opening.

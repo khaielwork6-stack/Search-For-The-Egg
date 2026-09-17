@@ -24,7 +24,9 @@ export type CrateService = typeof(setmetatable(
 		_schedule: (seconds: number, callback: () -> ()) -> (),
 		_busyUntil: number,
 		_runId: number,
+		_generation: number,
 		runStarted: any, -- (roundId, payload)
+		crateRespawned: any, -- (roundId, runId): a fresh crate is parked again; sales may resume
 		runFinished: any, -- (roundId, runId)
 		stats: { runs: number, refused: number },
 	},
@@ -42,7 +44,9 @@ function CrateService.new(
 		end,
 		_busyUntil = 0,
 		_runId = 0,
+		_generation = 0,
 		runStarted = Signal.new(),
+		crateRespawned = Signal.new(),
 		runFinished = Signal.new(),
 		stats = { runs = 0, refused = 0 },
 	}, CrateService)
@@ -104,11 +108,12 @@ function CrateService.start(
 ): { [string]: any }
 	local timeline = self:timeline(chapter)
 	local total = self:totalSeconds(chapter)
+	local crate = self._config.selling.crate
 	self._runId += 1
 	local runId = self._runId
 	-- The gate closes for the sell cooldown only (owner: one second), not the crate's whole ride:
 	-- a sale during the ride starts a fresh run and every client restarts the animation for it.
-	local cooldown = self._config.selling.crate.sellCooldownSeconds or total
+	local cooldown = crate.sellCooldownSeconds or total
 	self._busyUntil = self._clock:monotonic() + math.min(total, cooldown)
 	self.stats.runs += 1
 	local payload = {
@@ -120,9 +125,18 @@ function CrateService.start(
 		totalSeconds = total,
 	}
 	self.runStarted:Fire(roundId, payload)
+	-- Runs overlap: a fresh crate is parked `respawnSeconds` after each sale (the prompt comes back
+	-- with it), and every sold crate finishes its own ride. A reset between them (round over)
+	-- retires both timers.
+	local generation = self._generation
+	local respawn = math.min(total, crate.respawnSeconds or total)
+	self._schedule(respawn, function()
+		if self._generation == generation then
+			self.crateRespawned:Fire(roundId, runId)
+		end
+	end)
 	self._schedule(total, function()
-		if self._runId == runId then
-			self._busyUntil = 0
+		if self._generation == generation then
 			self.runFinished:Fire(roundId, runId)
 		end
 	end)
@@ -132,6 +146,7 @@ end
 -- Round ended: the crate is free again immediately (clients reset on their own).
 function CrateService.reset(self: CrateService)
 	self._runId += 1
+	self._generation += 1
 	self._busyUntil = 0
 end
 

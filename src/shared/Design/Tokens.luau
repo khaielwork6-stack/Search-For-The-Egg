@@ -211,6 +211,7 @@ Tokens.sound = table.freeze({
 	fuseHiss = "tool.fuseHiss",
 	throw = "tool.throw",
 	blast = "tool.blast",
+	blastLow = "tool.blastLow",
 	vacMotor = "tool.vacMotor",
 	vacSuck = "tool.vacSuck",
 	chickChirp = "tool.chickChirp",

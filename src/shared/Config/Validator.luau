@@ -158,6 +158,9 @@ function Validator.validate(raw: any): Report
 		check(isNonNegativeNumber(crate.resetDelaySeconds), "selling.crate.resetDelaySeconds must be >= 0")
 		-- OWNER 16 Sep 2026: the crate only refuses a second sale for this long, not for its whole ride.
 		check(isNonNegativeNumber(crate.sellCooldownSeconds), "selling.crate.sellCooldownSeconds must be >= 0")
+		-- OWNER 17 Sep 2026: a fresh crate pops in this long after a sale and the prompt returns with it,
+		-- while the sold crate is still riding the belts.
+		check(isPositiveNumber(crate.respawnSeconds), "selling.crate.respawnSeconds must be > 0")
 		check(
 			isPositiveNumber(crate.featherVisualMax) and crate.featherVisualMax % 1 == 0 and crate.featherVisualMax <= 64,
 			"selling.crate.featherVisualMax must be an integer 1..64"

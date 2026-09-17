@@ -521,6 +521,8 @@ function ToolVisualController._explodeCharge(self: ToolVisualController, payload
 	end)
 	-- Sound and shake fall off with distance for everyone in the round.
 	self._deps.audio:play(Tokens.sound.blast, { pitchVariance = 0.08 })
+	-- A low floor under the owner's explosion.
+	self._deps.audio:play(Tokens.sound.blastLow, { pitchVariance = 0.03 })
 	local camera = workspace.CurrentCamera
 	if camera and self._deps.camera then
 		local distance = (camera.CFrame.Position - position).Magnitude

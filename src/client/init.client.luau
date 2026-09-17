@@ -213,6 +213,7 @@ local intro = trove:add(IntroCinematicController.new({
 	hud = hud,
 	audio = audio,
 	accessibility = accessibility,
+	pile = pile,
 }))
 intro:bindRound()
 -- Player nameplates: display name and record time over every character.

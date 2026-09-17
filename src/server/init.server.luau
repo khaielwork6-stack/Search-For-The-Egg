@@ -796,6 +796,7 @@ end)
 -- The map's collection crate: clicking/tapping it sells (server-side ClickDetector, no token
 -- needed), the prompt stays for E / gamepad, and both are disabled while a run is in flight.
 local crateDetectors: { ClickDetector } = {}
+local crateModelNode: Instance? = nil
 local function crateInteractionEnabled(enabled: boolean)
 	for _, detector in ipairs(crateDetectors) do
 		detector.MaxActivationDistance = if enabled then config.interaction.sellRangeStuds else 0
@@ -805,6 +806,14 @@ local function crateInteractionEnabled(enabled: boolean)
 	local prompt = anchor and anchor:FindFirstChildOfClass("ProximityPrompt")
 	if prompt then
 		prompt.Enabled = enabled
+	end
+	-- The map crate's own sell prompt (built by the chapter shell) follows the same gate.
+	if crateModelNode then
+		for _, descendant in ipairs(crateModelNode:GetDescendants()) do
+			if descendant:IsA("ProximityPrompt") and descendant.Name == "SFE_Sell" then
+				descendant.Enabled = enabled
+			end
+		end
 	end
 end
 local function wireCrate()
@@ -820,6 +829,7 @@ local function wireCrate()
 	if not node or not node:IsA("Model") then
 		return
 	end
+	crateModelNode = node
 	for _, descendant in ipairs(node:GetDescendants()) do
 		if descendant:IsA("BasePart") and descendant.CanCollide then
 			local detector = Instance.new("ClickDetector")
@@ -849,7 +859,8 @@ crate.runStarted:Connect(function(roundId, payload)
 		send(player, "CrateRun", payload)
 	end
 end)
-crate.runFinished:Connect(function()
+-- The prompt comes back with the fresh crate, not at the end of the sold crate's ride.
+crate.crateRespawned:Connect(function()
 	crateInteractionEnabled(true)
 end)
 

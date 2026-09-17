@@ -665,7 +665,11 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 	local generation = self._generation
 	local folder = Instance.new("Folder")
 	folder.Name = "SFE_PileVisual"
-	folder.Parent = workspace
+	-- Built detached. The coat is placed over a few dozen frames, and a player looking at the mound
+	-- while that happens sees it grow row by row. Under a parent of nil nothing renders until the
+	-- last column is in, and the folder joins the workspace in one frame (the intro holds its fade
+	-- until `isBuilt`, so even that single pop lands behind black).
+	folder.Parent = nil
 	self._folder = folder
 	self._layout = ChapterLayout[chapter or "chapter1"]
 	self._grid = {
@@ -749,6 +753,8 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 		local template = AssetManifest.model("feather")
 		self.stats.coatKind = if template and template:IsA("MeshPart") then "feathers" else "feathers-parts"
 		self:_recount()
+		-- The whole coat appears in this one frame.
+		folder.Parent = workspace
 		self._building = false
 		self:_bindTargeting()
 		local pending = self._pendingDeltas
@@ -1523,6 +1529,11 @@ function PileVisualController.rainbowCount(self: PileVisualController): number
 		count += 1
 	end
 	return count
+end
+
+-- True once a round's coat is fully placed and in the workspace (false while building or empty).
+function PileVisualController.isBuilt(self: PileVisualController): boolean
+	return self._folder ~= nil and self._folder.Parent == workspace and not self._building
 end
 
 function PileVisualController.clear(self: PileVisualController)
