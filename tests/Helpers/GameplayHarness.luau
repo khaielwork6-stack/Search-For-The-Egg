@@ -333,8 +333,8 @@ function GameplayHarness.new(cfg, options)
 	h.entitlements = entitlements
 	h.clues = clues
 	h.surveys = surveys
-	function h.survey(userId, region)
-		return surveys:survey(userId, { sessionToken = h.token(userId), region = region })
+	function h.survey(userId, region, sub)
+		return surveys:survey(userId, { sessionToken = h.token(userId), region = region, sub = sub })
 	end
 	function h.analyze(userId, category)
 		return clues:analyze(userId, { sessionToken = h.token(userId), category = category })

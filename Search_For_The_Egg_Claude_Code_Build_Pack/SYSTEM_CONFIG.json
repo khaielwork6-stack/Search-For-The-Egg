@@ -554,12 +554,17 @@
     "assumption": "ASSUMED edges, OWNER costs and limits"
   },
   "survey": {
-    "SurveyCrateCost": 100,
+    "crateCosts": [
+      100,
+      200,
+      400
+    ],
+    "maxPerRound": 3,
     "stationRangeStuds": 10,
     "sequenceSeconds": 5.0,
     "weakManhattanDistance": 1,
-    "evidence": "OWNER 16 Sep 2026 (Molly the Mole brief): one standardized crate of 100 normal feathers buys the party's single survey of one of nine map regions; STRONG inside, WEAK at Manhattan distance 1, NO EGG SIGNAL otherwise. The cost is a fixed number, never the bag capacity, because upgraded and Infinite Bags never fill.",
-    "assumption": "OWNER cost, limit and rule; ASSUMED range and sequence length"
+    "evidence": "OWNER 17 Sep 2026 (Molly the Mole, reusable survey): three surveys per party per round, paid in normal feathers at 100, 200 and 400 in that order, each one narrowing the search - the first reads one of nine map regions (STRONG inside, WEAK at Manhattan distance 1, NO EGG SIGNAL otherwise), the second reads one of nine sub-cells inside that region by the same rule, the third pins the Egg's exact cell with no choice to make. Costs are fixed numbers, never the bag capacity, because upgraded and Infinite Bags never fill; Rainbow Feathers are never touched.",
+    "assumption": "OWNER costs, limit and narrowing rule; ASSUMED range and sequence length"
   },
   "selling": {
     "cashPerStandardFeather": 0.01,

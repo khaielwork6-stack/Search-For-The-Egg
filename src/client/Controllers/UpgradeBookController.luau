@@ -623,8 +623,9 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 			stamp.TextSize = Tokens.typography.caption.size - 2
 		end
 	end
-	-- Molly's survey: the party's one reading of the round, or NOT RUN.
-	local survey = round and round.survey
+	-- Molly's survey: the party's latest reading of the round (of up to three), or NOT RUN.
+	local surveyState = round and round.survey
+	local survey = surveyState and surveyState.latest
 	local surveyRow = Instance.new("Frame")
 	surveyRow.Name = "Clue_survey"
 	surveyRow.Position =
@@ -647,7 +648,13 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 		surveyRow,
 		"Value",
 		if survey
-			then string.format("%s: %s", tostring(survey.region), tostring((NestSurvey.WORDS :: any)[survey.signal].title))
+			then string.format(
+				"%s: %s (%d/%d)",
+				tostring(survey.id or survey.region),
+				tostring(((NestSurvey.WORDS :: any)[survey.signal] or NestSurvey.WORDS.none).title),
+				tonumber(surveyState.count) or 0,
+				tonumber(surveyState.max) or 0
+			)
 			else "NOT RUN",
 		"heading",
 		{
