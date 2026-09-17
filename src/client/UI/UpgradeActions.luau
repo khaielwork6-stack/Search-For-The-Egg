@@ -56,7 +56,6 @@ function UpgradeActions.purchase(deps: Deps, upgradeId: string, title: string?):
 		deps.audio:play(Tokens.sound.uiError)
 		local message = if result.code == "insufficient_funds"
 			then (if result.message == "gems" then "Not enough Gems" else "Not enough round cash")
-			elseif result.code == "out_of_range" then "Stand at the supplies counter"
 			elseif result.code == "stale_token" then "Prices changed - try again"
 			else "Upgrade unavailable"
 		deps.toasts:push(message, "warning")
