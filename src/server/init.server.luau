@@ -8,6 +8,35 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 
+-- The owner's dropped UI packs (StarterGui.USE and StarterGui.ScreenGui, ~3.8k instances each) are
+-- disabled reference art. Left in StarterGui they were cloned into every PlayerGui on every spawn:
+-- ~7.6k GUI instances replicated per player per respawn, the single largest join-time spike. They
+-- are kept, never deleted: moved into ServerStorage for this server's lifetime, so the place file
+-- still holds them in StarterGui for editing in Studio.
+do
+	local StarterGui = game:GetService("StarterGui")
+	local ServerStorage = game:GetService("ServerStorage")
+	local packs = ServerStorage:FindFirstChild("SFE_OwnerUIPacks") or Instance.new("Folder")
+	packs.Name = "SFE_OwnerUIPacks"
+	packs.Parent = ServerStorage
+	for _, name in ipairs({ "USE", "ScreenGui" }) do
+		local pack = StarterGui:FindFirstChild(name)
+		if pack and pack:IsA("ScreenGui") and not pack.Enabled then
+			pack.Parent = packs
+		end
+	end
+	-- A player who joined before this ran already holds clones; those copies go, the originals stay.
+	for _, player in ipairs(Players:GetPlayers()) do
+		local gui = player:FindFirstChildOfClass("PlayerGui")
+		for _, name in ipairs({ "USE", "ScreenGui" }) do
+			local copy = gui and gui:FindFirstChild(name)
+			if copy and copy:IsA("ScreenGui") and not copy.Enabled then
+				copy:Destroy()
+			end
+		end
+	end
+end
+
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Clock = require(Shared.Clock)
