@@ -2,7 +2,7 @@
 -- Discovery and victory presentation (MASTER_SPEC 15 "Discovery/victory", STATE_MACHINES 7):
 -- reveal = final-cover spiral + positional chime + glow + short camera framing (static cut under
 -- reduced motion); claim = brief gameplay input lock, winner announcement; rewards/results modal
--- with separated party reward and finder bonus rows counting up only after RewardsCommitted.
+-- as a clean Round Complete recap (winner, reward, CONTINUE) counting up only after RewardsCommitted.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -12,9 +12,10 @@ local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
 local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
-local EconomyMath = require(Shared.EconomyMath)
 local Button = require(script.Parent.Parent.UI.Components.Button)
-local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
+local Fit = require(script.Parent.Parent.UI.Components.Fit)
+local Depth = require(script.Parent.Parent.UI.Components.Depth)
+local Icons = require(script.Parent.Parent.UI.Components.Icons)
 local Skin = require(script.Parent.Parent.UI.Components.Skin)
 local Confetti = require(script.Parent.Parent.UI.Components.Confetti)
 local SafeArea = require(script.Parent.Parent.UI.SafeArea)
@@ -288,7 +289,12 @@ function VictoryController.onVictory(self: VictoryController, payload: { [string
 	end)
 end
 
--- Results modal: rows count up from zero to the committed values; Replay / Lobby actions.
+-- Round Complete recap (owner, 17 Sep 2026: "a clean, premium recap showing only the winner, reward
+-- and primary continue action"). One compact dark-kit card: the ROUND COMPLETE title, the winner's
+-- headshot and name (or "No winner"), the reward this player banked (Gems with the finder bonus
+-- included, and Tokens when any), and one green CONTINUE that sends the same ResultsAction the old
+-- primary "Search again" button sent. The reward counts up only after RewardsCommitted (which
+-- precedes ResultsProjection), and the card closes itself when the server returns the party.
 function VictoryController.onResults(self: VictoryController, payload: { [string]: any })
 	local deps = self._deps
 	self.stats.results += 1
@@ -299,150 +305,215 @@ function VictoryController.onResults(self: VictoryController, payload: { [string
 	local minimumTap = SafeArea.minimumTapTarget(deps.modals.gui, deps.config)
 	deps.modals:open("results", deps.modals.Priority.Results, true, function(container, api)
 		local cleanups: { any } = {}
-		local isFinder = payload.isFinder == true
-		local z = container.ZIndex + 1
-		local function line(order: number, text: string, color: Color3?, size: number?): TextLabel
-			local row = FrameKit.row(container, "Line" .. order, (size or Tokens.typography.body.size) + Tokens.spacing.lg, z)
-			row.LayoutOrder = order
-			local label = Instance.new("TextLabel")
-			label.Size = UDim2.fromScale(1, 1)
-			label.BackgroundTransparency = 1
-			label.Font = if size then Tokens.typography.label.font else Tokens.typography.body.font
-			label.TextSize = size or Tokens.typography.body.size
-			label.TextColor3 = color or Tokens.color.inkStrong
-			label.TextXAlignment = Enum.TextXAlignment.Left
-			label.TextWrapped = true
-			label.Text = text
-			label.ZIndex = z + 1
-			label.Parent = row
-			return label
-		end
-		Confetti.burst(container, {
-			origin = UDim2.fromScale(0.5, 0.2),
-			count = 32,
-			spread = 220,
-			motion = deps.accessibility:motionSettings(),
-			tier = deps.quality and deps.quality:tier() or nil,
-			zIndex = z + 8,
-		})
-		local time = payload.elapsedMs or 0
-		local totalSeconds = math.floor(time / 1000)
-		line(
-			1,
-			string.format(
-				"%s  -  %s  -  %s",
-				if isFinder then "You found the Egg" else (tostring(payload.finderName) .. " found the Egg"),
-				"Sunlit Henhouse",
-				tostring(payload.difficulty)
-			),
-			Tokens.color.inkMuted
-		)
-		line(
-			2,
-			string.format(
-				"Time %02d:%02d.%02d%s",
-				math.floor(totalSeconds / 60),
-				totalSeconds % 60,
-				math.floor((time % 1000) / 10),
-				if payload.newBest then "   NEW BEST" else ""
-			),
-			if payload.newBest then Tokens.color.leafDeep else nil,
-			Tokens.typography.heading.size
-		)
-		local contribution = payload.contribution or {}
-		line(
-			3,
-			string.format(
-				"Your contribution: %d feathers, %d patches cleared, %s cash",
-				contribution.feathersCollected or 0,
-				contribution.cellsRemoved or 0,
-				EconomyMath.formatCents(payload.roundCashCents or 0)
-			),
-			Tokens.color.inkMuted
-		)
-		local rewards = payload.rewards or {}
-		local partyRow = line(4, "Party reward: 0 Gems", Tokens.color.tealDeep, Tokens.typography.heading.size)
-		local bonusRow = if (rewards.finderBonusGems or 0) > 0
-			then line(5, "Finder bonus: 0 Gems", Tokens.color.ember, Tokens.typography.heading.size)
-			else nil
-		if payload.unlocked and #payload.unlocked > 0 then
-			local names = {}
-			for _, key in ipairs(payload.unlocked) do
-				table.insert(
-					names,
-					if key == "chapter1:hard" then "Sunlit Henhouse - Hard" elseif key == "chapter2:normal" then "Moonlit Cellar" else key
-				)
-			end
-			line(6, "Unlocked: " .. table.concat(names, ", "), Tokens.color.skyDeep)
-		end
-		-- Count-ups only after the server committed (RewardsCommitted precedes ResultsProjection).
+		local alive = true
 		local motion = deps.accessibility:motionSettings()
-		local duration = Motion.duration("slow", motion) * 3
-		local started = os.clock()
-		local thread = task.spawn(function()
-			while true do
-				local t = math.clamp((os.clock() - started) / duration, 0, 1)
-				local eased = 1 - (1 - t) ^ 3
-				partyRow.Text = string.format(
-					"Party reward: %d Gems%s",
-					math.floor((rewards.gems or 0) * eased + 0.5),
-					if (rewards.eventTokens or 0) > 0
-						then string.format("  +%d Tokens", math.floor(rewards.eventTokens * eased + 0.5))
-						else ""
-				)
-				if bonusRow then
-					bonusRow.Text = string.format("Finder bonus: %d Gems", math.floor((rewards.finderBonusGems or 0) * eased + 0.5))
-				end
-				if t >= 1 then
-					break
-				end
-				deps.audio:play(Tokens.sound.rewardTick)
-				task.wait(0.06)
-			end
-		end)
-		table.insert(cleanups, function()
-			task.cancel(thread)
-		end)
-		local function act(action: string)
-			local result = deps.net:request("ResultsAction", { action = action })
-			if result.ok then
-				api.close()
-			elseif result.code == "rate_limited" then
-				deps.hud.toasts:push("Take a breath...", "info")
-			end
+		local z = container.ZIndex + 1
+
+		-- A Scale builder: one root frame, no list, no scrolling.
+		container.AutomaticCanvasSize = Enum.AutomaticSize.None
+		container.CanvasSize = UDim2.fromScale(0, 0)
+		container.ScrollingEnabled = false
+		container.ScrollBarThickness = 0
+		local listLayout = container:FindFirstChildOfClass("UIListLayout")
+		if listLayout then
+			listLayout:Destroy()
 		end
-		local replay, replayCleanup = Button.create(container, {
-			text = "Search again",
-			variant = "primary",
+		local listPadding = container:FindFirstChildOfClass("UIPadding")
+		if listPadding then
+			listPadding:Destroy()
+		end
+		-- The single action is CONTINUE; the corner X would be a second, silent one.
+		api.shell.closeButton.Visible = false
+		local root = Fit.frame(container, "Recap", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), z)
+
+		-- Winner: a round headshot in a gold ring, a small caption and the name.
+		local finderId = tonumber(payload.finderUserId)
+		local hasWinner = finderId ~= nil and finderId > 0
+		local isFinder = payload.isFinder == true
+		local ring = Instance.new("Frame")
+		ring.Name = "Avatar"
+		ring.AnchorPoint = Vector2.new(0.5, 0.5)
+		ring.Position = UDim2.fromScale(0.5, 0.25)
+		ring.Size = UDim2.fromScale(0, 0.36)
+		ring.BackgroundColor3 = Tokens.color.panelDeep
+		ring.BorderSizePixel = 0
+		ring.ZIndex = z + 1
+		Fit.aspect(ring, 1, Enum.DominantAxis.Height)
+		Fit.corner(ring, 0.5)
+		Depth.keyline(ring, Tokens.depth.keyline, if hasWinner then Tokens.color.gold else Tokens.color.outline)
+		ring.Parent = root
+		local headshot = Instance.new("ImageLabel")
+		headshot.Name = "Headshot"
+		headshot.AnchorPoint = Vector2.new(0.5, 0.5)
+		headshot.Position = UDim2.fromScale(0.5, 0.5)
+		headshot.Size = UDim2.fromScale(0.92, 0.92)
+		headshot.BackgroundTransparency = 1
+		headshot.ZIndex = z + 2
+		Fit.corner(headshot, 0.5)
+		headshot.Parent = ring
+		if hasWinner then
+			task.spawn(function()
+				local ok, image = pcall(function()
+					return Players:GetUserThumbnailAsync(finderId :: number, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size180x180)
+				end)
+				if ok and alive and headshot.Parent then
+					headshot.Image = image
+				end
+			end)
+		else
+			Fit.text(ring, "Nobody", "?", {
+				font = Tokens.typography.display.font,
+				color = Tokens.color.inkMuted,
+				max = 90,
+				outline = 3,
+				outlineColor = Tokens.color.outline,
+				zIndex = z + 2,
+				size = UDim2.fromScale(0.6, 0.6),
+				position = UDim2.fromScale(0.5, 0.5),
+				anchor = Vector2.new(0.5, 0.5),
+			})
+		end
+		Fit.text(root, "Caption", if not hasWinner then "THE EGG WAS NOT FOUND" elseif isFinder then "YOU FOUND THE EGG" else "WINNER", {
+			font = Tokens.typography.label.font,
+			color = if hasWinner then Tokens.color.gold else Tokens.color.inkMuted,
+			max = 26,
+			outline = 2,
+			outlineColor = Tokens.color.outline,
+			zIndex = z + 1,
+			size = UDim2.fromScale(0.8, 0.07),
+			position = UDim2.fromScale(0.5, 0.465),
+			anchor = Vector2.new(0.5, 0),
+		})
+		local winnerName = if not hasWinner
+			then "No winner"
+			elseif isFinder then Players.LocalPlayer.DisplayName
+			else tostring(payload.finderName or "A forager")
+		local nameLabel = Fit.text(root, "Winner", winnerName, {
+			font = Tokens.typography.display.font,
+			color = Tokens.color.featherWhite,
+			max = 54,
+			outline = 3,
+			outlineColor = Tokens.color.outline,
+			zIndex = z + 1,
+			size = UDim2.fromScale(0.86, 0.12),
+			position = UDim2.fromScale(0.5, 0.54),
+			anchor = Vector2.new(0.5, 0),
+			wrap = false,
+		})
+		nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+
+		-- Reward: one slate pill with the gem and the amount this player banked.
+		local rewards = payload.rewards or {}
+		local gems = (rewards.gems or 0) + (rewards.finderBonusGems or 0)
+		local tokens = rewards.eventTokens or 0
+		local rewardPill = Instance.new("Frame")
+		rewardPill.Name = "Reward"
+		rewardPill.AnchorPoint = Vector2.new(0.5, 0)
+		rewardPill.Position = UDim2.fromScale(0.5, 0.69)
+		rewardPill.Size = UDim2.fromScale(0.6, 0.11)
+		rewardPill.BorderSizePixel = 0
+		rewardPill.ZIndex = z + 1
+		Depth.panel(rewardPill, Tokens.color.surface)
+		Fit.corner(rewardPill, 0.5)
+		rewardPill.Parent = root
+		local gemArt = Fit.image(rewardPill, "hud.gem", {
+			size = UDim2.fromScale(0, 0.74),
+			position = UDim2.fromScale(0.14, 0.5),
+			zIndex = z + 2,
+			name = "Gem",
+		})
+		if gemArt then
+			Fit.aspect(gemArt, 1, Enum.DominantAxis.Height)
+		else
+			local glyph = Icons.gem(rewardPill, 10, { zIndex = z + 2 })
+			glyph.AnchorPoint = Vector2.new(0.5, 0.5)
+			glyph.Position = UDim2.fromScale(0.14, 0.5)
+			glyph.Size = UDim2.fromScale(0, 0.7)
+			Fit.aspect(glyph, 1, Enum.DominantAxis.Height)
+		end
+		local amount = Fit.text(rewardPill, "Amount", "+0 Gems", {
+			font = Tokens.typography.numeral.font,
+			color = Tokens.color.featherWhite,
+			max = 40,
+			outline = 2.4,
+			outlineColor = Tokens.color.outline,
+			zIndex = z + 2,
+			size = UDim2.fromScale(0.68, 0.66),
+			position = UDim2.fromScale(0.27, 0.17),
+			wrap = false,
+		})
+		local function rewardText(fraction: number): string
+			local text = string.format("+%d Gems", math.floor(gems * fraction + 0.5))
+			if tokens > 0 then
+				text ..= string.format("  +%d Tokens", math.floor(tokens * fraction + 0.5))
+			end
+			return text
+		end
+		if gems <= 0 and tokens <= 0 then
+			amount.Text = "No reward this time"
+		elseif motion.reducedMotion then
+			amount.Text = rewardText(1)
+		else
+			local duration = Motion.duration("slow", motion) * 2.5
+			local started = os.clock()
+			local thread = task.spawn(function()
+				while alive do
+					local t = math.clamp((os.clock() - started) / duration, 0, 1)
+					amount.Text = rewardText(1 - (1 - t) ^ 3)
+					if t >= 1 then
+						break
+					end
+					deps.audio:play(Tokens.sound.rewardTick)
+					task.wait(0.08)
+				end
+			end)
+			table.insert(cleanups, function()
+				if coroutine.status(thread) ~= "dead" then
+					task.cancel(thread)
+				end
+			end)
+		end
+
+		-- The one action.
+		local continueHandle = Button.build(root, {
+			text = "CONTINUE",
+			variant = "success",
+			minimumTapTarget = minimumTap,
+			motion = motion,
+			size = UDim2.fromScale(0.56, 0.13),
 			zIndex = z + 1,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiConfirm)
 			end,
-			minimumTapTarget = minimumTap,
-			motion = motion,
-			size = UDim2.new(1, 0, 0, minimumTap),
+			hoverSound = function()
+				deps.audio:play(Tokens.sound.uiHover)
+			end,
 			onActivated = function()
-				act("replay")
+				local result = deps.net:request("ResultsAction", { action = "replay" })
+				if result.ok then
+					api.close()
+				elseif result.code == "rate_limited" then
+					deps.hud.toasts:push("Take a breath...", "info")
+				end
 			end,
 		})
-		replay.LayoutOrder = 10
-		table.insert(cleanups, replayCleanup)
-		local lobby, lobbyCleanup = Button.create(container, {
-			text = "Back to the lobby",
-			variant = "secondary",
-			zIndex = z + 1,
-			sound = function()
-				deps.audio:play(Tokens.sound.uiTap)
-			end,
-			minimumTapTarget = minimumTap,
-			motion = motion,
-			size = UDim2.new(1, 0, 0, minimumTap),
-			onActivated = function()
-				act("lobby")
-			end,
-		})
-		lobby.LayoutOrder = 11
-		table.insert(cleanups, lobbyCleanup)
+		continueHandle.button.Name = "Continue"
+		continueHandle.button.AnchorPoint = Vector2.new(0.5, 1)
+		continueHandle.button.Position = UDim2.fromScale(0.5, 0.98)
+		Fit.buttonText(continueHandle, 34)
+		table.insert(cleanups, continueHandle.destroy)
+		api.setInitialFocus(continueHandle.button)
+
+		if hasWinner then
+			Confetti.burst(root, {
+				origin = UDim2.fromScale(0.5, 0.25),
+				count = 26,
+				spread = 200,
+				motion = motion,
+				tier = deps.quality and deps.quality:tier() or nil,
+				zIndex = z + 8,
+			})
+		end
 		-- Auto-close when the server returns the party (phase Returning).
 		table.insert(
 			cleanups,
@@ -453,15 +524,16 @@ function VictoryController.onResults(self: VictoryController, payload: { [string
 			end)
 		)
 		return function()
+			alive = false
 			for _, cleanup in ipairs(cleanups) do
 				if type(cleanup) == "function" then
 					cleanup()
-				elseif type(cleanup) == "table" and cleanup.Disconnect then
+				elseif typeof(cleanup) == "RBXScriptConnection" then
 					cleanup:Disconnect()
 				end
 			end
 		end
-	end, "Round complete", { icon = "header.results" })
+	end, "Round complete", { compact = true, icon = "header.results" })
 end
 
 function VictoryController.destroy(self: VictoryController)
