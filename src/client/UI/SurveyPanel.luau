@@ -290,6 +290,18 @@ function SurveyPanel.create(
 			end,
 		})
 		handle.button.Name = "Area_" .. region
+		-- Two lines ("BACK" over "BARN"), scaled to the button: a single truncated line read "BACK...".
+		local areaLabel = handle.button:FindFirstChild("Label", true)
+		if areaLabel and areaLabel:IsA("TextLabel") then
+			areaLabel.Text = string.gsub(NestSurvey.name(region), " ", "\n")
+			areaLabel.TextTruncate = Enum.TextTruncate.None
+			areaLabel.TextWrapped = true
+			areaLabel.TextScaled = true
+			local cap = Instance.new("UITextSizeConstraint")
+			cap.MaxTextSize = 30
+			cap.MinTextSize = 12
+			cap.Parent = areaLabel
+		end
 		handle.button.AnchorPoint = Vector2.new(col - 1, row - 1)
 		handle.button.Position = UDim2.new(
 			col - 1,
