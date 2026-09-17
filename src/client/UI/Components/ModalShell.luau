@@ -316,6 +316,9 @@ function ModalShell.create(
 	-- list builder gets a card just tall enough for its rows, capped at the box, so short lists never
 	-- float in empty panel and long ones scroll inside it.
 	local function relayout()
+		if root.Parent == nil then
+			return -- closed: the detached aspect constraint must not be re-parented to a dead card
+		end
 		readDevice()
 		holderScale.Scale = if phone and stageScale > 0 then 1 / stageScale else 1
 		local boxHeight = if phone then 0.86 else geometry.box.Y
@@ -359,9 +362,13 @@ function ModalShell.create(
 	content:GetPropertyChangedSignal("AutomaticCanvasSize"):Connect(relayout)
 	holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
 	local stage = SafeArea.stageOf(gui)
-	if stage then
-		stage:GetAttributeChangedSignal("SFE_LayoutClass"):Connect(relayout)
-	end
+	local stageConnection = if stage then stage:GetAttributeChangedSignal("SFE_LayoutClass"):Connect(relayout) else nil
+	root.Destroying:Connect(function()
+		if stageConnection then
+			stageConnection:Disconnect()
+		end
+		aspect:Destroy() -- may be parked outside the tree (phone hero), so Destroy() on the root misses it
+	end)
 	task.defer(relayout)
 
 	local motion = options.motion
