@@ -481,6 +481,22 @@ function StudioDebug.install(container: any): any?
 		return result
 	end
 
+	-- Reveals the Egg where it lies, as if its cover had just been cleared: the same path the real
+	-- reveal takes (spawn, hollow, broadcast), so the reveal beat can be checked without digging.
+	function hooks.revealEgg(userId: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return { error = "no_round" }
+		end
+		local revealed = container.egg:revealNow(runtime)
+		local position = container.egg:position(runtime)
+		debugLog("REVEAL_EGG", { userId = userId, revealed = revealed })
+		return { revealed = revealed, x = position.X, y = position.Y, z = position.Z, phase = runtime.state.phase }
+	end
+
 	function hooks.setCarried(userId: number, standard: number, rainbow: number)
 		if not StudioDebug.isUserAllowed(userId) then
 			return nil
