@@ -52,6 +52,8 @@ local PAGE_EDGE = Tokens.color.surfaceAlt -- the stack of pages under the top sh
 local GUTTER = Tokens.color.panelDeep
 local BOARD_THICKNESS_PX = 7 -- how far the board's underside shows below the cover
 local BOARD_RULE_INSET = 10 -- how far in from the board's edge the gold rule is inlaid
+local BOOK_DESIGN = Vector2.new(1000, 580) -- the book's drawn size in px before the fit scale
+local BOOK_MAX_SCALE = 1.45 -- physical cap so a 4K window does not get a wall-sized book
 
 -- The items that get a page, in book order.
 local function itemList(cfg: { [string]: any }): { { id: string, title: string, art: string, paths: { string } } }
@@ -840,13 +842,26 @@ function UpgradeBookController.open(self: UpgradeBookController)
 	holder.Name = "Book"
 	holder.AnchorPoint = Vector2.new(0.5, 0.5)
 	holder.Position = UDim2.fromScale(0.5, 0.5)
-	holder.Size = UDim2.fromScale(0.76, 0.84)
+	-- Drawn at one design size in pixels (every row inside is offset-laid), then scaled to the
+	-- screen: a landscape phone gets a whole book at ~0.6, a 1080p desktop one at ~1.4.
+	holder.Size = UDim2.fromOffset(BOOK_DESIGN.X, BOOK_DESIGN.Y)
 	holder.BackgroundTransparency = 1
 	holder.ZIndex = 2
 	holder.Parent = stage
 	local bookScale = Instance.new("UIScale")
-	bookScale.Scale = 0.6
+	local function fitScale(): number
+		local stageScale = math.max(0.1, SafeArea.scaleOf(stage))
+		local physical =
+			math.min(stage.AbsoluteSize.X * 0.94 / BOOK_DESIGN.X, stage.AbsoluteSize.Y * 0.92 / BOOK_DESIGN.Y, BOOK_MAX_SCALE * stageScale)
+		return math.max(0.2, physical / stageScale)
+	end
+	session.fit = fitScale()
+	bookScale.Scale = session.fit * 0.6
 	bookScale.Parent = holder
+	session.trove:add(stage:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		session.fit = fitScale()
+		bookScale.Scale = session.fit
+	end))
 
 	-- The board's thickness. Sits a few pixels low and wide, so the book has a bottom edge you can see.
 	local thickness = Instance.new("Frame")
@@ -910,7 +925,7 @@ function UpgradeBookController.open(self: UpgradeBookController)
 	TweenService:Create(
 		bookScale,
 		TweenInfo.new(if motion.reducedMotion then 0.05 else 0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-		{ Scale = 1 }
+		{ Scale = session.fit }
 	):Play()
 
 	local function pageFrame(name: string, anchorX: number): Frame
@@ -1144,7 +1159,11 @@ function UpgradeBookController.close(self: UpgradeBookController)
 		session.trove:destroy()
 		return
 	end
-	local shrink = TweenService:Create(session.scale, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.6 })
+	local shrink = TweenService:Create(
+		session.scale,
+		TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		{ Scale = (session.fit or 1) * 0.6 }
+	)
 	shrink:Play()
 	shrink.Completed:Once(function()
 		session.trove:destroy()
