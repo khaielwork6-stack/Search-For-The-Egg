@@ -368,6 +368,11 @@ function StudioDebug.install(container: any): any?
 		container.debugEntitlements[userId] = container.debugEntitlements[userId] or {}
 		container.debugEntitlements[userId][key] = owned == true or owned == "true"
 		debugLog("SET_ENTITLEMENT", { userId = userId, key = key, owned = container.debugEntitlements[userId][key] })
+		-- Push the projection like a verified purchase does, so ownership-driven UI reacts live.
+		local player = container.playerData:playerOf(userId)
+		if player and typeof(player) == "Instance" then
+			container.playerData:pushProjection(player, container.config)
+		end
 		return table.clone(container.debugEntitlements[userId])
 	end
 

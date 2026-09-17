@@ -231,10 +231,40 @@ end
 
 -- 6. Sessions, player data, parties, rounds, gameplay services.
 local sessions = SessionService.new({ idGen = idGen, clock = clock, log = log })
+-- Verified entitlements (Roblox ownership through the adapter) merged with Studio-only debug overrides
+-- (the mock entitlement adapter for Phase 3 verification; never active outside Studio/allowlist).
+local debugEntitlements: { [number]: { [string]: boolean } } = {}
+local function getEntitlements(userId: number): { [string]: boolean }
+	local snapshot = entitlements:snapshot(userId)
+	local overrides = debugEntitlements[userId]
+	if overrides then
+		for key, value in pairs(overrides) do
+			snapshot[key] = value
+		end
+	end
+	return snapshot
+end
+-- The profile projection reads ownership through the same merge, so a Studio override reaches the
+-- client exactly as a verified purchase does. Everything else goes straight to the service.
+local projectedEntitlements = setmetatable({
+	snapshot = function(_, userId: number)
+		return getEntitlements(userId)
+	end,
+}, {
+	__index = function(_, key)
+		local value = (entitlements :: any)[key]
+		if type(value) == "function" then
+			return function(_, ...)
+				return value(entitlements, ...)
+			end
+		end
+		return value
+	end,
+})
 local playerData = PlayerDataService.new({
 	profiles = profiles,
 	sessions = sessions,
-	entitlements = entitlements,
+	entitlements = projectedEntitlements,
 	clock = clock,
 	policy = ServerPolicy,
 	send = send,
@@ -277,19 +307,6 @@ local function publishBestTime(player: Player)
 	player:SetAttribute("SFE_BestTimeMs", chapter and chapter.normal or 0)
 end
 
--- Verified entitlements (Roblox ownership through the adapter) merged with Studio-only debug overrides
--- (the mock entitlement adapter for Phase 3 verification; never active outside Studio/allowlist).
-local debugEntitlements: { [number]: { [string]: boolean } } = {}
-local function getEntitlements(userId: number): { [string]: boolean }
-	local snapshot = entitlements:snapshot(userId)
-	local overrides = debugEntitlements[userId]
-	if overrides then
-		for key, value in pairs(overrides) do
-			snapshot[key] = value
-		end
-	end
-	return snapshot
-end
 -- Line of sight (A-PILE-01): a strike must not pass through map geometry; the terrain core itself
 -- and the pile visuals are the target, so only other solid parts block.
 local function collectLineOfSight(_runtime: any, origin: Vector3, hit: Vector3): boolean
