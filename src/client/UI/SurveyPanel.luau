@@ -23,6 +23,7 @@ local SurveyPanel = {}
 local PLATE = Tokens.color.surface
 local WELL = Tokens.color.panelDeep
 local MAP_W, MAP_H = 620, 420
+local DESIGN = Vector2.new(1200, 640) -- the panel's drawn size before the fit scale
 
 export type State = {
 	title: string, -- the sign: "PICK AN AREA", "LISTENING...", the result
@@ -77,13 +78,38 @@ function SurveyPanel.create(
 	gui.Parent = parent
 	local _, scaleCleanup, stage = SafeArea.applyScale(gui, deps.config)
 
+	-- No visible dim behind the panel (owner, 17 Sep 2026: no dark overlays behind menus).
 	local dim = Instance.new("Frame")
 	dim.Name = "Dim"
 	dim.BackgroundColor3 = Tokens.color.overlay
-	dim.BackgroundTransparency = 0.45
+	dim.BackgroundTransparency = 1
 	dim.Size = UDim2.fromScale(1, 1)
 	dim.ZIndex = 1
 	dim.Parent = stage
+
+	-- Everything below is drawn at one design size and fitted to the screen by a single UIScale, so a
+	-- landscape phone gets the same panel smaller instead of offset-sized pieces piling on each other.
+	local layout = Instance.new("Frame")
+	layout.Name = "Layout"
+	layout.AnchorPoint = Vector2.new(0.5, 0.5)
+	layout.Position = UDim2.fromScale(0.5, 0.5)
+	layout.Size = UDim2.fromOffset(DESIGN.X, DESIGN.Y)
+	layout.BackgroundTransparency = 1
+	layout.ZIndex = 1
+	layout.Parent = stage
+	local layoutScale = Instance.new("UIScale")
+	layoutScale.Parent = layout
+	local function fitLayout()
+		local stageScale = math.max(0.1, SafeArea.scaleOf(stage))
+		local w = stage.AbsoluteSize.X / stageScale
+		local h = stage.AbsoluteSize.Y / stageScale
+		if w <= 0 or h <= 0 then
+			return
+		end
+		layoutScale.Scale = math.min(1, w / DESIGN.X, h / DESIGN.Y)
+	end
+	fitLayout()
+	stage:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitLayout)
 
 	-- The sign: a dark slate banner with a green line along its top, hung from the top of the screen.
 	local sign = Instance.new("Frame")
@@ -97,7 +123,7 @@ function SurveyPanel.create(
 	signCap.MaxSize = Vector2.new(620, 104)
 	signCap.MinSize = Vector2.new(300, 104)
 	signCap.Parent = sign
-	sign.Parent = stage
+	sign.Parent = layout
 	local signLine = Instance.new("Frame")
 	signLine.Name = "Line"
 	signLine.AnchorPoint = Vector2.new(0.5, 0)
@@ -146,7 +172,7 @@ function SurveyPanel.create(
 	counter.Size = UDim2.fromOffset(250, 64)
 	counter.ZIndex = 2
 	Depth.panel(counter, PLATE, { radius = Tokens.radius.lg })
-	counter.Parent = stage
+	counter.Parent = layout
 	local counterInset = Instance.new("Frame")
 	counterInset.Name = "Inset"
 	counterInset.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -187,7 +213,7 @@ function SurveyPanel.create(
 	pips.BackgroundTransparency = 1
 	pips.ZIndex = 2
 	pips.Visible = false
-	pips.Parent = stage
+	pips.Parent = layout
 	local pipsLabel = FrameKit.text(
 		pips,
 		"Label",
@@ -238,7 +264,7 @@ function SurveyPanel.create(
 	local mapRatio = Instance.new("UIAspectRatioConstraint")
 	mapRatio.AspectRatio = MAP_W / MAP_H
 	mapRatio.Parent = map
-	map.Parent = stage
+	map.Parent = layout
 	local edge = 0.1 -- the landmark margin, as a fraction of the map on each side
 	local function landmark(name: string, text: string, position: UDim2, size: UDim2, rotation: number)
 		local mark =
@@ -345,7 +371,7 @@ function SurveyPanel.create(
 	actions.Size = UDim2.new(0.8, 0, 0, 96)
 	actions.BackgroundTransparency = 1
 	actions.ZIndex = 2
-	actions.Parent = stage
+	actions.Parent = layout
 	local back = Button.build(actions, {
 		text = "X  BACK",
 		variant = "danger",
