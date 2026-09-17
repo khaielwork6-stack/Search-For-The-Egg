@@ -55,6 +55,8 @@ type Flight = {
 	attachments: { Attachment },
 	returnTo: (BasePart) -> (),
 	started: number,
+	baseSize: Vector3?,
+	baseColor: Color3?,
 }
 
 export type PickupFeedbackController = typeof(setmetatable(
@@ -249,7 +251,16 @@ function PickupFeedbackController.fly(
 		land()
 		return
 	end
-	local flight: Flight = { part = part, id = options.id, trail = nil, attachments = {}, returnTo = returnTo, started = os.clock() }
+	local flight: Flight = {
+		part = part,
+		id = options.id,
+		trail = nil,
+		attachments = {},
+		returnTo = returnTo,
+		started = os.clock(),
+		baseSize = part.Size,
+		baseColor = part.Color,
+	}
 	table.insert(self._active, flight)
 	self.stats.flights += 1
 	local releaseSeconds = if options.release == false then 0 else Motion.clampSeconds(pickup.releaseSeconds, motion)
@@ -259,6 +270,11 @@ function PickupFeedbackController.fly(
 	local side = Motion.amplitude(pickup.flightSideStuds, motion)
 	local roll = math.rad(pickup.flightRollDegrees)
 	local baseSize = part.Size
+	-- In flight the feather warms a step towards gold: still the same feather, but lit, so it reads
+	-- against the white mound it just left. Restored before the part goes back to the pool.
+	local baseColor = part.Color
+	local flightColor = baseColor:Lerp(Color3.fromRGB(255, 214, 120), if options.rainbow then 0 else 0.35)
+	part.Color = flightColor
 	-- The release starts from the seat the record actually had; `from` is the same point for a
 	-- coat record and the spawn point for a stream part.
 	local seat = if (part.Position - from).Magnitude > 0.5 then CFrame.new(from) else part.CFrame
@@ -277,6 +293,7 @@ function PickupFeedbackController.fly(
 		stripTrail(flight)
 		part.Size = baseSize
 		part.Transparency = 0
+		part.Color = baseColor
 		returnTo(part)
 		land()
 	end
@@ -649,6 +666,10 @@ function PickupFeedbackController.reset(self: PickupFeedbackController, _reason:
 	for _, flight in ipairs(active) do
 		stripTrail(flight)
 		flight.part.Transparency = 0
+		flight.part.Size = flight.baseSize or flight.part.Size
+		if flight.baseColor then
+			flight.part.Color = flight.baseColor
+		end
 		local ok, err = pcall(flight.returnTo, flight.part)
 		if not ok then
 			warn("[SFE][Pickup] could not return a flown part: " .. tostring(err))

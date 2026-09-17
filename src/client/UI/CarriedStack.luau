@@ -160,9 +160,35 @@ function CarriedStack.new(
 	viewport.Name = "Viewport"
 	viewport.BackgroundTransparency = 1
 	viewport.Size = UDim2.fromScale(1, 1)
-	viewport.Ambient = Color3.fromRGB(200, 196, 188)
-	viewport.LightColor = Color3.fromRGB(255, 250, 240)
-	viewport.LightDirection = Vector3.new(-0.3, -1, -0.6)
+	-- Lit from the upper left with a darker, warmer ambient than the world, so the bundle's feathers
+	-- carry shaded sides and read as an object in the hand against the white mound behind them.
+	viewport.Ambient = Color3.fromRGB(122, 108, 92)
+	viewport.LightColor = Color3.fromRGB(255, 238, 208)
+	viewport.LightDirection = Vector3.new(-0.55, -0.75, 0.4)
+	viewport.ZIndex = 3
+	-- A soft warm-dark shade under the bundle: the one thing that separates it from the pile when
+	-- both are ivory. Ellipse, faded at its ends, no image.
+	local shade = Instance.new("Frame")
+	shade.Name = "Shade"
+	shade.AnchorPoint = Vector2.new(0.5, 0.5)
+	shade.Position = UDim2.fromScale(0.6, 0.6)
+	shade.Size = UDim2.fromScale(0.95, 0.75)
+	shade.BackgroundColor3 = Color3.fromRGB(64, 42, 24)
+	shade.BackgroundTransparency = 0.7
+	shade.BorderSizePixel = 0
+	shade.ZIndex = 2
+	local shadeCorner = Instance.new("UICorner")
+	shadeCorner.CornerRadius = UDim.new(1, 0)
+	shadeCorner.Parent = shade
+	local shadeFade = Instance.new("UIGradient")
+	shadeFade.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.3, 0.2),
+		NumberSequenceKeypoint.new(0.7, 0.2),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	shadeFade.Parent = shade
+	shade.Parent = frame
 	viewport.Parent = frame
 	local camera = Instance.new("Camera")
 	camera.FieldOfView = 38
