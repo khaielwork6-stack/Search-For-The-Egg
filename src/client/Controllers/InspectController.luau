@@ -253,7 +253,17 @@ function InspectController.open(self: InspectController, key: string, model: Mod
 	local hudGui = deps.hud.gui
 	local hudWasEnabled = hudGui.Enabled
 	hudGui.Enabled = false
+	-- The lobby's side menu and the 2x Gems tile live on their own gui and collided with the skins
+	-- picker; they step aside with the HUD.
+	local lobbyGui = hudGui.Parent and hudGui.Parent:FindFirstChild("SFE_Lobby")
+	local lobbyWasEnabled = lobbyGui and lobbyGui:IsA("ScreenGui") and lobbyGui.Enabled
+	if lobbyGui and lobbyGui:IsA("ScreenGui") then
+		lobbyGui.Enabled = false
+	end
 	session.trove:add(function()
+		if lobbyGui and lobbyGui:IsA("ScreenGui") and lobbyGui.Parent then
+			lobbyGui.Enabled = lobbyWasEnabled == true
+		end
 		hudGui.Enabled = hudWasEnabled
 		deps.modals:setExternalUnlock(false)
 		deps.input:setSuspended(false)
