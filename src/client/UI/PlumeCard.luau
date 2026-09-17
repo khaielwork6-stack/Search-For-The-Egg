@@ -85,24 +85,42 @@ function PlumeCard.create(
 	dim.Parent = stage
 	dim.Activated:Connect(callbacks.onClose)
 
+	-- The card is drawn at its design size (its title plate, close knob and rows mix pixels and
+	-- fractions) and one UIScale on a holder fits it to the screen, so a phone gets the whole card
+	-- smaller rather than a squeezed card with truncated words.
+	local fit = Instance.new("Frame")
+	fit.Name = "Fit"
+	fit.AnchorPoint = Vector2.new(0.5, 0.5)
+	fit.Position = UDim2.fromScale(0.5, 0.54)
+	fit.Size = UDim2.fromOffset(CARD_W, CARD_H)
+	fit.BackgroundTransparency = 1
+	fit.ZIndex = 2
+	fit.Parent = stage
+	local fitScale = Instance.new("UIScale")
+	fitScale.Parent = fit
+	local function applyFit()
+		local stageScale = math.max(0.1, SafeArea.scaleOf(stage))
+		local w = stage.AbsoluteSize.X / stageScale
+		local h = stage.AbsoluteSize.Y / stageScale
+		if w > 0 and h > 0 then
+			-- Height leaves room for the title plate and close knob that overhang the card's top.
+			fitScale.Scale = math.min(1, w * 0.9 / CARD_W, h * 0.8 / (CARD_H + 40))
+		end
+	end
+	applyFit()
+	stage:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyFit)
+
 	local card = Instance.new("Frame")
 	card.Name = "Card"
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
-	card.Position = UDim2.fromScale(0.5, 0.52)
-	card.Size = UDim2.fromScale(0.62, 0.66)
+	card.Position = UDim2.fromScale(0.5, 0.5)
+	card.Size = UDim2.fromScale(1, 1)
 	card.ZIndex = 2
 	Depth.panel(card, CARD, { radius = Tokens.radius.xl })
-	local cap = Instance.new("UISizeConstraint")
-	cap.MaxSize = Vector2.new(CARD_W, CARD_H)
-	cap.MinSize = Vector2.new(340, 250)
-	cap.Parent = card
-	local ratio = Instance.new("UIAspectRatioConstraint")
-	ratio.AspectRatio = CARD_W / CARD_H
-	ratio.Parent = card
 	local entrance = Instance.new("UIScale")
 	entrance.Scale = 0.72
 	entrance.Parent = card
-	card.Parent = stage
+	card.Parent = fit
 
 	-- Title plate, floating over the top edge: a slate pill on a darker lip, like the modal shell's.
 	local plate = Instance.new("Frame")
