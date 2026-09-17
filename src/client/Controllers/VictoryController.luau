@@ -59,6 +59,7 @@ function VictoryController.new(deps: {
 	accessibility: any,
 	config: { [string]: any },
 	celebration: any?,
+	announcements: any?,
 }): VictoryController
 	local self = setmetatable({
 		_deps = deps,
@@ -357,6 +358,10 @@ end
 -- precedes ResultsProjection), and the card closes itself when the server returns the party.
 function VictoryController._openResults(self: VictoryController, payload: { [string]: any })
 	local deps = self._deps
+	-- The card is the last word: a banner still on screen ("EGG RETURNED!") sat across its title.
+	if deps.announcements then
+		deps.announcements:clear()
+	end
 	local minimumTap = SafeArea.minimumTapTarget(deps.modals.gui, deps.config)
 	deps.modals:open("results", deps.modals.Priority.Results, true, function(container, api)
 		local cleanups: { any } = {}

@@ -243,6 +243,8 @@ local function acquirePart(self: PileVisualController): BasePart
 	return part :: BasePart
 end
 
+local RELEASE_BUDGET_SECONDS = 0.004 -- per frame, while a finished round's coat goes back to the pool
+
 local function releasePart(self: PileVisualController, part: BasePart)
 	part.Parent = nil
 	part.Transparency = 0
@@ -1575,25 +1577,50 @@ function PileVisualController.clear(self: PileVisualController)
 	self._building = false
 	self._pendingDeltas = {}
 	self:_unbindTargeting()
+	-- The coat holds tens of thousands of parts. Releasing them all in one frame cost ~0.5 s at the end
+	-- of every round (measured 17 Sep 2026), so the folder leaves the world at once (one reparent hides
+	-- the whole coat) and the parts go back to the pool a few milliseconds per frame.
+	local released: { BasePart } = {}
 	for _, column in pairs(self._columns) do
 		for slot, part in pairs(column.feathers) do
-			releasePart(self, part)
+			table.insert(released, part)
 			column.feathers[slot] = nil
 		end
 		for _, part in ipairs(column.fluff) do
-			releasePart(self, part)
+			table.insert(released, part)
 		end
 		table.clear(column.fluff)
 		for _, entry in ipairs(column.under) do
-			releasePart(self, entry.part)
+			table.insert(released, entry.part)
 		end
 		table.clear(column.under)
 	end
 	table.clear(self._columns)
 	for _, part in ipairs(self._rimBed) do
-		releasePart(self, part)
+		table.insert(released, part)
 	end
 	table.clear(self._rimBed)
+	local oldFolder = self._folder
+	self._folder = nil
+	if oldFolder then
+		oldFolder.Parent = nil
+	end
+	if #released > 0 or oldFolder then
+		task.spawn(function()
+			local budget = RELEASE_BUDGET_SECONDS
+			local started = os.clock()
+			for index, part in ipairs(released) do
+				releasePart(self, part)
+				if index % 64 == 0 and os.clock() - started > budget then
+					task.wait()
+					started = os.clock()
+				end
+			end
+			if oldFolder then
+				oldFolder:Destroy()
+			end
+		end)
+	end
 	self._grid = nil
 	self._field = nil
 	self._seatField = nil
@@ -1607,10 +1634,6 @@ function PileVisualController.clear(self: PileVisualController)
 	if self._highlight then
 		self._highlight:Destroy()
 		self._highlight = nil
-	end
-	if self._folder then
-		self._folder:Destroy()
-		self._folder = nil
 	end
 end
 

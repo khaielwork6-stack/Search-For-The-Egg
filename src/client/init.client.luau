@@ -316,6 +316,7 @@ local victory = trove:add(VictoryController.new({
 	accessibility = accessibility,
 	config = config,
 	celebration = celebration,
+	announcements = announcements,
 }))
 hud:bindRound(round, interaction)
 -- The round intro. It owns the intro phase: camera, HUD, input and the avatar on screen, and it

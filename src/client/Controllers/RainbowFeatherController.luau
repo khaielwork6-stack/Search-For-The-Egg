@@ -41,7 +41,8 @@ function RainbowFeatherController.plumeState(
 ): { visible: boolean, carried: number, cost: number, used: boolean }
 	local cost = PlumeClue.cost(config)
 	local layout = chapter and (ChapterLayout :: any)[chapter]
-	local searching = phase == "Searching" or phase == "EggRevealed"
+	-- Only while Plume can still help: once the Egg is out the pill would advertise a closed stall.
+	local searching = phase == "Searching"
 	local visible = searching and player ~= nil and layout ~= nil and layout.clueStation ~= nil
 	return {
 		visible = visible,
