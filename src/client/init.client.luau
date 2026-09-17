@@ -30,6 +30,7 @@ local IntroCinematicController = require(script.Controllers.IntroCinematicContro
 local PileVisualController = require(Controllers.PileVisualController)
 local CrateController = require(Controllers.CrateController)
 local ToolController = require(Controllers.ToolController)
+local PickupFeedbackController = require(Controllers.PickupFeedbackController)
 local ToolVisualController = require(Controllers.ToolVisualController)
 local ToolViewmodelController = require(Controllers.ToolViewmodelController)
 local DialogueController = require(Controllers.DialogueController)
@@ -108,6 +109,21 @@ local toolVisuals = trove:add(ToolVisualController.new({
 	camera = camera,
 	hud = hud,
 }))
+local crateRun = trove:add(CrateController.new({ net = net, audio = audio, vfx = vfx, config = config }))
+-- One presentation for every pick and every sale: press, release, flight, landing, bag, sound.
+local pickupFeedback = trove:add(PickupFeedbackController.new({
+	hud = hud,
+	pile = pile,
+	audio = audio,
+	haptics = haptics,
+	camera = camera,
+	vfx = vfx,
+	accessibility = accessibility,
+	quality = quality,
+	round = round,
+	crate = crateRun,
+	config = config,
+}))
 local tools = trove:add(ToolController.new({
 	net = net,
 	round = round,
@@ -120,6 +136,7 @@ local tools = trove:add(ToolController.new({
 	accessibility = accessibility,
 	hud = hud,
 	visuals = toolVisuals,
+	feedback = pickupFeedback,
 	config = config,
 }))
 local hand = tools -- Phase 2 automation helpers keep working through the tool controller
@@ -288,7 +305,6 @@ end))
 trove:add(pile.targetChanged:Connect(function(targeting)
 	hud:setTargeting(targeting)
 end))
-local crateRun = trove:add(CrateController.new({ net = net, audio = audio, vfx = vfx, config = config }))
 -- Permanent first person: locked from boot; menus unlock through the modal controller.
 modals:setExternalUnlock(false)
 trove:add(round.saleRefused:Connect(function(payload)
@@ -301,9 +317,7 @@ trove:add(round.saleRefused:Connect(function(payload)
 	)
 	audio:play("ui.error")
 end))
-trove:add(hand.collected:Connect(function(data)
-	hud:onCollected(data)
-end))
+-- The bag and bundle update when the picked feather lands (PickupFeedbackController), not here.
 
 local lobby = trove:add(LobbyShellController.new({
 	ambient = ambient,
@@ -1340,6 +1354,78 @@ if RunService:IsStudio() then
 		end,
 		toolEnd = function()
 			return tools:endAction()
+		end,
+		pickupStatus = function()
+			return pickupFeedback:status()
+		end,
+		targetInfo = function()
+			local target = pile.target
+			if not target then
+				return { targeted = false }
+			end
+			return {
+				targeted = true,
+				featherId = target.featherId,
+				cell = target.cell,
+				slot = target.slot,
+				x = target.position.X,
+				y = target.position.Y,
+				z = target.position.Z,
+			}
+		end,
+		-- Every rendered record around a feather (by cell radius): id -> CFrame components, for
+		-- diffing before and after a pick to prove nothing but the picked record moved.
+		neighbourSnapshot = function(featherId, radiusCells)
+			local FeatherLayout = require(Shared.Domain.FeatherLayout)
+			local columns = (pile :: any)._columns or {}
+			local grid = (pile :: any)._grid
+			local cell = FeatherLayout.decode(tonumber(featherId) or 0)
+			if not cell or not grid then
+				return { error = "no cell" }
+			end
+			local width = grid.width
+			local cx, cz = (cell - 1) % width, math.floor((cell - 1) / width)
+			local radius = tonumber(radiusCells) or 2
+			local out = {}
+			local n = 0
+			for dz = -radius, radius do
+				for dx = -radius, radius do
+					local x, z = cx + dx, cz + dz
+					if x >= 0 and x < width and z >= 0 then
+						local column = columns[z * width + x + 1]
+						if column then
+							for slot, part in pairs(column.feathers) do
+								local id = part:GetAttribute("SFE_FeatherId")
+								if id then
+									local cf = part.CFrame
+									local px, py, pz, r00, r01, r02, r10, r11, r12, r20, r21, r22 = cf:GetComponents()
+									out[tostring(id)] = string.format(
+										"%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f|%.2f,%.2f,%.2f",
+										px,
+										py,
+										pz,
+										r00,
+										r01,
+										r02,
+										r10,
+										r11,
+										r12,
+										r20,
+										r21,
+										r22,
+										part.Size.X,
+										part.Size.Y,
+										part.Size.Z
+									)
+									n += 1
+								end
+								local _ = slot
+							end
+						end
+					end
+				end
+			end
+			return { count = n, records = out }
 		end,
 		toolStatus = function()
 			local status = tools:status()

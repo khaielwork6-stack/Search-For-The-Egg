@@ -23,7 +23,6 @@ local Tween = require(script.Parent.Parent.UI.Components.Tween)
 local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
 local Icons = require(script.Parent.Parent.UI.Components.Icons)
 local Skin = require(script.Parent.Parent.UI.Components.Skin)
-local SalePopup = require(script.Parent.Parent.UI.SalePopup)
 local SettingsModal = require(script.Parent.Parent.UI.Modals.SettingsModal)
 
 local HUDController = {}
@@ -770,30 +769,15 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 		self.carriedStack:setBag(player.carriedStandard, player.carriedRainbow, capacity, self._infiniteBag == true, false)
 		self.round:setCash(player.cashCents, false)
 	end))
+	-- The sale's bag count-down, cash count-up, crate stream, sounds and popup are one choreography in
+	-- PickupFeedbackController; the HUD only names a Rainbow sale here.
 	self._trove:add(round.sale:Connect(function(sale)
-		self.round:setBag(0, deps.config.bags.levels[(round.player and round.player.bagLevel) or 1].capacity, false, true)
-		self.carriedStack:clear(true)
-		deps.audio:play(Tokens.sound.sellArc)
-		self.round:setCash(sale.cashCents, true, function()
-			deps.audio:play(Tokens.sound.sellTick, { pitchVariance = 0.05 })
-		end)
-		if sale.finalCents >= 100 then
-			deps.audio:play(Tokens.sound.sellBurst)
-		end
 		if (sale.rainbowCount or 0) > 0 then
-			deps.audio:play(Tokens.sound.collectRainbow)
 			self.toasts:reward(
 				string.format("%d Rainbow Feather%s sold at 10x", sale.rainbowCount, if sale.rainbowCount == 1 then "" else "s"),
 				sale.rainbowCents or 0
 			)
 		end
-		SalePopup.show(self.stage, {
-			feathers = sale.standardCount + sale.rainbowCount,
-			cents = sale.finalCents,
-			motion = deps.accessibility:motionSettings(),
-			tier = if deps.quality then deps.quality:tier() else nil,
-		})
-		deps.audio:play(Tokens.sound.uiConfetti)
 	end))
 	self._trove:add(round.upgrade:Connect(function(result)
 		if result.paidCents then
@@ -850,72 +834,8 @@ function HUDController.onCollected(self: HUDController, data: { [string]: any })
 	-- bundle on the pick that earned it rather than waiting for the next projection push.
 	local carriedRainbow = data.carriedRainbow or 0
 	self.carriedStack:setBag(math.max(0, (data.carried or 0) - carriedRainbow), carriedRainbow, data.capacity, data.infinite == true, true)
-	self.carriedStack:pulse()
-	if awarded > 0 and data.hitX and data.hitZ then
-		self:floatPickup(Vector3.new(data.hitX, data.hitY or 0, data.hitZ), awarded, (data.rainbow or 0) > 0)
-	end
-end
-
--- A "+N" that rises from the pickup point in the world, timed with the bag tick and the pickup
--- sound. Rainbow pickups get the gem purple and a bigger pop.
-function HUDController.floatPickup(self: HUDController, position: Vector3, amount: number, rainbow: boolean?)
-	local motion = self._deps.accessibility:motionSettings()
-	local anchor = Instance.new("Part")
-	anchor.Name = "SFE_PickupFloat"
-	anchor.Anchored = true
-	anchor.CanCollide = false
-	anchor.CanQuery = false
-	anchor.CanTouch = false
-	anchor.Transparency = 1
-	anchor.Size = Vector3.new(0.2, 0.2, 0.2)
-	anchor.CFrame = CFrame.new(position + Vector3.new(0, 1.2, 0))
-	local gui = Instance.new("BillboardGui")
-	gui.Name = "Float"
-	gui.Size = UDim2.fromOffset(120, 44)
-	gui.AlwaysOnTop = true
-	gui.LightInfluence = 0
-	gui.Adornee = anchor
-	local label = Instance.new("TextLabel")
-	label.BackgroundTransparency = 1
-	label.Size = UDim2.fromScale(1, 1)
-	label.Font = Enum.Font.FredokaOne
-	-- A big haul shouts; a single feather still reads. Heavy cocoa outline so it holds up against
-	-- the mound, which is the brightest thing on screen.
-	label.TextSize = if rainbow then 52 elseif amount >= 10 then 46 elseif amount >= 5 then 38 else 32
-	label.TextColor3 = if rainbow then Color3.fromRGB(226, 150, 255) else Tokens.color.goldLight
-	label.Text = "+" .. tostring(amount)
-	label.Parent = gui
-	local gradient = Instance.new("UIGradient")
-	gradient.Rotation = 90
-	gradient.Color = ColorSequence.new(
-		if rainbow then Color3.fromRGB(255, 226, 255) else Tokens.color.featherWhite,
-		if rainbow then Color3.fromRGB(196, 96, 255) else Tokens.color.gold
-	)
-	gradient.Parent = label
-	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = 4.5
-	stroke.Color = Tokens.color.outline
-	stroke.Parent = label
-	local scale = Instance.new("UIScale")
-	scale.Scale = 0.6
-	scale.Parent = label
-	gui.Parent = anchor
-	anchor.Parent = workspace
-	local rise = Motion.amplitude(if rainbow then 4.4 else 3.2, motion)
-	local seconds = Motion.clampSeconds(0.9, motion)
-	TweenService
-		:Create(scale, TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = if rainbow then 1.3 else 1.08 })
-		:Play()
-	TweenService:Create(anchor, TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		CFrame = anchor.CFrame + Vector3.new(0, rise, 0),
-	}):Play()
-	task.delay(seconds * 0.55, function()
-		TweenService:Create(label, TweenInfo.new(seconds * 0.45), { TextTransparency = 1 }):Play()
-		TweenService:Create(stroke, TweenInfo.new(seconds * 0.45), { Transparency = 1 }):Play()
-	end)
-	task.delay(seconds + 0.1, function()
-		anchor:Destroy()
-	end)
+	local pickup = self._deps.config.pile.visual.pickup
+	self.carriedStack:land(pickup.landSquashScale, pickup.landTiltDegrees)
 end
 
 -- World point a couple of studs in front of the camera at the carried stack's screen position: the
@@ -946,6 +866,16 @@ end
 
 -- Targeting state from the pile: the reticle swaps to its locked art and grows a touch while a
 -- feather is under the crosshair.
+-- The reticle answers a press the instant it happens: a small dip and spring back.
+function HUDController.reticlePunch(self: HUDController)
+	local motion = self._deps.accessibility:motionSettings()
+	if motion.reducedMotion then
+		return
+	end
+	self._reticleScale.Scale = 0.82
+	TweenService:Create(self._reticleScale, TweenInfo.new(0.16, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+end
+
 function HUDController.setTargeting(self: HUDController, targeting: boolean)
 	if self._targeting == targeting then
 		return

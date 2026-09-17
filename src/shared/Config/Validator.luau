@@ -717,6 +717,90 @@ function Validator.validate(raw: any): Report
 				check(isPositiveNumber(visual[key]), "pile.visual." .. key .. " must be > 0")
 			end
 			check(isNonNegativeNumber(visual.surfaceLiftStuds), "pile.visual.surfaceLiftStuds must be >= 0")
+			-- Pickup choreography: one transaction, about 0.3 s, every number lives here.
+			local pickup = visual.pickup
+			check(type(pickup) == "table", "pile.visual.pickup missing")
+			if type(pickup) == "table" then
+				for _, key in ipairs({
+					"pressSeconds",
+					"releaseSeconds",
+					"flightSeconds",
+					"trailSeconds",
+					"moteSeconds",
+					"floatSeconds",
+					"cameraReturnSeconds",
+					"targetFadeSeconds",
+					"saleStreamSeconds",
+					"targetBreathHz",
+				}) do
+					check(isPositiveNumber(pickup[key]) and pickup[key] <= 2, "pile.visual.pickup." .. key .. " must be within (0, 2]")
+				end
+				local total = (tonumber(pickup.pressSeconds) or 0)
+					+ (tonumber(pickup.releaseSeconds) or 0)
+					+ (tonumber(pickup.flightSeconds) or 0)
+				check(total >= 0.24 and total <= 0.4, "pile.visual.pickup press + release + flight must total 0.24..0.4 s")
+				for _, key in ipairs({ "releaseLiftStuds", "flightArcStuds", "flightSideStuds", "cameraNudgeStuds" }) do
+					check(isNonNegativeNumber(pickup[key]) and pickup[key] <= 6, "pile.visual.pickup." .. key .. " must be within [0, 6]")
+				end
+				for _, key in ipairs({ "flightRollDegrees", "landTiltDegrees", "cameraNudgeDegrees", "cameraFovDegrees" }) do
+					check(
+						isNonNegativeNumber(pickup[key]) and pickup[key] <= 180,
+						"pile.visual.pickup." .. key .. " must be within [0, 180]"
+					)
+				end
+				for _, key in ipairs({ "pressScale", "launchScale", "tuckScale", "landSquashScale", "bagPulseScale" }) do
+					check(isPositiveNumber(pickup[key]) and pickup[key] <= 2, "pile.visual.pickup." .. key .. " must be within (0, 2]")
+				end
+				for _, key in ipairs({ "maxFlights", "moteCount", "floatPoolSize", "saleStreamCount", "floatRisePx" }) do
+					check(
+						isNonNegativeNumber(pickup[key]) and pickup[key] % 1 == 0 and pickup[key] <= 64,
+						"pile.visual.pickup." .. key .. " must be an integer 0..64"
+					)
+				end
+				for _, key in ipairs({ "rimTransparency", "fillTransparency", "targetBreathTransparency" }) do
+					check(isNonNegativeNumber(pickup[key]) and pickup[key] <= 1, "pile.visual.pickup." .. key .. " must be 0..1")
+				end
+				check(type(pickup.rimColor) == "table" and #pickup.rimColor == 3, "pile.visual.pickup.rimColor must be an RGB triple")
+			end
+			-- Readability: the lighting pass that keeps white feathers apart from each other.
+			local readability = visual.readability
+			check(type(readability) == "table", "pile.visual.readability missing")
+			if type(readability) == "table" then
+				check(
+					type(readability.exposureCompensation) == "number" and math.abs(readability.exposureCompensation) <= 2,
+					"pile.visual.readability.exposureCompensation must be within [-2, 2]"
+				)
+				check(
+					isPositiveNumber(readability.brightness) and readability.brightness <= 5,
+					"pile.visual.readability.brightness must be (0, 5]"
+				)
+				check(
+					type(readability.outdoorAmbient) == "table" and #readability.outdoorAmbient == 3,
+					"pile.visual.readability.outdoorAmbient must be an RGB triple"
+				)
+				check(
+					isNonNegativeNumber(readability.bloomIntensity) and readability.bloomIntensity <= 2,
+					"pile.visual.readability.bloomIntensity must be 0..2"
+				)
+				check(
+					isNonNegativeNumber(readability.bloomSize) and readability.bloomSize <= 56,
+					"pile.visual.readability.bloomSize must be 0..56"
+				)
+				check(
+					isNonNegativeNumber(readability.bloomThreshold) and readability.bloomThreshold <= 4,
+					"pile.visual.readability.bloomThreshold must be 0..4"
+				)
+				for _, key in ipairs({ "contrast", "saturation" }) do
+					check(
+						type(readability[key]) == "number" and math.abs(readability[key]) <= 1,
+						"pile.visual.readability." .. key .. " must be within [-1, 1]"
+					)
+				end
+				check(
+					isNonNegativeNumber(readability.shadowSoftness) and readability.shadowSoftness <= 1,
+					"pile.visual.readability.shadowSoftness must be 0..1"
+				)
+			end
 			check(isPositiveNumber(visual.rimMinScale) and visual.rimMinScale <= 1, "pile.visual.rimMinScale must be within (0, 1]")
 			range("underlayerLengthRange", 0.2, 12)
 			range("underlayerWidthRange", 0.1, 6)
@@ -1281,6 +1365,16 @@ function Validator.validate(raw: any): Report
 				check(isNonNegativeNumber(tuning.variance) and tuning.variance <= 1, where .. ".variance must be within [0,1]")
 				check(isNonNegativeNumber(tuning.minGap) and tuning.minGap <= 10, where .. ".minGap must be within [0,10]")
 				check(tuning.group == nil or type(tuning.group) == "string", where .. ".group must be a string when present")
+				if tuning.variants ~= nil then
+					check(type(tuning.variants) == "table" and #tuning.variants >= 1, where .. ".variants must list at least one id")
+					for index, id in ipairs(if type(tuning.variants) == "table" then tuning.variants else {}) do
+						check(
+							type(id) == "string"
+								and (string.match(id, "^rbxassetid://%d+$") ~= nil or string.match(id, "^rbxasset://") ~= nil),
+							where .. ".variants[" .. index .. "] must be an rbxassetid:// id or an rbxasset:// path"
+						)
+					end
+				end
 				check(tuning.looped == nil or type(tuning.looped) == "boolean", where .. ".looped must be a boolean when present")
 			end
 		end

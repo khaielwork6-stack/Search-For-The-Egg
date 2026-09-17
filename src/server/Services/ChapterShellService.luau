@@ -977,6 +977,40 @@ function ChapterShellService.paintParchment(parchment: BasePart, config: { [stri
 	gui.Parent = parchment
 end
 
+-- Readability pass on the place's lighting (OWNER 16 Sep 2026, clip comparison): the mound is white
+-- on a bright beige set, so exposure and bloom come down a step, the ambient warms and darkens a
+-- little, and contrast and saturation nudge up. Every value is config; nothing else in Lighting is
+-- touched, and the effects are created only when the place does not already have them.
+function ChapterShellService.applyReadability(lighting: Lighting, config: { [string]: any })
+	local readability = config.pile.visual.readability
+	if type(readability) ~= "table" then
+		return
+	end
+	lighting.ExposureCompensation = readability.exposureCompensation
+	lighting.Brightness = readability.brightness
+	local ambient = readability.outdoorAmbient
+	lighting.OutdoorAmbient = Color3.fromRGB(ambient[1], ambient[2], ambient[3])
+	lighting.ShadowSoftness = readability.shadowSoftness
+	local bloom = lighting:FindFirstChildOfClass("BloomEffect")
+	if not bloom then
+		bloom = Instance.new("BloomEffect")
+		bloom.Name = "Bloom"
+		bloom.Parent = lighting
+	end
+	bloom.Intensity = readability.bloomIntensity
+	bloom.Size = readability.bloomSize
+	bloom.Threshold = readability.bloomThreshold
+	local correction = lighting:FindFirstChild("SFE_Readability") :: ColorCorrectionEffect?
+	if not correction then
+		correction = Instance.new("ColorCorrectionEffect")
+		correction.Name = "SFE_Readability"
+		correction.Parent = lighting
+	end
+	correction.Contrast = readability.contrast
+	correction.Saturation = readability.saturation
+	correction.Enabled = true
+end
+
 function ChapterShellService.build(workspaceService: Workspace, config: { [string]: any }): Folder
 	local mapModel = workspaceService:FindFirstChild(ChapterLayout.CHAPTER1_MAP_NAME)
 	local folder = if mapModel

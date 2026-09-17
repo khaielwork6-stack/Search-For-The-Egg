@@ -329,46 +329,65 @@
         32
       ],
       "palette": [
-        [
-          255,
-          253,
-          248
-        ],
-        [
-          250,
-          245,
-          235
-        ],
-        [
-          242,
-          235,
-          220
-        ],
-        [
-          230,
-          221,
-          201
-        ],
-        [
-          211,
-          200,
-          176
-        ],
-        [
-          184,
-          172,
-          146
-        ],
-        [
-          150,
-          138,
-          114
-        ]
+        [255, 253, 248],
+        [250, 245, 235],
+        [242, 235, 220],
+        [229, 220, 199],
+        [206, 196, 174],
+        [176, 166, 142],
+        [138, 128, 106]
       ],
       "cullDistanceDesktopStuds": 220,
       "cullDistanceMobileStuds": 120,
       "targetRateHz": 20,
       "pullSeconds": 0.16,
+      "pickup": {
+        "pressScale": 0.94,
+        "pressSeconds": 0.05,
+        "releaseSeconds": 0.045,
+        "releaseLiftStuds": 0.18,
+        "flightSeconds": 0.2,
+        "flightArcStuds": 1.3,
+        "flightSideStuds": 0.8,
+        "flightRollDegrees": 60,
+        "launchScale": 1.05,
+        "tuckScale": 0.75,
+        "trailSeconds": 0.16,
+        "maxFlights": 6,
+        "moteCount": 4,
+        "moteSeconds": 0.3,
+        "landSquashScale": 1.07,
+        "landTiltDegrees": 6,
+        "bagPulseScale": 1.12,
+        "floatRisePx": 22,
+        "floatSeconds": 0.42,
+        "floatPoolSize": 8,
+        "cameraNudgeStuds": 0.03,
+        "cameraNudgeDegrees": 0.15,
+        "cameraFovDegrees": 0.5,
+        "cameraReturnSeconds": 0.1,
+        "targetBreathHz": 1.1,
+        "targetBreathTransparency": 0.25,
+        "targetFadeSeconds": 0.08,
+        "rimColor": [255, 232, 168],
+        "rimTransparency": 0.04,
+        "fillTransparency": 0.9,
+        "saleStreamCount": 8,
+        "saleStreamSeconds": 0.42,
+        "evidence": "OWNER 16 Sep 2026 (two-clip comparison): a pick has to read as one transaction - target, contact, that exact feather flying to the bundle, the bundle taking it, the counter moving at the landing - in about 0.3 s, with the next click free before the last one lands. press + release + flight = 0.295 s."
+      },
+      "readability": {
+        "exposureCompensation": -0.15,
+        "brightness": 1.7,
+        "outdoorAmbient": [92, 88, 82],
+        "bloomIntensity": 0.4,
+        "bloomSize": 18,
+        "bloomThreshold": 2.3,
+        "contrast": 0.05,
+        "saturation": 0.06,
+        "shadowSoftness": 0.35,
+        "evidence": "OWNER 16 Sep 2026 (clip comparison): sampled saturation ~14 vs the reference's ~26.5 and the whole frame brighter, so white feathers lost their creases. Exposure and bloom come down, ambient warms and darkens a little, contrast and saturation nudge up; the feathers stay feathers."
+      },
       "streakCount": 3,
       "chevronCount": 3,
       "chevronSeconds": 0.38,
@@ -405,10 +424,10 @@
       "fluffTintShift": 0.35,
       "selectionOutlineColor": [
         255,
-        168,
-        38
+        232,
+        168
       ],
-      "selectionFillTransparency": 0.42,
+      "selectionFillTransparency": 0.9,
       "downslopeYawJitterDegrees": 180,
       "rimInsetStuds": -1.2,
       "rimTaperStuds": 1.8,
@@ -466,7 +485,7 @@
       "layEvidence": "OWNER 14 Sep 2026: surface feathers lie tangent with overlapping tips (tilt 2-9 deg, roll +-20 deg), ivory-to-grey palette for depth, newly exposed records fade in beneath the removed one instead of popping",
       "depthEvidence": "ASSUMED 14 Sep 2026: a sweep or suction tick never takes more than maxPerCell records from one cell, so every accepted record is one of the rendered (top 10) feathers and the excavation spreads along the tool's contact area instead of tunnelling one cell",
       "scaleEvidence": "OWNER 14 Sep 2026 (clip review): feathers were 2.4-3.4 studs, about half a character, so the mound read as pillows and every pickup was a visible chunk. A feather is now ~1.2 studs; the same record count reads as thousands of small pieces.",
-      "depthTintWeight": 0.55,
+      "depthTintWeight": 0.6,
       "depthTintSlots": 16,
       "shadingEvidence": "OWNER 14 Sep 2026 (clip review): the mound was uniformly white with no depth cue. Records now tint down the palette with their depth in the column (depthTintWeight of the colour comes from depth over depthTintSlots records).",
       "rimCurlDegrees": 16,
@@ -1903,17 +1922,33 @@
       },
       "collect.tug": {
         "id": "rbxasset://sounds/clickfast.wav",
-        "volume": 0.18,
-        "speed": 1.6,
-        "variance": 0.2,
+        "variants": ["rbxasset://sounds/clickfast.wav", "rbxasset://sounds/switch.wav", "rbxasset://sounds/button.wav"],
+        "volume": 0.34,
+        "speed": 1.7,
+        "variance": 0.05,
         "minGap": 0.025
+      },
+      "collect.flight": {
+        "id": "rbxasset://sounds/swoosh.wav",
+        "volume": 0.14,
+        "speed": 1.9,
+        "variance": 0.05,
+        "minGap": 0.05
+      },
+      "collect.tick": {
+        "id": "rbxasset://sounds/clickfast.wav",
+        "volume": 0.16,
+        "speed": 2.3,
+        "variance": 0.04,
+        "minGap": 0.03
       },
       "collect.release": {
         "id": "rbxassetid://75757588904639",
-        "volume": 0.55,
+        "volume": 0.72,
         "speed": 1.0,
-        "variance": 0.08,
-        "minGap": 0.04
+        "variance": 0.05,
+        "minGap": 0.04,
+        "evidence": "OWNER 16 Sep 2026: this is the landing transient (played when the feather reaches the bundle, not when the server answers); the reference's strongest transients measured ~11 dB above ours, so it is louder and its pitch spread tighter."
       },
       "collect.rainbow": {
         "id": "rbxasset://sounds/electronicpingshort.wav",

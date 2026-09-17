@@ -9,6 +9,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
@@ -26,6 +27,8 @@ export type CrateController = typeof(setmetatable(
 		_config: { [string]: any },
 		_running: boolean,
 		_runId: number?,
+		_squash: number,
+		_squashVelocity: number,
 		_home: CFrame?,
 		_feathers: { BasePart },
 		_trove: Trove.Trove,
@@ -54,6 +57,8 @@ function CrateController.new(deps: { net: any, audio: any, vfx: any, config: { [
 		_config = deps.config,
 		_running = false,
 		_runId = nil,
+		_squash = 0,
+		_squashVelocity = 0,
 		_home = nil,
 		_feathers = {},
 		_trove = Trove.new(),
@@ -99,6 +104,31 @@ local function conveyorParts(): { rollers: { BasePart }, stripes: { { part: Base
 end
 
 -- Sold feathers stacked inside the crate (capped; cosmetic).
+-- A feather landing in the crate: the crate takes the weight and springs back. Applied on top of
+-- whatever pose the timeline is driving, clamped, decaying on its own.
+function CrateController.squash(self: CrateController, studs: number)
+	self._squashVelocity = math.clamp(self._squashVelocity + studs * 22, -2.5, 2.5)
+end
+
+-- Reveals the sold feathers already sitting in the crate up to `fraction` of them, so a stream of
+-- arrivals fills it rather than the whole load appearing at once.
+function CrateController.showFeathers(self: CrateController, fraction: number)
+	local n = #self._feathers
+	local shown = math.clamp(math.ceil(n * fraction), 0, n)
+	for index, part in ipairs(self._feathers) do
+		part.Transparency = if index <= shown then 0 else 1
+	end
+end
+
+-- Where a feather flying to the crate should aim: just inside the top of the crate's current pose.
+function CrateController.mouth(self: CrateController): Vector3?
+	local crate = self:crateModel()
+	if not crate then
+		return nil
+	end
+	return (crate:GetPivot() * CFrame.new(0, 0.6, 0)).Position
+end
+
 function CrateController._fillCrate(self: CrateController, crate: Model, count: number)
 	local template = AssetManifest.model("feather")
 	local n = math.min(count, self._config.selling.crate.featherVisualMax)
@@ -124,6 +154,7 @@ function CrateController._fillCrate(self: CrateController, crate: Model, count: 
 		part.CFrame = pivot
 			* CFrame.new((h - 0.5) * 6.5, -0.9 + (i / n) * 1.4, (g - 0.5) * 4.2)
 			* CFrame.Angles(math.rad(80 + (h - 0.5) * 20), h * math.pi * 2, (g - 0.5) * 0.6)
+		part.Transparency = 1 -- revealed as the stream from the bundle lands (showFeathers)
 		part.Parent = crate
 		table.insert(self._feathers, part)
 	end
@@ -157,6 +188,9 @@ function CrateController.play(self: CrateController, payload: { [string]: any })
 	self._home = home
 	self:_clearFeathers()
 	self:_fillCrate(crate, payload.featherCount or 0)
+	if payload.sellerUserId ~= Players.LocalPlayer.UserId then
+		self:showFeathers(1)
+	end
 	self.runStarted:Fire(payload)
 	self._audio:play("sell.arc")
 	local layout = ChapterLayout.chapter1
@@ -191,6 +225,8 @@ function CrateController.play(self: CrateController, payload: { [string]: any })
 			end
 			local name = segment.name
 			if name == "reset" then
+				self._squash = 0
+				self._squashVelocity = 0
 				crate:PivotTo(home)
 				for _, part in ipairs(self._feathers) do
 					part.Transparency = 0
@@ -221,7 +257,10 @@ function CrateController.play(self: CrateController, payload: { [string]: any })
 				local dt = RunService.Heartbeat:Wait()
 				elapsed += dt
 				local t = math.clamp(elapsed / math.max(0.001, segment.seconds), 0, 1)
-				crate:PivotTo(from:Lerp(to, ease(t)))
+				local damping = 2 * math.sqrt(180)
+				self._squashVelocity += (-180 * self._squash - damping * self._squashVelocity) * dt
+				self._squash = math.clamp(self._squash + self._squashVelocity * dt, -0.25, 0.25)
+				crate:PivotTo(from:Lerp(to, ease(t)) * CFrame.new(0, -self._squash, 0))
 				if onBelt then
 					for _, roller in ipairs(conveyor.rollers) do
 						roller.CFrame = roller.CFrame * CFrame.Angles(spin * dt, 0, 0)

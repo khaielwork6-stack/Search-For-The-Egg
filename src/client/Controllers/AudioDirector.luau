@@ -23,6 +23,7 @@ export type AudioDirector = typeof(setmetatable(
 		_state: MusicState,
 		_oneShots: { Sound },
 		_lastPlayed: { [string]: number },
+		_lastVariant: { [string]: number },
 		_pool: { Sound },
 		_manifest: { [string]: string },
 		_tuning: { [string]: RoleTuning },
@@ -73,6 +74,7 @@ function AudioDirector.new(profile: any, config: { [string]: any }): AudioDirect
 		_state = "Silent" :: MusicState,
 		_oneShots = {},
 		_lastPlayed = {},
+		_lastVariant = {},
 		_pool = {},
 		_manifest = {},
 		_tuning = {},
@@ -191,6 +193,18 @@ function AudioDirector.play(self: AudioDirector, role: string, options: { at: Ba
 		table.insert(self._pool, oldest)
 	end
 	local sound = acquire(self)
+	-- A role with variants rotates through them and never plays the same one twice in a row, so a
+	-- burst of picks is a handful of similar plucks rather than one sample on repeat.
+	local variants = tuning and tuning.variants
+	if type(variants) == "table" and #variants > 1 then
+		local last = self._lastVariant[role]
+		local index = math.random(1, #variants - 1)
+		if last and index >= last then
+			index += 1
+		end
+		self._lastVariant[role] = index
+		assetId = variants[index]
+	end
 	sound.SoundId = assetId
 	sound.Volume = if tuning and tuning.volume then tuning.volume else 1
 	local variance = opts.pitchVariance or (tuning and tuning.variance) or 0

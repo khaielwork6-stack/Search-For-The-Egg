@@ -70,6 +70,9 @@ export type PileVisualController = typeof(setmetatable(
 		_pendingDeltas: { { [string]: any } },
 		_generation: number,
 		_highlight: Highlight?,
+		_targetFade: number?,
+		_flight: ((part: BasePart, from: Vector3, target: () -> Vector3, options: any) -> ())?,
+		_ambient: BasePart?,
 		_targetAccumulator: number,
 		_cullAccumulator: number,
 		_culled: boolean,
@@ -126,6 +129,9 @@ function PileVisualController.new(
 		_pendingDeltas = {},
 		_generation = 0,
 		_highlight = nil,
+		_targetFade = nil,
+		_flight = nil,
+		_ambient = nil,
 		_targetAccumulator = 0,
 		_cullAccumulator = 0,
 		_culled = false,
@@ -670,6 +676,7 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 		base = table.clone(pile.base),
 	}
 	self._field = PileSurface.buildField(self._config, self._grid, self._layout)
+	self:_buildAmbient(folder)
 	-- Seat positions come from the mound as first built (the round's snapshot), so later deltas
 	-- never move untouched feathers.
 	self._seatField = if pile.seatField
@@ -990,6 +997,7 @@ function PileVisualController._step(self: PileVisualController, dt: number)
 			end
 		end
 	end
+	self:_stepTarget()
 	self._targetAccumulator += dt
 	if self._targetAccumulator < 1 / visual.targetRateHz then
 		return
@@ -1070,14 +1078,18 @@ function PileVisualController._setTarget(self: PileVisualController, target: Tar
 		return
 	end
 	local visual = self._config.pile.visual
+	local pickup = visual.pickup
 	if not self._highlight then
+		-- One Highlight for the whole coat. A thin warm rim over the real feather colour: the record
+		-- keeps its material and tint, the rim says "this one", and there is no solid fill to turn the
+		-- target into a marker sitting on the mound.
 		local highlight = Instance.new("Highlight")
 		highlight.Name = "SFE_PileTarget"
-		local rgb = visual.selectionOutlineColor
+		local rgb = pickup.rimColor
 		highlight.FillColor = Color3.fromRGB(rgb[1], rgb[2], rgb[3])
-		highlight.FillTransparency = visual.selectionFillTransparency
+		highlight.FillTransparency = pickup.fillTransparency
 		highlight.OutlineColor = Color3.fromRGB(rgb[1], rgb[2], rgb[3])
-		highlight.OutlineTransparency = 0.05
+		highlight.OutlineTransparency = pickup.rimTransparency
 		highlight.DepthMode = Enum.HighlightDepthMode.Occluded
 		highlight.Enabled = false
 		highlight.Parent = folder
@@ -1092,12 +1104,87 @@ function PileVisualController._setTarget(self: PileVisualController, target: Tar
 		if highlight.Adornee ~= target.part then
 			highlight.Adornee = target.part
 		end
+		self._targetFade = nil
 		highlight.Enabled = true
-	else
-		highlight.Enabled = false
-		highlight.Adornee = nil
+	elseif had then
+		-- Lost the target: the rim fades over targetFadeSeconds rather than blinking off.
+		self._targetFade = os.clock()
 	end
 	self.target = target
+end
+
+-- Ambient life: one emitter over the mound letting a few down motes drift across it. One instance,
+-- client-side, no record touched, and not on the low tier.
+function PileVisualController._buildAmbient(self: PileVisualController, folder: Folder)
+	local field = self._field
+	if not field or (self._quality and self._quality:tier() == "low") then
+		return
+	end
+	local anchor = Instance.new("Part")
+	anchor.Name = "SFE_PileAmbient"
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanQuery = false
+	anchor.CanTouch = false
+	anchor.Transparency = 1
+	anchor.Size = Vector3.new(field.cellSize * (self._grid :: any).width * 0.7, 4, field.cellSize * (self._grid :: any).depth * 0.7)
+	anchor.Position = Vector3.new(field.centreX, field.baseY + 9, field.centreZ)
+	local motes = Instance.new("ParticleEmitter")
+	motes.Name = "Down"
+	motes.Rate = 2.5
+	motes.Lifetime = NumberRange.new(4, 7)
+	motes.Speed = NumberRange.new(0.15, 0.4)
+	motes.Acceleration = Vector3.new(0.3, -0.35, 0.2)
+	motes.Drag = 0.6
+	motes.Rotation = NumberRange.new(0, 360)
+	motes.RotSpeed = NumberRange.new(-40, 40)
+	motes.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.12), NumberSequenceKeypoint.new(1, 0.18) })
+	motes.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.15, 0.35),
+		NumberSequenceKeypoint.new(0.85, 0.45),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	motes.Color = ColorSequence.new(Color3.fromRGB(255, 250, 238))
+	motes.LightEmission = 0.15
+	motes.Shape = Enum.ParticleEmitterShape.Box
+	motes.ShapeInOut = Enum.ParticleEmitterShapeInOut.Outward
+	motes.Parent = anchor
+	anchor.Parent = folder
+	self._ambient = anchor
+end
+
+-- Per frame while targeting is bound: the rim breathes on the live target and fades off a lost one.
+function PileVisualController._stepTarget(self: PileVisualController)
+	local highlight = self._highlight
+	if not highlight or not highlight.Enabled then
+		return
+	end
+	local pickup = self._config.pile.visual.pickup
+	local now = os.clock()
+	if self.target then
+		local breath = 0.5 + 0.5 * math.sin(now * pickup.targetBreathHz * math.pi * 2)
+		highlight.OutlineTransparency = pickup.rimTransparency + pickup.targetBreathTransparency * breath
+		highlight.FillTransparency = pickup.fillTransparency + (1 - pickup.fillTransparency) * 0.35 * breath
+		return
+	end
+	local started = self._targetFade
+	if not started then
+		highlight.Enabled = false
+		highlight.Adornee = nil
+		return
+	end
+	local t = (now - started) / math.max(0.016, pickup.targetFadeSeconds)
+	if t >= 1 then
+		self._targetFade = nil
+		highlight.Enabled = false
+		highlight.Adornee = nil
+		highlight.OutlineTransparency = pickup.rimTransparency
+		highlight.FillTransparency = pickup.fillTransparency
+	else
+		highlight.OutlineTransparency = pickup.rimTransparency + (1 - pickup.rimTransparency) * t
+		highlight.FillTransparency = pickup.fillTransparency + (1 - pickup.fillTransparency) * t
+	end
 end
 
 -- ---------------------------------------------------------------------------------------------
@@ -1230,20 +1317,15 @@ function PileVisualController.cancelLift(self: PileVisualController, featherId: 
 	end
 end
 
-function PileVisualController.collectFeather(
-	self: PileVisualController,
-	featherId: number,
-	hitPosition: Vector3,
-	target: () -> Vector3,
-	options: { pullSeconds: number?, quiet: boolean? }?
-)
+-- Server-confirmed pick of one record: that exact part leaves the coat now (no longer targetable,
+-- its slot marked taken, the column re-applied so the record beneath shows where it was - nothing
+-- else moves) and is handed back, free, to whoever animates the flight. `from` is where it was.
+function PileVisualController.detachFeather(self: PileVisualController, featherId: number, hitPosition: Vector3): (BasePart?, Vector3)
 	local folder = self._folder
 	if not folder then
-		return
+		return nil, hitPosition
 	end
-	local opts = (options or {}) :: any
 	local visual = self._config.pile.visual
-	local motion = self._accessibility:motionSettings()
 	local cellIndex, slot = FeatherLayout.decode(featherId)
 	local column = cellIndex and self._columns[cellIndex] or nil
 	local part = column and slot and column.feathers[slot] or nil
@@ -1282,26 +1364,70 @@ function PileVisualController.collectFeather(
 		self:_setTarget(nil)
 	end
 	self.stats.streamed += 1
-	local liftSeconds = Motion.clampSeconds(visual.liftSeconds, motion)
-	local pullSeconds = Motion.clampSeconds(opts.pullSeconds or visual.pullSeconds, motion)
-	local startCFrame = part.CFrame
+	return part, from
+end
+
+-- A flown part comes back to the pool once its flight is over.
+function PileVisualController.returnFlown(self: PileVisualController, part: BasePart)
+	if self._folder then
+		releasePart(self, part)
+	else
+		part:Destroy()
+	end
+end
+
+-- One flight animation for every source of a pick (the hand, the rake stream, another player's
+-- vac): installed by the pickup feedback controller so there is exactly one way a feather flies.
+function PileVisualController.setFlightDriver(
+	self: PileVisualController,
+	driver: ((part: BasePart, from: Vector3, target: () -> Vector3, options: any) -> ())?
+)
+	self._flight = driver
+end
+
+-- Detach + fly, for callers that only have a target point (tool streams). The pickup controller
+-- drives the local hand path itself for its landing hooks.
+function PileVisualController.collectFeather(
+	self: PileVisualController,
+	featherId: number,
+	hitPosition: Vector3,
+	target: () -> Vector3,
+	options: { pullSeconds: number?, quiet: boolean? }?
+)
+	local opts = (options or {}) :: any
+	local part, from = self:detachFeather(featherId, hitPosition)
+	if not part then
+		return
+	end
+	local driver = self._flight
+	if driver then
+		driver(part, from, target, { seconds = opts.pullSeconds, quiet = true })
+	else
+		self:_fallbackFlight(part, from, target, opts.pullSeconds)
+	end
+	if opts.quiet then
+		return
+	end
+	self._audio:play(Tokens.sound.collectTug, { pitchVariance = 0.18 })
+	self._vfx:burst("featherPuff", from, 0.15)
+end
+
+-- The pre-controller arc, kept for the brief moment before the driver is installed.
+function PileVisualController._fallbackFlight(
+	self: PileVisualController,
+	part: BasePart,
+	from: Vector3,
+	target: () -> Vector3,
+	seconds: number?
+)
+	local visual = self._config.pile.visual
+	local motion = self._accessibility:motionSettings()
+	local pullSeconds = Motion.clampSeconds(seconds or visual.pullSeconds, motion)
 	local baseSize = part.Size
-	local flying = part
+	local _ = from
 	task.spawn(function()
-		-- Lift: up and out along its own normal, enlarging.
+		local origin = part.Position
 		local elapsed = 0
-		local lifted = startCFrame + Vector3.new(0, visual.liftStuds, 0)
-		while elapsed < liftSeconds do
-			local dt = RunService.Heartbeat:Wait()
-			elapsed += dt
-			local t = math.clamp(elapsed / liftSeconds, 0, 1)
-			local e = 1 - (1 - t) * (1 - t)
-			flying.CFrame = startCFrame:Lerp(lifted, e) * CFrame.Angles(0, 0, e * 0.35)
-			flying.Size = baseSize * (1 + (visual.pickScale - 1) * e)
-		end
-		-- Arc: quadratic curve from the lifted pose to the bundle, shrinking and fading at the end.
-		local origin = flying.Position
-		elapsed = 0
 		while elapsed < pullSeconds do
 			local dt = RunService.Heartbeat:Wait()
 			elapsed += dt
@@ -1310,19 +1436,13 @@ function PileVisualController.collectFeather(
 			local destination = target()
 			local control = origin:Lerp(destination, 0.5) + Vector3.new(0, 1.2, 0)
 			local point = origin:Lerp(control, e):Lerp(control:Lerp(destination, e), e)
-			flying.CFrame = CFrame.lookAt(point, destination) * CFrame.Angles(math.rad(90), 0, t * 2)
-			flying.Size = baseSize * (visual.pickScale * (1 - t) + 0.35 * t)
-			flying.Transparency = if t > 0.8 then (t - 0.8) / 0.2 else 0
+			part.CFrame = CFrame.lookAt(point, destination) * CFrame.Angles(math.rad(90), 0, t * 2)
+			part.Size = baseSize * (1 - 0.6 * t)
+			part.Transparency = if t > 0.8 then (t - 0.8) / 0.2 else 0
 		end
-		flying.Size = baseSize
-		releasePart(self, flying)
+		part.Size = baseSize
+		self:returnFlown(part)
 	end)
-	self._audio:play(Tokens.sound.collectTug, { pitchVariance = 0.18 })
-	if opts.quiet then
-		return
-	end
-	self:_chevrons(from)
-	self._vfx:burst("featherPuff", from, 0.15)
 end
 
 -- Reveal spiral: loose feathers lift in a spiral around the Egg.

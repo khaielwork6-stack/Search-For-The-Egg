@@ -222,7 +222,7 @@ function RoundHud.setBag(self: RoundHud, carried: number, capacity: number, infi
 	end
 	self:_setFull(full)
 	if animate then
-		local amplitude = Motion.amplitude(if full then 0.12 else 0.05, self._motion())
+		local amplitude = Motion.amplitude(if full then 0.14 else 0.12, self._motion())
 		self._bagScale.Scale = 1 + amplitude
 		TweenService:Create(
 			self._bagScale,

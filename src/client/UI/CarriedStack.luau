@@ -43,8 +43,17 @@ export type CarriedStack = typeof(setmetatable(
 		_bobPhase: number,
 		_bob: number,
 		_sway: number,
+		_swayVelocity: number,
 		_lastYaw: number?,
 		_bound: boolean,
+		_kick: number,
+		_kickVelocity: number,
+		_lurch: Vector3,
+		_lurchVelocity: Vector3,
+		_lastRootVelocity: Vector3?,
+		_topTilt: number,
+		_topTiltVelocity: number,
+		_landings: number,
 	},
 	CarriedStack
 ))
@@ -187,8 +196,17 @@ function CarriedStack.new(
 		_bobPhase = 0,
 		_bob = 0,
 		_sway = 0,
+		_swayVelocity = 0,
 		_lastYaw = nil,
 		_bound = false,
+		_kick = 0,
+		_kickVelocity = 0,
+		_lurch = Vector3.zero,
+		_lurchVelocity = Vector3.zero,
+		_lastRootVelocity = nil,
+		_topTilt = 0,
+		_topTiltVelocity = 0,
+		_landings = 0,
 	}, CarriedStack)
 	self:_layout()
 	table.insert(
@@ -300,6 +318,18 @@ function CarriedStack.pulse(self: CarriedStack)
 	TweenService:Create(self._scale, TweenInfo.new(squash, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 end
 
+-- A feather has just arrived: the bundle takes the weight (compresses, springs back) and the top
+-- feather tips by a small deterministic amount before settling. Spring state, not a tween, so ten
+-- fast landings add up to a rhythm and never restart or drift: every spring is clamped.
+function CarriedStack.land(self: CarriedStack, squashScale: number, tiltDegrees: number)
+	local settings = self._motion()
+	local scale = if settings.reducedMotion then settings.reducedMotionScale else 1
+	self._landings += 1
+	self._kickVelocity = math.clamp(self._kickVelocity - (squashScale - 1) * 26 * scale, -0.9, 0.9)
+	local sign = if FeatherLayout.hash(self._landings, 7, 3) > 0.5 then 1 else -1
+	self._topTiltVelocity = math.clamp(self._topTiltVelocity + sign * math.rad(tiltDegrees) * 18 * scale, -2.5, 2.5)
+end
+
 -- Emptying the bundle. A sale or a deposit should look like the feathers leaving, so `animate` hands
 -- the current parts to a short fly-out (up and away towards the crate, shrinking) and detaches them
 -- from the bundle immediately, so a pick landing during the animation builds a fresh bundle rather
@@ -340,16 +370,27 @@ function CarriedStack._bind(self: CarriedStack)
 	end
 	self._bound = true
 	RunService:BindToRenderStep(RENDER_NAME, Enum.RenderPriority.Camera.Value + 5, function(dt)
+		dt = math.min(dt, 1 / 20)
 		local carried = self._config.hud.carriedStack
 		local settings = self._motion()
 		local amplitude = if settings.reducedMotion then 0 else carried.bobAmplitudeStuds
 		local character = Players.LocalPlayer.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local root = character and character:FindFirstChild("HumanoidRootPart")
 		local moving = humanoid and humanoid.MoveDirection.Magnitude > 0.1
 		local ease = math.clamp(dt / math.max(0.016, carried.easeSeconds), 0, 1)
-		self._bobPhase += dt * carried.bobHz * math.pi * 2
+		-- One critically damped spring for everything that reacts: x'' = -k x - c x'.
+		local function spring(value: number, velocity: number, target: number, stiffness: number): (number, number)
+			local damping = 2 * math.sqrt(stiffness)
+			velocity += (-stiffness * (value - target) - damping * velocity) * dt
+			return value + velocity * dt, velocity
+		end
+		-- Walking bob: speed-scaled phase, amplitude eased in and out.
+		local speed = if root then Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z).Magnitude else 0
+		self._bobPhase += dt * carried.bobHz * math.pi * 2 * math.clamp(speed / 16, 0.6, 1.3)
 		local bobTarget = if moving then amplitude else 0
 		self._bob += (bobTarget - self._bob) * ease
+		-- Camera-turn sway, sprung rather than eased, clamped to swayDegrees.
 		local camera = workspace.CurrentCamera
 		local yaw = if camera then math.atan2(-camera.CFrame.LookVector.X, -camera.CFrame.LookVector.Z) else 0
 		local delta = 0
@@ -364,7 +405,33 @@ function CarriedStack._bind(self: CarriedStack)
 		self._lastYaw = yaw
 		local swayLimit = if settings.reducedMotion then 0 else math.rad(carried.swayDegrees)
 		local swayTarget = math.clamp(-delta / math.max(0.001, dt) * 0.02, -swayLimit, swayLimit)
-		self._sway += (swayTarget - self._sway) * ease
+		self._sway, self._swayVelocity = spring(self._sway, self._swayVelocity, swayTarget, 140)
+		self._sway = math.clamp(self._sway, -swayLimit, swayLimit)
+		-- Acceleration: a change in the character's velocity lags the bundle the other way, then it
+		-- springs back. Clamped to a few hundredths of a stud so sprinting never throws it about.
+		local rootVelocity = if root then root.AssemblyLinearVelocity else Vector3.zero
+		if self._lastRootVelocity and not settings.reducedMotion then
+			local accel = (rootVelocity - self._lastRootVelocity) / math.max(0.008, dt)
+			local lurchKick = Vector3.new(-accel.X, -accel.Y * 0.5, -accel.Z) * 0.00035
+			self._lurchVelocity += lurchKick
+		end
+		self._lastRootVelocity = rootVelocity
+		local lurchDamping = 2 * math.sqrt(110)
+		self._lurchVelocity += (-110 * self._lurch - lurchDamping * self._lurchVelocity) * dt
+		self._lurch += self._lurchVelocity * dt
+		if self._lurch.Magnitude > 0.07 then
+			self._lurch = self._lurch.Unit * 0.07
+		end
+		-- Landing compression and the top feather's tip.
+		self._kick, self._kickVelocity = spring(self._kick, self._kickVelocity, 0, 260)
+		self._kick = math.clamp(self._kick, -0.12, 0.12)
+		self._topTilt, self._topTiltVelocity = spring(self._topTilt, self._topTiltVelocity, 0, 120)
+		self._topTilt = math.clamp(self._topTilt, -math.rad(14), math.rad(14))
+		local top = self._feathers[#self._feathers]
+		if top then
+			local rest = restPose(#self._feathers, #self._feathers, carried.bundle)
+			top.CFrame = rest * CFrame.Angles(0, 0, self._topTilt)
+		end
 		-- Rainbow hue flows on the bundle's own parts only. Desaturated like the pile's records rather
 		-- than raw neon, and no light anywhere: the ordinary feathers beside them keep their colour.
 		if next(self._rainbowParts) ~= nil then
@@ -377,9 +444,14 @@ function CarriedStack._bind(self: CarriedStack)
 				end
 			end
 		end
-		local bobY = math.sin(self._bobPhase) * self._bob
+		-- Idle breathing: a barely-there rise and fall so the bundle is never a still picture.
+		local breath = if settings.reducedMotion then 0 else math.sin(os.clock() * 1.1) * 0.012
+		local bobY = math.sin(self._bobPhase) * self._bob + breath
 		local bobX = math.cos(self._bobPhase * 0.5) * self._bob * 0.6
-		self._camera.CFrame = REST_CAMERA * CFrame.new(-bobX, -bobY, 0) * CFrame.Angles(0, self._sway, self._sway * 0.35)
+		local kickZ = self._kick * 1.6 -- compression reads as the bundle pushing back from the eye
+		self._camera.CFrame = REST_CAMERA
+			* CFrame.new(-bobX - self._lurch.X, -bobY - self._lurch.Y - self._kick * 0.4, -kickZ)
+			* CFrame.Angles(0, self._sway, self._sway * 0.35 + self._kick * 0.6)
 	end)
 end
 

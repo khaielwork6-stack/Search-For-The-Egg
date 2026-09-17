@@ -32,6 +32,25 @@ local KINDS: { [string]: Kind } = {
 	featherPuff = { color = Tokens.color.cream, rate = 12, lifetime = 1.4, size = 0.6 },
 	dust = { color = Tokens.color.creamDeep, rate = 4, lifetime = 3, size = 0.3 },
 	sparkle = { color = Tokens.color.straw, rate = 20, lifetime = 0.8, size = 0.25 },
+	-- Pickup contact: a concentrated warm glint where the feather was gripped, and a few tiny down
+	-- motes (feather dust, never collectible feathers) that drift off the spot.
+	glint = {
+		color = Color3.fromRGB(255, 240, 190),
+		rate = 60,
+		lifetime = 0.22,
+		size = 0.22,
+		speed = NumberRange.new(0.3, 0.9),
+		spread = 180,
+		light = true,
+	},
+	down = {
+		color = Color3.fromRGB(255, 251, 240),
+		rate = 40,
+		lifetime = 0.34,
+		size = 0.08,
+		speed = NumberRange.new(0.6, 1.6),
+		spread = 70,
+	},
 	-- Tool feel: blast fire, rolling smoke, fast sparks, wind wisps.
 	blast = {
 		color = Tokens.color.ember,

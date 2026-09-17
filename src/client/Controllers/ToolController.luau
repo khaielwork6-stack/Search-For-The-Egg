@@ -13,7 +13,6 @@ local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
 local Signal = require(Shared.Util.Signal)
-local FeatherLayout = require(Shared.Domain.FeatherLayout)
 local Tokens = require(Shared.Design.Tokens)
 local ToolSpecs = require(Shared.Domain.ToolSpecs)
 
@@ -88,6 +87,7 @@ function ToolController.new(deps: {
 	accessibility: any,
 	hud: any,
 	visuals: any,
+	feedback: any,
 	config: { [string]: any },
 }): ToolController
 	local self = setmetatable({
@@ -528,8 +528,8 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 		direction = (base.Position - origin).Unit
 	end
 	-- Cosmetic response starts now: the targeted feather loosens before the server answers.
-	if featherId and self._deps.pile.beginLift then
-		self._deps.pile:beginLift(featherId)
+	if featherId then
+		self._deps.feedback:press(featherId)
 		self._liftedId = featherId
 	end
 	-- Full bag: no request, no pile change, clear feedback (throttled). Capacity mirrors the HUD's
@@ -586,11 +586,7 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 		-- other refusal - range, cooldown, a full bag - leaves a live record where it was.
 		local stale = not result.ok
 			and (result.message == "already_collected" or result.message == "not_exposed" or result.message == "no_feather")
-		if stale and self._deps.pile.dropFeather then
-			self._deps.pile:dropFeather(self._liftedId)
-		elseif self._deps.pile.cancelLift then
-			self._deps.pile:cancelLift(self._liftedId)
-		end
+		self._deps.feedback:cancel(self._liftedId, stale)
 	end
 	self._liftedId = nil
 	if result.ok and result.data then
@@ -600,49 +596,17 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 		self._nextAllowedAt = os.clock() + (data.cooldownMs / 1000)
 		self._lastCooldownSeconds = data.cooldownMs / 1000
 		local hitPosition = Vector3.new(data.hitX, data.hitY or (origin.Y - 1), data.hitZ)
-		local function destination(): Vector3
-			return self._deps.hud:carriedStackWorldPoint() or hitPosition
-		end
-		-- Visual feedback can never block the next request: the award is already authoritative.
-		local feel = (self._deps.config.tools.nestRake or {})
-		local stagger = feel.streamStaggerSeconds or 0.028
-		local streamed = 0
+		-- The presentation - release, flight, landing, bag, sound, camera - is one transaction owned
+		-- by the pickup feedback controller. It can never block the next request: the award is
+		-- already authoritative.
 		local okVisual, visualError = pcall(function()
-			if toolId == "hand" and data.featherId then
-				self._deps.pile:collectFeather(data.featherId, hitPosition, destination)
-			else
-				-- The accepted records leave one after another along the sweep: a readable stream,
-				-- not one deletion. Each one ticks and adds to the bag as it goes.
-				for _, removal in ipairs(data.cells or {}) do
-					for _, slot in ipairs(removal.slots or {}) do
-						local id = FeatherLayout.featherId(removal.index, slot)
-						local delay = streamed * stagger
-						streamed += 1
-						if delay <= 0 then
-							self._deps.pile:collectFeather(id, hitPosition, destination)
-						else
-							task.delay(delay, function()
-								self._deps.pile:collectFeather(id, hitPosition, destination)
-							end)
-						end
-					end
-				end
-			end
+			self._deps.feedback:collected(data, hitPosition, toolId)
 		end)
-		data.streamSeconds = if streamed > 1 then streamed * stagger else 0
 		if not okVisual then
 			warn("[SFE][Tool] pick feedback failed: " .. tostring(visualError))
 		end
-		self._deps.audio:play(Tokens.sound.collectRelease, { pitchVariance = 0.12 })
-		if (data.rainbow or 0) > 0 then
-			self._deps.audio:play(Tokens.sound.collectRainbow)
-			self._deps.haptics:pulse(0.6, 0.12)
-		end
-		self._deps.haptics:pulse(if toolId == "nestRake" then 0.4 else 0.25, 0.05)
-		self._deps.camera:impulse(if toolId == "nestRake" then visual.cameraImpulseRake else visual.cameraImpulseHand)
-		if data.bagFull then
-			self._deps.audio:play(Tokens.sound.bagFull)
-			self._deps.haptics:pulse(0.6, 0.12)
+		if toolId == "nestRake" then
+			self._deps.camera:impulse(visual.cameraImpulseRake)
 		end
 		pcall(function()
 			self.collected:Fire(data)

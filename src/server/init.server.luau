@@ -509,6 +509,7 @@ local lobbyShell = WorldShellService.build(workspace, workspace:FindFirstChildOf
 -- Chick body: script-free, anchored clones under ReplicatedStorage so streaming never hides them.
 ChapterShellService.stageToolModels(workspace, ReplicatedStorage)
 local arena = ChapterShellService.build(workspace, config)
+ChapterShellService.applyReadability(game:GetService("Lighting"), config)
 local mapMode = WorldShellService.isMapMode(lobbyShell)
 
 -- Party nest pads (A-LOBBY-06): the map's "Join Match" nests form parties by standing on them.
