@@ -73,8 +73,14 @@ function ModalShell.create(
 	local z = Tokens.zIndex.modal
 	-- Phones: the responsive stage shrinks offset-based HUD; a Scale-based card wants the whole
 	-- screen instead, so a holder cancels the stage scale and the card fills its box.
+	-- Read live: a Play client can build its first modal while the camera still reports a tiny
+	-- startup viewport (classified phone), then grow to a desktop window a frame later.
 	local phone = SafeArea.classOf(gui) == "phone"
 	local stageScale = SafeArea.scaleOf(gui)
+	local function readDevice()
+		phone = SafeArea.classOf(gui) == "phone"
+		stageScale = SafeArea.scaleOf(gui)
+	end
 
 	local root = Instance.new("Frame")
 	root.Name = "Modal_" .. (options.id or options.title)
@@ -308,6 +314,8 @@ function ModalShell.create(
 	-- list builder gets a card just tall enough for its rows, capped at the box, so short lists never
 	-- float in empty panel and long ones scroll inside it.
 	local function relayout()
+		readDevice()
+		holderScale.Scale = if phone and stageScale > 0 then 1 / stageScale else 1
 		local boxHeight = if phone then 0.86 else geometry.box.Y
 		local boxWidth = if phone then 0.9 else geometry.box.X
 		if content.AutomaticCanvasSize == Enum.AutomaticSize.None then
@@ -348,6 +356,10 @@ function ModalShell.create(
 	contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(relayout)
 	content:GetPropertyChangedSignal("AutomaticCanvasSize"):Connect(relayout)
 	holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+	local stage = SafeArea.stageOf(gui)
+	if stage then
+		stage:GetAttributeChangedSignal("SFE_LayoutClass"):Connect(relayout)
+	end
 	task.defer(relayout)
 
 	local motion = options.motion
