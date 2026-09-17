@@ -5,6 +5,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TextService = game:GetService("TextService")
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local GuiService = game:GetService("GuiService")
@@ -267,12 +268,20 @@ function HUDController.new(deps: any): HUDController
 	detail.Parent = bannerContent
 	self._labels.detail = detail
 	self._bannerScale = bannerScale
-	local function fitBanner()
-		local widest = math.max(bannerTitle.TextBounds.X + Tokens.spacing.xxl * 2, detail.TextBounds.X + Tokens.spacing.lg * 2)
-		banner.Size = UDim2.fromOffset(math.max(280, math.ceil(widest)), bannerHeight)
+	-- Measured through TextService, not TextBounds: bounds follow the stage's UIScale and the
+	-- truncation, so on a phone they under-report and the ribbon would clip its own objective.
+	local function measure(label: TextLabel): number
+		return TextService:GetTextSize(label.Text, label.TextSize, label.Font, Vector2.new(4096, 256)).X
 	end
-	bannerTitle:GetPropertyChangedSignal("TextBounds"):Connect(fitBanner)
-	detail:GetPropertyChangedSignal("TextBounds"):Connect(fitBanner)
+	local function fitBanner()
+		local widest = math.max(measure(bannerTitle) + Tokens.spacing.xxl * 2, measure(detail) + Tokens.spacing.lg * 2)
+		local stageWidth = stage.AbsoluteSize.X / math.max(0.1, SafeArea.scaleOf(stage))
+		local cap = math.max(240, stageWidth - (Tokens.layout.stationButtonPx + Tokens.spacing.xxl * 2) * 2)
+		banner.Size = UDim2.fromOffset(math.clamp(math.ceil(widest), 280, cap), bannerHeight)
+	end
+	bannerTitle:GetPropertyChangedSignal("Text"):Connect(fitBanner)
+	detail:GetPropertyChangedSignal("Text"):Connect(fitBanner)
+	stage:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitBanner)
 	fitBanner()
 
 	-- Bottom-right input prompt: keycaps + verbs, swapped per input mode.

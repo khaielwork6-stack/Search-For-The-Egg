@@ -120,6 +120,7 @@ function LobbyController.new(deps: any): LobbyController
 		self._titles[id] = title
 	end
 	local labelHeight = Tokens.typography.label.size + Tokens.spacing.sm
+	local slots: { { slot: Frame, button: GuiButton } } = {}
 	for index, entry in ipairs(SIDE_MENU) do
 		self._titles[entry.id] = entry.title
 		local image = AssetManifest.image(entry.image .. ".normal") or AssetManifest.image(entry.image)
@@ -174,7 +175,21 @@ function LobbyController.new(deps: any): LobbyController
 		FrameKit.outline(label, 3)
 		self._buttons[entry.id] = handle
 		self._trove:add(handle.destroy)
+		table.insert(slots, { slot = slot, button = handle.button })
 	end
+	-- The column shrinks with the stage: four 84 px tiles overrun a landscape phone, so the tile
+	-- size comes from the height on offer (pre-scale), never below the tap minimum.
+	local function layoutRail()
+		local available = stage.AbsoluteSize.Y / math.max(0.1, SafeArea.scaleOf(stage))
+		local budget = available * 0.8 - railLayout.Padding.Offset * (#slots - 1)
+		local tile = math.clamp(math.floor(budget / math.max(1, #slots) - labelHeight), math.max(minimumTap, 48), size)
+		for _, item in ipairs(slots) do
+			item.slot.Size = UDim2.fromOffset(tile + Tokens.spacing.md, tile + labelHeight)
+			item.button.Size = UDim2.fromOffset(tile, tile)
+		end
+	end
+	self._trove:add(stage:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutRail))
+	layoutRail()
 
 	-- World prompts and server directives open the same modals.
 	self._trove:add(deps.interaction.stationRequested:Connect(function(stationId)
