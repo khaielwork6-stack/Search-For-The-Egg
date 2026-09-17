@@ -4,8 +4,10 @@
 -- only settles into its new state after the server acknowledged it, and snaps back on refusal.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Motion = require(Shared.Design.Motion)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
 local Switch = require(script.Parent.Parent.Components.Switch)
@@ -36,6 +38,90 @@ local QUALITY = {
 	{ id = "high", label = "High" },
 }
 
+-- A section heading with the stroke every label on the dark kit carries.
+local function heading(parent: Instance, name: string, text: string, zIndex: number): Frame
+	local row = FrameKit.heading(parent, name, text, zIndex)
+	local label = row:FindFirstChild("Text")
+	if label and label:IsA("TextLabel") then
+		FrameKit.outline(label, 2.5)
+	end
+	return row
+end
+
+-- Dresses a kit switch row to the dark reference: slate row inside a thick keyline, stroked
+-- lettering, a track that goes green when on. The Switch component still paints itself in the
+-- cream kit's colours on hover, focus and toggle, so each of those is answered here a frame later
+-- with the dark value; when the component is restyled this becomes a no-op.
+local function dress(handle: Switch.Handle, motion: Motion.MotionSettings, cleanups: { any })
+	local row = handle.row
+	local stroke = row:FindFirstChildOfClass("UIStroke")
+	local track = row:FindFirstChild("Track")
+	local state = row:FindFirstChild("State")
+	local function settle()
+		row.BackgroundColor3 = Tokens.color.surface
+		if stroke then
+			stroke.Color = Tokens.color.outline
+			stroke.Thickness = Tokens.depth.keyline
+			stroke.Transparency = 0
+		end
+	end
+	settle()
+	for _, name in ipairs({ "Label", "Detail", "State" }) do
+		local label = row:FindFirstChild(name)
+		if label and label:IsA("TextLabel") then
+			FrameKit.outline(label, if name == "Label" then 2.5 else 2)
+		end
+	end
+	local function recolour(animate: boolean)
+		if not (track and track:IsA("Frame") and state and state:IsA("TextLabel")) then
+			return
+		end
+		local on = state.Text == "On"
+		local trackColor = if on then Tokens.color.success else Tokens.color.panelDeep
+		state.TextColor3 = if on then Tokens.color.success else Tokens.color.inkMuted
+		if animate then
+			TweenService:Create(track, TweenInfo.new(Motion.duration("quick", motion)), { BackgroundColor3 = trackColor }):Play()
+		else
+			track.BackgroundColor3 = trackColor
+		end
+	end
+	recolour(false)
+	if state then
+		table.insert(
+			cleanups,
+			state:GetPropertyChangedSignal("Text"):Connect(function()
+				task.defer(recolour, true)
+			end)
+		)
+	end
+	local quick = function()
+		return TweenInfo.new(Motion.duration("quick", motion))
+	end
+	table.insert(
+		cleanups,
+		row.MouseEnter:Connect(function()
+			TweenService:Create(row, quick(), { BackgroundColor3 = Tokens.color.surfaceAlt }):Play()
+		end)
+	)
+	table.insert(
+		cleanups,
+		row.MouseLeave:Connect(function()
+			TweenService:Create(row, quick(), { BackgroundColor3 = Tokens.color.surface }):Play()
+		end)
+	)
+	table.insert(
+		cleanups,
+		row.SelectionGained:Connect(function()
+			if stroke then
+				stroke.Color = Tokens.color.gold
+				stroke.Thickness = Tokens.stroke.frame
+				stroke.Transparency = 0
+			end
+		end)
+	)
+	table.insert(cleanups, row.SelectionLost:Connect(settle))
+end
+
 function SettingsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -> ()
 	local cleanups: { any } = {}
 	local settings = deps.profile:settings() or {}
@@ -51,7 +137,8 @@ function SettingsModal.build(container: ScrollingFrame, api: any, deps: Deps): (
 		{ zIndex = z, color = Tokens.color.inkMuted }
 	)
 	intro.LayoutOrder = 0
-	FrameKit.heading(container, "ComfortHeading", "Comfort", z).LayoutOrder = 1
+	FrameKit.outline(intro, 2)
+	heading(container, "ComfortHeading", "Comfort", z).LayoutOrder = 1
 
 	local function send(payload: { [string]: any }): boolean
 		local result = deps.net:request("SettingsUpdate", payload)
@@ -84,11 +171,12 @@ function SettingsModal.build(container: ScrollingFrame, api: any, deps: Deps): (
 			end,
 		})
 		handle.row.LayoutOrder = 10 + index
+		dress(handle, motion, cleanups)
 		firstRow = firstRow or handle.row
 		table.insert(cleanups, handle.destroy)
 	end
 
-	FrameKit.heading(container, "QualityHeading", "Graphics quality", z).LayoutOrder = 20
+	heading(container, "QualityHeading", "Graphics quality", z).LayoutOrder = 20
 	local quality = Tabs.build(container, {
 		items = QUALITY,
 		selected = settings.qualityMode or "auto",
@@ -118,10 +206,11 @@ function SettingsModal.build(container: ScrollingFrame, api: any, deps: Deps): (
 	)
 	qualityNote.LayoutOrder = 22
 	qualityNote.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size * 2 + Tokens.spacing.xs)
+	FrameKit.outline(qualityNote, 2)
 
 	local done = Button.build(container, {
-		text = "Done",
-		variant = "primary",
+		text = "DONE",
+		variant = "success",
 		minimumTapTarget = tap,
 		motion = motion,
 		size = UDim2.new(1, 0, 0, tap),
@@ -138,7 +227,11 @@ function SettingsModal.build(container: ScrollingFrame, api: any, deps: Deps): (
 
 	return function()
 		for _, cleanup in ipairs(cleanups) do
-			cleanup()
+			if type(cleanup) == "function" then
+				cleanup()
+			else
+				cleanup:Disconnect()
+			end
 		end
 		deps.audio:play(Tokens.sound.uiClose)
 	end

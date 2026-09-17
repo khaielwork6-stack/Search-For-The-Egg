@@ -8,7 +8,6 @@ local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
-local Skin = require(script.Parent.Parent.Components.Skin)
 local Tween = require(script.Parent.Parent.Components.Tween)
 local Confetti = require(script.Parent.Parent.Components.Confetti)
 
@@ -33,49 +32,51 @@ function CodesModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local tap = deps.minimumTapTarget
 	local z = container.ZIndex + 1
 
-	local intro =
-		FrameKit.text(container, "Intro", "Found a code from the community? Post it here for a nest gift.", "body", { zIndex = z })
+	local intro = FrameKit.text(container, "Intro", "Found a code from the community? Post it here for a nest gift.", "body", {
+		zIndex = z,
+		color = Tokens.color.featherWhite,
+	})
 	intro.LayoutOrder = 1
 	intro.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size * 2 + 6)
+	FrameKit.outline(intro, 2)
 
+	-- The field: a dark slate well with a thick keyline, white lettering with its own stroke.
 	local box = Instance.new("TextBox")
 	box.Name = "CodeBox"
 	box.LayoutOrder = 2
-	box.Size = UDim2.new(1, 0, 0, tap)
-	box.BackgroundColor3 = Tokens.color.creamPill
-	box.TextColor3 = Tokens.color.inkStrong
+	box.Size = UDim2.new(1, 0, 0, tap + Tokens.spacing.sm)
+	box.BackgroundColor3 = Tokens.color.surface
+	box.TextColor3 = Tokens.color.featherWhite
 	box.PlaceholderText = "Enter a code"
 	box.PlaceholderColor3 = Tokens.color.inkMuted
 	box.Font = Tokens.typography.label.font
-	box.TextSize = Tokens.typography.label.size
+	box.TextSize = Tokens.typography.label.size + 2
 	box.ClearTextOnFocus = false
 	box.Text = ""
 	box.ZIndex = z + 1
 	box.Selectable = true
+	box.TextXAlignment = Enum.TextXAlignment.Center
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, Tokens.radius.pill)
+	corner.CornerRadius = UDim.new(0, Tokens.radius.md)
 	corner.Parent = box
 	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = Tokens.stroke.bold
+	stroke.Thickness = Tokens.depth.keyline
 	stroke.Color = Tokens.color.outline
 	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = box
-	box.BackgroundColor3 = Tokens.color.featherWhite
-	box.TextXAlignment = Enum.TextXAlignment.Center
+	local lettering = Instance.new("UIStroke")
+	lettering.Name = "TextOutline"
+	lettering.Thickness = 2
+	lettering.Color = Tokens.color.outline
+	lettering.LineJoinMode = Enum.LineJoinMode.Round
+	lettering.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+	lettering.Parent = box
 	local padding = Instance.new("UIPadding")
 	padding.PaddingLeft = UDim.new(0, Tokens.spacing.xl)
 	padding.PaddingRight = UDim.new(0, Tokens.spacing.xl)
 	padding.Parent = box
-	local boxArt: ImageLabel? = nil
 	local function boxState(state: string)
-		if boxArt then
-			Skin.apply(boxArt, "textbox." .. state)
-		else
-			stroke.Color = if state == "error"
-				then Tokens.color.danger
-				elseif state == "focused" then Tokens.color.tealAccent
-				else Tokens.color.outline
-		end
+		stroke.Color = if state == "error" then Tokens.color.danger elseif state == "focused" then Tokens.color.sky else Tokens.color.outline
 	end
 	box.Focused:Connect(function()
 		boxState("focused")
@@ -91,8 +92,9 @@ function CodesModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		end)
 	)
 
-	local feedback = FrameKit.text(container, "Feedback", "", "body", { zIndex = z, color = Tokens.color.goldDeep })
+	local feedback = FrameKit.text(container, "Feedback", "", "body", { zIndex = z, color = Tokens.color.featherWhite })
 	feedback.LayoutOrder = 3
+	FrameKit.outline(feedback, 2.5)
 	-- The feedback line only takes space once it has something to say.
 	feedback.Visible = false
 	feedback:GetPropertyChangedSignal("Text"):Connect(function()
@@ -117,7 +119,7 @@ function CodesModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			deps.haptics:pulse(0.6, 0.1)
 			local data = result.data
 			feedback.Text = string.format("Gift received: %d Gems, %d Event Tokens", data.gems, data.eventTokens or 0)
-			feedback.TextColor3 = Tokens.color.leafDeep
+			feedback.TextColor3 = Tokens.color.success
 			boxState("idle")
 			Confetti.burst(box, {
 				origin = UDim2.fromScale(0.5, 0.5),
@@ -147,8 +149,8 @@ function CodesModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	end
 
 	local redeemHandle = Button.build(container, {
-		text = "Redeem",
-		variant = "primary",
+		text = "REDEEM",
+		variant = "success",
 		sound = function()
 			deps.audio:play(Tokens.sound.uiTap)
 		end,
@@ -157,7 +159,7 @@ function CodesModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		end,
 		minimumTapTarget = tap,
 		motion = motion,
-		size = UDim2.new(1, 0, 0, tap),
+		size = UDim2.new(1, 0, 0, tap + Tokens.spacing.sm),
 		zIndex = z + 1,
 		onActivated = redeem,
 	})

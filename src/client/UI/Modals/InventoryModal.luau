@@ -1,13 +1,14 @@
 --!strict
--- Tool Rack: one tab per tool, then big square skin cards - art, a short name strip, a check when
--- equipped, LOCKED when unowned. Tapping an owned card equips it; the server validates and the
--- modal re-renders from the profile projection.
+-- Tool Rack: one tab per tool, then big square skin tiles - art, a green EQUIP, a short name strip,
+-- a gold keyline and a check when equipped, a lock and LOCKED when unowned. EQUIP (or tapping an
+-- owned tile) equips it; the server validates and the modal re-renders from the profile projection.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local SkinCatalog = require(Shared.Domain.SkinCatalog)
+local Depth = require(script.Parent.Parent.Components.Depth)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
 local Tabs = require(script.Parent.Parent.Components.Tabs)
@@ -79,8 +80,11 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 	tabs.frame.LayoutOrder = 1
 	table.insert(cleanups, tabs.destroy)
 
-	-- Card grid: three per row, square-ish.
+	-- Tile grid: three per row. Each tile is art over an EQUIP button over the name strip.
 	local cardSize = tap * 3
+	local stripHeight = Tokens.typography.label.size + Tokens.spacing.md
+	local equipHeight = math.floor(tap * 0.85)
+	local cardHeight = cardSize + equipHeight + Tokens.spacing.sm
 	local grid = Instance.new("Frame")
 	grid.Name = "Cards"
 	grid.BackgroundTransparency = 1
@@ -89,7 +93,7 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 	grid.LayoutOrder = 2
 	grid.ZIndex = z
 	local gridLayout = Instance.new("UIGridLayout")
-	gridLayout.CellSize = UDim2.fromOffset(cardSize, cardSize + Tokens.spacing.md)
+	gridLayout.CellSize = UDim2.fromOffset(cardSize, cardHeight)
 	gridLayout.CellPadding = UDim2.fromOffset(Tokens.spacing.md, Tokens.spacing.md)
 	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	gridLayout.Parent = grid
@@ -103,36 +107,38 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 		art: ImageLabel?,
 		name: TextLabel,
 		lockLabel: TextLabel,
+		lockGlyph: Frame,
 		check: Frame,
+		equip: Button.Handle,
 		hit: TextButton,
 	}
 	local cards: { Card } = {}
 	for index, skin in ipairs(catalog) do
 		local tile, face = FrameKit.tile(grid, "Skin_" .. skin.id, {
-			fill = Tokens.color.creamPill,
-			deep = Tokens.color.strawDeep,
+			fill = Tokens.color.surface,
+			deep = Tokens.color.panelDeep,
 			zIndex = z + 1,
 			radius = Tokens.radius.lg,
 		})
 		tile.LayoutOrder = index
 		local scale = Instance.new("UIScale")
 		scale.Parent = tile
-		local artSize = cardSize - Tokens.spacing.xl - Tokens.spacing.md
+		local artSize = cardHeight - stripHeight - equipHeight - Tokens.spacing.lg - Tokens.spacing.sm
 		local art = Skin.icon(face, "tool." .. skin.category .. ".normal", artSize, z + 3)
 		if art then
 			art.AnchorPoint = Vector2.new(0.5, 0)
 			art.Position = UDim2.new(0.5, 0, 0, Tokens.spacing.sm)
 			if skin.source ~= "default" then
-				-- Event skins: the same tool, tinted so the card reads as a different finish.
-				art.ImageColor3 = Color3.fromRGB(150, 230, 130)
+				-- Event skins: the same tool, tinted so the tile reads as a different finish.
+				art.ImageColor3 = Tokens.color.leafBright
 			end
 		end
 		local strip = Instance.new("Frame")
 		strip.Name = "Strip"
 		strip.AnchorPoint = Vector2.new(0.5, 1)
 		strip.Position = UDim2.fromScale(0.5, 1)
-		strip.Size = UDim2.new(1, 0, 0, Tokens.typography.label.size + Tokens.spacing.md)
-		strip.BackgroundColor3 = Tokens.color.strawDeep
+		strip.Size = UDim2.new(1, 0, 0, stripHeight)
+		strip.BackgroundColor3 = Tokens.color.panelDeep
 		strip.BorderSizePixel = 0
 		strip.ZIndex = z + 2
 		local stripCorner = Instance.new("UICorner")
@@ -145,14 +151,20 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 			align = Enum.TextXAlignment.Center,
 		})
 		name.Size = UDim2.fromScale(1, 1)
-		FrameKit.outline(name, 2)
-		local lockLabel = FrameKit.text(face, "Locked", "LOCKED", "title", {
+		FrameKit.outline(name, 2.5)
+		local lockGlyph = Icons.lock(face, Tokens.icon.lg + Tokens.spacing.sm, { zIndex = z + 4, color = Tokens.color.featherWhite })
+		lockGlyph.AnchorPoint = Vector2.new(0.5, 0.5)
+		lockGlyph.Position = UDim2.new(0.5, 0, 0, Tokens.spacing.sm + artSize / 2)
+		lockGlyph.Visible = false
+		local lockLabel = FrameKit.text(face, "Locked", "LOCKED", "label", {
 			zIndex = z + 4,
 			color = Tokens.color.featherWhite,
 			align = Enum.TextXAlignment.Center,
 		})
-		lockLabel.Position = UDim2.new(0, 0, 0.5, -Tokens.typography.title.size)
-		lockLabel.Size = UDim2.new(1, 0, 0, Tokens.typography.title.size + 4)
+		lockLabel.AnchorPoint = Vector2.new(0.5, 1)
+		lockLabel.Position = UDim2.new(0.5, 0, 1, -(stripHeight + Tokens.spacing.xs))
+		lockLabel.Size = UDim2.new(1, 0, 0, equipHeight)
+		lockLabel.TextYAlignment = Enum.TextYAlignment.Center
 		FrameKit.outline(lockLabel, 2.6)
 		lockLabel.Visible = false
 		local check = Instance.new("Frame")
@@ -181,6 +193,51 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 		hit.Size = UDim2.fromScale(1, 1)
 		hit.ZIndex = z + 6
 		hit.Parent = tile
+
+		-- One equip path for the tile tap and the EQUIP button.
+		local function equip()
+			local projection = deps.profile.projection
+			local owned = skin.source == "default" or (projection and projection.inventory.toolSkins[skin.id] == true)
+			if not owned then
+				deps.audio:play(Tokens.sound.uiError)
+				Tween.shake(tile, motion)
+				deps.toasts:push("Drops from the Moonlit Chest", "info")
+				return
+			end
+			deps.audio:play(Tokens.sound.uiTap)
+			local result = deps.net:request("InventoryEquip", { category = skin.category, itemId = skin.id })
+			if result.ok then
+				deps.audio:play(Tokens.sound.uiConfirm)
+				deps.haptics:pulse(0.3, 0.06)
+				scale.Scale = 1.1
+				Tween.scale(scale, "release", motion, 1)
+			else
+				deps.audio:play(Tokens.sound.uiError)
+				deps.toasts:push("Could not equip", "warning")
+			end
+		end
+		-- The button is a sibling of the hit frame, above it, so its own press wins over the tile's.
+		local equipHandle = Button.build(tile, {
+			text = "EQUIP",
+			variant = "success",
+			minimumTapTarget = tap,
+			motion = motion,
+			size = UDim2.new(1, -Tokens.spacing.lg, 0, equipHeight),
+			zIndex = z + 7,
+			textSize = Tokens.typography.label.size,
+			sound = function()
+				deps.audio:play(Tokens.sound.uiTap)
+			end,
+			hoverSound = function()
+				deps.audio:play(Tokens.sound.uiHover)
+			end,
+			onActivated = equip,
+		})
+		equipHandle.button.Name = "Equip"
+		equipHandle.button.AnchorPoint = Vector2.new(0.5, 1)
+		equipHandle.button.Position = UDim2.new(0.5, 0, 1, -(stripHeight + Tokens.spacing.xs + 5))
+		table.insert(cleanups, equipHandle.destroy)
+
 		local card: Card = {
 			skin = skin,
 			tile = tile,
@@ -189,7 +246,9 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 			art = art,
 			name = name,
 			lockLabel = lockLabel,
+			lockGlyph = lockGlyph,
 			check = check,
+			equip = equipHandle,
 			hit = hit,
 		}
 		table.insert(cards, card)
@@ -206,30 +265,7 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 				TweenService:Create(scale, TweenInfo.new(0.16), { Scale = 1 }):Play()
 			end)
 		)
-		table.insert(
-			cleanups,
-			hit.Activated:Connect(function()
-				local projection = deps.profile.projection
-				local owned = skin.source == "default" or (projection and projection.inventory.toolSkins[skin.id] == true)
-				if not owned then
-					deps.audio:play(Tokens.sound.uiError)
-					Tween.shake(tile, motion)
-					deps.toasts:push("Drops from the Moonlit Chest", "info")
-					return
-				end
-				deps.audio:play(Tokens.sound.uiTap)
-				local result = deps.net:request("InventoryEquip", { category = skin.category, itemId = skin.id })
-				if result.ok then
-					deps.audio:play(Tokens.sound.uiConfirm)
-					deps.haptics:pulse(0.3, 0.06)
-					scale.Scale = 1.1
-					Tween.scale(scale, "release", motion, 1)
-				else
-					deps.audio:play(Tokens.sound.uiError)
-					deps.toasts:push("Could not equip", "warning")
-				end
-			end)
-		)
+		table.insert(cleanups, hit.Activated:Connect(equip))
 	end
 
 	local close = Button.build(container, {
@@ -262,33 +298,21 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 			first = first or card.hit
 			local owned = card.skin.source == "default" or (projection ~= nil and projection.inventory.toolSkins[card.skin.id] == true)
 			local equipped = projection ~= nil and projection.inventory.equippedSkins[card.skin.category] == card.skin.id
-			card.face.BackgroundColor3 = if equipped
-				then Tokens.color.leafBright
-				elseif owned then Tokens.color.creamPill
-				else Tokens.color.cocoa
-			card.tile.BackgroundColor3 = if equipped
-				then Tokens.color.leafDeep
-				elseif owned then Tokens.color.strawDeep
-				else Tokens.color.outline
-			local gradient = card.face:FindFirstChildOfClass("UIGradient")
-			if gradient then
-				local fill = card.face.BackgroundColor3
-				gradient.Color = ColorSequence.new({
-					ColorSequenceKeypoint.new(0, fill:Lerp(Color3.new(1, 1, 1), 0.28)),
-					ColorSequenceKeypoint.new(1, fill),
-				})
-			end
-			local strip = card.face:FindFirstChild("Strip") :: Frame?
-			if strip then
-				strip.BackgroundColor3 = if equipped
-					then Tokens.color.leafDeep
-					elseif owned then Tokens.color.strawDeep
-					else Tokens.color.outline
+			-- Dark slate throughout; the equipped tile earns a gold keyline, a locked one sinks.
+			local fill = if owned then Tokens.color.surface else Tokens.color.surfaceAlt
+			card.face.BackgroundColor3 = fill
+			Depth.applySheen(card.face, fill)
+			local keyline = Depth.keylineOf(card.tile)
+			if keyline then
+				keyline.Color = if equipped then Tokens.color.gold else Tokens.color.outline
+				keyline.Thickness = if equipped then Tokens.stroke.frame + 1 else Tokens.stroke.frame
 			end
 			if card.art then
-				card.art.ImageTransparency = if owned then 0 else 0.55
+				card.art.ImageTransparency = if owned then 0 else 0.6
 			end
+			card.lockGlyph.Visible = not owned
 			card.lockLabel.Visible = not owned
+			card.equip.button.Visible = owned and not equipped
 			card.check.Visible = equipped
 		end
 		if first then
