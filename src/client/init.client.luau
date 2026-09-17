@@ -217,7 +217,7 @@ local intro = trove:add(IntroCinematicController.new({
 intro:bindRound()
 -- Player nameplates: display name and record time over every character.
 local nameplates = trove:add(NameplateController.new(round))
--- Professor Plume: the clue NPC. Nameplate, outline, idle, the board, the trade and its sequence.
+-- Professor Plume: the rod lender. Nameplate, outline, idle, the board, the loan and its hand-over.
 local plume = trove:add(PlumeController.new({
 	net = net,
 	round = round,
@@ -232,6 +232,7 @@ local plume = trove:add(PlumeController.new({
 	config = config,
 	dialogue = dialogue,
 	interaction = interaction,
+	tools = tools,
 }))
 -- Molly the Mole: the survey NPC. Nameplate, outline, idle, the map, the trade and its sequence.
 local molly = trove:add(MollyController.new({
@@ -1229,7 +1230,8 @@ if RunService:IsStudio() then
 			status.hudEnabled = hud.gui.Enabled
 			status.mouseBehaviour = tostring(game:GetService("UserInputService").MouseBehavior)
 			status.promptsEnabled = game:GetService("ProximityPromptService").Enabled
-			status.roundClues = round.round and round.round.clues or nil
+			status.roundPlume = round.round and round.round.plume or nil
+			status.rod = tools:rodState()
 			status.carriedRainbow = round.player and round.player.carriedRainbow or nil
 			status.carriedStandard = round.player and round.player.carriedStandard or nil
 			local stack = (hud :: any).carriedStack
@@ -1295,14 +1297,14 @@ if RunService:IsStudio() then
 			return { codes = codes, pending = pending }
 		end,
 		-- Raw request spam straight at the remote, past the controller's own guard.
-		plumeSpam = function(n, category)
+		plumeSpam = function(n)
 			local token = round:sessionToken()
 			local codes = {}
 			local pending = 0
 			for _ = 1, tonumber(n) or 5 do
 				pending += 1
 				task.spawn(function()
-					local result = net:request("ClueAnalyze", { sessionToken = token, category = tostring(category or "depth") })
+					local result = net:request("PlumeLend", { sessionToken = token })
 					table.insert(codes, if result.ok then "ok" else tostring(result.message or result.code))
 					pending -= 1
 				end)
@@ -1316,8 +1318,8 @@ if RunService:IsStudio() then
 		plumeOpen = function()
 			return { opened = plume:interact(), top = modals:topId() }
 		end,
-		plumeAnalyze = function(category)
-			return plume:analyze(tostring(category or "direction"))
+		plumeBorrow = function()
+			return plume:borrow()
 		end,
 		plumeSkip = function()
 			plume:skip()

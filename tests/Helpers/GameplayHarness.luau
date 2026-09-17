@@ -187,7 +187,12 @@ function GameplayHarness.new(cfg, options)
 		config = cfg,
 		rounds = rounds,
 		sessions = sessions,
+		tools = tools,
+		clock = clock,
 		getCharacterPosition = getCharacterPosition,
+		getEggPosition = function(runtime)
+			return egg:position(runtime)
+		end,
 		analytics = analytics,
 	})
 	local surveys = SurveyService.new({
@@ -336,8 +341,11 @@ function GameplayHarness.new(cfg, options)
 	function h.survey(userId, region)
 		return surveys:survey(userId, { sessionToken = h.token(userId), region = region })
 	end
-	function h.analyze(userId, category)
-		return clues:analyze(userId, { sessionToken = h.token(userId), category = category })
+	function h.lend(userId)
+		return clues:lend(userId, { sessionToken = h.token(userId) })
+	end
+	function h.rodAim(userId, x, y, z)
+		return clues:aim(userId, { sessionToken = h.token(userId), x = x, y = y, z = z })
 	end
 	h.toolEvents = toolEvents
 	h.toolRng = toolRng

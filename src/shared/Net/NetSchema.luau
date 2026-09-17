@@ -30,6 +30,8 @@ local TOKEN = Schema.string({ min = 8, max = 64, pattern = "^[%w%-{}]+$" })
 local UPGRADE_ID = Schema.string({ max = 48, min = 1, pattern = "^[%w_%-%.:]+$" })
 -- Molly's map: nine regions, A1..C3.
 local REGION = Schema.enum({ "A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3" })
+-- A world coordinate the Egg Sense rod may aim at: a bounded number (the service checks the mound).
+local WORLD_COORD = Schema.number({ min = -100000, max = 100000 })
 
 local function request(
 	name: string,
@@ -152,7 +154,10 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		),
 		request("EggClaim", Schema.object({ sessionToken = TOKEN }), slowRate, 2),
 		request("EggDeliver", Schema.object({ sessionToken = TOKEN }), slowRate, 2),
-		request("ClueAnalyze", Schema.object({ sessionToken = TOKEN, category = Schema.enum({ "direction", "depth" }) }), slowRate, 2),
+		-- Professor Plume lends the Egg Sense rod; the borrower's rod then reads the crosshair point at
+		-- the rod's own aim rate (tool-class limit: it is a held tool, like the vac's re-aim).
+		request("PlumeLend", Schema.object({ sessionToken = TOKEN }), slowRate, 2),
+		request("RodAim", Schema.object({ sessionToken = TOKEN, x = WORLD_COORD, y = WORLD_COORD, z = WORLD_COORD }), toolRate, 2, 256),
 		request("SurveyRequest", Schema.object({ sessionToken = TOKEN, region = REGION }), slowRate, 2),
 		request("SurveySelect", Schema.object({ sessionToken = TOKEN, region = Schema.optional(REGION) }), uiRate, 2),
 		-- Meta ---------------------------------------------------------------------------------
@@ -231,7 +236,7 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		serverEvent("CrateRun", Schema.object({}), 2),
 		serverEvent("UpgradeResult", Schema.object({}), 2),
 		serverEvent("EggRevealed", Schema.object({}), 2),
-		serverEvent("ClueUnlocked", Schema.object({}), 2),
+		serverEvent("PlumeLent", Schema.object({}), 2),
 		serverEvent("SurveyCompleted", Schema.object({}), 2),
 		serverEvent("SurveySelection", Schema.object({}), 2),
 		serverEvent("EggCarried", Schema.object({}), 2),

@@ -315,7 +315,7 @@ function CommerceService._registerGrants(self: CommerceService)
 			return { gems = bundle.gems }
 		end)
 	end
-	for toolId in pairs(cfg.tools) do
+	for _, toolId in ipairs(ToolSpecs.TOOL_IDS) do
 		receipts:registerGrant("oneRoundTool:" .. toolId, function(data)
 			data.pendingGrants.oneRoundTools[toolId] = (data.pendingGrants.oneRoundTools[toolId] or 0) + 1
 			return { toolId = toolId, pending = data.pendingGrants.oneRoundTools[toolId] }

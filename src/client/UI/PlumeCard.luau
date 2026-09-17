@@ -1,8 +1,8 @@
 --!strict
 -- Professor Plume's card: one look, one decision. A wooden title plate over a parchment card, the
--- Rainbow Feather with its glow on the left, the count against the cost in big gold numerals on the
--- right with the two clue slips under it, and one orange button. Nothing on it is a paragraph; what
--- Plume has to say, he says over his own head.
+-- Egg Sense rod with its glowing crystal on the left, the loan pips, the carried count against the
+-- price in big gold numerals and a one-line note on the right, and one orange button. Nothing on
+-- it is a paragraph; what Plume has to say, he says over his own head.
 
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -11,29 +11,29 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
-local NestClues = require(Shared.Domain.NestClues)
 local FrameKit = require(script.Parent.Components.Frame)
 local Button = require(script.Parent.Components.Button)
 local Depth = require(script.Parent.Components.Depth)
-local Skin = require(script.Parent.Components.Skin)
 local SafeArea = require(script.Parent.SafeArea)
 
 local PlumeCard = {}
 
 local PARCHMENT = Color3.fromRGB(248, 236, 208)
-local SLIP = Color3.fromRGB(238, 222, 180)
 local WOOD = Color3.fromRGB(160, 116, 66)
 local WOOD_DEEP = Color3.fromRGB(110, 76, 42)
 local STAMP = Color3.fromRGB(196, 52, 44)
-local BLUE = Color3.fromRGB(40, 104, 172)
+local ROD_WOOD = Color3.fromRGB(122, 82, 46)
 local CARD_W, CARD_H = 600, 440
 
 export type State = {
-	carried: number,
-	cost: number?, -- nil once every clue is bought
-	unlocked: { [string]: any },
-	selected: string?,
-	canGet: boolean,
+	carried: number, -- normal feathers in the bag
+	cost: number?, -- nil once every loan is used
+	usesLeft: number,
+	maxUses: number,
+	activeSeconds: number,
+	active: boolean, -- this player already holds the rod
+	canBorrow: boolean,
+	reason: string?, -- phase | active | limit | insufficient, when canBorrow is false
 }
 
 export type Handle = {
@@ -46,13 +46,31 @@ local function outlined(label: TextLabel, thickness: number, color: Color3?)
 	FrameKit.outline(label, thickness, color)
 end
 
+local function circle(parent: GuiObject, name: string, color: Color3, zIndex: number): Frame
+	local frame = Instance.new("Frame")
+	frame.Name = name
+	frame.BackgroundColor3 = color
+	frame.BorderSizePixel = 0
+	frame.ZIndex = zIndex
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = frame
+	local ratio = Instance.new("UIAspectRatioConstraint")
+	ratio.Parent = frame
+	frame.Parent = parent
+	return frame
+end
+
 function PlumeCard.create(
 	parent: Instance,
 	deps: { audio: any, accessibility: any, config: { [string]: any } },
-	callbacks: { onGetClue: (category: string) -> (), onSelect: (category: string) -> (), onClose: () -> () }
+	callbacks: { onBorrow: () -> (), onClose: () -> () }
 ): Handle
 	local motion = deps.accessibility:motionSettings()
 	local tap = Tokens.layout.minimumTapTargetPx
+	local rodCfg = deps.config.plume.rod
+	local cold = Color3.fromRGB(rodCfg.coldColor[1], rodCfg.coldColor[2], rodCfg.coldColor[3])
+	local warm = Color3.fromRGB(rodCfg.warmColor[1], rodCfg.warmColor[2], rodCfg.warmColor[3])
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "SFE_PlumeCard"
 	gui.ResetOnSpawn = false
@@ -146,7 +164,7 @@ function PlumeCard.create(
 		callbacks.onClose()
 	end)
 
-	-- Left: the feather and its glow.
+	-- Left: the rod, drawn from frames: a leaning shaft, two prongs, the crystal and its glow.
 	local art = Instance.new("Frame")
 	art.Name = "Art"
 	art.BackgroundTransparency = 1
@@ -154,45 +172,55 @@ function PlumeCard.create(
 	art.Size = UDim2.fromScale(0.42, 0.6)
 	art.ZIndex = 3
 	art.Parent = card
-	for i, spec in ipairs({ { 1.0, 0.55 }, { 0.72, 0.35 } }) do
-		local glow = Instance.new("Frame")
-		glow.Name = "Glow" .. i
+	local artRatio = Instance.new("UIAspectRatioConstraint")
+	artRatio.AspectRatio = 1
+	artRatio.Parent = art
+	local glows = {}
+	for i, spec in ipairs({ { 0.62, 0.55 }, { 0.42, 0.3 } }) do
+		local glow = circle(art, "Glow" .. i, cold, 3)
 		glow.AnchorPoint = Vector2.new(0.5, 0.5)
-		glow.Position = UDim2.fromScale(0.5, 0.5)
+		glow.Position = UDim2.fromScale(0.5, 0.28)
 		glow.Size = UDim2.fromScale(spec[1], spec[1])
-		glow.BackgroundColor3 = Color3.fromRGB(255, 236, 170)
 		glow.BackgroundTransparency = spec[2]
-		glow.BorderSizePixel = 0
-		glow.ZIndex = 3
-		local glowCorner = Instance.new("UICorner")
-		glowCorner.CornerRadius = UDim.new(1, 0)
-		glowCorner.Parent = glow
-		local glowRatio = Instance.new("UIAspectRatioConstraint")
-		glowRatio.Parent = glow
-		glow.Parent = art
+		table.insert(glows, glow)
 	end
-	local feather = Skin.icon(art, "icon.feather", 200, 5)
-	local featherRatio = Instance.new("UIAspectRatioConstraint")
-	if feather then
-		feather.AnchorPoint = Vector2.new(0.5, 0.5)
-		feather.Position = UDim2.fromScale(0.5, 0.5)
-		feather.Size = UDim2.fromScale(0.86, 0.86)
-		feather.Rotation = -18
-		featherRatio.Parent = feather
-		local rainbow = Instance.new("UIGradient")
-		rainbow.Rotation = 60
-		rainbow.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 96, 96)),
-			ColorSequenceKeypoint.new(0.22, Color3.fromRGB(255, 176, 64)),
-			ColorSequenceKeypoint.new(0.42, Color3.fromRGB(255, 236, 90)),
-			ColorSequenceKeypoint.new(0.62, Color3.fromRGB(110, 226, 120)),
-			ColorSequenceKeypoint.new(0.82, Color3.fromRGB(96, 170, 255)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 110, 255)),
-		})
-		rainbow.Parent = feather
+	local shaft = Instance.new("Frame")
+	shaft.Name = "Shaft"
+	shaft.AnchorPoint = Vector2.new(0.5, 0)
+	shaft.Position = UDim2.fromScale(0.5, 0.36)
+	shaft.Size = UDim2.fromScale(0.07, 0.6)
+	shaft.Rotation = -8
+	shaft.BackgroundColor3 = ROD_WOOD
+	shaft.BorderSizePixel = 0
+	shaft.ZIndex = 4
+	local shaftCorner = Instance.new("UICorner")
+	shaftCorner.CornerRadius = UDim.new(1, 0)
+	shaftCorner.Parent = shaft
+	Depth.keyline(shaft, Tokens.stroke.standard, WOOD_DEEP)
+	shaft.Parent = art
+	for _, side in ipairs({ -1, 1 }) do
+		local prong = Instance.new("Frame")
+		prong.Name = if side < 0 then "ProngLeft" else "ProngRight"
+		prong.AnchorPoint = Vector2.new(0.5, 1)
+		prong.Position = UDim2.fromScale(0.5 + side * 0.06, 0.4)
+		prong.Size = UDim2.fromScale(0.05, 0.24)
+		prong.Rotation = side * 28 - 8
+		prong.BackgroundColor3 = ROD_WOOD
+		prong.BorderSizePixel = 0
+		prong.ZIndex = 4
+		local prongCorner = Instance.new("UICorner")
+		prongCorner.CornerRadius = UDim.new(1, 0)
+		prongCorner.Parent = prong
+		Depth.keyline(prong, Tokens.stroke.standard, WOOD_DEEP)
+		prong.Parent = art
 	end
+	local crystal = circle(art, "Crystal", cold, 5)
+	crystal.AnchorPoint = Vector2.new(0.5, 0.5)
+	crystal.Position = UDim2.fromScale(0.5, 0.28)
+	crystal.Size = UDim2.fromScale(0.2, 0.2)
+	Depth.keyline(crystal, Tokens.stroke.bold, WOOD_DEEP)
 	local sparkles = {}
-	for i, spot in ipairs({ { 0.12, 0.2 }, { 0.86, 0.14 }, { 0.9, 0.78 }, { 0.1, 0.8 } }) do
+	for i, spot in ipairs({ { 0.2, 0.12 }, { 0.82, 0.1 }, { 0.86, 0.5 }, { 0.14, 0.52 } }) do
 		local spark =
 			FrameKit.text(art, "Spark" .. i, "*", "display", { zIndex = 6, color = Tokens.color.gold, align = Enum.TextXAlignment.Center })
 		spark.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -203,7 +231,7 @@ function PlumeCard.create(
 		table.insert(sparkles, spark)
 	end
 
-	-- Right: the count, the caption, the two slips.
+	-- Right: the name, the loan pips, the count against the cost, the note.
 	local right = Instance.new("Frame")
 	right.Name = "Right"
 	right.BackgroundTransparency = 1
@@ -211,9 +239,33 @@ function PlumeCard.create(
 	right.Size = UDim2.fromScale(0.5, 0.62)
 	right.ZIndex = 3
 	right.Parent = card
+	local heading = FrameKit.text(
+		right,
+		"Heading",
+		"EGG SENSE ROD",
+		"heading",
+		{ zIndex = 4, color = Tokens.color.inkStrong, align = Enum.TextXAlignment.Center }
+	)
+	heading.Size = UDim2.fromScale(1, 0.14)
+	heading.TextScaled = true
+	local pips = Instance.new("Frame")
+	pips.Name = "Pips"
+	pips.BackgroundTransparency = 1
+	pips.Position = UDim2.fromScale(0, 0.15)
+	pips.Size = UDim2.fromScale(1, 0.12)
+	pips.ZIndex = 4
+	pips.Parent = right
+	local pipLayout = Instance.new("UIListLayout")
+	pipLayout.FillDirection = Enum.FillDirection.Horizontal
+	pipLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	pipLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	pipLayout.Padding = UDim.new(0, Tokens.spacing.sm)
+	pipLayout.Parent = pips
+	local pipViews: { Frame } = {}
 	local count =
-		FrameKit.text(right, "Count", "0 / 3", "display", { zIndex = 4, color = Tokens.color.gold, align = Enum.TextXAlignment.Center })
-	count.Size = UDim2.fromScale(1, 0.42)
+		FrameKit.text(right, "Count", "0 / 100", "display", { zIndex = 4, color = Tokens.color.gold, align = Enum.TextXAlignment.Center })
+	count.Position = UDim2.fromScale(0, 0.28)
+	count.Size = UDim2.fromScale(1, 0.36)
 	count.TextScaled = true
 	outlined(count, 5, WOOD_DEEP)
 	local countScale = Instance.new("UIScale")
@@ -221,81 +273,27 @@ function PlumeCard.create(
 	local caption = FrameKit.text(
 		right,
 		"Caption",
-		"TRADE FOR A CLUE",
+		"FEATHERS FOR ONE LOAN",
 		"heading",
 		{ zIndex = 4, color = Tokens.color.inkStrong, align = Enum.TextXAlignment.Center }
 	)
-	caption.Position = UDim2.fromScale(0, 0.42)
-	caption.Size = UDim2.fromScale(1, 0.13)
+	caption.Position = UDim2.fromScale(0, 0.64)
+	caption.Size = UDim2.fromScale(1, 0.12)
 	caption.TextScaled = true
-	local slips = Instance.new("Frame")
-	slips.Name = "Slips"
-	slips.BackgroundTransparency = 1
-	slips.Position = UDim2.fromScale(0, 0.58)
-	slips.Size = UDim2.fromScale(1, 0.42)
-	slips.ZIndex = 4
-	slips.Parent = right
-	local slipViews: { [string]: any } = {}
-	for index, category in ipairs(NestClues.CATEGORIES) do
-		local slip = Instance.new("TextButton")
-		slip.Name = "Slip_" .. category
-		slip.Text = ""
-		slip.AutoButtonColor = false
-		slip.AnchorPoint = Vector2.new(if index == 1 then 0 else 1, 0)
-		slip.Position = UDim2.fromScale(if index == 1 then 0 else 1, 0)
-		slip.Size = UDim2.fromScale(0.47, 1)
-		slip.BackgroundColor3 = SLIP
-		slip.ZIndex = 4
-		local slipCorner = Instance.new("UICorner")
-		slipCorner.CornerRadius = UDim.new(0, Tokens.radius.sm)
-		slipCorner.Parent = slip
-		Depth.keyline(slip, Tokens.stroke.standard, Tokens.color.strawDeep)
-		-- The folded corner.
-		local fold = Instance.new("Frame")
-		fold.Name = "Fold"
-		fold.Position = UDim2.fromOffset(-4, -4)
-		fold.Size = UDim2.fromOffset(18, 18)
-		fold.Rotation = 45
-		fold.BackgroundColor3 = Tokens.color.strawDeep
-		fold.BorderSizePixel = 0
-		fold.ZIndex = 5
-		fold.Parent = slip
-		local label = FrameKit.text(
-			slip,
-			"Label",
-			NestClues.LABELS[category],
-			"caption",
-			{ zIndex = 6, color = Tokens.color.inkStrong, align = Enum.TextXAlignment.Center }
-		)
-		label.Position = UDim2.fromScale(0, 0.08)
-		label.Size = UDim2.fromScale(1, 0.22)
-		label.TextScaled = true
-		local value = FrameKit.text(
-			slip,
-			"Value",
-			"?",
-			"display",
-			{ zIndex = 6, color = Tokens.color.inkStrong, align = Enum.TextXAlignment.Center, wrap = true }
-		)
-		value.Position = UDim2.fromScale(0.05, 0.32)
-		value.Size = UDim2.fromScale(0.9, 0.6)
-		value.TextScaled = true
-		local stamp = FrameKit.badge(slip, "Stamp", "ANALYZED", STAMP, 7)
-		stamp.AnchorPoint = Vector2.new(0.5, 1)
-		stamp.Position = UDim2.new(0.5, 0, 1, 4)
-		stamp.Rotation = -8
-		stamp.TextSize = Tokens.typography.caption.size - 2
-		stamp.Visible = false
-		slip.Parent = slips
-		slip.Activated:Connect(function()
-			callbacks.onSelect(category)
-		end)
-		slipViews[category] = { slip = slip, value = value, stamp = stamp }
-	end
+	local note = FrameKit.text(
+		right,
+		"Note",
+		"",
+		"caption",
+		{ zIndex = 4, color = Tokens.color.inkMuted, align = Enum.TextXAlignment.Center, wrap = true }
+	)
+	note.Position = UDim2.fromScale(0, 0.78)
+	note.Size = UDim2.fromScale(1, 0.22)
+	note.TextScaled = true
 
 	-- The one button.
 	local button = Button.build(card, {
-		text = "GET CLUE",
+		text = "BORROW THE ROD",
 		variant = "ember",
 		minimumTapTarget = tap,
 		motion = motion,
@@ -314,14 +312,14 @@ function PlumeCard.create(
 	button.button.Position = UDim2.new(0.5, 0, 1, -Tokens.spacing.lg)
 	local current: State? = nil
 	button.button.Activated:Connect(function()
-		if current and current.canGet and current.selected then
-			callbacks.onGetClue(current.selected)
+		if current and current.canBorrow then
+			callbacks.onBorrow()
 		else
 			deps.audio:play(Tokens.sound.uiError)
 		end
 	end)
 
-	-- Twinkle and a settle-in.
+	-- Twinkle, a breathing glow that warms and cools, and a settle-in.
 	TweenService:Create(entrance, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeBack), { Scale = 1 }):Play()
 	local heartbeat = nil
 	if not motion.reducedMotion then
@@ -332,9 +330,12 @@ function PlumeCard.create(
 				spark.TextTransparency = 0.5 + 0.5 * math.sin(t * 2.6 + i * 1.7)
 				spark.Rotation = math.sin(t * 1.3 + i) * 20
 			end
-			if feather then
-				feather.Rotation = -18 + math.sin(t * 1.1) * 3
-				feather.Position = UDim2.fromScale(0.5, 0.5 + math.sin(t * 1.4) * 0.015)
+			local heat = 0.5 + 0.5 * math.sin(t * 0.9)
+			local tint = cold:Lerp(warm, heat)
+			crystal.BackgroundColor3 = tint
+			for i, glow in ipairs(glows) do
+				glow.BackgroundColor3 = tint
+				glow.BackgroundTransparency = (if i == 1 then 0.55 else 0.3) + 0.15 * (1 - heat)
 			end
 		end)
 	end
@@ -353,26 +354,37 @@ function PlumeCard.create(
 		lastCount = countText
 		count.Text = countText
 		count.TextColor3 = if cost and state.carried < cost then Tokens.color.strawDeep else Tokens.color.gold
-		caption.Text = if not cost
-			then "ALL CLUES FOUND"
-			elseif state.carried < cost then string.format("NEED %d RAINBOW FEATHERS", cost)
-			else "TRADE FOR A CLUE"
-		for category, view in pairs(slipViews) do
-			local entry = state.unlocked[category]
-			local isSelected = state.selected == category and not entry
-			view.value.Text = if entry then tostring(entry.title) else "?"
-			view.value.TextColor3 = if entry then BLUE else Tokens.color.inkStrong
-			view.stamp.Visible = entry ~= nil
-			view.slip.BackgroundColor3 = if isSelected then Tokens.color.creamPill else SLIP
-			local keyline = Depth.keylineOf(view.slip)
-			if keyline then
-				keyline.Color = if isSelected then Tokens.color.gold else Tokens.color.strawDeep
-				keyline.Thickness = if isSelected then Tokens.stroke.frame else Tokens.stroke.standard
-			end
+		-- One pip per loan the party may still take; spent ones sit hollow.
+		while #pipViews < state.maxUses do
+			local pip = circle(pips, "Pip" .. (#pipViews + 1), Tokens.color.gold, 5)
+			pip.Size = UDim2.fromScale(0.75, 0.75)
+			pip.LayoutOrder = #pipViews + 1
+			Depth.keyline(pip, Tokens.stroke.bold, WOOD_DEEP)
+			table.insert(pipViews, pip)
 		end
-		button.setText(if cost then "GET CLUE" else "ALL CLUES FOUND")
-		button.setEnabled(state.canGet)
-		button.pulse(state.canGet)
+		for index, pip in ipairs(pipViews) do
+			local left = index <= state.usesLeft
+			pip.Visible = index <= state.maxUses
+			pip.BackgroundColor3 = if left then Tokens.color.gold else PARCHMENT
+			pip.BackgroundTransparency = if left then 0 else 0.35
+		end
+		caption.Text = if state.reason == "active"
+			then "ROD IN YOUR HAND"
+			elseif not cost then "NO LOANS LEFT"
+			elseif state.carried < cost then string.format("NEED %d FEATHERS", cost)
+			else "FEATHERS FOR ONE LOAN"
+		note.Text =
+			string.format("Ticks faster near the Egg. Lasts %d s. %d of %d loans left.", state.activeSeconds, state.usesLeft, state.maxUses)
+		button.setText(
+			if state.reason == "active"
+				then "ROD IN USE"
+				elseif state.reason == "limit" then "NO LOANS LEFT"
+				elseif state.reason == "insufficient" then "NEED MORE FEATHERS"
+				elseif state.reason == "phase" then "NOT NOW"
+				else "BORROW THE ROD"
+		)
+		button.setEnabled(state.canBorrow)
+		button.pulse(state.canBorrow)
 	end
 
 	return {

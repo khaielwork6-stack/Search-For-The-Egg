@@ -360,10 +360,10 @@ function StudioDebug.install(container: any): any?
 		return table.clone(container.debugEntitlements[userId])
 	end
 
-	-- Professor Plume. `clueState` is what the party sees; `eggTruth` is the server's own band
-	-- arithmetic for the live Egg, so a delivered clue can be checked against it; `setCarried`
-	-- writes a bag directly (Rainbow Feathers are far too rare to farm in a test).
-	function hooks.clueState(userId: number)
+	-- Professor Plume. `plumeState` is what the party sees plus the caller's live rod; `eggTruth` is
+	-- the server's Egg position and the heat the rod would read from a given point, so a delivered
+	-- reading can be checked against it; `setCarried` writes a bag directly.
+	function hooks.plumeState(userId: number)
 		if not StudioDebug.isUserAllowed(userId) then
 			return nil
 		end
@@ -373,7 +373,9 @@ function StudioDebug.install(container: any): any?
 		end
 		local state = runtime.players[userId]
 		return {
-			clues = container.clues:project(runtime),
+			plume = container.clues:project(runtime),
+			rodRemaining = container.tools:timedRemaining(userId, "eggSense"),
+			equippedTool = state and state.equippedTool or nil,
 			carriedStandard = state and state.carriedStandard or 0,
 			carriedRainbow = state and state.carriedRainbow or 0,
 			phase = runtime.state.phase,
@@ -381,7 +383,7 @@ function StudioDebug.install(container: any): any?
 		}
 	end
 
-	function hooks.eggTruth(userId: number)
+	function hooks.eggTruth(userId: number, x: number?, y: number?, z: number?)
 		if not StudioDebug.isUserAllowed(userId) then
 			return nil
 		end
@@ -389,26 +391,24 @@ function StudioDebug.install(container: any): any?
 		if not runtime then
 			return { error = "no_round" }
 		end
-		local NestClues = require(game:GetService("ReplicatedStorage").Shared.Domain.NestClues)
-		local ChapterLayout = require(game:GetService("ReplicatedStorage").Shared.Domain.ChapterLayout)
-		local layout = ChapterLayout[runtime.state.chapter]
-		local facts = container.clues:eggFacts(runtime)
+		local EggSense = require(game:GetService("ReplicatedStorage").Shared.Domain.EggSense)
 		local position = container.egg:position(runtime)
+		local heat = nil
+		if type(x) == "number" and type(y) == "number" and type(z) == "number" then
+			heat = EggSense.heatFor(container.config, { x = x, y = y, z = z }, { x = position.X, y = position.Y, z = position.Z })
+		end
 		return {
 			x = position.X,
 			y = position.Y,
 			z = position.Z,
-			depthFraction = facts.depthFraction,
-			sideFraction = NestClues.sideFraction(layout, facts.radius, facts.worldX, facts.worldZ),
-			direction = NestClues.directionBand(container.config, NestClues.sideFraction(layout, facts.radius, facts.worldX, facts.worldZ)),
-			depth = NestClues.depthBand(container.config, facts.depthFraction),
+			heat = heat,
 			eggSlot = runtime.eggSlot,
 		}
 	end
 
-	-- A trade made by another member (a simulated one has no character or token), so the real
-	-- client can be checked as the party member who did not pay.
-	function hooks.clueAnalyzeAs(userId: number, category: string)
+	-- A loan taken by another member (a simulated one has no character or token), so the real
+	-- client can be checked as the party member who did not borrow.
+	function hooks.plumeLendAs(userId: number)
 		if not StudioDebug.isUserAllowed(userId) then
 			return nil
 		end
@@ -418,7 +418,7 @@ function StudioDebug.install(container: any): any?
 			return { error = "no_round" }
 		end
 		local layout = ChapterLayout[runtime.state.chapter]
-		local result = container.clues:analyze(userId, { category = category }, { trusted = true, characterPosition = layout.clueStation })
+		local result = container.clues:lend(userId, {}, { trusted = true, characterPosition = layout.clueStation })
 		local player = container.playerData:playerOf(userId)
 		if result.ok and player and typeof(player) == "Instance" and container.pushPreviews then
 			container.pushPreviews(player)

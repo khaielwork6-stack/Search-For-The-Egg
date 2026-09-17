@@ -26,9 +26,12 @@ function ProductMap.expectedKeys(cfg: { [string]: any }): { Entry }
 	for _, key in ipairs({ "doubleLuck", "fastRolls", "extraClassSlot" }) do
 		add(key, "gamePass", "pass:" .. key)
 	end
-	for toolId in pairs(cfg.tools) do
-		add(toolId .. "Permanent", "gamePass", "permanentTool:" .. toolId)
-		add(toolId .. "OneRound", "developerProduct", "oneRoundTool:" .. toolId)
+	-- Only tools with a Robux packaging; a lent tool (Professor Plume's rod) is never a product.
+	for toolId, tool in pairs(cfg.tools) do
+		if tool.lent ~= true then
+			add(toolId .. "Permanent", "gamePass", "permanentTool:" .. toolId)
+			add(toolId .. "OneRound", "developerProduct", "oneRoundTool:" .. toolId)
+		end
 	end
 	for _, bundle in ipairs(cfg.monetization.gemBundles) do
 		add("gemBundle" .. tostring(bundle.gems), "developerProduct", "gems:" .. tostring(bundle.gems))

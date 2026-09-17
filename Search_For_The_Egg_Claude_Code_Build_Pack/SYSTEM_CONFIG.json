@@ -535,23 +535,34 @@
     "repeatProtectionRounds": 3,
     "assumption": "ASSUMED"
   },
-  "clues": {
-    "costsRainbow": [
-      3,
-      5
+  "plume": {
+    "costsStandard": [
+      100,
+      200,
+      400
     ],
-    "maxPerRound": 2,
+    "maxPerRound": 3,
     "stationRangeStuds": 10,
-    "analyzeSeconds": 2.0,
-    "direction": {
-      "sideFraction": 0.22
+    "rod": {
+      "activeSeconds": 18,
+      "radiusStuds": 14,
+      "minTickHz": 1.2,
+      "maxTickHz": 9,
+      "warmColor": [
+        255,
+        150,
+        60
+      ],
+      "coldColor": [
+        120,
+        190,
+        255
+      ],
+      "hapticsMax": 0.6,
+      "aimRateHz": 8
     },
-    "depth": {
-      "outerMaxFraction": 0.52,
-      "coreMinFraction": 0.59
-    },
-    "evidence": "OWNER 16 Sep 2026 (Professor Plume brief): first clue 3 Rainbow Feathers, second 5, at most two clues per party per round, DIRECTION (barn side / center / fence side) and DEPTH (outer layer / packed middle / nest core). Band edges are ASSUMED: sideFraction 0.22 makes the centre stripe ~6.4 studs wide on a 14.6-stud mound; the depth edges split the configured 0.45-0.65 removal window into thirds so every band is reachable (a lucky shallow Egg reads OUTER LAYER).",
-    "assumption": "ASSUMED edges, OWNER costs and limits"
+    "evidence": "OWNER 17 Sep 2026 (Egg Sense brief): Professor Plume lends the Egg Sense rod instead of reading band clues. Three loans per party per round at 100, 200 then 400 normal feathers from the borrower's carried bag (never Rainbow); the rod is active for 18 s and ticks faster, glows warmer and pulses harder the closer the crosshair is to the hidden Egg. Heat = 1 - distance / radiusStuds, quantised to 0.05 so a reading can never be triangulated to the centimetre. Radius, tick rates, colours, haptics and the aim rate are ASSUMED.",
+    "assumption": "OWNER costs, limit and active time; ASSUMED radius, tick rates, colours, haptics and aim rate"
   },
   "survey": {
     "SurveyCrateCost": 100,
@@ -789,6 +800,11 @@
       "depositSeconds": 1.0,
       "permanentIncludesMaxUpgrades": true,
       "evidence": "VERIFIED packaging/speed preview; ASSUMED target name and other base values"
+    },
+    "eggSense": {
+      "displayName": "Egg Sense Rod",
+      "lent": true,
+      "evidence": "OWNER 17 Sep 2026 (Egg Sense brief): never bought, never upgraded; Professor Plume lends it for plume.rod.activeSeconds per loan and the server takes it back when the time is up."
     }
   },
   "toolUpgrades": {
@@ -1767,6 +1783,12 @@
       "recoilStuds": 0.12,
       "jitterStuds": 0.02
     },
+    "eggSense": {
+      "viewmodelScale": 1.0,
+      "trembleStuds": 0.03,
+      "dipStuds": 0.06,
+      "lightRangeStuds": 9
+    },
     "scoutChick": {
       "modelScale": 0.34,
       "hopHeightStuds": 0.32,
@@ -2177,6 +2199,20 @@
         "speed": 1.9,
         "variance": 0.15,
         "minGap": 0.25
+      },
+      "tool.rodTick": {
+        "id": "rbxasset://sounds/clickfast.wav",
+        "volume": 0.45,
+        "speed": 1.0,
+        "variance": 0.08,
+        "minGap": 0.0
+      },
+      "tool.rodLock": {
+        "id": "rbxasset://sounds/electronicpingshort.wav",
+        "volume": 0.4,
+        "speed": 1.4,
+        "variance": 0.04,
+        "minGap": 0.5
       },
       "intro.ambience": {
         "id": "",
