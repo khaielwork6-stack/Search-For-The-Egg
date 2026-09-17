@@ -253,7 +253,14 @@ function HUDController.new(deps: any): HUDController
 	local prompt = Instance.new("Frame")
 	prompt.Name = "Prompt"
 	prompt.AnchorPoint = Vector2.new(1, 1)
-	prompt.Position = UDim2.new(1, -Tokens.layout.safeAreaPaddingPx, 1, -Tokens.layout.safeAreaPaddingPx)
+	-- Above the round strip (timer, bag, Plume, cash), which is centred along the same bottom edge: level
+	-- with it, the hint covered the cash pill once the Plume pill widened the strip.
+	prompt.Position = UDim2.new(
+		1,
+		-Tokens.layout.safeAreaPaddingPx,
+		1,
+		-(Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx + Tokens.spacing.sm)
+	)
 	prompt.Size = UDim2.fromOffset(0, Tokens.layout.minimumTapTargetPx - Tokens.spacing.sm)
 	prompt.AutomaticSize = Enum.AutomaticSize.X
 	prompt.BackgroundColor3 = Tokens.color.surface

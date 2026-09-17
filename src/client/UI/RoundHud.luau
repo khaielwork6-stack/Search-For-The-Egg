@@ -82,6 +82,23 @@ local function chip(
 	return frame, text
 end
 
+-- A rounded clip for a growing fill: a CanvasGroup takes the face's corner, and the fill inside it is a
+-- plain rectangle. A pill-cornered fill frame on its own turned into a disc at low values.
+local function fillClip(face: Frame): CanvasGroup
+	local clip = Instance.new("CanvasGroup")
+	clip.Name = "FillClip"
+	clip.Size = UDim2.fromScale(1, 1)
+	clip.BackgroundTransparency = 1
+	clip.BorderSizePixel = 0
+	clip.ZIndex = face.ZIndex + 1
+	local faceCorner = face:FindFirstChildOfClass("UICorner")
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = if faceCorner then faceCorner.CornerRadius else UDim.new(0, Tokens.radius.pill)
+	corner.Parent = clip
+	clip.Parent = face
+	return clip
+end
+
 function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): RoundHud
 	local root = Instance.new("Frame")
 	root.Name = "RoundHud"
@@ -117,11 +134,8 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 	bagFill.BackgroundColor3 = Tokens.color.leafDeep
 	bagFill.BorderSizePixel = 0
 	bagFill.ZIndex = face.ZIndex + 1
-	local fillCorner = Instance.new("UICorner")
-	fillCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
-	fillCorner.Parent = bagFill
 	Depth.applySheen(bagFill, Tokens.color.leafDeep)
-	bagFill.Parent = face
+	bagFill.Parent = fillClip(face)
 	bagText.Text = "Bag 0 / 25"
 	bagText.TextColor3 = Tokens.color.featherWhite
 	local bagScale = bagFrame:FindFirstChildOfClass("UIScale") :: UIScale
@@ -145,14 +159,12 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 	plumeFill.BackgroundTransparency = 0.12
 	plumeFill.BorderSizePixel = 0
 	plumeFill.ZIndex = plumeFace.ZIndex + 1
-	local plumeFillCorner = Instance.new("UICorner")
-	plumeFillCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
-	plumeFillCorner.Parent = plumeFill
 	local plumeGradient = Instance.new("UIGradient")
 	plumeGradient.Name = "Rainbow"
 	plumeGradient.Color = AnnouncementBanner.rainbow()
 	plumeGradient.Parent = plumeFill
-	plumeFill.Parent = plumeFace
+	local plumeClip = fillClip(plumeFace)
+	plumeFill.Parent = plumeClip
 	-- A dark wash over the fill so the white lettering keeps its contrast on the yellow band.
 	local plumeShade = Instance.new("Frame")
 	plumeShade.Name = "Shade"
@@ -161,7 +173,7 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 	plumeShade.BackgroundTransparency = 0.72
 	plumeShade.BorderSizePixel = 0
 	plumeShade.ZIndex = plumeFace.ZIndex + 2
-	plumeShade.Parent = plumeFace
+	plumeShade.Parent = plumeClip -- inside the rounded clip, so its corners never square off the pill
 	plumeText.TextScaled = true
 	local plumeTextSize = Instance.new("UITextSizeConstraint")
 	plumeTextSize.MaxTextSize = Tokens.typography.label.size - 2
