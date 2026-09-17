@@ -37,10 +37,10 @@ export type Deps = {
 local DIFFICULTIES = { "normal", "hard" }
 local DIFFICULTY_LABEL = { normal = "NORMAL", hard = "HARD" }
 local CHAPTERS = { "chapter1", "chapter2" }
--- Card art and tint per chapter (the Cellar is dark, the Henhouse is daylight).
-local CHAPTER_LOOK: { [string]: { art: string, fill: Color3, deep: Color3, short: string } } = {
-	chapter1 = { art = "station.party.normal", fill = Tokens.color.leaf, deep = Tokens.color.leafDeep, short = "HENHOUSE" },
-	chapter2 = { art = "station.event.normal", fill = Color3.fromRGB(70, 60, 96), deep = Color3.fromRGB(40, 32, 58), short = "CELLAR" },
+-- Card art per chapter; every destination tile is the same dark slate with the painted art on it.
+local CHAPTER_LOOK: { [string]: { art: string, short: string } } = {
+	chapter1 = { art = "station.party.normal", short = "HENHOUSE" },
+	chapter2 = { art = "station.event.normal", short = "CELLAR" },
 }
 
 local function unlockedFor(profile: any, chapter: string, difficulty: string): boolean
@@ -129,8 +129,8 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	layout.Parent = container
 
 	local _, leftFace = FrameKit.tile(layout, "Main", {
-		fill = Tokens.color.featherWhite,
-		deep = Tokens.color.strawDeep,
+		fill = Tokens.color.surfaceAlt,
+		deep = Tokens.color.panelDeep,
 		zIndex = z + 1,
 		radius = Tokens.radius.xl,
 		size = UDim2.new(0.58, -Tokens.spacing.sm, 1, 0),
@@ -155,23 +155,16 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local preview = Instance.new("Frame")
 	preview.Name = "Preview"
 	preview.Size = UDim2.new(1, 0, 0, previewHeight)
-	preview.BackgroundColor3 = Tokens.color.sky
+	-- The preview is a darker well at the top of the card with the painted art in it.
+	preview.BackgroundColor3 = Tokens.color.panelDeep
 	preview.BorderSizePixel = 0
 	preview.ZIndex = z + 2
 	preview.ClipsDescendants = true
 	local previewCorner = Instance.new("UICorner")
 	previewCorner.CornerRadius = UDim.new(0, Tokens.radius.xl)
 	previewCorner.Parent = preview
-	local previewGradient = Instance.new("UIGradient")
-	previewGradient.Rotation = 90
-	previewGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Tokens.color.sky),
-		ColorSequenceKeypoint.new(0.62, Color3.fromRGB(184, 222, 236)),
-		ColorSequenceKeypoint.new(1, Tokens.color.leaf),
-	})
-	previewGradient.Parent = preview
+	Depth.applySheen(preview, Tokens.color.panelDeep)
 	preview.Parent = leftFace
-	Skin.texture(preview, "texture.rays", { zIndex = z + 2, transparency = 0.8, color = Tokens.color.featherWhite })
 	local previewArt = if compact then nil else Skin.icon(preview, CHAPTER_LOOK.chapter1.art, tap * 2 + Tokens.spacing.lg, z + 3)
 	if previewArt then
 		previewArt.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -275,7 +268,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		})
 		handle.button.LayoutOrder = index
 		handle.button.Name = "Difficulty_" .. difficulty
-		local lock = Icons.lock(handle.button, Tokens.icon.sm + 2, { zIndex = z + 6, color = Tokens.color.gold })
+		local lock = Icons.lock(handle.button, Tokens.icon.sm + 2, { zIndex = z + 6, color = Tokens.color.featherWhite })
 		lock.AnchorPoint = Vector2.new(0, 0.5)
 		lock.Position = UDim2.new(0, Tokens.spacing.sm, 0.5, -2)
 		lock.Visible = false
@@ -300,19 +293,20 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	sizeRow.Parent = createPanel
 	local sizeCaption = FrameKit.text(sizeRow, "SizeCaption", "PARTY SIZE:", "title", {
 		zIndex = z + 3,
-		color = Tokens.color.inkStrong,
+		color = Tokens.color.featherWhite,
 		align = Enum.TextXAlignment.Right,
 	})
 	sizeCaption.Size = UDim2.fromScale(0, 1)
 	sizeCaption.AutomaticSize = Enum.AutomaticSize.X
 	sizeCaption.TextYAlignment = Enum.TextYAlignment.Center
 	sizeCaption.LayoutOrder = 1
+	FrameKit.outline(sizeCaption, 2.5)
 	local sizeCaptionPad = Instance.new("UIPadding")
 	sizeCaptionPad.PaddingRight = UDim.new(0, Tokens.spacing.sm)
 	sizeCaptionPad.Parent = sizeCaption
 	local sizeValue, sizeValueFace = FrameKit.tile(sizeRow, "Value", {
-		fill = Tokens.color.creamPill,
-		deep = Tokens.color.strawDeep,
+		fill = Tokens.color.surface,
+		deep = Tokens.color.panelDeep,
 		zIndex = z + 3,
 		radius = Tokens.radius.md,
 		lip = 4,
@@ -321,11 +315,12 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	sizeValue.LayoutOrder = 3
 	local sizeText = FrameKit.text(sizeValueFace, "Text", "1", "display", {
 		zIndex = z + 4,
-		color = Tokens.color.inkStrong,
+		color = Tokens.color.featherWhite,
 		align = Enum.TextXAlignment.Center,
 	})
 	sizeText.Size = UDim2.fromScale(1, 1)
 	sizeText.TextYAlignment = Enum.TextYAlignment.Center
+	FrameKit.outline(sizeText, 3)
 	local function stepper(name: string, glyph: string, direction: number)
 		local handle = Button.build(sizeRow, {
 			text = glyph,
@@ -363,6 +358,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	hint.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size * 2 + 4)
 	hint.LayoutOrder = 3
 	hint.Visible = not compact
+	FrameKit.outline(hint, 2)
 
 	local createHandle = Button.build(createPanel, {
 		text = "CREATE",
@@ -410,10 +406,11 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	partyPanel.Parent = leftFace
 	local status = FrameKit.text(partyPanel, "Status", "", "title", {
 		zIndex = z + 3,
-		color = Tokens.color.goldDeep,
+		color = Tokens.color.featherWhite,
 		align = Enum.TextXAlignment.Center,
 	})
 	status.Size = UDim2.new(1, 0, 0, Tokens.typography.title.size + 4)
+	FrameKit.outline(status, 2.5)
 	local members = Instance.new("Frame")
 	members.Name = "Members"
 	members.BackgroundTransparency = 1
@@ -440,7 +437,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	actionsLayout.Parent = actions
 	actions.Parent = partyPanel
 	local startHandle = Button.build(actions, {
-		text = "START",
+		text = "SET OFF",
 		variant = "success",
 		sound = function()
 			deps.audio:play(Tokens.sound.uiTap)
@@ -519,14 +516,13 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		local look = CHAPTER_LOOK[chapterKey]
 		local chapter = cfg.chapters[chapterKey]
 		local tile, face = FrameKit.tile(right, "Card_" .. chapterKey, {
-			fill = look.fill,
-			deep = look.deep,
+			fill = Tokens.color.surface,
+			deep = Tokens.color.panelDeep,
 			zIndex = z + 2,
 			radius = Tokens.radius.lg,
 			size = UDim2.new(1, 0, 0, cardHeight),
 		})
 		tile.LayoutOrder = index
-		Skin.texture(face, "texture.rays", { zIndex = z + 3, transparency = 0.82, color = Tokens.color.featherWhite })
 		local art = Skin.icon(face, look.art, if compact then tap + Tokens.spacing.md else tap * 2, z + 4)
 		if art then
 			art.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -547,7 +543,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		lockBadge.Position = UDim2.fromScale(0.5, 0.4)
 		local badgePx = if compact then tap - Tokens.spacing.sm else tap + Tokens.spacing.xs
 		lockBadge.Size = UDim2.fromOffset(badgePx, badgePx)
-		lockBadge.BackgroundColor3 = Tokens.color.gold
+		lockBadge.BackgroundColor3 = Tokens.color.panelDeep
 		lockBadge.ZIndex = z + 6
 		local lockCorner = Instance.new("UICorner")
 		lockCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
@@ -556,7 +552,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		lockStroke.Thickness = Tokens.stroke.bold
 		lockStroke.Color = Tokens.color.outline
 		lockStroke.Parent = lockBadge
-		local lockGlyph = Icons.lock(lockBadge, Tokens.icon.lg, { zIndex = z + 7, color = Tokens.color.inkStrong })
+		local lockGlyph = Icons.lock(lockBadge, Tokens.icon.lg, { zIndex = z + 7, color = Tokens.color.featherWhite })
 		lockGlyph.AnchorPoint = Vector2.new(0.5, 0.5)
 		lockGlyph.Position = UDim2.fromScale(0.5, 0.5)
 		lockBadge.Parent = face
@@ -642,6 +638,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local emptyList =
 		FrameKit.text(container, "EmptyList", "No open parties right now", "caption", { zIndex = z, color = Tokens.color.inkMuted })
 	emptyList.LayoutOrder = 4
+	FrameKit.outline(emptyList, 2)
 
 	local rowHandles: { any } = {}
 	local function renderList()
@@ -678,12 +675,14 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 					entry.maxMembers
 				),
 				"body",
-				{ zIndex = z + 1 }
+				{ zIndex = z + 1, color = Tokens.color.featherWhite }
 			)
 			text.Size = UDim2.new(1, -(tap * 2 + Tokens.spacing.md), 1, 0)
+			text.TextTruncate = Enum.TextTruncate.AtEnd
+			FrameKit.outline(text, 2)
 			local joinHandle = Button.build(row, {
-				text = "Join",
-				variant = "teal",
+				text = "JOIN",
+				variant = "success",
 				minimumTapTarget = tap,
 				motion = motion,
 				size = UDim2.fromOffset(tap * 2, tap),
@@ -722,7 +721,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			local unlocked = projection ~= nil and unlockedFor(deps.profile, chapterKey, key)
 			local available = chapter and chapter.availableDifficulties and chapter.availableDifficulties[key] == true
 			local active = unlocked and available
-			chip.handle.setVariant(if key == difficulty and active then "teal" else "secondary")
+			chip.handle.setVariant(if key == difficulty and active then "success" else "secondary")
 			chip.handle.setSelected(key == difficulty and active)
 			chip.handle.setText(if active then DIFFICULTY_LABEL[key] else "    " .. requirementText(cfg, chapterKey, key))
 			chip.lock.Visible = not active
@@ -736,7 +735,7 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			local open = available and unlocked
 			local outline = Depth.keylineOf(card.tile) :: UIStroke?
 			if outline then
-				outline.Color = if key == chapterKey then Tokens.color.featherWhite else Tokens.color.outline
+				outline.Color = if key == chapterKey then Tokens.color.gold else Tokens.color.outline
 				outline.Thickness = if key == chapterKey then Tokens.stroke.frame + 1 else Tokens.stroke.frame
 			end
 			card.lockBadge.Visible = not open
@@ -766,16 +765,18 @@ function PartyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 					.. (if table.find(party.lockedUserIds or {}, memberId) then "  -  needs the unlock" else "")
 				local label = FrameKit.text(row, "Name", name .. suffix, "body", {
 					zIndex = z + 4,
-					color = if memberId == Players.LocalPlayer.UserId then Tokens.color.goldDeep else Tokens.color.inkStrong,
+					color = if memberId == Players.LocalPlayer.UserId then Tokens.color.gold else Tokens.color.featherWhite,
 				})
 				label.Size = UDim2.fromScale(1, 1)
+				label.TextTruncate = Enum.TextTruncate.AtEnd
+				FrameKit.outline(label, 2)
 			end
 			for index = #party.members + 1, party.maxMembers do
-				local row = FrameKit.row(members, "Empty" .. index, tap - Tokens.spacing.xs, z + 3)
+				local row = FrameKit.row(members, "Empty" .. index, tap - Tokens.spacing.xs, z + 3, { muted = true })
 				row.LayoutOrder = index
-				row.BackgroundTransparency = 0.7
-				FrameKit.text(row, "Name", "Open seat", "caption", { zIndex = z + 4, color = Tokens.color.inkMuted }).Size =
-					UDim2.fromScale(1, 1)
+				local seat = FrameKit.text(row, "Name", "Open seat", "caption", { zIndex = z + 4, color = Tokens.color.inkMuted })
+				seat.Size = UDim2.fromScale(1, 1)
+				FrameKit.outline(seat, 2)
 			end
 			local phase = party.phase
 			local size = party.maxMembers or maxSize

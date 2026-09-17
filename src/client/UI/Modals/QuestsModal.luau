@@ -39,6 +39,7 @@ type Card = {
 	detail: TextLabel,
 	count: TextLabel,
 	fill: Frame,
+	meter: FrameKit.MeterHandle,
 	reward: TextLabel,
 	claim: Button.Handle,
 	questId: string?,
@@ -57,9 +58,10 @@ function QuestsModal.build(container: ScrollingFrame, api: any, deps: Deps): () 
 	local slots = deps.config.dailyQuests.slots
 	local receivedAt = os.clock()
 
+	-- The reset line sits in a dark band across the top of the list.
 	local header, headerFace = FrameKit.tile(container, "Header", {
-		fill = Tokens.color.tealPanel,
-		deep = Tokens.color.tealDeep,
+		fill = Tokens.color.surfaceAlt,
+		deep = Tokens.color.panelDeep,
 		zIndex = z,
 		radius = Tokens.radius.lg,
 		size = UDim2.new(1, 0, 0, tap),
@@ -71,6 +73,7 @@ function QuestsModal.build(container: ScrollingFrame, api: any, deps: Deps): () 
 	headerPad.Parent = headerFace
 	local resetLine = FrameKit.text(headerFace, "Reset", "", "heading", { zIndex = z + 2, color = Tokens.color.featherWhite })
 	resetLine.Size = UDim2.fromScale(1, 1)
+	FrameKit.outline(resetLine, 2.5)
 
 	local list = Instance.new("Frame")
 	list.Name = "Quests"
@@ -89,7 +92,7 @@ function QuestsModal.build(container: ScrollingFrame, api: any, deps: Deps): () 
 	for slot = 1, slots do
 		local root, face = FrameKit.tile(list, "Quest" .. slot, {
 			fill = Tokens.color.surface,
-			deep = Tokens.color.creamDeep,
+			deep = Tokens.color.panelDeep,
 			zIndex = z + 1,
 			radius = Tokens.radius.md,
 			size = UDim2.new(1, 0, 0, math.floor(tap * 2.1)),
@@ -104,57 +107,44 @@ function QuestsModal.build(container: ScrollingFrame, api: any, deps: Deps): () 
 		pad.PaddingTop = UDim.new(0, Tokens.spacing.sm)
 		pad.Parent = face
 
-		local badge = Icons.star(face, Tokens.icon.lg, { zIndex = z + 3, color = Tokens.color.goldDeep })
+		local badge = Icons.star(face, Tokens.icon.lg, { zIndex = z + 3, color = Tokens.color.gold })
 		badge.AnchorPoint = Vector2.new(0, 0)
 		badge.Position = UDim2.fromOffset(0, 2)
 
-		local title = FrameKit.text(face, "Title", "", "heading", { zIndex = z + 3, color = Tokens.color.inkStrong })
+		local title = FrameKit.text(face, "Title", "", "heading", { zIndex = z + 3, color = Tokens.color.featherWhite })
 		title.Position = UDim2.fromOffset(Tokens.icon.lg + Tokens.spacing.sm, 0)
 		title.Size = UDim2.new(1, -(Tokens.icon.lg + Tokens.spacing.sm + tap * 2.6), 0, Tokens.typography.heading.size + 2)
+		FrameKit.outline(title, 2.5)
 		local detail = FrameKit.text(face, "Detail", "", "caption", { zIndex = z + 3, color = Tokens.color.inkMuted })
 		detail.Position = UDim2.fromOffset(Tokens.icon.lg + Tokens.spacing.sm, Tokens.typography.heading.size + 4)
 		detail.Size = UDim2.new(1, -(Tokens.icon.lg + Tokens.spacing.sm + tap * 2.6), 0, Tokens.typography.caption.size + 2)
+		FrameKit.outline(detail, 2)
 
-		-- Progress rail: a track, a fill and the exact numbers, so the bar is never the only reading.
-		local track = Instance.new("Frame")
-		track.Name = "Track"
+		-- Progress rail: the kit's dark meter with a green fill, and the exact numbers over it so
+		-- the bar is never the only reading.
+		local track, fill, meter = FrameKit.meter(face, "Track", 0, { height = 14, fill = Tokens.color.success, zIndex = z + 3 })
 		track.AnchorPoint = Vector2.new(0, 1)
 		track.Position = UDim2.new(0, 0, 1, -Tokens.spacing.sm)
-		track.Size = UDim2.new(1, -(tap * 2.6), 0, 12)
-		track.BackgroundColor3 = Tokens.color.creamDeep
-		track.BorderSizePixel = 0
-		track.ZIndex = z + 3
-		track.Parent = face
-		local trackCorner = Instance.new("UICorner")
-		trackCorner.CornerRadius = UDim.new(1, 0)
-		trackCorner.Parent = track
-		local fill = Instance.new("Frame")
-		fill.Name = "Fill"
-		fill.Size = UDim2.fromScale(0, 1)
-		fill.BackgroundColor3 = Tokens.color.leafBright
-		fill.BorderSizePixel = 0
-		fill.ZIndex = z + 4
-		fill.Parent = track
-		local fillCorner = Instance.new("UICorner")
-		fillCorner.CornerRadius = UDim.new(1, 0)
-		fillCorner.Parent = fill
+		track.Size = UDim2.new(1, -(tap * 2.6), 0, 14)
 		local count = FrameKit.text(face, "Count", "", "caption", {
 			zIndex = z + 5,
-			color = Tokens.color.inkStrong,
+			color = Tokens.color.featherWhite,
 			align = Enum.TextXAlignment.Center,
 		})
 		count.AnchorPoint = Vector2.new(0, 1)
 		count.Position = UDim2.new(0, 0, 1, -Tokens.spacing.sm + 1)
-		count.Size = UDim2.new(1, -(tap * 2.6), 0, 12)
+		count.Size = UDim2.new(1, -(tap * 2.6), 0, 14)
+		FrameKit.outline(count, 2)
 
 		local reward = FrameKit.text(face, "Reward", "", "label", {
 			zIndex = z + 3,
-			color = Tokens.color.goldDeep,
+			color = Tokens.color.gold,
 			align = Enum.TextXAlignment.Right,
 		})
 		reward.AnchorPoint = Vector2.new(1, 0)
 		reward.Position = UDim2.fromScale(1, 0)
 		reward.Size = UDim2.fromOffset(tap * 2.4, Tokens.typography.label.size + 2)
+		FrameKit.outline(reward, 2.5)
 
 		local claim = Button.build(face, {
 			text = "CLAIM",
@@ -183,6 +173,7 @@ function QuestsModal.build(container: ScrollingFrame, api: any, deps: Deps): () 
 			detail = detail,
 			count = count,
 			fill = fill,
+			meter = meter,
 			reward = reward,
 			claim = claim,
 			questId = nil,
@@ -235,6 +226,12 @@ function QuestsModal.build(container: ScrollingFrame, api: any, deps: Deps): () 
 		return (rewards and rewards.quests) or {}, (rewards and rewards.questResetInSeconds) or 0
 	end
 
+	-- A card's face is re-lit, not just recoloured, so the sheen follows the state.
+	local function paint(card: Card, face: Color3)
+		card.face.BackgroundColor3 = face
+		Depth.applySheen(card.face, face)
+	end
+
 	local function render()
 		local quests, resetIn = questsOf()
 		receivedAt = os.clock()
@@ -248,26 +245,29 @@ function QuestsModal.build(container: ScrollingFrame, api: any, deps: Deps): () 
 				card.detail.Text = quest.detail
 				card.count.Text = string.format("%d / %d", quest.progress, quest.target)
 				card.reward.Text = string.format("+%d Gems", quest.gems)
-				local fraction = math.clamp(quest.fraction or 0, 0, 1)
-				card.fill.Size = UDim2.fromScale(fraction, 1)
+				card.meter.set(math.clamp(quest.fraction or 0, 0, 1))
 				if quest.claimed then
 					card.stroke.Color = Tokens.color.leafDeep
-					card.face.BackgroundColor3 = Tokens.color.tealTint
-					card.fill.BackgroundColor3 = Tokens.color.leafDeep
+					card.stroke.Thickness = Tokens.stroke.frame
+					paint(card, Tokens.color.surfaceAlt)
+					card.meter.setColor(Tokens.color.leafDeep)
+					card.claim.setVariant("success")
 					card.claim.setText("CLAIMED")
 					card.claim.setEnabled(false)
 				elseif quest.complete then
 					card.stroke.Color = Tokens.color.gold
 					card.stroke.Thickness = Tokens.stroke.frame
-					card.face.BackgroundColor3 = Tokens.color.creamPill
-					card.fill.BackgroundColor3 = Tokens.color.success
+					paint(card, Tokens.color.surface)
+					card.meter.setColor(Tokens.color.success)
+					card.claim.setVariant("success")
 					card.claim.setText("CLAIM")
 					card.claim.setEnabled(true)
 				else
-					card.stroke.Color = Tokens.color.strawDeep
-					card.stroke.Thickness = Tokens.stroke.standard
-					card.face.BackgroundColor3 = Tokens.color.surface
-					card.fill.BackgroundColor3 = Tokens.color.leafBright
+					card.stroke.Color = Tokens.color.outline
+					card.stroke.Thickness = Tokens.stroke.frame
+					paint(card, Tokens.color.surface)
+					card.meter.setColor(Tokens.color.success)
+					card.claim.setVariant("secondary")
 					card.claim.setText("IN PROGRESS")
 					card.claim.setEnabled(false)
 				end

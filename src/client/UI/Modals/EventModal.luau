@@ -24,6 +24,15 @@ local function prettify(id: string): string
 	return string.upper(string.sub(spaced, 1, 1)) .. string.sub(spaced, 2)
 end
 
+-- Every list row carries the reference's thick near-black keyline.
+local function thicken(row: Frame)
+	local stroke = row:FindFirstChildOfClass("UIStroke")
+	if stroke then
+		stroke.Thickness = Tokens.depth.keyline
+		stroke.Transparency = 0
+	end
+end
+
 function EventModal.build(container: ScrollingFrame, api: any, deps: Deps): () -> ()
 	local cleanups: { any } = {}
 	local cfg = deps.config
@@ -32,35 +41,48 @@ function EventModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local z = container.ZIndex + 1
 	local chest = cfg.monetization.eventChest
 
-	local balance = FrameKit.text(container, "Balance", "", "heading", { zIndex = z, color = Tokens.color.inkStrong })
-	balance.LayoutOrder = 1
+	-- The balance sits in a dark band at the top; the odds are slate rows beneath it.
+	local balanceRow = FrameKit.row(container, "BalanceRow", tap, z, { muted = true })
+	balanceRow.LayoutOrder = 1
+	thicken(balanceRow)
+	local balance = FrameKit.text(balanceRow, "Balance", "", "heading", { zIndex = z + 1, color = Tokens.color.sky })
+	balance.Size = UDim2.fromScale(1, 1)
+	balance.TextYAlignment = Enum.TextYAlignment.Center
+	FrameKit.outline(balance, 2.5)
 	local intro = FrameKit.text(
 		container,
 		"Intro",
 		string.format("A sealed chest from the moonlit cellar. Each opening costs %d Event Tokens and holds one of these:", chest.tokenCost),
 		"body",
-		{ zIndex = z }
+		{ zIndex = z, color = Tokens.color.featherWhite }
 	)
 	intro.LayoutOrder = 2
 	intro.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size * 3 + 6)
+	FrameKit.outline(intro, 2)
 	for index, reward in ipairs(chest.rewards) do
-		local row = FrameKit.row(container, "Reward_" .. reward.id, tap, z)
+		local row = FrameKit.row(container, "Reward_" .. reward.id, tap + Tokens.spacing.sm, z)
 		row.LayoutOrder = 10 + index
+		thicken(row)
 		local text = if reward.min
 			then string.format("%s  -  %d to %d Gems", prettify(reward.id), reward.min, reward.max)
 			else string.format("%s  -  tool skin", prettify(reward.id))
-		FrameKit.text(row, "Text", text, "body", { zIndex = z + 1, color = Tokens.color.inkStrong }).Size = UDim2.fromScale(0.75, 1)
+		local label = FrameKit.text(row, "Text", text, "label", { zIndex = z + 1, color = Tokens.color.featherWhite })
+		label.Size = UDim2.fromScale(0.75, 1)
+		label.TextYAlignment = Enum.TextYAlignment.Center
+		label.TextTruncate = Enum.TextTruncate.AtEnd
+		FrameKit.outline(label, 2.5)
 		local odds = FrameKit.text(
 			row,
 			"Odds",
 			string.format("%.1f%%", reward.weight),
-			"numeral",
-			{ align = Enum.TextXAlignment.Right, zIndex = z + 1, color = Tokens.color.goldDeep }
+			"label",
+			{ align = Enum.TextXAlignment.Right, zIndex = z + 1, color = Tokens.color.gold }
 		)
 		odds.AnchorPoint = Vector2.new(1, 0)
 		odds.Position = UDim2.fromScale(1, 0)
 		odds.Size = UDim2.fromScale(0.25, 1)
-		odds.TextSize = Tokens.typography.body.size
+		odds.TextYAlignment = Enum.TextYAlignment.Center
+		FrameKit.outline(odds, 2.5)
 	end
 	local note = FrameKit.text(
 		container,
@@ -71,9 +93,10 @@ function EventModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	)
 	note.LayoutOrder = 30
 	note.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size * 2 + 6)
+	FrameKit.outline(note, 2)
 	local sealed = Button.build(container, {
-		text = "Sealed for now",
-		variant = "ghost",
+		text = "SEALED FOR NOW",
+		variant = "secondary",
 		minimumTapTarget = tap,
 		motion = motion,
 		size = UDim2.new(1, 0, 0, tap),

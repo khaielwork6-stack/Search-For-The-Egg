@@ -1,5 +1,6 @@
 --!strict
--- Stats: a player header (avatar, name, total playtime) over big picture stat cards, then the
+-- Stats: a player header (avatar, name, total playtime) over the ledger - one dark slate row per
+-- stat, caption on the left and the value on the right in white stroked lettering - then the
 -- leaderboards behind a tab strip. Numbers come from the profile projection and the bounded
 -- LeaderboardProjection; nothing here is computed locally beyond formatting.
 
@@ -9,7 +10,6 @@ local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Tabs = require(script.Parent.Parent.Components.Tabs)
-local Skin = require(script.Parent.Parent.Components.Skin)
 local Icons = require(script.Parent.Parent.Components.Icons)
 
 local TAB_LABELS: { [string]: string } = {
@@ -53,44 +53,29 @@ local function formatTime(ms: number?): string?
 	return string.format("%02d:%02d.%02d", math.floor(totalSeconds / 60), totalSeconds % 60, math.floor((ms % 1000) / 10))
 end
 
--- The picture cards: caption, art, tint, and how to read the value from the projection.
-type CardSpec = { key: string, caption: string, art: string, icon: string, fill: Color3, deep: Color3 }
-local CARDS: { CardSpec } = {
-	{
-		key = "class",
-		caption = "CLASS",
-		art = "station.classes.normal",
-		icon = "star",
-		fill = Tokens.color.gold,
-		deep = Tokens.color.goldDeep,
-	},
-	{
-		key = "record",
-		caption = "TIME RECORD",
-		art = "none",
-		icon = "clock",
-		fill = Tokens.color.ember,
-		deep = Tokens.color.emberDeep,
-	},
-	{ key = "wins", caption = "EGGS WON", art = "icon.egg", icon = "egg", fill = Tokens.color.leaf, deep = Tokens.color.leafDeep },
-	{
-		key = "feathers",
-		caption = "FEATHERS",
-		art = "icon.feather",
-		icon = "feather",
-		fill = Tokens.color.sky,
-		deep = Tokens.color.skyDeep,
-	},
-	{ key = "eggs", caption = "EGGS FOUND", art = "hud.token", icon = "egg", fill = Tokens.color.gem, deep = Tokens.color.gemDeep },
-	{
-		key = "searches",
-		caption = "SEARCHES",
-		art = "station.party.normal",
-		icon = "star",
-		fill = Tokens.color.tealAccent,
-		deep = Tokens.color.tealDeep,
-	},
+-- The ledger rows: caption, glyph, and the key renderPersonal fills from the projection.
+type RowSpec = { key: string, caption: string, icon: string }
+local ROWS: { RowSpec } = {
+	{ key = "class", caption = "CLASS", icon = "star" },
+	{ key = "record", caption = "TIME RECORD", icon = "clock" },
+	{ key = "wins", caption = "EGGS WON", icon = "egg" },
+	{ key = "feathers", caption = "FEATHERS", icon = "feather" },
+	{ key = "eggs", caption = "EGGS FOUND", icon = "egg" },
+	{ key = "searches", caption = "SEARCHES", icon = "star" },
 }
+
+-- Medal tones for the top three ranks; every rank below is plain slate.
+local MEDALS = { Tokens.color.gold, Tokens.color.sky, Tokens.color.gem }
+
+-- The reference draws a thick near-black keyline around every list item; the kit row ships with the
+-- standard one.
+local function thicken(row: Frame)
+	local stroke = row:FindFirstChildOfClass("UIStroke")
+	if stroke then
+		stroke.Thickness = Tokens.depth.keyline
+		stroke.Transparency = 0
+	end
+end
 
 function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -> ()
 	local cleanups: { any } = {}
@@ -100,11 +85,11 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local z = container.ZIndex + 1
 	local player = Players.LocalPlayer
 
-	-- Header: avatar disc, name, total playtime.
+	-- Header: avatar disc, name, total playtime on a slate tile.
 	local headerHeight = tap * 2 + Tokens.spacing.md
 	local header, headerFace = FrameKit.tile(container, "Header", {
-		fill = Tokens.color.tealPanel,
-		deep = Tokens.color.tealDeep,
+		fill = Tokens.color.surface,
+		deep = Tokens.color.panelDeep,
 		zIndex = z,
 		radius = Tokens.radius.xl,
 		size = UDim2.new(1, 0, 0, headerHeight),
@@ -115,7 +100,7 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	avatar.AnchorPoint = Vector2.new(0, 0.5)
 	avatar.Position = UDim2.new(0, Tokens.spacing.md, 0.5, -2)
 	avatar.Size = UDim2.fromOffset(headerHeight - Tokens.spacing.lg, headerHeight - Tokens.spacing.lg)
-	avatar.BackgroundColor3 = Tokens.color.creamPill
+	avatar.BackgroundColor3 = Tokens.color.surfaceAlt
 	avatar.ZIndex = z + 2
 	local avatarCorner = Instance.new("UICorner")
 	avatarCorner.CornerRadius = UDim.new(1, 0)
@@ -144,7 +129,7 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	nameLabel.Size = UDim2.new(0.55, -nameLeft, 0, Tokens.typography.display.size + 4)
 	nameLabel.TextSize = Tokens.typography.display.size - 4
 	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	FrameKit.outline(nameLabel, 2.6)
+	FrameKit.outline(nameLabel, 3)
 	local playCaption = FrameKit.text(headerFace, "PlayCaption", "TOTAL PLAYTIME", "label", {
 		zIndex = z + 2,
 		color = Tokens.color.featherWhite,
@@ -154,72 +139,62 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	playCaption.Position = UDim2.new(1, -Tokens.spacing.md, 0, Tokens.spacing.md)
 	playCaption.Size = UDim2.new(0.45, 0, 0, Tokens.typography.label.size + 4)
 	playCaption.TextSize = Tokens.typography.label.size - 2
-	FrameKit.outline(playCaption, 2)
+	FrameKit.outline(playCaption, 2.5)
 	local playValue = FrameKit.text(headerFace, "PlayValue", "0m 00s", "display", {
 		zIndex = z + 2,
-		color = Tokens.color.goldLight,
+		color = Tokens.color.gold,
 		align = Enum.TextXAlignment.Right,
 	})
 	playValue.AnchorPoint = Vector2.new(1, 1)
 	playValue.Position = UDim2.new(1, -Tokens.spacing.md, 1, -Tokens.spacing.sm)
 	playValue.Size = UDim2.new(0.45, 0, 0, Tokens.typography.display.size + 4)
 	playValue.TextSize = Tokens.typography.display.size - 4
-	FrameKit.outline(playValue, 2.6)
+	FrameKit.outline(playValue, 3)
 
-	-- Picture cards, two per row.
-	local cardHeight = tap * 2 + Tokens.spacing.xs
-	local grid = Instance.new("Frame")
-	grid.Name = "Cards"
-	grid.BackgroundTransparency = 1
-	grid.Size = UDim2.new(1, 0, 0, (cardHeight + Tokens.spacing.sm) * math.ceil(#CARDS / 2))
-	grid.LayoutOrder = 2
-	grid.ZIndex = z
-	local gridLayout = Instance.new("UIGridLayout")
-	gridLayout.CellSize = UDim2.new(0.5, -Tokens.spacing.xs, 0, cardHeight)
-	gridLayout.CellPadding = UDim2.fromOffset(Tokens.spacing.sm, Tokens.spacing.sm)
-	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	gridLayout.Parent = grid
-	grid.Parent = container
+	-- The ledger: one generous slate row per stat, glyph and caption left, value right.
+	local rowHeight = math.floor(tap * 1.5)
+	local ledger = Instance.new("Frame")
+	ledger.Name = "Ledger"
+	ledger.BackgroundTransparency = 1
+	ledger.Size = UDim2.fromScale(1, 0)
+	ledger.AutomaticSize = Enum.AutomaticSize.Y
+	ledger.LayoutOrder = 2
+	ledger.ZIndex = z
+	local ledgerLayout = Instance.new("UIListLayout")
+	ledgerLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	ledgerLayout.Padding = UDim.new(0, Tokens.spacing.sm)
+	ledgerLayout.Parent = ledger
+	ledger.Parent = container
 	local values: { [string]: TextLabel } = {}
-	for index, spec in ipairs(CARDS) do
-		local tile, face =
-			FrameKit.tile(grid, "Card_" .. spec.key, { fill = spec.fill, deep = spec.deep, zIndex = z + 1, radius = Tokens.radius.lg })
-		tile.LayoutOrder = index
-		local artSize = cardHeight - Tokens.spacing.lg
-		local artHolder = Instance.new("Frame")
-		artHolder.Name = "Art"
-		artHolder.AnchorPoint = Vector2.new(0, 0.5)
-		artHolder.Position = UDim2.new(0, Tokens.spacing.sm, 0.5, -2)
-		artHolder.Size = UDim2.fromOffset(artSize, artSize)
-		artHolder.BackgroundTransparency = 1
-		artHolder.ZIndex = z + 2
-		artHolder.Parent = face
-		Skin.texture(artHolder, "texture.sunburst", { zIndex = z + 2, transparency = 0.7, color = Tokens.color.featherWhite })
-		local glyph = Skin.icon(artHolder, spec.art, artSize - Tokens.spacing.sm, z + 4)
-			or Icons.build(spec.icon, artHolder, artSize - Tokens.spacing.md, { zIndex = z + 4, color = Tokens.color.featherWhite })
-		glyph.AnchorPoint = Vector2.new(0.5, 0.5)
-		glyph.Position = UDim2.fromScale(0.5, 0.5)
-		local left = artSize + Tokens.spacing.md
-		local caption = FrameKit.text(face, "Caption", spec.caption, "label", {
-			zIndex = z + 3,
+	for index, spec in ipairs(ROWS) do
+		local row = FrameKit.row(ledger, "Row_" .. spec.key, rowHeight, z + 1, { padding = Tokens.spacing.lg })
+		row.LayoutOrder = index
+		thicken(row)
+		local glyph = Icons.build(spec.icon, row, Tokens.icon.lg, { zIndex = z + 2, color = Tokens.color.featherWhite })
+		glyph.AnchorPoint = Vector2.new(0, 0.5)
+		glyph.Position = UDim2.fromScale(0, 0.5)
+		local left = Tokens.icon.lg + Tokens.spacing.md
+		local caption = FrameKit.text(row, "Caption", spec.caption, "title", {
+			zIndex = z + 2,
 			color = Tokens.color.featherWhite,
-			align = Enum.TextXAlignment.Center,
 		})
-		caption.Position = UDim2.new(0, left, 0.5, -(Tokens.typography.label.size + Tokens.spacing.xs) - 2)
-		caption.Size = UDim2.new(1, -(left + Tokens.spacing.sm), 0, Tokens.typography.label.size + 4)
-		caption.TextSize = Tokens.typography.label.size - 2
-		FrameKit.outline(caption, 2)
-		local value = FrameKit.text(face, "Value", "-", "display", {
-			zIndex = z + 3,
-			color = Tokens.color.goldLight,
-			align = Enum.TextXAlignment.Center,
+		caption.Position = UDim2.fromOffset(left, 0)
+		caption.Size = UDim2.new(0.5, -left, 1, 0)
+		caption.TextSize = Tokens.typography.title.size - 2
+		caption.TextYAlignment = Enum.TextYAlignment.Center
+		FrameKit.outline(caption, 2.5)
+		local value = FrameKit.text(row, "Value", "-", "title", {
+			zIndex = z + 2,
+			color = Tokens.color.featherWhite,
+			align = Enum.TextXAlignment.Right,
 		})
-		value.Position = UDim2.new(0, left, 0.5, -2)
-		value.Size = UDim2.new(1, -(left + Tokens.spacing.sm), 0, Tokens.typography.display.size + 2)
-		value.TextSize = Tokens.typography.display.size - 6
-		value.TextScaled = false
+		value.AnchorPoint = Vector2.new(1, 0)
+		value.Position = UDim2.fromScale(1, 0)
+		value.Size = UDim2.fromScale(0.5, 1)
+		value.TextYAlignment = Enum.TextYAlignment.Center
+		value.TextWrapped = false
 		value.TextTruncate = Enum.TextTruncate.AtEnd
-		FrameKit.outline(value, 2.6)
+		FrameKit.outline(value, 2.5)
 		values[spec.key] = value
 	end
 
@@ -233,12 +208,22 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	rowsFrame.ZIndex = z
 	local rowsLayout = Instance.new("UIListLayout")
 	rowsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	rowsLayout.Padding = UDim.new(0, Tokens.spacing.xs)
+	rowsLayout.Padding = UDim.new(0, Tokens.spacing.sm)
 	rowsLayout.Parent = rowsFrame
 
 	local selectedBoard = cfg.leaderboards.boards[1]
 	local tabsHandle
-	local medalColors = { Tokens.color.gold, Color3.fromRGB(196, 200, 210), Color3.fromRGB(205, 137, 84) }
+
+	local function emptyRow(text: string)
+		local empty = FrameKit.row(rowsFrame, "Empty", tap + Tokens.spacing.sm, z, { muted = true })
+		local label = FrameKit.text(empty, "Text", text, "label", {
+			zIndex = z + 1,
+			color = Tokens.color.inkMuted,
+			align = Enum.TextXAlignment.Center,
+		})
+		label.Size = UDim2.fromScale(1, 1)
+		FrameKit.outline(label, 2)
+	end
 
 	local function renderBoard()
 		for _, child in ipairs(rowsFrame:GetChildren()) do
@@ -248,15 +233,7 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		end
 		local snapshot = deps.leaderboards.snapshot
 		if not snapshot then
-			local empty = FrameKit.row(rowsFrame, "Empty", tap, z)
-			FrameKit.text(
-				empty,
-				"Text",
-				"Loading...",
-				"body",
-				{ zIndex = z + 1, color = Tokens.color.inkMuted, align = Enum.TextXAlignment.Center }
-			).Size =
-				UDim2.fromScale(1, 1)
+			emptyRow("Loading...")
 			return
 		end
 		for _, board in ipairs(snapshot.boards) do
@@ -264,39 +241,34 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				continue
 			end
 			if #board.rows == 0 then
-				local empty = FrameKit.row(rowsFrame, "Empty", tap, z)
-				FrameKit.text(
-					empty,
-					"Text",
-					"No entries yet",
-					"body",
-					{ zIndex = z + 1, color = Tokens.color.inkMuted, align = Enum.TextXAlignment.Center }
-				).Size =
-					UDim2.fromScale(1, 1)
+				emptyRow("No entries yet")
 			end
 			for index, row in ipairs(board.rows) do
-				local frame = FrameKit.row(rowsFrame, "Row" .. index, tap, z)
+				local frame = FrameKit.row(rowsFrame, "Row" .. index, tap + Tokens.spacing.sm, z)
 				frame.LayoutOrder = index
+				thicken(frame)
 				local mine = row.userId == player.UserId
 				local value = if board.unit == "ms" then (formatTime(row.value) or "--:--") else tostring(row.value)
-				local rank = FrameKit.badge(frame, "Rank", "#" .. index, medalColors[index] or Tokens.color.strawDeep, z + 2)
+				local rank = FrameKit.badge(frame, "Rank", "#" .. index, MEDALS[index] or Tokens.color.surfaceAlt, z + 2)
 				rank.AnchorPoint = Vector2.new(0, 0.5)
 				rank.Position = UDim2.fromScale(0, 0.5)
-				rank.TextColor3 = Tokens.color.inkStrong
 				local label = FrameKit.text(frame, "Text", row.name, "label", {
 					zIndex = z + 1,
-					color = if mine then Tokens.color.goldDeep else Tokens.color.inkStrong,
+					color = if mine then Tokens.color.gold else Tokens.color.featherWhite,
 				})
-				label.Position = UDim2.fromOffset(tap, 0)
-				label.Size = UDim2.new(0.6, -tap, 1, 0)
+				label.Position = UDim2.fromOffset(tap + Tokens.spacing.sm, 0)
+				label.Size = UDim2.new(0.6, -(tap + Tokens.spacing.sm), 1, 0)
+				label.TextTruncate = Enum.TextTruncate.AtEnd
+				FrameKit.outline(label, 2.5)
 				local valueLabel = FrameKit.text(frame, "Value", value, "label", {
 					align = Enum.TextXAlignment.Right,
 					zIndex = z + 1,
-					color = Tokens.color.goldDeep,
+					color = Tokens.color.featherWhite,
 				})
 				valueLabel.AnchorPoint = Vector2.new(1, 0)
 				valueLabel.Position = UDim2.fromScale(1, 0)
 				valueLabel.Size = UDim2.fromScale(0.4, 1)
+				FrameKit.outline(valueLabel, 2.5)
 			end
 		end
 	end
@@ -344,9 +316,7 @@ function StatsModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		playValue.Text = playtime(projection.stats.playtimeSeconds)
 		values.class.Text = className
 		local best = projection.progression.bestTimeMs.chapter1 or {}
-		local record = formatTime(best.normal)
-		values.record.Text = record or "NO RECORD"
-		values.record.TextSize = if record then Tokens.typography.display.size - 6 else Tokens.typography.title.size - 2
+		values.record.Text = formatTime(best.normal) or "NO RECORD"
 		values.wins.Text = tostring(projection.progression.totalWins)
 		values.feathers.Text = tostring(projection.stats.feathersCollected)
 		values.eggs.Text = tostring(projection.stats.eggsFound)
