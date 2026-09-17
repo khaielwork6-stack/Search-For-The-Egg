@@ -17,6 +17,7 @@ local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
 local Button = require(script.Parent.Parent.UI.Components.Button)
 local Skin = require(script.Parent.Parent.UI.Components.Skin)
 local UpgradeActions = require(script.Parent.Parent.UI.UpgradeActions)
+local Depth = require(script.Parent.Parent.UI.Components.Depth)
 
 local InspectController = {}
 InspectController.__index = InspectController
@@ -325,17 +326,12 @@ function InspectController.open(self: InspectController, key: string, model: Mod
 	panel.AnchorPoint = Vector2.new(0, 0.5)
 	panel.Position = UDim2.new(0, Tokens.spacing.xl * 2, 0.5, -Tokens.spacing.lg)
 	panel.Size = UDim2.fromScale(0.27, 0.56)
-	panel.BackgroundColor3 = Color3.fromRGB(58, 34, 22)
-	panel.BackgroundTransparency = 0.12
+	-- Dark kit card (owner, 17 Sep 2026: the old brown panel with the retired "cream" token, now a
+	-- charcoal, put dark copy on a dark panel). Opaque charcoal, near-black keyline, white stroked
+	-- title, light ink copy with a soft stroke, gold tag: every text sits at high contrast.
 	panel.BorderSizePixel = 0
 	panel.ZIndex = 3
-	local panelCorner = Instance.new("UICorner")
-	panelCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
-	panelCorner.Parent = panel
-	local panelStroke = Instance.new("UIStroke")
-	panelStroke.Thickness = Tokens.stroke.bold
-	panelStroke.Color = Tokens.color.outline
-	panelStroke.Parent = panel
+	Depth.panel(panel, Tokens.color.panel, { radius = Tokens.radius.lg })
 	local panelPadding = Instance.new("UIPadding")
 	panelPadding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
 	panelPadding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
@@ -347,21 +343,26 @@ function InspectController.open(self: InspectController, key: string, model: Mod
 	panelScale.Parent = panel
 	panel.Parent = gui
 	TweenService:Create(panelScale, TweenInfo.new(seconds, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
-	local title = FrameKit.text(panel, "Title", copy.name, "display", { zIndex = 4, color = Tokens.color.goldLight })
+	local title = FrameKit.text(panel, "Title", copy.name, "display", { zIndex = 4, color = Tokens.color.featherWhite })
 	title.Size = UDim2.new(1, 0, 0, Tokens.typography.display.size + 6)
 	title.TextSize = Tokens.typography.display.size - 4
-	FrameKit.outline(title, 2)
+	title.TextTruncate = Enum.TextTruncate.AtEnd
+	FrameKit.outline(title, 3)
 	local rule = FrameKit.divider(panel, "Rule", 4)
 	rule.Position = UDim2.fromOffset(0, Tokens.typography.display.size + Tokens.spacing.md)
-	rule.BackgroundColor3 = Tokens.color.strawDeep
-	local story = FrameKit.text(panel, "Story", copy.story, "body", { zIndex = 4, color = Tokens.color.cream, wrap = true })
+	rule.BackgroundColor3 = Tokens.color.gold
+	rule.BackgroundTransparency = 0.35
+	local story = FrameKit.text(panel, "Story", copy.story, "body", { zIndex = 4, color = Tokens.color.ink, wrap = true })
 	story.Position = UDim2.fromOffset(0, Tokens.typography.display.size + Tokens.spacing.xl)
 	story.Size = UDim2.new(1, 0, 1, -(Tokens.typography.display.size + Tokens.spacing.xl + tap))
 	story.TextYAlignment = Enum.TextYAlignment.Top
+	local storyStroke = FrameKit.outline(story, 1.2)
+	storyStroke.Transparency = 0.45
 	local tag = FrameKit.text(panel, "Tag", "", "label", { zIndex = 4, color = Tokens.color.gold })
 	tag.AnchorPoint = Vector2.new(0, 1)
 	tag.Position = UDim2.fromScale(0, 1)
 	tag.Size = UDim2.new(1, 0, 0, Tokens.typography.label.size + 6)
+	FrameKit.outline(tag, 2)
 	session.tag = tag
 
 	-- Headline over the model.
