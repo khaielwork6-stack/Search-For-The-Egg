@@ -47,6 +47,8 @@ export type HUDController = typeof(setmetatable(
 		_bannerScale: UIScale?,
 		_reticleArt: ImageLabel?,
 		_reticleScale: UIScale,
+		_bagHolds: number,
+		_pendingBag: { standard: number, rainbow: number, capacity: number }?,
 		_heatFill: Frame?,
 		_heatFlame: UIScale?,
 		_heatLabel: TextLabel?,
@@ -87,6 +89,8 @@ function HUDController.new(deps: any): HUDController
 		_bannerScale = nil,
 		_reticleArt = nil,
 		_reticleScale = nil :: any,
+		_bagHolds = 0,
+		_pendingBag = nil,
 		_holdRing = nil,
 		_targeting = false,
 		_veil = nil,
@@ -765,9 +769,16 @@ function HUDController.bindRound(self: HUDController, round: any, interaction: a
 		if player.bagInfinite ~= nil then
 			self._infiniteBag = player.bagInfinite == true
 		end
-		self.round:setBag(player.carriedStandard + player.carriedRainbow, capacity, self._infiniteBag == true, false)
-		self.carriedStack:setBag(player.carriedStandard, player.carriedRainbow, capacity, self._infiniteBag == true, false)
 		self.round:setCash(player.cashCents, false)
+		-- While a picked feather is still flying to the bundle, the projection's new count waits:
+		-- the number and the bundle change when the feather lands (onCollected), not when the
+		-- server's reply arrives a fifth of a second earlier.
+		local bag = { standard = player.carriedStandard, rainbow = player.carriedRainbow, capacity = capacity }
+		if self._bagHolds > 0 then
+			self._pendingBag = bag
+			return
+		end
+		self:_applyBag(bag)
 	end))
 	-- The sale's bag count-down, cash count-up, crate stream, sounds and popup are one choreography in
 	-- PickupFeedbackController; the HUD only names a Rainbow sale here.
@@ -807,8 +818,33 @@ function HUDController.celebrateCurrency(self: HUDController, key: string, amoun
 	)
 end
 
--- Called by ToolController on each accepted award for the bag squash.
+function HUDController._applyBag(self: HUDController, bag: { standard: number, rainbow: number, capacity: number })
+	self.round:setBag(bag.standard + bag.rainbow, bag.capacity, self._infiniteBag == true, false)
+	self.carriedStack:setBag(bag.standard, bag.rainbow, bag.capacity, self._infiniteBag == true, false)
+end
+
+-- A pick is in the air: the projection's bag value is parked until the landing applies it.
+function HUDController.holdBag(self: HUDController)
+	self._bagHolds += 1
+end
+
+function HUDController.releaseBag(self: HUDController)
+	self._bagHolds = math.max(0, self._bagHolds - 1)
+	if self._bagHolds == 0 and self._pendingBag then
+		local bag = self._pendingBag
+		self._pendingBag = nil
+		self:_applyBag(bag)
+	end
+end
+
+function HUDController.releaseAllBagHolds(self: HUDController)
+	self._bagHolds = 0
+	self:releaseBag()
+end
+
+-- Called at the landing of a pick for the bag squash and the bundle.
 function HUDController.onCollected(self: HUDController, data: { [string]: any })
+	self._pendingBag = nil
 	self._infiniteBag = data.infinite == true
 	local awarded = (data.awarded or 0) + (data.rainbow or 0)
 	local seconds = data.streamSeconds or 0

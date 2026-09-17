@@ -372,10 +372,16 @@ function PickupFeedbackController.collected(self: PickupFeedbackController, data
 		return deps.hud:carriedStackWorldPoint() or hitPosition
 	end
 	local firstLanded = false
+	if deps.hud.holdBag then
+		deps.hud:holdBag()
+	end
 	local function landing(index: number)
 		if not firstLanded then
 			firstLanded = true
 			deps.hud:onCollected(data)
+			if deps.hud.releaseBag then
+				deps.hud:releaseBag()
+			end
 			self:float(awarded, rainbow)
 			deps.audio:play(Tokens.sound.collectRelease)
 			deps.audio:play(Tokens.sound.collectTick)
@@ -681,6 +687,9 @@ function PickupFeedbackController.reset(self: PickupFeedbackController, _reason:
 	end
 	table.clear(self._floatBusy)
 	table.clear(self._pressed)
+	if self._deps.hud.releaseAllBagHolds then
+		self._deps.hud:releaseAllBagHolds()
+	end
 	if self._saleThread then
 		task.cancel(self._saleThread)
 		self._saleThread = nil
