@@ -52,6 +52,21 @@ local player = Players.LocalPlayer
 local bootStarted = os.clock()
 if RunService:IsStudio() then
 	PerfTrace.startRecorder()
+	PerfTrace.event(if game:IsLoaded() then "alreadyLoaded" else "notLoaded")
+	game.Loaded:Connect(function()
+		PerfTrace.event("gameLoaded")
+	end)
+	player.CharacterAdded:Connect(function(character)
+		PerfTrace.event("characterAdded")
+		task.defer(function()
+			PerfTrace.event("characterDeferred")
+		end)
+		character.DescendantAdded:Connect(function(d)
+			if d:IsA("Accessory") then
+				PerfTrace.event("accessory")
+			end
+		end)
+	end)
 end
 PerfTrace.mark("waitRuntime")
 

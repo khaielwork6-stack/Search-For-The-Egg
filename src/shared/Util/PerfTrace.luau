@@ -21,6 +21,13 @@ local over50 = 0
 local over100 = 0
 local connection: RBXScriptConnection? = nil
 local MAX_SPIKES = 60
+local events: { { at: number, name: string } } = {}
+
+function PerfTrace.event(name: string)
+	if #events < 40 then
+		table.insert(events, { at = math.floor((os.clock() - started) * 100) / 100, name = name })
+	end
+end
 
 function PerfTrace.mark(name: string)
 	local now = os.clock()
@@ -74,6 +81,7 @@ function PerfTrace.report(): { [string]: any }
 		over100 = over100,
 		stages = stages,
 		spikes = spikes,
+		events = events,
 	}
 end
 
