@@ -1265,11 +1265,13 @@ if RunService:IsStudio() then
 			return { moved = molly:navigate(tonumber(dRow) or 0, tonumber(dCol) or 0), selected = molly:status().selected }
 		end,
 		mollyConfirm = function()
-			local selected = molly:status().selected
-			if not selected then
+			local status = molly:status()
+			local selected = status.selected
+			-- Tier 3 (the pin) needs no selection; tiers 1 and 2 need the region (and the patch).
+			if not selected and status.roundSurvey and status.roundSurvey.nextTier ~= "pin" then
 				return { ok = false, message = "no_selection" }
 			end
-			return molly:survey(selected)
+			return molly:survey(selected, status.selectedSub)
 		end,
 		mollyCancel = function()
 			molly:cancel()
