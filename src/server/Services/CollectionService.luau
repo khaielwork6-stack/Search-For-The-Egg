@@ -462,7 +462,7 @@ function CollectionService._collectFeather(
 	if removal.remaining == 0 then
 		state.contribution.cellsRemoved += 1
 	end
-	local isRainbow = FeatherLayout.isRainbow(self._config, runtime.rainbowSeed or 0, cell.index, slot)
+	local isRainbow = FeatherLayout.isRainbowRecord(self._config, runtime, cell.index, slot)
 	local award = RoundAwards.award(state, if isRainbow then 0 else 1, if isRainbow then 1 else 0, capacity)
 	local cooldown = self:spec(runtime, userId, "hand").cooldownSeconds
 	state.cooldownUntil = now + cooldown
@@ -571,7 +571,7 @@ function CollectionService.collect(self: CollectionService, userId: number, payl
 	local rainbowCount = 0
 	for _, removal in ipairs(removals) do
 		for _, removedSlot in ipairs(removal.slots or {}) do
-			if FeatherLayout.isRainbow(self._config, runtime.rainbowSeed or 0, removal.index, removedSlot) then
+			if FeatherLayout.isRainbowRecord(self._config, runtime, removal.index, removedSlot) then
 				rainbowCount += 1
 			end
 		end

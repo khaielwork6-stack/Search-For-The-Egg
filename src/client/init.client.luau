@@ -43,6 +43,7 @@ local InspectController = require(Controllers.InspectController)
 local UpgradeBookController = require(Controllers.UpgradeBookController)
 local PlumeController = require(Controllers.PlumeController)
 local MollyController = require(Controllers.MollyController)
+local RoundEventController = require(Controllers.RoundEventController)
 local PromptController = require(Controllers.PromptController)
 local ObjectiveController = require(Controllers.ObjectiveController)
 local VictoryController = require(Controllers.VictoryController)
@@ -315,6 +316,39 @@ local molly = trove:add(MollyController.new({
 	camera = camera,
 	config = config,
 	interaction = interaction,
+}))
+-- The round's mid-round event: the pill under the objective, the crate, the chick and the pile's
+-- converted Rainbow Feathers.
+-- TEMP: wired to AnnouncementService at merge. Until the banner/celebration kit lands, an
+-- announcement (the client's own start/end lines, and the server's `type = "announce"` RoundEvent
+-- payloads) is a success toast.
+local function announceRoundEvent(payload: { [string]: any })
+	local text = tostring(payload.text or "")
+	if payload.sub and payload.sub ~= "" then
+		text = text .. "  " .. tostring(payload.sub)
+	end
+	if text ~= "" then
+		hud.toasts:push(text, "success")
+	end
+end
+trove:add(net:on("RoundEvent", function(payload)
+	if type(payload) == "table" and payload.type == "announce" then
+		announceRoundEvent(payload)
+	end
+end))
+PerfTrace.mark("roundEvents")
+local roundEvents = trove:add(RoundEventController.new({
+	net = net,
+	round = round,
+	hud = hud,
+	pile = pile,
+	audio = audio,
+	vfx = vfx,
+	quality = quality,
+	accessibility = accessibility,
+	config = config,
+	announce = announceRoundEvent,
+	dialogue = dialogue,
 }))
 -- The upgrade book: Tab, the book button, or the supplies counter opens it during a search.
 PerfTrace.mark("book")
@@ -1345,6 +1379,22 @@ if RunService:IsStudio() then
 			status.bundleRainbow = stack and stack._rainbowCount or nil
 			status.bundleCount = stack and stack._count or nil
 			return status
+		end,
+		-- Round event: what the pill shows, the live event, and the pile's converted Rainbow Feathers.
+		roundEventStatus = function()
+			local active = roundEvents:active()
+			local pill = hud.stage:FindFirstChild("RoundEventPill")
+			return {
+				event = active,
+				pillVisible = pill ~= nil and (pill :: Frame).Visible,
+				pillText = pill and ((pill :: Frame):FindFirstChild("Text") :: TextLabel).Text or nil,
+				stats = table.clone(roundEvents.stats),
+				rainbowParts = pile:rainbowCount(),
+			}
+		end,
+		roundEventAct = function(action)
+			local result = roundEvents:request(tostring(action or "deposit"))
+			return result
 		end,
 		-- Molly the Mole: drive the map, the trade and the sequence, and read what the player sees.
 		mollyStatus = function()

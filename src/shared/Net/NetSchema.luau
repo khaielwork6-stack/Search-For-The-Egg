@@ -171,6 +171,15 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		-- Molly's survey names one of the four areas; the live pick may clear (no region).
 		request("SurveyRequest", Schema.object({ sessionToken = TOKEN, region = REGION }), slowRate, 2),
 		request("SurveySelect", Schema.object({ sessionToken = TOKEN, region = Schema.optional(REGION) }), uiRate, 2),
+		-- The round's mid-round event: a Supply Drop deposit or a completed Chick Rescue hold. The server
+		-- owns amounts, caps, distance and rewards; the client names only the action.
+		request(
+			"RoundEventAction",
+			Schema.object({ sessionToken = TOKEN, action = Schema.enum({ "deposit", "rescue" }) }),
+			slowRate,
+			2,
+			256
+		),
 
 		-- Meta ---------------------------------------------------------------------------------
 		request(
@@ -250,6 +259,8 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		serverEvent("EggRevealed", Schema.object({}), 2),
 		serverEvent("SurveyCompleted", Schema.object({}), 2),
 		serverEvent("SurveySelection", Schema.object({}), 2),
+		-- Round event start / update / end ({ type, roundId, event, rainbowOverrides? }).
+		serverEvent("RoundEvent", Schema.object({}), 2),
 		serverEvent("EggCarried", Schema.object({}), 2),
 		serverEvent("EggDropped", Schema.object({}), 2),
 		serverEvent("VictoryStarted", Schema.object({}), 2),

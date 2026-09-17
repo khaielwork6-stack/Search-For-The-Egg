@@ -435,6 +435,73 @@ function StudioDebug.install(container: any): any?
 		}
 	end
 
+	-- Round events. `startRoundEvent` starts `kind` now on the caller's Searching round (refused once the
+	-- round has had its event); `roundEventState` is the server's own view of it.
+	function hooks.startRoundEvent(userId: number, kind: string)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return { error = "no_round" }
+		end
+		local ok, err = container.roundEvents:start(runtime, kind)
+		return { ok = ok, error = err, event = container.roundEvents:project(runtime) }
+	end
+
+	-- Runs a deposit or rescue for a member as if standing at the event (no token, no character).
+	function hooks.roundEventActAs(userId: number, action: string)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local runtime = container.rounds:roundOf(userId)
+		local event = runtime and runtime.roundEvent
+		if not event or not event.position then
+			return { error = "no_event" }
+		end
+		local options = { trusted = true, characterPosition = event.position }
+		local result = if action == "rescue"
+			then container.roundEvents:rescue(userId, {}, options)
+			else container.roundEvents:deposit(userId, {}, options)
+		local player = container.playerData:playerOf(userId)
+		if result.ok and player and typeof(player) == "Instance" and container.pushPreviews then
+			container.pushPreviews(player)
+		end
+		return result
+	end
+
+	function hooks.roundEventState(userId: number)
+		if not StudioDebug.isUserAllowed(userId) then
+			return nil
+		end
+		local runtime = container.rounds:roundOf(userId)
+		if not runtime then
+			return { error = "no_round" }
+		end
+		local event = runtime.roundEvent
+		local contributors = {}
+		for contributor, amount in pairs(event and event.contributors or {}) do
+			contributors[tostring(contributor)] = amount
+		end
+		local state = runtime.players[userId]
+		return {
+			phase = runtime.state.phase,
+			status = event and event.status or "unplanned",
+			kind = event and event.kind or nil,
+			startsInSeconds = if event and event.status == "scheduled"
+				then math.floor(event.startAt - container.clock:monotonic())
+				else nil,
+			result = event and event.result or nil,
+			projection = container.roundEvents:project(runtime),
+			contributors = contributors,
+			overrides = #require(game:GetService("ReplicatedStorage").Shared.Domain.RoundEvents).overrideList(runtime.rainbowOverrides),
+			carriedStandard = state and state.carriedStandard or 0,
+			carriedRainbow = state and state.carriedRainbow or 0,
+			cashCents = state and state.cashCents or 0,
+			stats = table.clone(container.roundEvents.stats),
+		}
+	end
+
 	function hooks.eggRegion(userId: number)
 		if not StudioDebug.isUserAllowed(userId) then
 			return nil

@@ -86,6 +86,8 @@ local ToolService = require(script.Services.ToolService)
 local EggService = require(script.Services.EggService)
 local ClueService = require(script.Services.ClueService)
 local SurveyService = require(script.Services.SurveyService)
+local RoundEventService = require(script.Services.RoundEventService)
+local RoundEventWorld = require(script.Services.RoundEventWorld)
 local VictoryService = require(script.Services.VictoryService)
 local ObjectiveService = require(script.Services.ObjectiveService)
 local ClassService = require(script.Services.ClassService)
@@ -684,6 +686,52 @@ local function pushPreviews(player: Player)
 	})
 end
 
+-- The round's one mid-round event (Rainbow Rush / Supply Drop / Chick Rescue). Its prompts and
+-- models live in the world adapter; the rules, validation and rewards live in the service.
+-- TEMP: wired to AnnouncementService at merge. Until then an announcement rides the RoundEvent
+-- remote (`type = "announce"`) and the client shows it as a toast.
+local function announceRoundEvent(runtime: any, payload: { [string]: any })
+	local recipients = if payload.userId then memberPlayers({ payload.userId }) else memberPlayers(runtime.state.members)
+	for _, player in ipairs(recipients) do
+		send(player, "RoundEvent", {
+			type = "announce",
+			roundId = runtime.state.roundId,
+			kind = payload.kind,
+			text = payload.text,
+			sub = payload.sub,
+			tone = payload.tone,
+		})
+	end
+end
+local roundEvents = RoundEventService.new({
+	config = config,
+	clock = clock,
+	rounds = rounds,
+	sessions = sessions,
+	rng = rng,
+	getCharacterPosition = getCharacterPosition,
+	getProfile = getProfile,
+	announce = announceRoundEvent,
+	world = RoundEventWorld.new(workspace, config),
+})
+roundEvents.event:Connect(function(runtime, payload)
+	for _, player in ipairs(memberPlayers(runtime.state.members)) do
+		send(player, "RoundEvent", payload)
+	end
+end)
+-- A reward changes the contributor's round cash (Supply Drop) or profile gems (Chick Rescue).
+roundEvents.rewarded:Connect(function(_runtime, userId, reward)
+	local player = playerData:playerOf(userId)
+	if not player or typeof(player) ~= "Instance" then
+		return
+	end
+	if reward.kind == "gems" then
+		playerData:pushProjection(player, config)
+	else
+		pushPreviews(player :: Player)
+	end
+end)
+
 -- Party -> round hand-off (local adapter) or real teleport.
 parties.started:Connect(function(party, reservation)
 	if reservation.isLocal then
@@ -1042,6 +1090,7 @@ end)
 
 -- Round returned: characters back to the lobby, remove the Egg, refresh projections, replay.
 rounds.returned:Connect(function(state, runtime)
+	roundEvents:onRoundReturned(runtime)
 	crate:reset()
 	crateInteractionEnabled(true)
 	pileTerrain:clear(runtime)
@@ -1255,6 +1304,17 @@ registry:onRequest("SurveyRequest", function(player, payload)
 	end
 	return result
 end)
+registry:onRequest("RoundEventAction", function(player, payload)
+	local result = roundEvents:action(player.UserId, payload)
+	local runtime = rounds:roundOf(player.UserId)
+	if result.ok and runtime then
+		-- The deposit left the bag: the caller's HUD gets the fresh projection with the reply.
+		local data = result.data :: any
+		data.player = projectPlayerFor(runtime.state.roundId, player.UserId)
+		pushPreviews(player)
+	end
+	return result
+end)
 registry:onRequest("SurveySelect", function(player, payload)
 	return surveys:select(player.UserId, payload)
 end)
@@ -1448,6 +1508,7 @@ task.spawn(function()
 		pads:tick()
 		parties:tick()
 		rounds:tick()
+		roundEvents:tick()
 		victory:tick()
 	end
 end)
@@ -1506,6 +1567,7 @@ local container = {
 	egg = egg,
 	clues = clues,
 	surveys = surveys,
+	roundEvents = roundEvents,
 	tools = tools,
 	entitlements = entitlements,
 	commerce = commerce,

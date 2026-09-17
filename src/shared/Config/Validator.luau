@@ -1359,6 +1359,85 @@ function Validator.validate(raw: any): Report
 		end
 	end
 
+	-- Round events: at most one short mid-round event per round.
+	check(type(raw.roundEvents) == "table", "roundEvents missing")
+	if type(raw.roundEvents) == "table" then
+		local events = raw.roundEvents
+		check(isNonNegativeNumber(events.chance) and events.chance <= 1, "roundEvents.chance must be within [0, 1]")
+		local window = events.startFraction
+		check(
+			type(window) == "table"
+				and isNonNegativeNumber(window[1])
+				and isNonNegativeNumber(window[2])
+				and window[1] <= window[2]
+				and window[2] < 1,
+			"roundEvents.startFraction must be [a, b] with 0 <= a <= b < 1"
+		)
+		check(type(events.events) == "table", "roundEvents.events missing")
+		local defs = if type(events.events) == "table" then events.events else {}
+		local totalWeight = 0
+		local function integer(value: any): boolean
+			return isPositiveNumber(value) and value == math.floor(value)
+		end
+		local function spots(where: string, list: any)
+			check(type(list) == "table" and #list >= 1, where .. ".spots must list at least one [x, y, z]")
+			for index, spot in ipairs(if type(list) == "table" then list else {}) do
+				check(
+					type(spot) == "table" and type(spot[1]) == "number" and type(spot[2]) == "number" and type(spot[3]) == "number",
+					where .. ".spots[" .. index .. "] must be [x, y, z]"
+				)
+			end
+		end
+		for _, kind in ipairs({ "rainbowRush", "supplyDrop", "chickRescue" }) do
+			local def = defs[kind]
+			local where = "roundEvents.events." .. kind
+			check(type(def) == "table", where .. " missing")
+			if type(def) ~= "table" then
+				continue
+			end
+			check(isNonNegativeNumber(def.weight), where .. ".weight must be >= 0")
+			totalWeight += if isNonNegativeNumber(def.weight) then def.weight else 0
+			check(
+				isPositiveNumber(def.durationSeconds) and def.durationSeconds >= 30 and def.durationSeconds <= 45,
+				where .. ".durationSeconds must be within [30, 45]"
+			)
+			if kind == "rainbowRush" then
+				check(integer(def.maxConversions), where .. ".maxConversions must be a positive integer")
+				check(isNonNegativeNumber(def.eggExclusionStuds), where .. ".eggExclusionStuds must be >= 0")
+				check(
+					isNonNegativeNumber(def.buriedMarginRecords) and def.buriedMarginRecords % 1 == 0,
+					where .. ".buriedMarginRecords must be a non-negative integer"
+				)
+				check(integer(def.depthBandRecords), where .. ".depthBandRecords must be a positive integer")
+				check(integer(def.spreadBlocks), where .. ".spreadBlocks must be a positive integer")
+			elseif kind == "supplyDrop" then
+				check(integer(def.target), where .. ".target must be a positive integer")
+				check(isNonNegativeNumber(def.targetPerExtraPlayer), where .. ".targetPerExtraPlayer must be >= 0")
+				check(integer(def.depositPerRequest), where .. ".depositPerRequest must be a positive integer")
+				check(integer(def.depositPerPlayerCap), where .. ".depositPerPlayerCap must be a positive integer")
+				check(isPositiveNumber(def.rangeStuds), where .. ".rangeStuds must be > 0")
+				check(integer(def.rewardPoolCents), where .. ".rewardPoolCents must be a positive integer")
+				check(
+					isNonNegativeNumber(def.rewardFloorCents)
+						and def.rewardFloorCents % 1 == 0
+						and integer(def.rewardCapCents)
+						and def.rewardFloorCents <= def.rewardCapCents,
+					where .. ".rewardFloorCents/rewardCapCents must be integers with floor <= cap"
+				)
+				check(isPositiveNumber(def.dropSeconds), where .. ".dropSeconds must be > 0")
+				spots(where, def.spots)
+			elseif kind == "chickRescue" then
+				check(isPositiveNumber(def.holdSeconds), where .. ".holdSeconds must be > 0")
+				check(integer(def.holdsRequired), where .. ".holdsRequired must be a positive integer")
+				check(isPositiveNumber(def.rangeStuds), where .. ".rangeStuds must be > 0")
+				check(integer(def.gemReward), where .. ".gemReward must be a positive integer")
+				check(isPositiveNumber(def.chirpIntervalSeconds), where .. ".chirpIntervalSeconds must be > 0")
+				spots(where, def.spots)
+			end
+		end
+		check(events.enabled == false or totalWeight > 0, "roundEvents.events weights must sum to > 0")
+	end
+
 	check(type(raw.audio) == "table", "audio missing")
 	if type(raw.audio) == "table" then
 		local audio = raw.audio

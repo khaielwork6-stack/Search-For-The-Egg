@@ -560,6 +560,88 @@
     "evidence": "OWNER 17 Sep 2026 (Molly simplification): a clear top-down nest map in four large labelled areas (BACK BARN, BACK FENCE, FRONT BARN, FRONT FENCE; BARN is the yard's west, BACK its north). Three surveys per party per round, paid in normal feathers at 100, 200 and 400 in that order; each picks one area and answers only STRONG SIGNAL (the Egg is inside it), WEAK SIGNAL (outside, but within weakBorderFraction of the nest's width/depth of that area's border) or NO SIGNAL. No coordinates, sub-cells or pins. Rainbow Feathers are never touched.",
     "assumption": "OWNER costs, limit, four areas and three-word answer; ASSUMED weak margin, range and sequence length"
   },
+  "roundEvents": {
+    "enabled": true,
+    "chance": 0.8,
+    "startFraction": [
+      0.35,
+      0.65
+    ],
+    "events": {
+      "rainbowRush": {
+        "weight": 1,
+        "durationSeconds": 35,
+        "maxConversions": 24,
+        "eggExclusionStuds": 4.0,
+        "buriedMarginRecords": 1,
+        "depthBandRecords": 4,
+        "spreadBlocks": 4
+      },
+      "supplyDrop": {
+        "weight": 1,
+        "durationSeconds": 45,
+        "target": 120,
+        "targetPerExtraPlayer": 0.6,
+        "depositPerRequest": 50,
+        "depositPerPlayerCap": 120,
+        "rangeStuds": 10,
+        "rewardPoolCents": 300,
+        "rewardFloorCents": 25,
+        "rewardCapCents": 250,
+        "dropSeconds": 1.1,
+        "spots": [
+          [
+            32.0,
+            52.1,
+            364.0
+          ],
+          [
+            -14.0,
+            52.1,
+            345.0
+          ],
+          [
+            -10.0,
+            52.1,
+            394.0
+          ]
+        ]
+      },
+      "chickRescue": {
+        "weight": 1,
+        "durationSeconds": 40,
+        "holdSeconds": 1.5,
+        "holdsRequired": 3,
+        "rangeStuds": 10,
+        "gemReward": 5,
+        "chirpIntervalSeconds": 3.0,
+        "spots": [
+          [
+            -24.0,
+            52.1,
+            360.0
+          ],
+          [
+            27.0,
+            52.1,
+            362.0
+          ],
+          [
+            -8.0,
+            52.1,
+            392.0
+          ],
+          [
+            0.0,
+            52.1,
+            350.0
+          ]
+        ]
+      }
+    },
+    "evidence": "OWNER 17 Sep 2026: at most one short mid-round event per round. Rainbow Rush turns a capped number of buried standard records near the surface into Rainbow Feathers (conversions only; the feather count never changes, never near the Egg). Supply Drop pays contributors CASH for normal feathers deposited from their bags. Chick Rescue pays contributors GEMS for freeing a trapped chick at the nest edge. Events never move the Egg, add feathers or point at the Egg.",
+    "assumption": "OWNER event set and reward currencies; ASSUMED chance, start window (fraction of round.maximumRoundSeconds from Searching start), durations, targets, caps, rewards and preset spots (spots measured from ChapterLayout clear bays, not verified in Studio)"
+  },
   "selling": {
     "cashPerStandardFeather": 0.01,
     "rainbowFeatherMultiplier": 10,
@@ -1797,6 +1879,15 @@
       "Results": "music.results"
     },
     "roles": {
+      "event.chirp": {
+        "id": "rbxasset://sounds/electronicpingshort.wav",
+        "volume": 0.5,
+        "speed": 1.6,
+        "variance": 0.08,
+        "minGap": 0.5,
+        "evidence": "PLACEHOLDER - owner to replace",
+        "assumption": "Chick Rescue directional chirp played at the trapped chick; the only sound the round events add"
+      },
       "ui.tap": {
         "id": "rbxassetid://15675059323",
         "volume": 0.55,

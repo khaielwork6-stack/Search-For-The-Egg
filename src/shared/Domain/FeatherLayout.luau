@@ -36,6 +36,22 @@ function FeatherLayout.isRainbow(cfg: { [string]: any }, seed: number, cellIndex
 	return FeatherLayout.hash(cellIndex, slot, seed + 0.5) < chance
 end
 
+-- Whether a record is a Rainbow Feather this round: the seeded roll above, or a record the server
+-- converted during a Rainbow Rush (`rainbowOverrides`, keyed by feather id). The one rule both the
+-- server's award and the client's pile use, so a converted record pays and renders as rainbow.
+function FeatherLayout.isRainbowRecord(
+	cfg: { [string]: any },
+	pile: { rainbowSeed: number?, rainbowOverrides: { [number]: boolean }? },
+	cellIndex: number,
+	slot: number
+): boolean
+	local overrides = pile.rainbowOverrides
+	if overrides and overrides[FeatherLayout.featherId(cellIndex, slot)] then
+		return true
+	end
+	return FeatherLayout.isRainbow(cfg, pile.rainbowSeed or 0, cellIndex, slot)
+end
+
 -- Returns (cellIndex, slot) or nil for a malformed id.
 function FeatherLayout.decode(featherId: any): (number?, number?)
 	if type(featherId) ~= "number" or featherId % 1 ~= 0 or featherId < FeatherLayout.SLOT_STRIDE then

@@ -168,6 +168,7 @@ Tokens.recipes = table.freeze({
 -- references an asset id. PLACEHOLDER: manifest ids are stand-ins until Phase 6 audio pass.
 Tokens.sound = table.freeze({
 	uiTap = "ui.tap",
+	eventChirp = "event.chirp", -- Chick Rescue's positional chirp (placeholder id; owner to replace)
 	uiConfirm = "ui.confirm",
 	uiCancel = "ui.cancel",
 	uiOpen = "ui.open",

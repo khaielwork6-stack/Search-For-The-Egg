@@ -26,6 +26,7 @@ local AssetManifest = require(Shared.Design.AssetManifest)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local PileSurface = require(Shared.Domain.PileSurface)
 local FeatherLayout = require(Shared.Domain.FeatherLayout)
+local RoundEvents = require(Shared.Domain.RoundEvents)
 
 local PileVisualController = {}
 PileVisualController.__index = PileVisualController
@@ -144,6 +145,9 @@ function PileVisualController.new(
 		_trove = Trove.new(),
 		_rainbowParts = {},
 		_rainbowSeed = 0,
+		-- The round's rainbow rule in the shape FeatherLayout.isRainbowRecord reads: the seed plus the
+		-- records a Rainbow Rush converted (feather id -> true).
+		_rainbowPile = { rainbowSeed = 0, rainbowOverrides = {} },
 		_rainbowLoop = nil,
 		target = nil,
 		stats = {
@@ -432,7 +436,7 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 			part.Color = paletteColor(self._config, depthTint(visual, placement.tint, column.base - slot))
 			part:SetAttribute(FEATHER_ID_ATTRIBUTE, FeatherLayout.featherId(column.index, slot))
 			column.feathers[slot] = part
-			if FeatherLayout.isRainbow(self._config, self._rainbowSeed or 0, column.index, slot) then
+			if FeatherLayout.isRainbowRecord(self._config, self._rainbowPile, column.index, slot) then
 				self:_dressRainbow(part, column.index, slot)
 			end
 			local yaw = self:_downslope(wx, wz) + (placement.yaw / (math.pi * 2) - 0.5) * math.rad(visual.downslopeYawJitterDegrees) * 2
@@ -638,9 +642,17 @@ function PileVisualController.build(self: PileVisualController, pile: { [string]
 		remaining = table.clone(pile.remaining),
 		base = table.clone(pile.base),
 		masks = table.clone(pile.masks or {}),
+		-- Kept so a quality rebuild draws the same Rainbow Feathers (seeded and converted).
+		rainbowSeed = pile.rainbowSeed,
+		rainbowOverrides = table.clone(pile.rainbowOverrides or {}),
 	}
 	self._lastChapter = chapter
 	self._rainbowSeed = pile.rainbowSeed or 0
+	local overrides = {}
+	for _, id in ipairs(pile.rainbowOverrides or {}) do
+		overrides[id] = true
+	end
+	self._rainbowPile = { rainbowSeed = self._rainbowSeed, rainbowOverrides = overrides }
 	self._generation += 1
 	local generation = self._generation
 	local folder = Instance.new("Folder")
@@ -1497,6 +1509,31 @@ function PileVisualController._dressRainbow(self: PileVisualController, part: Ba
 	motes.Parent = part
 	self._rainbowParts[part] = FeatherLayout.hash(cellIndex, slot, 7) -- phase offset for the hue flow
 	self:_ensureRainbowLoop()
+end
+
+-- A Rainbow Rush converted these records (server-authoritative ids). They join the round's rainbow
+-- rule for the rest of the round; a converted record already on screen is dressed in place, and a
+-- buried one is dressed when digging exposes it. Returns how many were dressed now.
+function PileVisualController.applyRainbowOverrides(self: PileVisualController, featherIds: { number }): number
+	local overrides = self._rainbowPile.rainbowOverrides
+	local dressed = 0
+	for _, id in ipairs(featherIds) do
+		if type(id) ~= "number" or overrides[id] then
+			continue
+		end
+		overrides[id] = true
+		local index, slot = FeatherLayout.decode(id)
+		local column = index and self._columns[index]
+		local part = column and slot and column.feathers[slot] or nil
+		if part and not part:GetAttribute(RAINBOW_ATTRIBUTE) then
+			self:_dressRainbow(part, index :: number, slot :: number)
+			dressed += 1
+		end
+	end
+	if self._lastPile then
+		self._lastPile.rainbowOverrides = RoundEvents.overrideList(overrides)
+	end
+	return dressed
 end
 
 -- One shared heartbeat drives the hue of every rainbow record (and any in flight): a smooth,

@@ -14,6 +14,7 @@ local PileGrid = require(Shared.Domain.PileGrid)
 local NestSurvey = require(Shared.Domain.NestSurvey)
 local PileSurface = require(Shared.Domain.PileSurface)
 local EggNodes = require(Shared.Domain.EggNodes)
+local RoundEvents = require(Shared.Domain.RoundEvents)
 local ToolSpecs = require(Shared.Domain.ToolSpecs)
 local Signal = require(Shared.Util.Signal)
 
@@ -61,6 +62,8 @@ export type Runtime = {
 	resultsShownAt: number?,
 	returnVotes: { [number]: string },
 	survey: NestSurvey.State?, -- Molly's readings (up to three); owned by SurveyService, reset with the round
+	rainbowOverrides: { [number]: boolean }, -- Rainbow Rush conversions by feather id
+	roundEvent: any?, -- the round's one mid-round event (RoundEventService)
 }
 
 export type RoundService = typeof(setmetatable(
@@ -213,6 +216,9 @@ function RoundService.createForParty(
 		eggDepthFraction = eggDepthFraction,
 		eggLucky = eggLucky,
 		rainbowSeed = math.floor(self._rng:next() * 1000000),
+		-- Records a Rainbow Rush converted (feather id -> true); they stay rainbow for the round.
+		rainbowOverrides = {},
+		roundEvent = nil, -- the round's one mid-round event; owned by RoundEventService
 		eggSlot = eggSlot,
 		eggCoverCleared = false,
 		players = {},
@@ -553,9 +559,12 @@ function RoundService.project(self: RoundService, roundId: string, includePile: 
 	projection.removedFraction = PileGrid.removedFraction(runtime.grid)
 	-- Areas and signal words only; never the Egg's place.
 	projection.survey = NestSurvey.project(self._config, runtime.survey)
+	-- The round's event (kind, deadline, progress, its own spot); never anything about the Egg.
+	projection.event = RoundEvents.project(runtime.roundEvent, nowMs)
 	if includePile then
 		projection.pile = PileGrid.snapshot(runtime.grid)
 		projection.pile.rainbowSeed = runtime.rainbowSeed or 0
+		projection.pile.rainbowOverrides = RoundEvents.overrideList(runtime.rainbowOverrides)
 		local bundles = {}
 		for _, bundle in pairs(runtime.bundles) do
 			table.insert(bundles, {
