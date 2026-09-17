@@ -448,7 +448,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		-- Rays behind the reward, clipped by the face: they turn on the claimable card and the finale.
 		local rays = Skin.texture(face, "texture.sunburst", {
 			zIndex = z + 5,
-			transparency = 0.62,
+			transparency = 0.45,
 			color = Tokens.color.goldLight,
 			name = "Rays",
 		})
@@ -457,7 +457,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			-- over the parchment. It breathes in transparency instead.
 			rays.AnchorPoint = Vector2.new(0.5, 0.5)
 			rays.Position = UDim2.fromScale(0.5, 0.58)
-			rays.Size = UDim2.fromScale(1, 1)
+			rays.Size = UDim2.fromScale(1.2, 1.2)
 			rays.ScaleType = Enum.ScaleType.Fit
 			rays.Visible = false
 		end
@@ -483,20 +483,21 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			outline = 1.6,
 			outlineColor = CHOCOLATE_DEEP,
 			zIndex = z + 7,
-			size = UDim2.fromScale(0.86, 0.86),
+			size = UDim2.fromScale(0.7, 0.86),
 			position = UDim2.fromScale(0.5, 0.5),
 			anchor = Vector2.new(0.5, 0.5),
 		})
-		local lock = Icons.lock(face, 16, { zIndex = z + 8, color = Tokens.color.cocoa })
-		lock.AnchorPoint = Vector2.new(1, 0)
-		lock.Position = UDim2.fromScale(0.985, 0.045)
-		lock.Size = UDim2.fromScale(0.13, 0.13)
+		-- State glyphs live inside the tag, at its right end.
+		local lock = Icons.lock(tag, 16, { zIndex = z + 8, color = Tokens.color.featherWhite })
+		lock.AnchorPoint = Vector2.new(1, 0.5)
+		lock.Position = UDim2.fromScale(0.95, 0.5)
+		lock.Size = UDim2.fromScale(0, 0.78)
 		Fit.aspect(lock, 1, Enum.DominantAxis.Height)
 		lock.Visible = false
-		local check = Icons.check(face, 16, { zIndex = z + 8, color = Tokens.color.leafDeep })
-		check.AnchorPoint = Vector2.new(1, 0)
-		check.Position = UDim2.fromScale(0.985, 0.045)
-		check.Size = UDim2.fromScale(0.13, 0.13)
+		local check = Icons.check(tag, 16, { zIndex = z + 8, color = Tokens.color.featherWhite })
+		check.AnchorPoint = Vector2.new(1, 0.5)
+		check.Position = UDim2.fromScale(0.95, 0.5)
+		check.Size = UDim2.fromScale(0, 0.8)
 		Fit.aspect(check, 1, Enum.DominantAxis.Height)
 		check.Visible = false
 
@@ -519,8 +520,11 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		local artScale = Instance.new("UIScale")
 		artScale.Parent = artBox
 		local role = artRoleFor(entry.gems or 0, biggest, grand)
+		-- The painted pieces carry transparent margins, so the image overscans its box (the face
+		-- clips it) and the visible stone fills the band it was given.
+		local overscan = if role == "hud.gem" or role == "perk.gemValue" then 1.34 else 1.16
 		local art: GuiObject? = Fit.image(artBox, role, {
-			size = UDim2.fromScale(1, 1),
+			size = UDim2.fromScale(overscan, overscan),
 			position = UDim2.fromScale(0.5, 0.5),
 			zIndex = z + 7,
 			name = "Art",
@@ -842,11 +846,11 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				cell.raysTween = nil
 			end
 			if live and not motion.reducedMotion then
-				cell.rays.ImageTransparency = 0.62
+				cell.rays.ImageTransparency = 0.45
 				cell.raysTween = TweenService:Create(
 					cell.rays,
 					TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-					{ ImageTransparency = 0.8 }
+					{ ImageTransparency = 0.66 }
 				)
 				cell.raysTween:Play()
 			end
