@@ -12,6 +12,7 @@ local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
 local Button = require(script.Parent.Components.Button)
+local FrameKit = require(script.Parent.Components.Frame)
 local SafeArea = require(script.Parent.SafeArea)
 
 local IntroOverlay = {}
@@ -86,28 +87,33 @@ function IntroOverlay.create(parent: Instance, options: Options): Overlay
 	local _, releaseScale, stage = SafeArea.applyScale(gui, options.config)
 	stage.ZIndex = 5
 
-	-- Subtitle: light text on a soft dark plate, low enough to sit inside the bottom bar's breathing
-	-- room but never under it.
+	-- Subtitle: white stroked text on a dark slate plate with a black keyline, low enough to sit
+	-- inside the bottom bar's breathing room but never under it.
 	local plate = Instance.new("Frame")
 	plate.Name = "SubtitlePlate"
 	plate.AnchorPoint = Vector2.new(0.5, 1)
 	plate.Position = UDim2.fromScale(0.5, 0.84)
 	plate.Size = UDim2.fromOffset(0, 0)
 	plate.AutomaticSize = Enum.AutomaticSize.XY
-	plate.BackgroundColor3 = Color3.fromRGB(18, 13, 9)
-	plate.BackgroundTransparency = 0.25
+	plate.BackgroundColor3 = Tokens.color.panelDeep
+	plate.BackgroundTransparency = 0.15
 	plate.BorderSizePixel = 0
 	plate.Visible = false
 	plate.ZIndex = 6
 	plate.Parent = stage
 	local plateCorner = Instance.new("UICorner")
-	plateCorner.CornerRadius = UDim.new(0, Tokens.radius.sm)
+	plateCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
 	plateCorner.Parent = plate
+	local plateStroke = Instance.new("UIStroke")
+	plateStroke.Thickness = Tokens.depth.keylineThin
+	plateStroke.Color = Tokens.color.outline
+	plateStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	plateStroke.Parent = plate
 	local platePad = Instance.new("UIPadding")
 	platePad.PaddingTop = UDim.new(0, Tokens.spacing.xs)
 	platePad.PaddingBottom = UDim.new(0, Tokens.spacing.xs)
-	platePad.PaddingLeft = UDim.new(0, Tokens.spacing.md)
-	platePad.PaddingRight = UDim.new(0, Tokens.spacing.md)
+	platePad.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
+	platePad.PaddingRight = UDim.new(0, Tokens.spacing.lg)
 	platePad.Parent = plate
 	local subtitle = Instance.new("TextLabel")
 	subtitle.Name = "Subtitle"
@@ -117,10 +123,9 @@ function IntroOverlay.create(parent: Instance, options: Options): Overlay
 	subtitle.Font = Tokens.typography.title.font
 	subtitle.TextSize = Tokens.typography.title.size
 	subtitle.TextColor3 = Tokens.color.featherWhite
-	subtitle.TextStrokeColor3 = Color3.new(0, 0, 0)
-	subtitle.TextStrokeTransparency = 0.4
 	subtitle.Text = ""
 	subtitle.ZIndex = 7
+	FrameKit.outline(subtitle, 2.5)
 	subtitle.Parent = plate
 	local subtitleCap = Instance.new("UISizeConstraint")
 	subtitleCap.MaxSize = Vector2.new(820, math.huge)
@@ -134,15 +139,15 @@ function IntroOverlay.create(parent: Instance, options: Options): Overlay
 	waiting.BackgroundTransparency = 1
 	waiting.Font = Tokens.typography.body.font
 	waiting.TextSize = Tokens.typography.body.size
-	waiting.TextColor3 = Tokens.color.creamDeep
-	waiting.TextStrokeColor3 = Color3.new(0, 0, 0)
-	waiting.TextStrokeTransparency = 0.5
+	waiting.TextColor3 = Tokens.color.inkMuted
 	waiting.Text = intro.waitingLabel
 	waiting.Visible = false
 	waiting.ZIndex = 9
+	FrameKit.outline(waiting, 2)
 	waiting.Parent = stage
 
 	-- The objective card: the one thing that survives the fade, so the round opens on its goal.
+	-- White display lettering with a thick black stroke; the stroke fades with the text.
 	local objective = Instance.new("TextLabel")
 	objective.Name = "Objective"
 	objective.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -152,11 +157,11 @@ function IntroOverlay.create(parent: Instance, options: Options): Overlay
 	objective.Font = Tokens.typography.display.font
 	objective.TextSize = Tokens.typography.display.size
 	objective.TextColor3 = Tokens.color.featherWhite
-	objective.TextStrokeColor3 = Color3.new(0, 0, 0)
-	objective.TextStrokeTransparency = 0.35
 	objective.TextTransparency = 1
 	objective.Text = ""
 	objective.ZIndex = 10
+	local objectiveOutline = FrameKit.outline(objective, 4)
+	objectiveOutline.Transparency = 1
 	objective.Parent = stage
 
 	local skip: Button.Handle? = nil
@@ -244,10 +249,13 @@ function IntroOverlay.create(parent: Instance, options: Options): Overlay
 			end
 			objective.Text = text
 			objective.TextTransparency = 1
+			objectiveOutline.Transparency = 1
 			tween(objective, 0.35, { TextTransparency = 0 })
+			tween(objectiveOutline, 0.35, { Transparency = 0 })
 			task.delay(math.max(0.1, seconds), function()
 				if alive then
 					tween(objective, 0.5, { TextTransparency = 1 })
+					tween(objectiveOutline, 0.5, { Transparency = 1 })
 				end
 			end)
 		end,

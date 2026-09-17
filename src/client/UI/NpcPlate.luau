@@ -1,7 +1,8 @@
 --!strict
 -- Vendor presentation for the lobby NPCs: a floating nameplate (name + role pill) and a speech
--- bubble that pops when the player walks up. Drawn in the UI language (cream, cocoa outline, gold
--- lip) inside BillboardGuis so it reads at a fixed screen size from any distance.
+-- bubble that pops when the player walks up. Drawn in the UI language (dark slate pills, black
+-- keylines, white stroked lettering) inside BillboardGuis so it reads at a fixed screen size from
+-- any distance.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -33,7 +34,7 @@ end
 
 function NpcPlate.build(adornee: BasePart, name: string, role: string, heightStuds: number, options: { onTop: boolean? }?): Handle
 	local opts = (options or {}) :: any
-	-- Nameplate: outlined name over a small gold role pill.
+	-- Nameplate: stroked white name over a small dark slate role pill.
 	local plate = billboard("Nameplate", adornee, UDim2.fromOffset(220, 62), Vector3.new(0, heightStuds, 0))
 	plate.AlwaysOnTop = opts.onTop == true
 	local nameLabel = FrameKit.text(plate, "Name", name, "title", {
@@ -43,25 +44,25 @@ function NpcPlate.build(adornee: BasePart, name: string, role: string, heightStu
 	})
 	nameLabel.Size = UDim2.new(1, 0, 0, Tokens.typography.title.size + 6)
 	nameLabel.TextSize = Tokens.typography.title.size - 2
-	FrameKit.outline(nameLabel, 2.4)
-	-- Role pill: cocoa plank with white outlined lettering. Gold-on-gold caption text was unreadable
-	-- against the sky and the barn.
+	FrameKit.outline(nameLabel, 3)
+	-- Role pill: a dark slate pill with white stroked lettering. The caption is white, never gold on
+	-- gold, which was unreadable against the sky and the barn.
 	local pill = FrameKit.pill(plate, "Role", role, {
 		size = UDim2.fromOffset(0, Tokens.typography.label.size + Tokens.spacing.md),
 		textSize = Tokens.typography.label.size - 2,
 		zIndex = 2,
-		fill = Tokens.color.cocoa,
+		fill = Tokens.color.surface,
 		textColor = Tokens.color.featherWhite,
 		fitText = true,
 		outline = true,
 	})
 	pill.Font = Tokens.typography.label.font
-	-- A UIGradient on a TextLabel tints the lettering too, so the pill is a flat cocoa plank.
+	-- A UIGradient on a TextLabel tints the lettering too, so the pill is a flat slate plank.
 	local pillShade = pill:FindFirstChildOfClass("UIGradient")
 	if pillShade then
 		pillShade:Destroy()
 	end
-	pill.BackgroundColor3 = Tokens.color.cocoa
+	pill.BackgroundColor3 = Tokens.color.surface
 	local roleOutline = pill:FindFirstChild("TextOutline")
 	if roleOutline and roleOutline:IsA("UIStroke") then
 		roleOutline.Thickness = 2
@@ -69,7 +70,7 @@ function NpcPlate.build(adornee: BasePart, name: string, role: string, heightStu
 	pill.AnchorPoint = Vector2.new(0.5, 1)
 	pill.Position = UDim2.fromScale(0.5, 1)
 
-	-- Speech bubble: cream card with a cocoa outline; grows in from the vendor's head.
+	-- Speech bubble: a dark slate card with a black keyline; grows in from the vendor's head.
 	local bubble = billboard("Speech", adornee, UDim2.fromOffset(260, 74), Vector3.new(0, heightStuds + 1.4, 0))
 	bubble.AlwaysOnTop = opts.onTop == true
 	bubble.Enabled = false
@@ -78,14 +79,14 @@ function NpcPlate.build(adornee: BasePart, name: string, role: string, heightStu
 	card.AnchorPoint = Vector2.new(0.5, 1)
 	card.Position = UDim2.fromScale(0.5, 1)
 	card.Size = UDim2.new(1, 0, 1, -8)
-	card.BackgroundColor3 = Tokens.color.featherWhite
+	card.BackgroundColor3 = Tokens.color.surface
 	card.BorderSizePixel = 0
 	card.ZIndex = 3
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, Tokens.radius.lg)
 	corner.Parent = card
 	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = Tokens.stroke.bold
+	stroke.Thickness = Tokens.depth.keyline
 	stroke.Color = Tokens.color.outline
 	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = card
@@ -99,12 +100,13 @@ function NpcPlate.build(adornee: BasePart, name: string, role: string, heightStu
 	scale.Parent = card
 	local text = FrameKit.text(card, "Line", "", "body", {
 		zIndex = 4,
-		color = Tokens.color.inkStrong,
+		color = Tokens.color.featherWhite,
 		align = Enum.TextXAlignment.Center,
 		wrap = true,
 	})
 	text.Size = UDim2.fromScale(1, 1)
 	text.TextYAlignment = Enum.TextYAlignment.Center
+	FrameKit.outline(text, 2)
 	card.Parent = bubble
 	-- Tail: a small rotated square under the card.
 	local tail = Instance.new("Frame")
@@ -113,11 +115,11 @@ function NpcPlate.build(adornee: BasePart, name: string, role: string, heightStu
 	tail.Position = UDim2.new(0.5, 0, 1, -8)
 	tail.Size = UDim2.fromOffset(14, 14)
 	tail.Rotation = 45
-	tail.BackgroundColor3 = Tokens.color.featherWhite
+	tail.BackgroundColor3 = Tokens.color.surface
 	tail.BorderSizePixel = 0
 	tail.ZIndex = 2
 	local tailStroke = Instance.new("UIStroke")
-	tailStroke.Thickness = Tokens.stroke.bold
+	tailStroke.Thickness = Tokens.depth.keyline
 	tailStroke.Color = Tokens.color.outline
 	tailStroke.Parent = tail
 	tail.Parent = bubble

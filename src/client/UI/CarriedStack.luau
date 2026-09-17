@@ -13,6 +13,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
+local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
 local AssetManifest = require(Shared.Design.AssetManifest)
 local FeatherLayout = require(Shared.Domain.FeatherLayout)
@@ -166,15 +167,15 @@ function CarriedStack.new(
 	viewport.LightColor = Color3.fromRGB(255, 244, 222)
 	viewport.LightDirection = Vector3.new(-0.55, -0.75, 0.4)
 	viewport.ZIndex = 3
-	-- A soft warm-dark shade under the bundle: the one thing that separates it from the pile when
-	-- both are ivory. Ellipse, faded at its ends, no image.
+	-- A soft dark shade under the bundle: the one thing that separates it from the pile when both
+	-- are ivory. Ellipse in the kit's near-black, faded at its ends, no image.
 	local shade = Instance.new("Frame")
 	shade.Name = "Shade"
 	shade.AnchorPoint = Vector2.new(0.5, 0.5)
 	shade.Position = UDim2.fromScale(0.62, 0.66)
 	shade.Size = UDim2.fromScale(0.8, 0.5)
-	shade.BackgroundColor3 = Color3.fromRGB(64, 42, 24)
-	shade.BackgroundTransparency = 0.8
+	shade.BackgroundColor3 = Tokens.color.overlay
+	shade.BackgroundTransparency = 0.78
 	shade.BorderSizePixel = 0
 	shade.ZIndex = 2
 	local shadeCorner = Instance.new("UICorner")

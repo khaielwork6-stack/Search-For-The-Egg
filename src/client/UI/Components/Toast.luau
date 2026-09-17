@@ -1,8 +1,8 @@
 --!strict
--- Toast queue: at most three visible, each auto-dismissing. Cream cards with a tone strip and a
--- vector glyph slide in from above (Back-out), pop, and shrink away. Non-blocking, inside the safe
--- area at the top-center. Reward toasts count their amount up only after the server acknowledged
--- the grant, with a coin icon.
+-- Toast queue: at most three visible, each auto-dismissing. Dark slate pills with a coloured accent
+-- on the left (green for success, red for a warning) and a vector glyph slide in from above
+-- (Back-out), pop, and shrink away. Non-blocking, inside the safe area at the top-center. Reward
+-- toasts count their amount up only after the server acknowledged the grant, with a coin icon.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
@@ -10,6 +10,7 @@ local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
 local Tween = require(script.Parent.Tween)
 local FrameKit = require(script.Parent.Frame)
+local Depth = require(script.Parent.Depth)
 local Icons = require(script.Parent.Icons)
 local Skin = require(script.Parent.Skin)
 
@@ -30,9 +31,9 @@ export type Toast = typeof(setmetatable(
 ))
 
 local TONES: { [string]: { color: Color3, icon: string } } = {
-	info = { color = Tokens.color.tealAccent, icon = "feather" },
+	info = { color = Tokens.color.sky, icon = "feather" },
 	success = { color = Tokens.color.success, icon = "check" },
-	warning = { color = Tokens.color.warning, icon = "star" },
+	warning = { color = Tokens.color.ember, icon = "star" },
 	danger = { color = Tokens.color.danger, icon = "close" },
 	reward = { color = Tokens.color.gold, icon = "coin" },
 }
@@ -89,34 +90,45 @@ function Toast._drain(self: Toast)
 		local card = Instance.new("Frame")
 		card.Name = "Toast"
 		card.Size = UDim2.new(1, 0, 0, Tokens.layout.minimumTapTargetPx + Tokens.spacing.xs)
-		card.BackgroundColor3 = Tokens.color.goldDeep
+		card.BackgroundColor3 = Tokens.color.panelDeep
 		card.ZIndex = Tokens.zIndex.toast
 		card.Visible = false
 		local corner = Instance.new("UICorner")
 		corner.CornerRadius = UDim.new(0, Tokens.radius.pill)
 		corner.Parent = card
-		local stroke = Instance.new("UIStroke")
-		stroke.Thickness = Tokens.stroke.bold
-		stroke.Color = Tokens.color.outline
-		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		stroke.Parent = card
+		Depth.keyline(card)
 		local scale = Instance.new("UIScale")
 		scale.Parent = card
 		local face = Instance.new("Frame")
 		face.Name = "Face"
 		face.Size = UDim2.new(1, 0, 1, -4)
-		face.BackgroundColor3 = Tokens.color.featherWhite
+		face.BackgroundColor3 = Tokens.color.surface
 		face.BorderSizePixel = 0
+		face.ClipsDescendants = true
 		face.ZIndex = card.ZIndex + 1
 		local faceCorner = Instance.new("UICorner")
 		faceCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
 		faceCorner.Parent = face
-		local gradient = Instance.new("UIGradient")
-		gradient.Rotation = 90
-		gradient.Color =
-			ColorSequence.new({ ColorSequenceKeypoint.new(0, Tokens.color.featherWhite), ColorSequenceKeypoint.new(1, Tokens.color.cream) })
-		gradient.Parent = face
+		Depth.applySheen(face, Tokens.color.surface)
 		face.Parent = card
+		-- The tone accent: a band of the tone colour down the left edge, under the glyph disc.
+		local accent = Instance.new("Frame")
+		accent.Name = "Accent"
+		accent.Size = UDim2.new(0, Tokens.spacing.xs + 2 + Tokens.icon.lg + 2 + Tokens.spacing.sm, 1, 0)
+		accent.BackgroundColor3 = tone.color
+		accent.BorderSizePixel = 0
+		accent.ZIndex = card.ZIndex + 1
+		local accentCorner = Instance.new("UICorner")
+		accentCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
+		accentCorner.Parent = accent
+		local accentFade = Instance.new("UIGradient")
+		accentFade.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.35),
+			NumberSequenceKeypoint.new(0.6, 0.55),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		accentFade.Parent = accent
+		accent.Parent = face
 		-- Tone glyph in a coloured disc on the left.
 		local glyphBadge = Instance.new("Frame")
 		glyphBadge.Name = "Glyph"
@@ -156,26 +168,27 @@ function Toast._drain(self: Toast)
 			"Text",
 			item.text,
 			"body",
-			{ align = Enum.TextXAlignment.Left, zIndex = card.ZIndex + 2, color = Tokens.color.inkStrong }
+			{ align = Enum.TextXAlignment.Left, zIndex = card.ZIndex + 2, color = Tokens.color.featherWhite }
 		)
 		label.Font = Tokens.typography.heading.font
 		label.Position = UDim2.fromOffset(textLeft, 0)
 		label.Size = UDim2.new(1, -(textLeft + Tokens.spacing.lg), 1, 0)
 		label.TextYAlignment = Enum.TextYAlignment.Center
+		FrameKit.outline(label, 2)
 		if item.amount then
 			local amountLabel = FrameKit.text(
 				face,
 				"Amount",
 				"+0",
 				"numeral",
-				{ align = Enum.TextXAlignment.Right, color = Tokens.color.goldDeep, zIndex = card.ZIndex + 2 }
+				{ align = Enum.TextXAlignment.Right, color = Tokens.color.gold, zIndex = card.ZIndex + 2 }
 			)
 			amountLabel.Font = Tokens.typography.label.font
 			amountLabel.AnchorPoint = Vector2.new(1, 0.5)
 			amountLabel.Position = UDim2.new(1, -Tokens.spacing.lg, 0.5, 0)
 			amountLabel.Size = UDim2.fromOffset(120, Tokens.typography.numeral.size + Tokens.spacing.xs)
 			amountLabel.TextYAlignment = Enum.TextYAlignment.Center
-			FrameKit.outline(amountLabel, 1.2)
+			FrameKit.outline(amountLabel, 2.4)
 			label.Size = UDim2.new(1, -(textLeft + 120 + Tokens.spacing.lg), 1, 0)
 			Tween.countUp(0, item.amount :: number, self._motion(), function(value)
 				amountLabel.Text = string.format("+%d Gems", value)

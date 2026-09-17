@@ -1,9 +1,9 @@
 --!strict
--- What is on screen while a player is at Molly's map: a wooden sign across the top with the one
--- instruction, a feather counter on the right (carried against the next crate) with the round's
--- surveys-left pips under it, and the one orange button at the bottom with a small BACK beside it.
--- The map itself is the interface; this only names the decision. It draws and reports presses;
--- the MollyController owns every decision.
+-- What is on screen while a player is at Molly's map: a dark slate banner across the top with the
+-- one instruction, a feather counter on the right (carried against the next crate) with the
+-- round's surveys-left pips under it, and the one green button at the bottom with a small red BACK
+-- beside it. The map itself is the interface; this only names the decision. It draws and reports
+-- presses; the MollyController owns every decision.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -18,9 +18,8 @@ local SafeArea = require(script.Parent.SafeArea)
 
 local SurveyPanel = {}
 
-local PAPER = Color3.fromRGB(246, 236, 212)
-local WOOD = Color3.fromRGB(150, 112, 66)
-local WOOD_DEEP = Color3.fromRGB(104, 74, 42)
+local PLATE = Tokens.color.surface
+local WELL = Tokens.color.panelDeep
 
 export type State = {
 	title: string, -- the sign: "PICK ONE AREA", "SCANNING...", the result
@@ -62,81 +61,79 @@ function SurveyPanel.create(
 	gui.Parent = parent
 	local _, scaleCleanup, stage = SafeArea.applyScale(gui, deps.config)
 
-	-- The sign: a plank with a parchment inset, hung from the top.
+	-- The sign: a dark slate banner with a green line along its top, hung from the top of the screen.
 	local sign = Instance.new("Frame")
 	sign.Name = "Sign"
 	sign.AnchorPoint = Vector2.new(0.5, 0)
 	sign.Position = UDim2.new(0.5, 0, 0, Tokens.spacing.lg)
 	sign.Size = UDim2.new(0.5, 0, 0, 104)
 	sign.ZIndex = 2
-	Depth.panel(sign, WOOD, { radius = Tokens.radius.md, rim = Color3.fromRGB(214, 170, 110) })
+	Depth.panel(sign, PLATE, { radius = Tokens.radius.lg })
 	local signCap = Instance.new("UISizeConstraint")
 	signCap.MaxSize = Vector2.new(620, 104)
 	signCap.MinSize = Vector2.new(300, 104)
 	signCap.Parent = sign
 	sign.Parent = stage
-	for _, x in ipairs({ 0.12, 0.88 }) do
-		local nail = Instance.new("Frame")
-		nail.Name = "Nail"
-		nail.AnchorPoint = Vector2.new(0.5, 0.5)
-		nail.Position = UDim2.new(x, 0, 0, 10)
-		nail.Size = UDim2.fromOffset(10, 10)
-		nail.BackgroundColor3 = Tokens.color.goldDeep
-		nail.ZIndex = 5
-		local nailCorner = Instance.new("UICorner")
-		nailCorner.CornerRadius = UDim.new(1, 0)
-		nailCorner.Parent = nail
-		nail.Parent = sign
-	end
+	local signLine = Instance.new("Frame")
+	signLine.Name = "Line"
+	signLine.AnchorPoint = Vector2.new(0.5, 0)
+	signLine.Position = UDim2.new(0.5, 0, 0, 3)
+	signLine.Size = UDim2.new(1, -Tokens.radius.lg * 2, 0, 4)
+	signLine.BackgroundColor3 = Tokens.color.success
+	signLine.BorderSizePixel = 0
+	signLine.ZIndex = 3
+	local signLineCorner = Instance.new("UICorner")
+	signLineCorner.CornerRadius = UDim.new(1, 0)
+	signLineCorner.Parent = signLine
+	signLine.Parent = sign
 	local inset = Instance.new("Frame")
 	inset.Name = "Inset"
 	inset.AnchorPoint = Vector2.new(0.5, 0.5)
 	inset.Position = UDim2.fromScale(0.5, 0.5)
 	inset.Size = UDim2.new(1, -Tokens.spacing.lg * 2, 1, -Tokens.spacing.lg)
-	inset.BackgroundColor3 = PAPER
+	inset.BackgroundTransparency = 1
 	inset.ZIndex = 3
-	local insetCorner = Instance.new("UICorner")
-	insetCorner.CornerRadius = UDim.new(0, Tokens.radius.sm)
-	insetCorner.Parent = inset
-	Depth.keyline(inset, Tokens.stroke.standard, WOOD_DEEP)
 	inset.Parent = sign
 	local title = FrameKit.text(
 		inset,
 		"Title",
 		"PICK ONE AREA",
 		"display",
-		{ zIndex = 4, color = Tokens.color.inkStrong, align = Enum.TextXAlignment.Center }
+		{ zIndex = 4, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Center }
 	)
 	title.Position = UDim2.fromScale(0, 0.04)
 	title.Size = UDim2.fromScale(1, 0.62)
 	title.TextScaled = true
+	outlined(title, 3)
 	local caption =
 		FrameKit.text(inset, "Caption", "", "caption", { zIndex = 4, color = Tokens.color.inkMuted, align = Enum.TextXAlignment.Center })
 	caption.Position = UDim2.fromScale(0, 0.66)
 	caption.Size = UDim2.fromScale(1, 0.3)
 	caption.TextScaled = true
+	outlined(caption, 2)
 	local signScale = Instance.new("UIScale")
 	signScale.Parent = sign
 
-	-- The feather counter, top right.
+	-- The feather counter, top right: a slate pill with a dark well for the numerals.
 	local counter = Instance.new("Frame")
 	counter.Name = "Counter"
 	counter.AnchorPoint = Vector2.new(1, 0)
 	counter.Position = UDim2.new(1, -Tokens.spacing.lg, 0, Tokens.spacing.lg + 20)
 	counter.Size = UDim2.fromOffset(250, 64)
 	counter.ZIndex = 2
-	Depth.panel(counter, WOOD, { radius = Tokens.radius.md, rim = Color3.fromRGB(214, 170, 110) })
+	Depth.panel(counter, PLATE, { radius = Tokens.radius.lg })
 	counter.Parent = stage
 	local counterInset = Instance.new("Frame")
 	counterInset.Name = "Inset"
 	counterInset.AnchorPoint = Vector2.new(0.5, 0.5)
 	counterInset.Position = UDim2.fromScale(0.5, 0.5)
 	counterInset.Size = UDim2.new(1, -Tokens.spacing.md, 1, -Tokens.spacing.md)
-	counterInset.BackgroundColor3 = WOOD_DEEP
+	counterInset.BackgroundColor3 = WELL
 	counterInset.ZIndex = 3
 	local counterCorner = Instance.new("UICorner")
-	counterCorner.CornerRadius = UDim.new(0, Tokens.radius.sm)
+	counterCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
 	counterCorner.Parent = counterInset
+	Depth.keyline(counterInset, Tokens.depth.keylineThin)
 	counterInset.Parent = counter
 	local featherIcon = Skin.icon(counterInset, "icon.feather", 36, 4)
 	if featherIcon then
@@ -155,7 +152,7 @@ function SurveyPanel.create(
 	count.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, 0)
 	count.Size = UDim2.new(1, -60, 0.8, 0)
 	count.TextScaled = true
-	outlined(count, 2, WOOD_DEEP)
+	outlined(count, 3)
 
 	-- Surveys left this round: one pip per survey, lit while it is still to be bought.
 	local pips = Instance.new("Frame")
@@ -177,7 +174,7 @@ function SurveyPanel.create(
 	pipsLabel.AnchorPoint = Vector2.new(1, 0.5)
 	pipsLabel.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, 0)
 	pipsLabel.Size = UDim2.fromScale(0.6, 1)
-	outlined(pipsLabel, 2, WOOD_DEEP)
+	outlined(pipsLabel, 2)
 	local pipDots: { Frame } = {}
 	local function buildPips(total: number)
 		for _, dot in ipairs(pipDots) do
@@ -190,18 +187,18 @@ function SurveyPanel.create(
 			dot.AnchorPoint = Vector2.new(0, 0.5)
 			dot.Position = UDim2.new(0, Tokens.spacing.sm + (i - 1) * 26, 0.5, 0)
 			dot.Size = UDim2.fromOffset(18, 18)
-			dot.BackgroundColor3 = Tokens.color.goldLight
+			dot.BackgroundColor3 = Tokens.color.gold
 			dot.ZIndex = 3
 			local dotCorner = Instance.new("UICorner")
 			dotCorner.CornerRadius = UDim.new(1, 0)
 			dotCorner.Parent = dot
-			Depth.keyline(dot, 2, WOOD_DEEP)
+			Depth.keyline(dot, Tokens.depth.keylineThin)
 			dot.Parent = pips
 			table.insert(pipDots, dot)
 		end
 	end
 
-	-- The bottom row: BACK, the primary, SKIP.
+	-- The bottom row: a red BACK, the green primary, a slate SKIP.
 	local row = Instance.new("Frame")
 	row.Name = "Actions"
 	row.AnchorPoint = Vector2.new(0.5, 1)
@@ -212,7 +209,7 @@ function SurveyPanel.create(
 	row.Parent = stage
 	local back = Button.build(row, {
 		text = "X  BACK",
-		variant = "secondary",
+		variant = "danger",
 		minimumTapTarget = tap,
 		motion = motion,
 		size = UDim2.fromOffset(150, 72),
@@ -227,7 +224,7 @@ function SurveyPanel.create(
 	back.button.Position = UDim2.new(0.5, -300, 0.5, 0)
 	local primary = Button.build(row, {
 		text = "SCAN",
-		variant = "ember",
+		variant = "success",
 		minimumTapTarget = tap,
 		motion = motion,
 		size = UDim2.fromOffset(560, 96),
@@ -248,7 +245,7 @@ function SurveyPanel.create(
 	primaryCap.Parent = primary.button
 	local skip = Button.build(row, {
 		text = "SKIP",
-		variant = "ghost",
+		variant = "secondary",
 		minimumTapTarget = tap,
 		motion = motion,
 		size = UDim2.fromOffset(140, 64),
@@ -270,13 +267,13 @@ function SurveyPanel.create(
 		lastTitle = state.title
 		title.Text = state.title
 		title.TextColor3 = if state.tone == "good"
-			then Tokens.color.goldDeep
-			elseif state.tone == "bad" then Color3.fromRGB(90, 110, 140)
-			else Tokens.color.inkStrong
+			then Tokens.color.success
+			elseif state.tone == "bad" then Tokens.color.ember
+			else Tokens.color.featherWhite
 		caption.Text = state.caption or ""
 		caption.Visible = (state.caption or "") ~= ""
 		count.Text = string.format("%d / %d", state.carried, state.cost)
-		count.TextColor3 = if state.carried >= state.cost then Tokens.color.featherWhite else Color3.fromRGB(255, 190, 170)
+		count.TextColor3 = if state.carried >= state.cost then Tokens.color.featherWhite else Tokens.color.ember
 		local usesMax = state.usesMax or 0
 		pips.Visible = state.usesLeft ~= nil and usesMax > 0
 		if pips.Visible then
@@ -287,8 +284,8 @@ function SurveyPanel.create(
 			for i, dot in ipairs(pipDots) do
 				-- Spent pips go dark from the left; the ones still to buy stay lit.
 				local lit = i > usesMax - left
-				dot.BackgroundColor3 = if lit then Tokens.color.goldLight else WOOD_DEEP
-				dot.BackgroundTransparency = if lit then 0 else 0.3
+				dot.BackgroundColor3 = if lit then Tokens.color.gold else WELL
+				dot.BackgroundTransparency = 0
 			end
 		end
 		primary.button.Visible = state.primary ~= nil

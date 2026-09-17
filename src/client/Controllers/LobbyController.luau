@@ -94,7 +94,8 @@ function LobbyController.new(deps: any): LobbyController
 		deps.net:request("LeaderboardRequest", nil)
 	end
 
-	-- Side menu: a vertical stack on the right edge, one square tile with its name beneath.
+	-- Side menu: a vertical stack of big painted icons on the right edge, no frame around any of
+	-- them, a short white stroked name beneath each - the reference's SHOP / BADGES / STATS column.
 	local rail = Instance.new("Frame")
 	rail.Name = "SideMenu"
 	rail.AnchorPoint = Vector2.new(1, 0.5)
@@ -118,7 +119,7 @@ function LobbyController.new(deps: any): LobbyController
 	for id, title in pairs(WORLD_TITLES) do
 		self._titles[id] = title
 	end
-	local labelHeight = Tokens.typography.caption.size + Tokens.spacing.sm
+	local labelHeight = Tokens.typography.label.size + Tokens.spacing.sm
 	for index, entry in ipairs(SIDE_MENU) do
 		self._titles[entry.id] = entry.title
 		local image = AssetManifest.image(entry.image .. ".normal") or AssetManifest.image(entry.image)
@@ -155,17 +156,22 @@ function LobbyController.new(deps: any): LobbyController
 		if not image then
 			handle.button.TextSize = Tokens.typography.caption.size + 1
 		end
-		local label = FrameKit.text(slot, "Name", entry.short, "caption", {
+		local label = FrameKit.text(slot, "Name", string.upper(entry.short), "label", {
 			zIndex = rail.ZIndex + 2,
 			color = Tokens.color.featherWhite,
 			align = Enum.TextXAlignment.Center,
 		})
 		label.Font = Tokens.typography.label.font
-		label.TextSize = Tokens.typography.caption.size + 1
+		label.TextSize = Tokens.typography.label.size
+		label.TextScaled = true
+		local labelCap = Instance.new("UITextSizeConstraint")
+		labelCap.MaxTextSize = Tokens.typography.label.size
+		labelCap.MinTextSize = Tokens.typography.minimumBodySize
+		labelCap.Parent = label
 		label.AnchorPoint = Vector2.new(0.5, 1)
 		label.Position = UDim2.fromScale(0.5, 1)
-		label.Size = UDim2.new(1, 0, 0, labelHeight)
-		FrameKit.outline(label, 1.6)
+		label.Size = UDim2.new(1, Tokens.spacing.md, 0, labelHeight)
+		FrameKit.outline(label, 3)
 		self._buttons[entry.id] = handle
 		self._trove:add(handle.destroy)
 	end

@@ -1,8 +1,9 @@
 --!strict
--- Round HUD strip: timer chip, bag meter (recessed cream track, clipped gold fill that grows with
--- the bag, outlined count, squash on award, FULL - DEPOSIT state that pulses gently until the bag is
--- emptied), and the cash chip with an accelerating count-up and a floating "+$" delta. Hidden
--- outside rounds. All vector, in the cookie-chip language of the HUD.
+-- Round HUD strip: timer pill, bag meter (a recessed dark track, a clipped fill that grows with the
+-- bag and turns green when it is full, white stroked count, squash on award, FULL - DEPOSIT state
+-- that pulses gently until the bag is emptied), and the cash pill with a gold coin, an accelerating
+-- count-up and a floating "+$" delta. Hidden outside rounds. All vector, dark slate pills with white
+-- stroked lettering like the rest of the HUD.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -11,6 +12,7 @@ local Tokens = require(Shared.Design.Tokens)
 local Motion = require(Shared.Design.Motion)
 local EconomyMath = require(Shared.EconomyMath)
 local FrameKit = require(script.Parent.Components.Frame)
+local Depth = require(script.Parent.Components.Depth)
 local Icons = require(script.Parent.Components.Icons)
 local Skin = require(script.Parent.Components.Skin)
 local Tween = require(script.Parent.Components.Tween)
@@ -56,7 +58,11 @@ local function chip(
 	text.Font = Tokens.typography.label.font
 	text.TextSize = Tokens.typography.label.size + 1
 	text.TextXAlignment = Enum.TextXAlignment.Center
-	FrameKit.outline(text, 1.4, Tokens.color.featherWhite)
+	text.TextColor3 = Tokens.color.featherWhite
+	local outline = text:FindFirstChild("TextOutline") :: UIStroke?
+	if outline then
+		outline.Thickness = 2.4
+	end
 	if iconRole or iconFallback then
 		iconSlot.Visible = true
 		local art = if iconRole then Skin.icon(iconSlot, iconRole, Tokens.icon.md + 2, iconSlot.ZIndex + 1) else nil
@@ -94,7 +100,7 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 	-- Bag: the chip face is the recessed track; the fill grows inside it, under the count.
 	local bagFrame, bagText = chip(root, "Bag", 2, BAG_WIDTH, nil, nil)
 	local face = bagFrame:FindFirstChild("Face") :: Frame
-	face.BackgroundColor3 = Tokens.color.creamDeep
+	face.BackgroundColor3 = Tokens.color.panelDeep
 	local faceGradient = face:FindFirstChildOfClass("UIGradient")
 	if faceGradient then
 		faceGradient.Enabled = false
@@ -103,25 +109,26 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 	local bagFill = Instance.new("Frame")
 	bagFill.Name = "Fill"
 	bagFill.Size = UDim2.fromScale(0, 1)
-	bagFill.BackgroundColor3 = Tokens.color.gold
+	bagFill.BackgroundColor3 = Tokens.color.leafDeep
 	bagFill.BorderSizePixel = 0
 	bagFill.ZIndex = face.ZIndex + 1
 	local fillCorner = Instance.new("UICorner")
 	fillCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
 	fillCorner.Parent = bagFill
-	local fillGradient = Instance.new("UIGradient")
-	fillGradient.Rotation = 90
-	fillGradient.Color =
-		ColorSequence.new({ ColorSequenceKeypoint.new(0, Tokens.color.goldLight), ColorSequenceKeypoint.new(1, Tokens.color.gold) })
-	fillGradient.Parent = bagFill
+	Depth.applySheen(bagFill, Tokens.color.leafDeep)
 	bagFill.Parent = face
 	bagText.Text = "Bag 0 / 25"
-	bagText.TextColor3 = Tokens.color.inkStrong
+	bagText.TextColor3 = Tokens.color.featherWhite
 	local bagScale = bagFrame:FindFirstChildOfClass("UIScale") :: UIScale
 
-	local _cashFrame, cashText = chip(root, "Cash", 3, CASH_WIDTH, "hud.token", "coin")
+	local cashFrame, cashText = chip(root, "Cash", 3, CASH_WIDTH, "hud.token", "coin")
 	cashText.Text = "$0.00"
-	cashText.TextColor3 = Tokens.color.leafDeep
+	cashText.TextColor3 = Tokens.color.featherWhite
+	local cashArt = cashFrame:FindFirstChild("IconSlot", true)
+	local cashIcon = cashArt and cashArt:FindFirstChildWhichIsA("ImageLabel")
+	if cashIcon then
+		cashIcon.ImageColor3 = Tokens.color.gold
+	end
 
 	return setmetatable({
 		root = root,
@@ -163,10 +170,11 @@ function RoundHud._setFull(self: RoundHud, full: boolean)
 		self.bagText.TextColor3 = Tokens.color.featherWhite
 		local outline = self.bagText:FindFirstChild("TextOutline") :: UIStroke?
 		if outline then
-			outline.Color = Tokens.color.emberDeep
-			outline.Thickness = 2
+			outline.Thickness = 3
 		end
-		self.bagFill.BackgroundColor3 = Tokens.color.ember
+		-- The bag pill goes green when it is full: the one time the meter is the whole message.
+		self.bagFill.BackgroundColor3 = Tokens.color.success
+		Depth.applySheen(self.bagFill, Tokens.color.success)
 		self._fullThread = task.spawn(function()
 			local showPrompt = true
 			while self._full do
@@ -184,13 +192,13 @@ function RoundHud._setFull(self: RoundHud, full: boolean)
 			task.cancel(self._fullThread)
 			self._fullThread = nil
 		end
-		self.bagText.TextColor3 = Tokens.color.inkStrong
+		self.bagText.TextColor3 = Tokens.color.featherWhite
 		local outline = self.bagText:FindFirstChild("TextOutline") :: UIStroke?
 		if outline then
-			outline.Color = Tokens.color.featherWhite
-			outline.Thickness = 1.4
+			outline.Thickness = 2.4
 		end
-		self.bagFill.BackgroundColor3 = Tokens.color.gold
+		self.bagFill.BackgroundColor3 = Tokens.color.leafDeep
+		Depth.applySheen(self.bagFill, Tokens.color.leafDeep)
 		self.bagText.Text = self._lastBagText
 	end
 end
@@ -213,9 +221,11 @@ function RoundHud.setBag(self: RoundHud, carried: number, capacity: number, infi
 		self.bagFill.Size = target
 	end
 	if infinite then
-		self.bagFill.BackgroundColor3 = Tokens.color.tealLight
+		self.bagFill.BackgroundColor3 = Tokens.color.sky
+		Depth.applySheen(self.bagFill, Tokens.color.sky)
 	elseif not full then
-		self.bagFill.BackgroundColor3 = Tokens.color.gold
+		self.bagFill.BackgroundColor3 = Tokens.color.leafDeep
+		Depth.applySheen(self.bagFill, Tokens.color.leafDeep)
 	end
 	if not self._full or not full then
 		self.bagText.Text = self._lastBagText
@@ -244,7 +254,7 @@ function RoundHud.setCash(self: RoundHud, cents: number, animate: boolean?, onTi
 		Tween.floatText(
 			self.cashText.Parent.Parent :: GuiObject,
 			"+" .. EconomyMath.formatCents(cents - previous),
-			Tokens.color.leafDeep,
+			Tokens.color.featherWhite,
 			self._motion()
 		)
 	end

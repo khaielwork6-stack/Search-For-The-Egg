@@ -237,14 +237,17 @@ function Icons.chevron(parent: Instance, px: number, options: Options?): Frame
 	return frame
 end
 
--- Key cap: a rounded square with a letter, for input prompt glyphs (LMB, E, RT...).
+-- Key cap: a rounded square with a letter, for input prompt glyphs (LMB, E, RT...). Dark slate by
+-- default (a small dark pill with white stroked lettering, like the reference's key hints); pass
+-- `color` for an accent cap (the green key square on a world prompt) and the sheen follows it.
 function Icons.keycap(parent: Instance, text: string, px: number, options: Options?): Frame
 	local opts = (options or {}) :: any
 	local z = opts.zIndex or 1
+	local face = opts.color or Tokens.color.surface
 	local frame = Instance.new("Frame")
 	frame.Name = "Key_" .. text
 	frame.Size = UDim2.fromOffset(math.max(px, px * (#text > 2 and 1.6 or 1)), px)
-	frame.BackgroundColor3 = opts.color or Tokens.color.featherWhite
+	frame.BackgroundColor3 = face
 	frame.ZIndex = z
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, math.max(3, px * 0.22))
@@ -255,8 +258,22 @@ function Icons.keycap(parent: Instance, text: string, px: number, options: Optio
 	stroke.Parent = frame
 	local gradient = Instance.new("UIGradient")
 	gradient.Rotation = 90
-	gradient.Color =
-		ColorSequence.new({ ColorSequenceKeypoint.new(0, Tokens.color.featherWhite), ColorSequenceKeypoint.new(1, Tokens.color.creamDeep) })
+	local function lift(color: Color3, amount: number): Color3
+		return Color3.new(color.R + (1 - color.R) * amount, color.G + (1 - color.G) * amount, color.B + (1 - color.B) * amount)
+	end
+	local function sink(color: Color3, amount: number): Color3
+		local foot = Tokens.color.outline
+		return Color3.new(
+			color.R + (foot.R - color.R) * amount,
+			color.G + (foot.G - color.G) * amount,
+			color.B + (foot.B - color.B) * amount
+		)
+	end
+	gradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, lift(face, Tokens.depth.sheenLift)),
+		ColorSequenceKeypoint.new(0.4, face),
+		ColorSequenceKeypoint.new(1, sink(face, Tokens.depth.sheenDrop)),
+	})
 	gradient.Parent = frame
 	local label = Instance.new("TextLabel")
 	label.Name = "Glyph"
@@ -264,9 +281,16 @@ function Icons.keycap(parent: Instance, text: string, px: number, options: Optio
 	label.BackgroundTransparency = 1
 	label.Font = Tokens.typography.heading.font
 	label.TextSize = math.max(Tokens.typography.minimumBodySize, math.floor(px * 0.55))
-	label.TextColor3 = Tokens.color.inkStrong
+	label.TextColor3 = Tokens.color.featherWhite
 	label.Text = text
 	label.ZIndex = z + 1
+	local glyphStroke = Instance.new("UIStroke")
+	glyphStroke.Name = "TextOutline"
+	glyphStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+	glyphStroke.Thickness = 2
+	glyphStroke.Color = Tokens.color.outline
+	glyphStroke.LineJoinMode = Enum.LineJoinMode.Round
+	glyphStroke.Parent = label
 	label.Parent = frame
 	frame.Parent = parent
 	return frame

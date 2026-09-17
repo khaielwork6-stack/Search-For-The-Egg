@@ -1,6 +1,7 @@
 --!strict
--- Gem balance chip for a modal header: wooden chip, parchment window, painted gem, the count, and
--- a round green "+" that opens the gem bundles. Sized in Scale from its parent's height.
+-- Gem balance chip for a modal header: a dark slate chip, a darker well, the painted gem, the count
+-- in white stroked numerals, and a round green "+" that opens the gem bundles. Sized in Scale from
+-- its parent's height.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -18,9 +19,10 @@ export type Handle = {
 	destroy: () -> (),
 }
 
-local WOOD = Color3.fromRGB(150, 108, 60)
-local WOOD_DEEP = Color3.fromRGB(96, 64, 34)
-local PAPER = Color3.fromRGB(250, 241, 220)
+local CHIP = Tokens.color.surface
+local WELL = Tokens.color.panelDeep
+local PLUS = Tokens.color.success
+local PLUS_DEEP = Tokens.color.leafDeep
 
 local function withCommas(n: number): string
 	local text = tostring(math.floor(n))
@@ -38,7 +40,7 @@ function GemChip.build(
 	root.BorderSizePixel = 0
 	root.ZIndex = z
 	Fit.aspect(root, 3.3, Enum.DominantAxis.Height)
-	Depth.panel(root, WOOD, { radius = Tokens.radius.md, rim = Color3.fromRGB(204, 158, 100) })
+	Depth.panel(root, CHIP, { radius = Tokens.radius.md })
 	Fit.corner(root, 0.3)
 	root.Parent = parent
 
@@ -46,13 +48,12 @@ function GemChip.build(
 	window.Name = "Window"
 	window.Position = UDim2.fromScale(0.05, 0.14)
 	window.Size = UDim2.fromScale(0.66, 0.72)
-	window.BackgroundColor3 = PAPER
+	window.BackgroundColor3 = WELL
 	window.BorderSizePixel = 0
 	window.ZIndex = 2
 	Fit.corner(window, 0.35)
 	local line = Depth.keyline(window)
-	line.Color = WOOD_DEEP
-	line.Thickness = 1.5
+	line.Thickness = Tokens.depth.keylineThin
 	window.Parent = root
 
 	local gem = Fit.image(window, "hud.gem", {
@@ -72,9 +73,11 @@ function GemChip.build(
 	end
 	local count = Fit.text(window, "Count", withCommas(options.count), {
 		font = Tokens.typography.numeral.font,
-		color = Tokens.color.inkStrong,
+		color = Tokens.color.featherWhite,
 		max = 30,
 		zIndex = 3,
+		outline = 2,
+		outlineColor = Tokens.color.outline,
 		size = UDim2.fromScale(0.62, 0.8),
 		position = UDim2.fromScale(0.34, 0.1),
 		align = Enum.TextXAlignment.Center,
@@ -87,7 +90,7 @@ function GemChip.build(
 	plus.AnchorPoint = Vector2.new(0.5, 0.5)
 	plus.Position = UDim2.fromScale(0.855, 0.5)
 	plus.Size = UDim2.fromScale(0, 0.86)
-	plus.BackgroundColor3 = Tokens.color.leafDeep
+	plus.BackgroundColor3 = PLUS_DEEP
 	plus.BorderSizePixel = 0
 	plus.ZIndex = 3
 	plus.Selectable = true
@@ -97,19 +100,20 @@ function GemChip.build(
 	local face = Instance.new("Frame")
 	face.Name = "Face"
 	face.Size = UDim2.fromScale(1, 0.9)
-	face.BackgroundColor3 = Tokens.color.leafBright
+	face.BackgroundColor3 = PLUS
 	face.BorderSizePixel = 0
 	face.ZIndex = 4
 	Fit.corner(face, 0.5)
-	Depth.applySheen(face, Tokens.color.leafBright)
+	Depth.applySheen(face, PLUS)
+	Depth.rim(face, PLUS)
 	face.Parent = plus
 	Fit.text(face, "Glyph", "+", {
 		font = Tokens.typography.display.font,
 		color = Tokens.color.featherWhite,
 		max = 34,
 		zIndex = 5,
-		outline = 1.5,
-		outlineColor = Tokens.color.leafDeep,
+		outline = 2,
+		outlineColor = Tokens.color.outline,
 		size = UDim2.fromScale(0.9, 0.9),
 		position = UDim2.fromScale(0.5, 0.48),
 		anchor = Vector2.new(0.5, 0.5),

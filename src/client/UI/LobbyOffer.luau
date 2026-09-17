@@ -64,7 +64,7 @@ function LobbyOffer.create(parent: Instance, options: Options): Offer?
 	glow.Size = UDim2.fromScale(1.16, 1.16)
 	glow.BackgroundTransparency = 1
 	glow.Image = image
-	glow.ImageColor3 = Color3.fromRGB(255, 226, 140)
+	glow.ImageColor3 = Tokens.color.goldLight
 	glow.ImageTransparency = offer.glowTransparency
 	glow.ZIndex = frame.ZIndex
 	glow.Parent = frame
@@ -110,7 +110,7 @@ function LobbyOffer.create(parent: Instance, options: Options): Offer?
 	ownedTag.AnchorPoint = Vector2.new(0.5, 1)
 	ownedTag.Position = UDim2.fromScale(0.5, 0.98)
 	ownedTag.Size = UDim2.new(0.86, 0, 0, Tokens.typography.label.size + Tokens.spacing.sm)
-	ownedTag.BackgroundColor3 = Tokens.color.leafDeep
+	ownedTag.BackgroundColor3 = Tokens.color.success
 	ownedTag.BorderSizePixel = 0
 	ownedTag.Font = Tokens.typography.label.font
 	ownedTag.TextSize = Tokens.typography.label.size
@@ -120,12 +120,20 @@ function LobbyOffer.create(parent: Instance, options: Options): Offer?
 	ownedTag.ZIndex = frame.ZIndex + 3
 	ownedTag.Parent = frame
 	local ownedCorner = Instance.new("UICorner")
-	ownedCorner.CornerRadius = UDim.new(0, Tokens.radius.sm)
+	ownedCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
 	ownedCorner.Parent = ownedTag
 	local ownedStroke = Instance.new("UIStroke")
-	ownedStroke.Thickness = Tokens.stroke.standard
+	ownedStroke.Thickness = Tokens.depth.keyline
 	ownedStroke.Color = Tokens.color.outline
+	ownedStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	ownedStroke.Parent = ownedTag
+	local ownedText = Instance.new("UIStroke")
+	ownedText.Name = "TextOutline"
+	ownedText.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+	ownedText.Thickness = 2
+	ownedText.Color = Tokens.color.outline
+	ownedText.LineJoinMode = Enum.LineJoinMode.Round
+	ownedText.Parent = ownedTag
 
 	local alive, owned, hovered = true, false, false
 	local connections: { RBXScriptConnection } = {}
