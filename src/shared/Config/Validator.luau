@@ -1225,6 +1225,75 @@ function Validator.validate(raw: any): Report
 
 	-- Audio: every id, mix value, loop flag and cooldown the client plays lives here, so this is the
 	-- only place a wrong role name or an out-of-range volume can be caught before it ships.
+	-- Lobby ambience: the client-only yard chickens and the per-frame budget they are measured against.
+	local ambience = type(raw.lobby) == "table" and raw.lobby.ambience or nil
+	check(type(ambience) == "table", "lobby.ambience missing")
+	if type(ambience) == "table" then
+		check(isPositiveNumber(ambience.frameBudgetMs), "lobby.ambience.frameBudgetMs must be > 0")
+		local chickens = ambience.chickens
+		check(type(chickens) == "table", "lobby.ambience.chickens missing")
+		if type(chickens) == "table" then
+			check(type(chickens.enabled) == "boolean", "lobby.ambience.chickens.enabled must be boolean")
+			local counts = chickens.countByTier
+			check(type(counts) == "table", "lobby.ambience.chickens.countByTier missing")
+			if type(counts) == "table" then
+				for _, tier in ipairs({ "low", "medium", "high" }) do
+					check(
+						isNonNegativeNumber(counts[tier]) and counts[tier] % 1 == 0 and counts[tier] <= 12,
+						"lobby.ambience.chickens.countByTier." .. tier .. " must be an integer in [0, 12]"
+					)
+				end
+				if isNonNegativeNumber(counts.low) and isNonNegativeNumber(counts.high) then
+					check(counts.low <= counts.high, "lobby.ambience.chickens.countByTier.low must be <= high")
+				end
+			end
+			check(
+				isPositiveNumber(chickens.updateHz) and chickens.updateHz <= 60,
+				"lobby.ambience.chickens.updateHz must be within (0, 60]"
+			)
+			check(
+				isPositiveNumber(chickens.lowTierUpdateHz) and chickens.lowTierUpdateHz <= (tonumber(chickens.updateHz) or 0),
+				"lobby.ambience.chickens.lowTierUpdateHz must be > 0 and <= updateHz"
+			)
+			for _, key in ipairs({
+				"cullDistanceStuds",
+				"walkSpeedStuds",
+				"turnRadiansPerSecond",
+				"stepHz",
+				"pauseMinSeconds",
+				"peckSeconds",
+				"wanderStepMaxStuds",
+				"groundToleranceStuds",
+				"modelScale",
+			}) do
+				check(isPositiveNumber(chickens[key]), "lobby.ambience.chickens." .. key .. " must be > 0")
+			end
+			for _, key in ipairs({ "hopHeightStuds", "headBobStuds", "exclusionMarginStuds", "walkLineClearanceStuds" }) do
+				check(isNonNegativeNumber(chickens[key]), "lobby.ambience.chickens." .. key .. " must be >= 0")
+			end
+			check(
+				isNonNegativeNumber(chickens.reducedMotionHopScale) and chickens.reducedMotionHopScale <= 1,
+				"lobby.ambience.chickens.reducedMotionHopScale must be 0..1"
+			)
+			check(
+				isNonNegativeNumber(chickens.lookAroundChance) and chickens.lookAroundChance <= 1,
+				"lobby.ambience.chickens.lookAroundChance must be 0..1"
+			)
+			check(
+				isPositiveNumber(chickens.pauseMaxSeconds) and chickens.pauseMaxSeconds >= (tonumber(chickens.pauseMinSeconds) or math.huge),
+				"lobby.ambience.chickens.pauseMaxSeconds must be >= pauseMinSeconds"
+			)
+			check(
+				isNonNegativeNumber(chickens.peckMin)
+					and chickens.peckMin % 1 == 0
+					and isNonNegativeNumber(chickens.peckMax)
+					and chickens.peckMax % 1 == 0
+					and chickens.peckMax >= chickens.peckMin,
+				"lobby.ambience.chickens.peckMin/peckMax must be integers with min <= max"
+			)
+		end
+	end
+
 	-- The lobby's permanent offer button (owner artwork; lobby only).
 	local offer = type(raw.lobby) == "table" and raw.lobby.offer or nil
 	check(type(offer) == "table", "lobby.offer missing")

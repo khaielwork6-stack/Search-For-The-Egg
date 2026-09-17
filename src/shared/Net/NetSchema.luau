@@ -263,6 +263,20 @@ function NetSchema.build(cfg: { [string]: any }): { list: { MessageDef }, byName
 		serverEvent("RoundEvent", Schema.object({}), 2),
 		serverEvent("EggCarried", Schema.object({}), 2),
 		serverEvent("EggDropped", Schema.object({}), 2),
+		-- The big centre-top banner (AnnouncementService -> AnnouncementBanner): rare round moments only.
+		serverEvent(
+			"Announcement",
+			Schema.object({
+				kind = Schema.id(32),
+				text = Schema.string({ min = 1, max = 80 }),
+				sub = Schema.optional(Schema.string({ min = 1, max = 120 })),
+				tone = Schema.enum({ "gold", "rainbow", "info", "success" }),
+				userId = Schema.optional(Schema.number({ min = -1e12, max = 1e12, integer = true })),
+				position = Schema.optional(Schema.vector3()),
+			}),
+			2,
+			1024
+		),
 		serverEvent("VictoryStarted", Schema.object({}), 2),
 		serverEvent("RewardsCommitted", Schema.object({}), 2),
 		serverEvent("ResultsProjection", Schema.object({}), 2),

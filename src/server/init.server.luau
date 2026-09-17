@@ -88,6 +88,8 @@ local ClueService = require(script.Services.ClueService)
 local SurveyService = require(script.Services.SurveyService)
 local RoundEventService = require(script.Services.RoundEventService)
 local RoundEventWorld = require(script.Services.RoundEventWorld)
+local AnnouncementService = require(script.Services.AnnouncementService)
+local RoundAnnouncements = require(script.Services.RoundAnnouncements)
 local VictoryService = require(script.Services.VictoryService)
 local ObjectiveService = require(script.Services.ObjectiveService)
 local ClassService = require(script.Services.ClassService)
@@ -686,52 +688,6 @@ local function pushPreviews(player: Player)
 	})
 end
 
--- The round's one mid-round event (Rainbow Rush / Supply Drop / Chick Rescue). Its prompts and
--- models live in the world adapter; the rules, validation and rewards live in the service.
--- TEMP: wired to AnnouncementService at merge. Until then an announcement rides the RoundEvent
--- remote (`type = "announce"`) and the client shows it as a toast.
-local function announceRoundEvent(runtime: any, payload: { [string]: any })
-	local recipients = if payload.userId then memberPlayers({ payload.userId }) else memberPlayers(runtime.state.members)
-	for _, player in ipairs(recipients) do
-		send(player, "RoundEvent", {
-			type = "announce",
-			roundId = runtime.state.roundId,
-			kind = payload.kind,
-			text = payload.text,
-			sub = payload.sub,
-			tone = payload.tone,
-		})
-	end
-end
-local roundEvents = RoundEventService.new({
-	config = config,
-	clock = clock,
-	rounds = rounds,
-	sessions = sessions,
-	rng = rng,
-	getCharacterPosition = getCharacterPosition,
-	getProfile = getProfile,
-	announce = announceRoundEvent,
-	world = RoundEventWorld.new(workspace, config),
-})
-roundEvents.event:Connect(function(runtime, payload)
-	for _, player in ipairs(memberPlayers(runtime.state.members)) do
-		send(player, "RoundEvent", payload)
-	end
-end)
--- A reward changes the contributor's round cash (Supply Drop) or profile gems (Chick Rescue).
-roundEvents.rewarded:Connect(function(_runtime, userId, reward)
-	local player = playerData:playerOf(userId)
-	if not player or typeof(player) ~= "Instance" then
-		return
-	end
-	if reward.kind == "gems" then
-		playerData:pushProjection(player, config)
-	else
-		pushPreviews(player :: Player)
-	end
-end)
-
 -- Party -> round hand-off (local adapter) or real teleport.
 parties.started:Connect(function(party, reservation)
 	if reservation.isLocal then
@@ -837,9 +793,85 @@ rounds.deltaFlushed:Connect(function(roundId, delta)
 	end
 end)
 
+-- Big centre-top announcements: rare round moments only (first Rainbow Feather, Plume ready, the
+-- Egg uncovered / carried / returned), to the round's present players. Bound to the Egg's signals
+-- before the handlers below, so the notice leaves ahead of the phase change it belongs to.
+local announcements = AnnouncementService.new({
+	send = send,
+	getPlayers = function()
+		return Players:GetPlayers()
+	end,
+	clock = clock,
+})
+local roundAnnouncements = RoundAnnouncements.new({
+	config = config,
+	announcements = announcements,
+	playerOf = function(userId: number)
+		local player = playerData:playerOf(userId)
+		return if player and typeof(player) == "Instance" then player else nil
+	end,
+	nameOf = displayNameOf,
+})
+roundAnnouncements:bindEgg(egg)
+
+-- The round's one mid-round event (Rainbow Rush / Supply Drop / Chick Rescue). Its prompts and
+-- models live in the world adapter; the rules, validation and rewards live in the service. Its
+-- human-facing lines go through the round's announcements: a reward (`userId`) only to that player,
+-- a line with `exceptUserIds` to the rest of the round, anything else to every present player.
+local function announceRoundEvent(runtime: any, payload: { [string]: any })
+	local recipients = roundAnnouncements:recipients(runtime)
+	if payload.userId or payload.exceptUserIds then
+		local filtered = {}
+		for _, player in ipairs(recipients) do
+			local userId = (player :: Player).UserId
+			if payload.userId then
+				if userId == payload.userId then
+					table.insert(filtered, player)
+				end
+			elseif not table.find(payload.exceptUserIds, userId) then
+				table.insert(filtered, player)
+			end
+		end
+		recipients = filtered
+	end
+	if #recipients > 0 then
+		announcements:announce(recipients, payload)
+	end
+end
+local roundEvents = RoundEventService.new({
+	config = config,
+	clock = clock,
+	rounds = rounds,
+	sessions = sessions,
+	rng = rng,
+	getCharacterPosition = getCharacterPosition,
+	getProfile = getProfile,
+	announce = announceRoundEvent,
+	nameOf = displayNameOf,
+	world = RoundEventWorld.new(workspace, config),
+})
+roundEvents.event:Connect(function(runtime, payload)
+	for _, player in ipairs(memberPlayers(runtime.state.members)) do
+		send(player, "RoundEvent", payload)
+	end
+end)
+-- A reward changes the contributor's round cash (Supply Drop) or profile gems (Chick Rescue).
+roundEvents.rewarded:Connect(function(_runtime, userId, reward)
+	local player = playerData:playerOf(userId)
+	if not player or typeof(player) ~= "Instance" then
+		return
+	end
+	if reward.kind == "gems" then
+		playerData:pushProjection(player, config)
+	else
+		pushPreviews(player :: Player)
+	end
+end)
+
 local function onFeathersAwarded(userId: number, runtime: any, result: any)
 	if type(result) == "table" then
 		pileTerrain:onAwarded(runtime, result)
+		roundAnnouncements:onAwarded(userId, runtime, result)
 	end
 	if egg:checkReveal(runtime) then
 		return

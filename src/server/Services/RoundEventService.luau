@@ -41,6 +41,7 @@ export type RoundEventService = typeof(setmetatable(
 		_getCharacterPosition: (userId: number) -> Vector3?,
 		_getProfile: (userId: number) -> any?,
 		_announce: (runtime: any, payload: { [string]: any }) -> (),
+		_nameOf: (userId: number) -> string,
 		_world: any?,
 		_counter: number,
 		event: any, -- (runtime, payload) start / update / end, for the RoundEvent broadcast
@@ -59,6 +60,7 @@ function RoundEventService.new(options: {
 	getCharacterPosition: (userId: number) -> Vector3?,
 	getProfile: (userId: number) -> any?,
 	announce: ((runtime: any, payload: { [string]: any }) -> ())?,
+	nameOf: ((userId: number) -> string)?,
 	world: any?,
 }): RoundEventService
 	return setmetatable({
@@ -70,12 +72,47 @@ function RoundEventService.new(options: {
 		_getCharacterPosition = options.getCharacterPosition,
 		_getProfile = options.getProfile,
 		_announce = options.announce or function() end,
+		_nameOf = options.nameOf or function()
+			return "A forager"
+		end,
 		_world = options.world,
 		_counter = 0,
 		event = Signal.new(),
 		rewarded = Signal.new(),
 		stats = { planned = 0, started = 0, cancelled = 0, ended = 0, rejected = 0, conversions = 0 },
 	}, RoundEventService)
+end
+
+-- The banner lines. Start and end go to the round; a reward goes to its contributor by name (the
+-- announcement path holds an identical line back for a moment, so each one must read differently),
+-- and the round-wide "filled" line then goes only to the members who did not contribute.
+RoundEventService.ANNOUNCE = table.freeze({
+	start = table.freeze({
+		rainbowRush = table.freeze({ text = "RAINBOW RUSH!", sub = "Rainbow Feathers are hiding just under the surface", tone = "rainbow" }),
+		supplyDrop = table.freeze({ text = "SUPPLY DROP!", sub = "Fill the crate with normal feathers for a cash bonus", tone = "gold" }),
+		chickRescue = table.freeze({ text = "CHICK RESCUE!", sub = "Follow the chirps and free the chick for gems", tone = "info" }),
+	}),
+	completed = table.freeze({
+		supplyDrop = table.freeze({ text = "SUPPLY DROP FILLED!", sub = "Contributors earned a cash bonus", tone = "success" }),
+		chickRescue = table.freeze({ text = "CHICK RESCUED!", sub = "Rescuers earned gems", tone = "success" }),
+	}),
+	expired = table.freeze({
+		rainbowRush = table.freeze({ text = "RAINBOW RUSH OVER", sub = "The rainbow feathers stay in the nest", tone = "info" }),
+		supplyDrop = table.freeze({ text = "SUPPLY DROP MISSED", sub = "The crate was not filled in time", tone = "info" }),
+		chickRescue = table.freeze({ text = "CHICK RESCUE OVER", sub = "Nobody freed the chick in time", tone = "info" }),
+	}),
+	cashReward = "%s earned +%s!",
+	cashRewardSub = "Supply Drop bonus",
+	gemReward = "%s earned +%d gems!",
+	gemRewardSub = "Chick rescued",
+})
+
+local function announce(self: RoundEventService, runtime: any, kind: string, line: any, extra: { [string]: any }?)
+	local payload: { [string]: any } = { kind = kind, text = line.text, sub = line.sub, tone = line.tone }
+	for key, value in pairs(extra or {}) do
+		payload[key] = value
+	end
+	self._announce(runtime, payload)
 end
 
 local function reject(self: RoundEventService, code: string, message: string?): Envelope.Envelope<any>
@@ -175,6 +212,7 @@ function RoundEventService.start(self: RoundEventService, runtime: any, kind: st
 		self._world:spawn(runtime, event)
 	end
 	fire(self, runtime, "start", if kind == "rainbowRush" then { rainbowOverrides = table.clone(event.conversions) } else nil)
+	announce(self, runtime, "roundEventStart", RoundEventService.ANNOUNCE.start[kind], { position = event.position })
 	return true, nil
 end
 
@@ -192,6 +230,22 @@ function RoundEventService._finish(self: RoundEventService, runtime: any, result
 		self._world:despawn(runtime, event)
 	end
 	fire(self, runtime, "end")
+	if result == "completed" then
+		-- Contributors already heard their own reward; everyone else hears that it was done.
+		local except = {}
+		for contributor in pairs(event.contributors) do
+			table.insert(except, contributor)
+		end
+		local line = RoundEventService.ANNOUNCE.completed[event.kind]
+		if line and #except < #RoundReducer.presentMembers(runtime.state) then
+			announce(self, runtime, "roundEventEnd", line, { exceptUserIds = except, position = event.position })
+		end
+	elseif result == "expired" then
+		local line = RoundEventService.ANNOUNCE.expired[event.kind]
+		if line then
+			announce(self, runtime, "roundEventEnd", line)
+		end
+	end
 end
 
 -- Rainbow Rush progress: how many converted records have been collected so far.
@@ -359,14 +413,11 @@ function RoundEventService.deposit(
 				contributorState.cashCents = EconomyMath.addBounded(contributorState.cashCents, cents, maximumCents)
 				local reward = { kind = "cash", cents = cents, cashCents = contributorState.cashCents }
 				self.rewarded:Fire(runtime, contributor, reward)
-				self._announce(runtime, {
-					kind = "roundEventReward",
-					text = "SUPPLY DROP FILLED",
-					sub = "+" .. EconomyMath.formatCents(cents),
-					tone = "reward",
-					userId = contributor,
-					position = event.position,
-				})
+				announce(self, runtime, "roundEventReward", {
+					text = string.format(RoundEventService.ANNOUNCE.cashReward, self._nameOf(contributor), EconomyMath.formatCents(cents)),
+					sub = RoundEventService.ANNOUNCE.cashRewardSub,
+					tone = "gold",
+				}, { userId = contributor, position = event.position })
 			end
 		end
 	end
@@ -430,14 +481,11 @@ function RoundEventService.rescue(
 				gems = granted
 			end
 			self.rewarded:Fire(runtime, contributor, { kind = "gems", gems = granted })
-			self._announce(runtime, {
-				kind = "roundEventReward",
-				text = "CHICK RESCUED",
-				sub = "+" .. tostring(granted) .. " gems",
-				tone = "reward",
-				userId = contributor,
-				position = event.position,
-			})
+			announce(self, runtime, "roundEventReward", {
+				text = string.format(RoundEventService.ANNOUNCE.gemReward, self._nameOf(contributor), granted),
+				sub = RoundEventService.ANNOUNCE.gemRewardSub,
+				tone = "gold",
+			}, { userId = contributor, position = event.position })
 		end
 	end
 	fire(self, runtime, "update")

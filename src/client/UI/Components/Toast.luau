@@ -259,6 +259,22 @@ function Toast._drain(self: Toast)
 	end
 end
 
+-- Moves the stack down by `px` (the AnnouncementBanner makes room while it shows, so a toast and the
+-- banner never sit on top of each other), and back up with 0.
+function Toast.setOffset(self: Toast, px: number)
+	local this = self :: any
+	if this._restY == nil then
+		this._restY = self._container.Position.Y.Offset
+	end
+	local target = UDim2.new(0.5, 0, 0, this._restY + math.max(0, px))
+	if self._container.Position == target then
+		return
+	end
+	game:GetService("TweenService")
+		:Create(self._container, TweenInfo.new(Motion.duration("standard", self._motion()), Tokens.motion.easeOut), { Position = target })
+		:Play()
+end
+
 function Toast.visibleCount(self: Toast): number
 	return self._visible
 end

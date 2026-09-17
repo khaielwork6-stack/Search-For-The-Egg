@@ -47,6 +47,8 @@ export type Deps = {
 	round: any,
 	crate: any,
 	config: { [string]: any },
+	-- RainbowFeatherController: celebrates the Rainbow Feathers of a landing (optional).
+	rainbow: any?,
 }
 
 type Flight = {
@@ -372,8 +374,9 @@ function PickupFeedbackController.collected(self: PickupFeedbackController, data
 	local pickup = self:_pickup()
 	local deps = self._deps
 	local list = ids(data)
-	local rainbow = (data.rainbow or 0) > 0
-	local awarded = (data.awarded or 0) + (data.rainbow or 0)
+	local rainbowCount = data.rainbow or 0
+	local rainbow = rainbowCount > 0
+	local awarded = (data.awarded or 0) + rainbowCount
 	local stagger = (deps.config.tools.nestRake or {}).streamStaggerSeconds or 0.028
 	local streamed = if #list > 1 then #list else 0
 	data.streamSeconds = if streamed > 1 then streamed * stagger else 0
@@ -391,12 +394,24 @@ function PickupFeedbackController.collected(self: PickupFeedbackController, data
 			if deps.hud.releaseBag then
 				deps.hud:releaseBag()
 			end
-			self:float(awarded, rainbow)
+			if rainbow and deps.rainbow then
+				-- The Rainbow Feathers get their own moment at the flight's end (burst, bag flash,
+				-- "+N RAINBOW"); the float beside the bundle counts only the plain feathers.
+				self:float(awarded - rainbowCount, false)
+				local okRainbow, rainbowError = pcall(function()
+					deps.rainbow:landed(rainbowCount, destination())
+				end)
+				if not okRainbow then
+					warn("[SFE][Pickup] rainbow landing failed: " .. tostring(rainbowError))
+				end
+			else
+				self:float(awarded, rainbow)
+			end
 			deps.audio:play(Tokens.sound.collectRelease)
 			deps.audio:play(Tokens.sound.collectTick)
 			if rainbow then
-				-- A Rainbow Feather lands like any feather (its float and bundle say it is special); the
-				-- extra ping it used to layer on the landing was never an assigned sound.
+				-- A Rainbow Feather lands like any feather to the ear (no sound of its own); the
+				-- celebration is visual.
 				deps.haptics:pulse(0.6, 0.12)
 			end
 			deps.haptics:pulse(if toolId == "nestRake" then 0.4 else 0.25, 0.05)

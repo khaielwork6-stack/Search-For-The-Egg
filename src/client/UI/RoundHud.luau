@@ -16,6 +16,7 @@ local Depth = require(script.Parent.Components.Depth)
 local Icons = require(script.Parent.Components.Icons)
 local Skin = require(script.Parent.Components.Skin)
 local Tween = require(script.Parent.Components.Tween)
+local AnnouncementBanner = require(script.Parent.AnnouncementBanner)
 
 local RoundHud = {}
 RoundHud.__index = RoundHud
@@ -37,6 +38,9 @@ export type RoundHud = typeof(setmetatable(
 		_full: boolean,
 		_fullThread: thread?,
 		_lastBagText: string,
+		_plume: { [string]: any },
+		_rainbowTag: TextLabel?,
+		_rainbowToken: number,
 	},
 	RoundHud
 ))
@@ -44,6 +48,7 @@ export type RoundHud = typeof(setmetatable(
 local TIMER_WIDTH = 138
 local BAG_WIDTH = 210
 local CASH_WIDTH = 142
+local PLUME_WIDTH = 172
 
 local function chip(
 	parent: Instance,
@@ -121,7 +126,51 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 	bagText.TextColor3 = Tokens.color.featherWhite
 	local bagScale = bagFrame:FindFirstChildOfClass("UIScale") :: UIScale
 
-	local cashFrame, cashText = chip(root, "Cash", 3, CASH_WIDTH, "hud.token", "coin")
+	-- Plume progress: "7/10 FOR PLUME" over a rainbow fill, READY FOR PLUME (gold, breathing) at the
+	-- cost, PLUME USED once this round's clue is spent. Hidden until a round projection says Plume is
+	-- there to visit (RainbowFeatherController drives it).
+	local plumeFrame, plumeText = chip(root, "Plume", 3, PLUME_WIDTH, nil, nil)
+	plumeFrame.Visible = false
+	local plumeFace = plumeFrame:FindFirstChild("Face") :: Frame
+	plumeFace.BackgroundColor3 = Tokens.color.panelDeep
+	local plumeFaceGradient = plumeFace:FindFirstChildOfClass("UIGradient")
+	if plumeFaceGradient then
+		plumeFaceGradient.Enabled = false
+	end
+	plumeFace.ClipsDescendants = true
+	local plumeFill = Instance.new("Frame")
+	plumeFill.Name = "Fill"
+	plumeFill.Size = UDim2.fromScale(0, 1)
+	plumeFill.BackgroundColor3 = Color3.new(1, 1, 1)
+	plumeFill.BackgroundTransparency = 0.12
+	plumeFill.BorderSizePixel = 0
+	plumeFill.ZIndex = plumeFace.ZIndex + 1
+	local plumeFillCorner = Instance.new("UICorner")
+	plumeFillCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
+	plumeFillCorner.Parent = plumeFill
+	local plumeGradient = Instance.new("UIGradient")
+	plumeGradient.Name = "Rainbow"
+	plumeGradient.Color = AnnouncementBanner.rainbow()
+	plumeGradient.Parent = plumeFill
+	plumeFill.Parent = plumeFace
+	-- A dark wash over the fill so the white lettering keeps its contrast on the yellow band.
+	local plumeShade = Instance.new("Frame")
+	plumeShade.Name = "Shade"
+	plumeShade.Size = UDim2.fromScale(1, 1)
+	plumeShade.BackgroundColor3 = Tokens.color.outline
+	plumeShade.BackgroundTransparency = 0.72
+	plumeShade.BorderSizePixel = 0
+	plumeShade.ZIndex = plumeFace.ZIndex + 2
+	plumeShade.Parent = plumeFace
+	plumeText.TextScaled = true
+	local plumeTextSize = Instance.new("UITextSizeConstraint")
+	plumeTextSize.MaxTextSize = Tokens.typography.label.size - 2
+	plumeTextSize.MinTextSize = Tokens.typography.minimumBodySize
+	plumeTextSize.Parent = plumeText
+	plumeText.Text = "0/10 FOR PLUME"
+	local plumeOutline = plumeFrame:FindFirstChildOfClass("UIStroke")
+
+	local cashFrame, cashText = chip(root, "Cash", 4, CASH_WIDTH, "hud.token", "coin")
 	cashText.Text = "$0.00"
 	cashText.TextColor3 = Tokens.color.featherWhite
 	local cashArt = cashFrame:FindFirstChild("IconSlot", true)
@@ -146,6 +195,18 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 		_full = false,
 		_fullThread = nil,
 		_lastBagText = "",
+		_plume = {
+			frame = plumeFrame,
+			fill = plumeFill,
+			gradient = plumeGradient,
+			text = plumeText,
+			outline = plumeOutline,
+			scale = plumeFrame:FindFirstChildOfClass("UIScale"),
+			state = "",
+			stopPulse = nil,
+		},
+		_rainbowTag = nil,
+		_rainbowToken = 0,
 	}, RoundHud)
 end
 
@@ -242,6 +303,133 @@ function RoundHud.setBag(self: RoundHud, carried: number, capacity: number, infi
 	end
 end
 
+-- The Plume pill. `state` = { visible, carried, cost, used }.
+function RoundHud.setPlume(self: RoundHud, state: { visible: boolean, carried: number, cost: number, used: boolean })
+	local plume = self._plume
+	local frame = plume.frame :: Frame
+	frame.Visible = state.visible
+	local cost = math.max(1, state.cost)
+	local ready = not state.used and state.carried >= cost
+	local mode = if not state.visible then "hidden" elseif state.used then "used" elseif ready then "ready" else "progress"
+	local text = if state.used
+		then "PLUME USED"
+		elseif ready then "READY FOR PLUME"
+		else string.format("%d/%d FOR PLUME", math.max(0, state.carried), cost)
+	plume.text.Text = text
+	local fraction = if state.used then 0 else math.clamp(state.carried / cost, 0, 1)
+	local motion = self._motion()
+	TweenService:Create(plume.fill, TweenInfo.new(Motion.duration("quick", motion), Tokens.motion.easeOut), {
+		Size = UDim2.fromScale(fraction, 1),
+	}):Play()
+	plume.text.TextColor3 = if state.used then Tokens.color.inkMuted else Tokens.color.featherWhite
+	if mode == plume.state then
+		return
+	end
+	local previous = plume.state
+	plume.state = mode
+	if plume.stopPulse then
+		plume.stopPulse()
+		plume.stopPulse = nil
+	end
+	if plume.outline then
+		plume.outline.Color = if mode == "ready" then Tokens.color.gold else Tokens.color.outline
+	end
+	if mode == "ready" then
+		-- Attention only while it is useful: breathe gold until the clue is bought or the bag is sold.
+		plume.stopPulse = Tween.pulseLoop(plume.scale, motion, 0.05)
+		if previous == "progress" and plume.scale then
+			plume.scale.Scale = 1 + Motion.amplitude(0.16, motion)
+			TweenService:Create(plume.scale, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeBack), { Scale = 1 })
+				:Play()
+		end
+	end
+end
+
+function RoundHud.plumeState(self: RoundHud): string
+	return self._plume.state
+end
+
+-- A Rainbow Feather reached the bag: the count flashes through the rainbow, the chip pops, and a
+-- "+N RAINBOW" tag rises off it. One pooled tag; a second flash restarts it.
+function RoundHud.flashRainbow(self: RoundHud, count: number?)
+	local motion = self._motion()
+	self._rainbowToken += 1
+	local token = self._rainbowToken
+	local gradient = self.bagText:FindFirstChild("RainbowFlash") :: UIGradient?
+	if not gradient then
+		local made = Instance.new("UIGradient")
+		made.Name = "RainbowFlash"
+		made.Color = AnnouncementBanner.rainbow()
+		made.Parent = self.bagText
+		gradient = made
+	end
+	local flash = gradient :: UIGradient
+	flash.Enabled = true
+	flash.Offset = Vector2.new(-0.6, 0)
+	-- Deliberately longer than the UI tween cap: this is a moment, not a control responding.
+	local flashSeconds = if motion.reducedMotion then 0.5 else 0.9
+	TweenService:Create(flash, TweenInfo.new(flashSeconds, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+		Offset = Vector2.new(0.6, 0),
+	}):Play()
+	local fill = self.bagFill
+	local fillColor = fill.BackgroundColor3
+	fill.BackgroundColor3 = Color3.fromRGB(226, 150, 255)
+	TweenService:Create(fill, TweenInfo.new(flashSeconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		BackgroundColor3 = fillColor,
+	}):Play()
+	self._bagScale.Scale = 1 + Motion.amplitude(0.2, motion)
+	TweenService:Create(self._bagScale, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeBack), { Scale = 1 }):Play()
+	task.delay(flashSeconds + 0.05, function()
+		if self._rainbowToken == token then
+			flash.Enabled = false
+		end
+	end)
+
+	local tag = self._rainbowTag
+	if not tag then
+		local made = Instance.new("TextLabel")
+		made.Name = "RainbowTag"
+		made.AnchorPoint = Vector2.new(0.5, 1)
+		made.BackgroundTransparency = 1
+		made.Size = UDim2.fromOffset(BAG_WIDTH, Tokens.typography.numeral.size + Tokens.spacing.xs)
+		made.Font = Tokens.typography.display.font
+		made.TextSize = Tokens.typography.numeral.size
+		made.TextColor3 = Color3.new(1, 1, 1)
+		made.ZIndex = Tokens.zIndex.hud + 6
+		local tagGradient = Instance.new("UIGradient")
+		tagGradient.Color = AnnouncementBanner.rainbow()
+		tagGradient.Parent = made
+		FrameKit.outline(made, 2.6)
+		made.Parent = self._bagFrame
+		self._rainbowTag = made
+		tag = made
+	end
+	local label = tag :: TextLabel
+	local stroke = label:FindFirstChild("TextOutline") :: UIStroke?
+	label.Text = string.format("+%d RAINBOW", math.max(1, count or 1))
+	label.Visible = true
+	label.TextTransparency = 0
+	if stroke then
+		stroke.Transparency = 0
+	end
+	local seconds = if motion.reducedMotion then 0.8 else 1.1
+	local rise = Motion.amplitude(34, motion)
+	label.Position = UDim2.new(0.5, 0, 0, -2)
+	TweenService:Create(label, TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0, -2 - rise),
+	}):Play()
+	task.delay(seconds * 0.55, function()
+		if self._rainbowToken ~= token then
+			return
+		end
+		local fade = TweenInfo.new(seconds * 0.45)
+		TweenService:Create(label, fade, { TextTransparency = 1 }):Play()
+		if stroke then
+			TweenService:Create(stroke, fade, { Transparency = 1 }):Play()
+		end
+	end)
+end
+
 function RoundHud.setCash(self: RoundHud, cents: number, animate: boolean?, onTick: (() -> ())?)
 	local previous = self._targetCents
 	self._targetCents = cents
@@ -290,6 +478,9 @@ function RoundHud.destroy(self: RoundHud)
 		task.cancel(self._countThread)
 	end
 	self:_setFull(false)
+	if self._plume.stopPulse then
+		self._plume.stopPulse()
+	end
 	self.root:Destroy()
 end
 

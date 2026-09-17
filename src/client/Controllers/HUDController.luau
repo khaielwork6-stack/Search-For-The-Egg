@@ -702,11 +702,17 @@ function HUDController.new(deps: any): HUDController
 		local reserved = (Tokens.layout.safeAreaPaddingPx + 200) * 2
 		local natural = 500
 		local factor = math.clamp((width - reserved) / natural, 0.6, 1)
-		for _, bandScale in ipairs(bandScales) do
-			bandScale.Scale = factor
-		end
+		-- The strip is wider while the Plume pill shows; only the strip gives way for it.
+		local plume = self.round.root:FindFirstChild("Plume")
+		local stripNatural = if plume and plume:IsA("GuiObject") and plume.Visible then natural + 180 else natural
+		bandScales[1].Scale = math.clamp((width - reserved) / stripNatural, 0.6, 1)
+		bandScales[2].Scale = factor
 	end
 	fitBand()
+	local plumeChip = self.round.root:FindFirstChild("Plume")
+	if plumeChip then
+		self._trove:add(plumeChip:GetPropertyChangedSignal("Visible"):Connect(fitBand))
+	end
 	self._trove:add(stage:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitBand))
 	self._trove:add(SafeArea.overrideChanged:Connect(fitBand))
 	self._trove:add(deps.input.modeChanged:Connect(function(mode)
@@ -959,11 +965,22 @@ function HUDController.carriedStackWorldPoint(self: HUDController): Vector3?
 	return ray.Origin + ray.Direction.Unit * 2.2
 end
 
-function HUDController.setObjective(self: HUDController, title: string, detail: string?)
+-- Stage-pixel y just under the objective pill (where the AnnouncementBanner hangs).
+function HUDController.objectiveBottomPx(self: HUDController): number
+	local pill = self._labels.banner and self._labels.banner.Parent
+	if pill and pill:IsA("GuiObject") then
+		return pill.Position.Y.Offset + pill.Size.Y.Offset + Tokens.spacing.sm + 2
+	end
+	return Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx + Tokens.spacing.sm
+end
+
+-- `options.quiet` skips the pop for lines that tick (a countdown changes its title every second).
+function HUDController.setObjective(self: HUDController, title: string, detail: string?, options: { quiet: boolean? }?)
 	local changed = self._labels.banner.Text ~= title
 	self._labels.banner.Text = title
 	self._labels.detail.Text = detail or ""
-	if changed and self._bannerScale and not string.find(title, "^Get ready") then
+	local quiet = options ~= nil and options.quiet == true
+	if changed and not quiet and self._bannerScale and not string.find(title, "^Get ready") then
 		self._bannerScale.Scale = 1 + Motion.amplitude(0.06, self._deps.accessibility:motionSettings())
 		TweenService:Create(
 			self._bannerScale,

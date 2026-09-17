@@ -36,6 +36,16 @@ return function(describe, it, expect)
 		end)
 	end
 
+	local function ofKind(announced, kind)
+		local out = {}
+		for _, payload in ipairs(announced) do
+			if payload.kind == kind then
+				table.insert(out, payload)
+			end
+		end
+		return out
+	end
+
 	-- Kind rolls for equal weights in KINDS order.
 	local KIND_ROLL = { rainbowRush = 0.1, supplyDrop = 0.5, chickRescue = 0.9 }
 
@@ -61,6 +71,9 @@ return function(describe, it, expect)
 			end,
 			announce = function(_runtime, payload)
 				table.insert(announced, payload)
+			end,
+			nameOf = function(userId)
+				return "P" .. tostring(userId)
 			end,
 		})
 		service.event:Connect(function(_runtime, payload)
@@ -441,8 +454,14 @@ return function(describe, it, expect)
 				expect(cents).toBeGreaterThanOrEqual(spec.rewardFloorCents)
 				expect(cents).toBeLessThanOrEqual(spec.rewardCapCents)
 			end
-			expect(#announced).toBe(2)
-			expect(announced[1].userId ~= nil).toBe(true)
+			-- One start line for the round, one named reward per contributor, and no round-wide "filled"
+			-- line because every present member contributed.
+			expect(#ofKind(announced, "roundEventStart")).toBe(1)
+			local lines = ofKind(announced, "roundEventReward")
+			expect(#lines).toBe(2)
+			expect(lines[1].userId ~= nil).toBe(true)
+			expect(lines[1].text).never.toBe(lines[2].text)
+			expect(#ofKind(announced, "roundEventEnd")).toBe(0)
 			-- A larger share never pays less.
 			if event.contributors[1] > event.contributors[2] then
 				expect(rewards[1]).toBeGreaterThanOrEqual(rewards[2])
@@ -478,7 +497,8 @@ return function(describe, it, expect)
 			expect(runtime.roundEvent.result).toBe("expired")
 			expect(state.cashCents).toBe(cash)
 			expect(state.carriedStandard).toBe(0)
-			expect(#announced).toBe(0)
+			expect(#ofKind(announced, "roundEventReward")).toBe(0)
+			expect(ofKind(announced, "roundEventEnd")[1].text).toBe(RoundEventService.ANNOUNCE.expired.supplyDrop.text)
 			state.carriedStandard = 30
 			expect(deposit(1).ok).toBe(false)
 		end)
@@ -564,12 +584,57 @@ return function(describe, it, expect)
 			expect(runtime.roundEvent.result).toBe("completed")
 			expect(h.profile(1).data.currencies.gems - gems1).toBe(spec.gemReward)
 			expect(h.profile(2).data.currencies.gems - gems2).toBe(spec.gemReward)
-			expect(#announced).toBe(2)
+			local lines = ofKind(announced, "roundEventReward")
+			expect(#lines).toBe(2)
+			expect(lines[1].text).never.toBe(lines[2].text)
 			local again = rescue(2)
 			expect(again.ok).toBe(false)
 			expect(h.profile(2).data.currencies.gems - gems2).toBe(spec.gemReward)
 			expectEggUnchanged(h, runtime, egg)
 			expect(service.stats.started).toBe(1)
+		end)
+
+		it("every contributor's reward line survives the announcement path's repeat hold", function()
+			local AnnouncementService = require(Server.Services.AnnouncementService)
+			local h, _, runtime, service = chick({ 1, 2 })
+			local delivered = {}
+			local announcements = AnnouncementService.new({
+				send = function(player, remote, payload)
+					table.insert(delivered, { userId = player.UserId, remote = remote, payload = payload })
+				end,
+				getPlayers = function()
+					return {}
+				end,
+				clock = h.clock,
+			})
+			-- The same routing init.server applies: a reward to its contributor only.
+			service._announce = function(_runtime, payload)
+				local recipients = {}
+				for _, userId in ipairs(runtime.state.members) do
+					if (payload.userId == nil or payload.userId == userId) and not table.find(payload.exceptUserIds or {}, userId) then
+						table.insert(recipients, GameplayHarness.fakePlayer(userId))
+					end
+				end
+				announcements:announce(recipients, payload)
+			end
+			local spec = events.events.chickRescue
+			expect(service:rescue(1, { sessionToken = h.token(1) }).ok).toBe(true)
+			expect(service:rescue(2, { sessionToken = h.token(2) }).ok).toBe(true)
+			h.clock:advance(spec.holdSeconds)
+			for _ = 3, spec.holdsRequired do
+				expect(service:rescue(1, { sessionToken = h.token(1) }).ok).toBe(true)
+				h.clock:advance(spec.holdSeconds)
+			end
+			local rewardsFor = {}
+			for _, entry in ipairs(delivered) do
+				expect(entry.remote).toBe("Announcement")
+				if entry.payload.kind == "roundEventReward" then
+					rewardsFor[entry.userId] = (rewardsFor[entry.userId] or 0) + 1
+				end
+			end
+			expect(rewardsFor[1]).toBe(1)
+			expect(rewardsFor[2]).toBe(1)
+			expect(announcements.stats.suppressed).toBe(0)
 		end)
 
 		it("pays nobody when the chick is not freed in time", function()
@@ -580,7 +645,24 @@ return function(describe, it, expect)
 			service:tick()
 			expect(runtime.roundEvent.result).toBe("expired")
 			expect(h.profile(1).data.currencies.gems).toBe(gems)
-			expect(#announced).toBe(0)
+			expect(#ofKind(announced, "roundEventReward")).toBe(0)
+			expect(#ofKind(announced, "roundEventEnd")).toBe(1)
+		end)
+
+		it("tells the members who did not help that it was done", function()
+			local h, _, runtime, _, rescue, announced = chick({ 1, 2 })
+			h.standAt(2, runtime.roundEvent.position + Vector3.new(30, 0, 30))
+			local spec = events.events.chickRescue
+			for _ = 1, spec.holdsRequired do
+				expect(rescue(1).ok).toBe(true)
+				h.clock:advance(spec.holdSeconds)
+			end
+			local done = ofKind(announced, "roundEventEnd")
+			expect(#done).toBe(1)
+			expect(done[1].text).toBe(RoundEventService.ANNOUNCE.completed.chickRescue.text)
+			expect(table.find(done[1].exceptUserIds, 1) ~= nil).toBe(true)
+			expect(table.find(done[1].exceptUserIds, 2)).toBeNil()
+			expect(#ofKind(announced, "roundEventReward")).toBe(1)
 		end)
 	end)
 

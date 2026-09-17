@@ -49,6 +49,10 @@ local ObjectiveController = require(Controllers.ObjectiveController)
 local VictoryController = require(Controllers.VictoryController)
 local PartyController = require(Controllers.PartyController)
 local LobbyController = require(Controllers.LobbyController)
+local LobbyChickens = require(Controllers.LobbyChickens)
+local CelebrationController = require(Controllers.CelebrationController)
+local RainbowFeatherController = require(Controllers.RainbowFeatherController)
+local AnnouncementBanner = require(script.UI.AnnouncementBanner)
 
 local player = Players.LocalPlayer
 local bootStarted = os.clock()
@@ -147,6 +151,52 @@ PerfTrace.mark("round")
 local round = trove:add(
 	RoundController.new({ net = net, profile = profile, modals = modals, accessibility = accessibility, audio = audio, config = config })
 )
+-- Big moments: pooled celebration effects any controller can call, and the one centre-top banner the
+-- server's Announcement event (or a controller, locally) puts the round's rare notices on.
+PerfTrace.mark("celebration")
+local celebration = trove:add(CelebrationController.new({
+	quality = quality,
+	accessibility = accessibility,
+	camera = camera,
+	audio = audio,
+	hud = hud,
+}))
+-- Created further down (it needs the pile); the banner tells it how much room an announcement takes.
+local roundEvents: any = nil
+local announcements = trove:add(AnnouncementBanner.new(hud.stage, {
+	motion = function()
+		return accessibility:motionSettings()
+	end,
+	tier = function()
+		return quality:tier()
+	end,
+	topPx = function()
+		return hud:objectiveBottomPx()
+	end,
+	onSpace = function(px)
+		hud.toasts:setOffset(px)
+		if roundEvents then
+			roundEvents:setAnnouncementSpace(px)
+		end
+	end,
+}))
+trove:add(net:on("Announcement", function(payload)
+	announcements:show(payload)
+end))
+trove:add(round.phaseChanged:Connect(function(phase)
+	if phase == "Returning" or phase == "Abandoned" or phase == "Cutscene" then
+		announcements:clear()
+	end
+end))
+-- Rainbow Feathers: the landing celebration and the Plume progress pill beside the bag.
+PerfTrace.mark("rainbow")
+local rainbow = trove:add(RainbowFeatherController.new({
+	net = net,
+	round = round,
+	hud = hud,
+	celebration = celebration,
+	config = config,
+}))
 PerfTrace.mark("pile")
 local pile = trove:add(
 	PileVisualController.new({ round = round, quality = quality, accessibility = accessibility, vfx = vfx, audio = audio, config = config })
@@ -180,6 +230,7 @@ local pickupFeedback = trove:add(PickupFeedbackController.new({
 	round = round,
 	crate = crateRun,
 	config = config,
+	rainbow = rainbow,
 }))
 PerfTrace.mark("tools")
 local tools = trove:add(ToolController.new({
@@ -264,6 +315,7 @@ local victory = trove:add(VictoryController.new({
 	haptics = haptics,
 	accessibility = accessibility,
 	config = config,
+	celebration = celebration,
 }))
 hud:bindRound(round, interaction)
 -- The round intro. It owns the intro phase: camera, HUD, input and the avatar on screen, and it
@@ -318,26 +370,9 @@ local molly = trove:add(MollyController.new({
 	interaction = interaction,
 }))
 -- The round's mid-round event: the pill under the objective, the crate, the chick and the pile's
--- converted Rainbow Feathers.
--- TEMP: wired to AnnouncementService at merge. Until the banner/celebration kit lands, an
--- announcement (the client's own start/end lines, and the server's `type = "announce"` RoundEvent
--- payloads) is a success toast.
-local function announceRoundEvent(payload: { [string]: any })
-	local text = tostring(payload.text or "")
-	if payload.sub and payload.sub ~= "" then
-		text = text .. "  " .. tostring(payload.sub)
-	end
-	if text ~= "" then
-		hud.toasts:push(text, "success")
-	end
-end
-trove:add(net:on("RoundEvent", function(payload)
-	if type(payload) == "table" and payload.type == "announce" then
-		announceRoundEvent(payload)
-	end
-end))
+-- converted Rainbow Feathers. Its lines arrive as server Announcements; its effects are `celebration`.
 PerfTrace.mark("roundEvents")
-local roundEvents = trove:add(RoundEventController.new({
+roundEvents = trove:add(RoundEventController.new({
 	net = net,
 	round = round,
 	hud = hud,
@@ -347,7 +382,7 @@ local roundEvents = trove:add(RoundEventController.new({
 	quality = quality,
 	accessibility = accessibility,
 	config = config,
-	announce = announceRoundEvent,
+	celebration = celebration,
 	dialogue = dialogue,
 }))
 -- The upgrade book: Tab, the book button, or the supplies counter opens it during a search.
@@ -530,6 +565,20 @@ lobby:start()
 PerfTrace.mark("arena:start")
 arena:start()
 lobbyMeta.leaderboards.request()
+-- The pill and the barn-door board say what happens next; tutorial updates in the lobby refresh it.
+objectives:setLobbyStatus(function()
+	lobbyMeta:refreshStatus()
+end)
+lobbyMeta:refreshStatus()
+-- Yard chickens by the barn: client-only ambience on the shared scheduler (lobby.ambience.chickens).
+PerfTrace.mark("lobbyChickens")
+local lobbyChickens = trove:add(LobbyChickens.new({
+	ambient = ambient,
+	quality = quality,
+	accessibility = accessibility,
+	config = config,
+}))
+lobbyChickens:start()
 
 -- Diagnostics for Studio verification: instance/connection snapshots and an exposed container.
 local container = {
@@ -559,6 +608,13 @@ local container = {
 	victory = victory,
 	party = party,
 	lobbyMeta = lobbyMeta,
+	lobbyChickens = lobbyChickens,
+	-- Shared presentation for big moments (other controllers call these directly):
+	--   announcements:show({ kind, text, sub?, tone?, userId?, position? })
+	--   celebration:goldenRipple / burst / cameraPunch / musicDip / screenFlash / confetti / carrierGlow
+	celebration = celebration,
+	announcements = announcements,
+	rainbow = rainbow,
 	trove = trove,
 	snapshot = function()
 		return {
@@ -600,6 +656,18 @@ if RunService:IsStudio() then
 			local report: any = Feedback.stats()
 			report.toastsShown = hud.toasts.shown
 			report.toastsMerged = hud.toasts.merged
+			return report
+		end,
+		-- Lobby ambience cost: chicken count, update rate and the measured cost of each update
+		-- (os.clock around the whole flock step, rolling average), against lobby.ambience.frameBudgetMs.
+		lobbyAmbienceStats = function(reset)
+			local report: any = lobbyChickens:snapshot()
+			report.schedulerActors = ambient:actorCount()
+			report.schedulerStats = ambient.stats
+			report.status = lobbyMeta.status
+			if reset then
+				lobbyChickens:resetStats()
+			end
 			return report
 		end,
 		perfReport = function(reset)

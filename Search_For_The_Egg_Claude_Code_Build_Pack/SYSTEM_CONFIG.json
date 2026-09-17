@@ -1422,6 +1422,38 @@
     "stationPromptRangeStuds": 10,
     "padFullAutoStartSeconds": 0.5,
     "padZoneHeightStuds": 6,
+    "ambience": {
+      "chickens": {
+        "enabled": true,
+        "countByTier": {
+          "low": 2,
+          "medium": 4,
+          "high": 6
+        },
+        "updateHz": 18,
+        "lowTierUpdateHz": 8,
+        "cullDistanceStuds": 120,
+        "walkSpeedStuds": 3.2,
+        "turnRadiansPerSecond": 4.0,
+        "stepHz": 4.5,
+        "hopHeightStuds": 0.16,
+        "headBobStuds": 0.12,
+        "reducedMotionHopScale": 0.25,
+        "pauseMinSeconds": 1.2,
+        "pauseMaxSeconds": 3.5,
+        "peckMin": 1,
+        "peckMax": 4,
+        "peckSeconds": 0.42,
+        "lookAroundChance": 0.35,
+        "wanderStepMaxStuds": 12,
+        "exclusionMarginStuds": 3,
+        "walkLineClearanceStuds": 5,
+        "groundToleranceStuds": 0.7,
+        "modelScale": 1.0
+      },
+      "frameBudgetMs": 0.5,
+      "evidence": "ASSUMED 17 Sep 2026: a few client-only yard chickens by the barn for life without cost. Low tier keeps 2 at 8 Hz; nothing collides, queries or touches; the drift feathers stay off (owner: no drifting feathers in the lobby)."
+    },
     "assumption": "ASSUMED",
     "offer": {
       "productKey": "doubleGems",

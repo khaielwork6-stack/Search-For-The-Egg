@@ -29,6 +29,7 @@ export type LobbyShellController = typeof(setmetatable(
 		_actors: { any },
 		_loops: { Sound },
 		_shell: Instance?,
+		_nextRoundBoard: { gui: BillboardGui, label: TextLabel }?,
 		started: boolean,
 	},
 	LobbyShellController
@@ -70,6 +71,7 @@ function LobbyShellController.new(deps: any, folderName: string?): LobbyShellCon
 		_actors = {},
 		_loops = {},
 		_shell = nil,
+		_nextRoundBoard = nil,
 		started = false,
 	}, LobbyShellController)
 end
@@ -297,6 +299,37 @@ function LobbyShellController.setPartySilhouettes(self: LobbyShellController, pa
 	end
 end
 
+-- The next-search line on a small board in the barn doorway (the portal): the same words as the HUD
+-- pill, drawn once per change on one client-only billboard. Nil or "" hides it.
+function LobbyShellController.setNextRoundLine(self: LobbyShellController, text: string?)
+	local shell = self._shell
+	local portal = shell and shell:FindFirstChild("PortalAnchor")
+	if not (portal and portal:IsA("BasePart")) then
+		return
+	end
+	local board = self._nextRoundBoard
+	if not board then
+		local world = Tokens.world
+		local gui =
+			WorldBillboard.create(portal, "NextRoundBoard", world.nextRoundBoardStuds, Vector3.new(0, 1.2, 0.8), world.padBoardMaxDistance)
+		local label = WorldBillboard.text(gui, "Line", "", {
+			size = UDim2.fromScale(1, 1),
+			position = UDim2.fromScale(0.5, 0.5),
+			anchor = Vector2.new(0.5, 0.5),
+			outline = 2.4,
+			wrap = true,
+		})
+		self._trove:add(gui)
+		board = { gui = gui, label = label }
+		self._nextRoundBoard = board
+	end
+	local line = text or ""
+	board.gui.Enabled = line ~= ""
+	if board.label.Text ~= line then
+		board.label.Text = line
+	end
+end
+
 -- Fills the ledger SurfaceGui with the first board's rows.
 function LobbyShellController.setLeaderboard(self: LobbyShellController, snapshot: { [string]: any }?)
 	local shell = self._shell
@@ -491,6 +524,7 @@ function LobbyShellController.stop(self: LobbyShellController)
 	end
 	table.clear(self._loops)
 	self._trove:clean()
+	self._nextRoundBoard = nil
 	self.started = false
 end
 

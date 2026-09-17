@@ -3,11 +3,14 @@
 -- only shows them:
 --   * a compact pill under the objective banner: name, progress where it has one, and the countdown
 --     ("RAINBOW RUSH 0:24", "SUPPLY DROP 84/150 0:31", "CHICK RESCUE 0:40");
---   * start and end announcements through the injected `announce`;
---   * Rainbow Rush: the converted records handed to the pile (they render rainbow as they surface);
---   * Supply Drop: the server's crate falls in with a thud of dust and carries a world fill bar;
+--   * Rainbow Rush: the converted records handed to the pile (they render rainbow as they surface),
+--     and a rainbow burst over the nest as it starts;
+--   * Supply Drop: the server's crate falls in with a thud of dust and a golden ripple, and carries a
+--     world fill bar;
 --   * Chick Rescue: the owner's DodoBird (or a small built chick) struggles in the server's cage,
---     chirps from where it is every few seconds, and hops out in a burst when freed.
+--     chirps from where it is every few seconds, and hops out in a golden burst when freed.
+-- Start, end and reward lines are the server's announcements (AnnouncementService); the effects are
+-- the shared CelebrationController's.
 -- The crate's and cage's prompts send the one RoundEventAction request. Motion is scaled down for
 -- reduced motion and trimmed on the low quality tier; every instance goes with the event or the round.
 
@@ -19,6 +22,7 @@ local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Trove = require(Shared.Util.Trove)
 local RoundEvents = require(Shared.Domain.RoundEvents)
+local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local Feedback = require(script.Parent.Parent.UI.Feedback)
 local Depth = require(script.Parent.Parent.UI.Components.Depth)
 local WorldBillboard = require(script.Parent.Parent.UI.Components.WorldBillboard)
@@ -45,32 +49,14 @@ export type RoundEventController = typeof(setmetatable(
 		_pill: Frame,
 		_pillLabel: TextLabel,
 		_pillText: string,
+		_announcementSpace: number,
+		_place: () -> (),
 		_bar: { label: TextLabel, fill: Frame }?,
 		_chick: { model: Model, anchor: BasePart?, cage: Model?, rest: CFrame, nextChirp: number, freed: boolean }?,
 		stats: { started: number, ended: number, requests: number, refused: number, chirps: number },
 	},
 	RoundEventController
 ))
-
-local ANNOUNCE_START: { [string]: { text: string, sub: string } } = {
-	rainbowRush = { text = "RAINBOW RUSH", sub = "Rainbow Feathers are surfacing in the nest" },
-	supplyDrop = { text = "SUPPLY DROP", sub = "Deposit normal feathers at the crate for a cash bonus" },
-	chickRescue = { text = "CHICK RESCUE", sub = "Follow the chirps and free the chick for gems" },
-}
-
-local ANNOUNCE_END: { [string]: { [string]: { text: string, sub: string?, tone: string } } } = {
-	rainbowRush = {
-		expired = { text = "Rainbow Rush over", sub = "The rainbow feathers stay in the nest", tone = "info" },
-	},
-	supplyDrop = {
-		completed = { text = "Supply Drop complete", sub = "Every contributor was paid", tone = "success" },
-		expired = { text = "Supply Drop missed", sub = "The crate was not filled in time", tone = "info" },
-	},
-	chickRescue = {
-		completed = { text = "Chick freed", sub = "Every rescuer earned gems", tone = "success" },
-		expired = { text = "Chick Rescue over", sub = "Nobody freed the chick in time", tone = "info" },
-	},
-}
 
 local DENIAL_TEXT: { [string]: string } = {
 	no_feathers = "Your bag has no normal feathers",
@@ -97,7 +83,7 @@ function RoundEventController.new(deps: {
 	quality: any,
 	accessibility: any,
 	config: { [string]: any },
-	announce: (payload: { [string]: any }) -> (),
+	celebration: any?,
 	dialogue: any?,
 }): RoundEventController
 	local trove = Trove.new()
@@ -147,20 +133,23 @@ function RoundEventController.new(deps: {
 		_pill = pill,
 		_pillLabel = label,
 		_pillText = "",
+		_announcementSpace = 0,
+		_place = function() end,
 		_bar = nil,
 		_chick = nil,
 		stats = { started = 0, ended = 0, requests = 0, refused = 0, chirps = 0 },
 	}, RoundEventController)
 
-	-- Sits just under the objective banner and follows its height (the detail line comes and goes).
+	-- Sits just under the objective pill and follows its height (the detail line comes and goes), and
+	-- steps below a big announcement while one is on screen instead of hiding under it.
 	local banner = deps.hud.stage:FindFirstChild("Banner") :: Frame?
 	local function place()
-		local top = Tokens.layout.safeAreaPaddingPx
-		if banner then
-			top = banner.Position.Y.Offset + banner.Size.Y.Offset
-		end
-		pill.Position = UDim2.new(0.5, 0, 0, top + Tokens.spacing.xs)
+		local top = if deps.hud.objectiveBottomPx
+			then deps.hud:objectiveBottomPx()
+			else Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx
+		pill.Position = UDim2.new(0.5, 0, 0, top + self._announcementSpace)
 	end
+	self._place = place
 	if banner then
 		trove:add(banner:GetPropertyChangedSignal("Size"):Connect(place))
 	end
@@ -188,6 +177,12 @@ function RoundEventController.new(deps: {
 		end
 	end))
 	return self
+end
+
+-- The announcement banner reports the room it takes under the objective (0 when it is gone).
+function RoundEventController.setAnnouncementSpace(self: RoundEventController, px: number)
+	self._announcementSpace = math.max(0, px)
+	self._place()
 end
 
 function RoundEventController.active(self: RoundEventController): { [string]: any }?
@@ -222,8 +217,8 @@ function RoundEventController.request(self: RoundEventController, action: string
 end
 
 function RoundEventController._onRemote(self: RoundEventController, payload: { [string]: any })
-	if type(payload) ~= "table" or payload.type == "announce" then
-		return -- announcements are shown by the announcement path, not here
+	if type(payload) ~= "table" then
+		return
 	end
 	local event = payload.event
 	if payload.rainbowOverrides and self._deps.pile then
@@ -304,10 +299,11 @@ function RoundEventController._begin(self: RoundEventController, event: { [strin
 	self._eventTrove = eventTrove
 	self:_apply(event)
 	self._pill.Visible = true
-	if fresh then
-		local copy = ANNOUNCE_START[event.kind]
-		if copy then
-			deps.announce({ kind = "roundEventStart", text = copy.text, sub = copy.sub, tone = "info" })
+	if fresh and event.kind == "rainbowRush" and deps.celebration then
+		-- The nest shimmers: a rainbow burst over the mound's crown.
+		local layout = deps.config and ChapterLayout[deps.round.round and deps.round.round.chapter or "chapter1"]
+		if layout and layout.nestCenter then
+			deps.celebration:burst(layout.nestCenter + Vector3.new(0, 8, 0), "rainbow", 1.4)
 		end
 	end
 	local reduced = deps.accessibility:reducedMotion()
@@ -386,8 +382,18 @@ function RoundEventController._dressCrate(self: RoundEventController, model: Mod
 	self:_refresh()
 	local rest = model:GetPivot()
 	local puffAt = rest.Position - Vector3.new(0, body.Size.Y * 0.5 - 0.2, 0)
+	local function landed(strong: boolean)
+		deps.vfx:burst("smoke", puffAt, if low or not strong then 0.15 else 0.35)
+		if deps.celebration and strong then
+			deps.celebration:goldenRipple(puffAt, 7)
+			local camera = workspace.CurrentCamera
+			if camera and (camera.CFrame.Position - puffAt).Magnitude < 45 then
+				deps.celebration:cameraPunch(0.35, 0.3)
+			end
+		end
+	end
 	if not animate then
-		deps.vfx:burst("smoke", puffAt, 0.12)
+		landed(false)
 		return
 	end
 	-- The fall: straight down from the sky, accelerating, a squash on landing and a puff of dust.
@@ -405,7 +411,7 @@ function RoundEventController._dressCrate(self: RoundEventController, model: Mod
 		if t >= 1 then
 			connection:Disconnect()
 			model:PivotTo(rest)
-			deps.vfx:burst("smoke", puffAt, if low then 0.15 else 0.35)
+			landed(true)
 		end
 	end)
 	eventTrove:add(connection)
@@ -517,12 +523,6 @@ function RoundEventController._finish(self: RoundEventController, event: { [stri
 	self._event = event
 	self:_refresh()
 	self.stats.ended += 1
-	if fresh and event.result ~= "interrupted" then
-		local copy = ANNOUNCE_END[event.kind] and ANNOUNCE_END[event.kind][event.result or ""]
-		if copy then
-			deps.announce({ kind = "roundEventEnd", text = copy.text, sub = copy.sub, tone = copy.tone })
-		end
-	end
 	self._pill.Visible = false
 	self._event = nil
 	local eventTrove = self._eventTrove
@@ -533,6 +533,11 @@ function RoundEventController._finish(self: RoundEventController, event: { [stri
 	elseif fresh and event.result == "completed" and self._bar then
 		self._bar.fill.Size = UDim2.fromScale(1, 1)
 		self._bar.fill.BackgroundColor3 = Tokens.color.leafBright
+		local gui = self._bar.label:FindFirstAncestorOfClass("BillboardGui")
+		local adornee = gui and gui.Adornee
+		if deps.celebration and adornee and adornee:IsA("BasePart") then
+			deps.celebration:burst(adornee.Position + Vector3.new(0, 2, 0), "gold", 1)
+		end
 	end
 	-- Leave the closing beat a moment on screen, then take everything away.
 	if eventTrove then
@@ -557,7 +562,11 @@ function RoundEventController._freeChick(self: RoundEventController, chick: any,
 		end
 	end
 	local origin = chick.rest
-	deps.vfx:burst("spark", origin.Position + Vector3.new(0, 0.8, 0), if deps.quality:tier() == "low" then 0.15 else 0.35)
+	if deps.celebration then
+		deps.celebration:burst(origin.Position + Vector3.new(0, 0.8, 0), "gold", 0.9)
+	else
+		deps.vfx:burst("spark", origin.Position + Vector3.new(0, 0.8, 0), if deps.quality:tier() == "low" then 0.15 else 0.35)
+	end
 	if reduced then
 		return
 	end

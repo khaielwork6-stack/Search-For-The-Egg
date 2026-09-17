@@ -115,10 +115,59 @@ end
 
 function AudioDirector.setVolumes(self: AudioDirector, music: number, sfx: number)
 	self._volumes = { music = math.clamp(music, 0, 1), sfx = math.clamp(sfx, 0, 1) }
-	self._buses.Music.Volume = self._volumes.music
+	local this = self :: any
+	-- A duck in progress keeps its depth against the new setting; its release restores the new value.
+	self._buses.Music.Volume = self._volumes.music * (if this._duckDepth then 1 - this._duckDepth else 1)
 	self._buses.Ambience.Volume = self._volumes.sfx
 	self._buses.SFX.Volume = self._volumes.sfx
 	self._buses.UI.Volume = self._volumes.sfx
+end
+
+-- Ducks the Music bus for a big moment: down by `depth` (0..1) quickly, held for `seconds`, then back
+-- to the player's music volume. Only the Music bus moves; SFX, UI and ambience are untouched, and the
+-- player's setting is never rewritten. A duck asked for while one is running extends it (the deeper
+-- depth wins) rather than stacking.
+function AudioDirector.duck(self: AudioDirector, seconds: number, depth: number?)
+	local this = self :: any
+	local amount = math.clamp(depth or 0.6, 0, 1)
+	local hold = math.max(0, seconds)
+	local now = os.clock()
+	if this._duckDepth and this._duckUntil and now < this._duckUntil then
+		amount = math.max(amount, this._duckDepth)
+	end
+	this._duckDepth = amount
+	this._duckUntil = math.max(this._duckUntil or 0, now + hold)
+	this._duckToken = (this._duckToken or 0) + 1
+	local token = this._duckToken
+	local bus = self._buses.Music
+	if this._duckTween then
+		this._duckTween:Cancel()
+	end
+	local down = TweenService:Create(
+		bus,
+		TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Volume = self._volumes.music * (1 - amount) }
+	)
+	this._duckTween = down
+	down:Play()
+	task.delay(this._duckUntil - now, function()
+		if this._duckToken ~= token then
+			return
+		end
+		this._duckDepth = nil
+		this._duckUntil = nil
+		local up = TweenService:Create(
+			bus,
+			TweenInfo.new(0.7, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+			{ Volume = self._volumes.music }
+		)
+		this._duckTween = up
+		up:Play()
+	end)
+end
+
+function AudioDirector.isDucked(self: AudioDirector): boolean
+	return (self :: any)._duckDepth ~= nil
 end
 
 -- Cross-fades music layers; never restarts abruptly.
