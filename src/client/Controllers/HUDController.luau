@@ -650,7 +650,12 @@ function HUDController.new(deps: any): HUDController
 	-- refusal's, and that one is played by Feedback.deny behind its per-reason cooldown.
 	self.toasts = Toast.new(stage, function()
 		return deps.accessibility:motionSettings()
-	end, { dedupeSeconds = deps.config.hud.feedback.notificationDedupeSeconds })
+	end, {
+		dedupeSeconds = deps.config.hud.feedback.notificationDedupeSeconds,
+		onShow = function()
+			deps.audio:play(Tokens.sound.uiToast)
+		end,
+	})
 	self._trove:add(self.toasts)
 	Feedback.bind({
 		toasts = self.toasts,

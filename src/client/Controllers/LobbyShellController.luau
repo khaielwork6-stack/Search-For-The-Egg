@@ -35,7 +35,7 @@ export type LobbyShellController = typeof(setmetatable(
 ))
 
 local STRANDS_PER_ANCHOR_BY_TIER = { low = 6, medium = 12, high = 20 }
-local FEATHER_TINTS = { Tokens.color.cream, Tokens.color.creamDeep, Tokens.color.straw }
+local FEATHER_TINTS = { Tokens.worldColor.feather, Tokens.worldColor.featherDeep, Tokens.color.straw }
 
 local function makeStrand(parent: Instance, index: number): BasePart
 	local template = AssetManifest.model("feather")
@@ -292,7 +292,7 @@ function LobbyShellController.setPartySilhouettes(self: LobbyShellController, pa
 			child.Transparency = if filled then 0.1 else 0.75
 			child.Color = if filled
 				then (if party and party.members[slot] == party.leaderUserId then Tokens.color.gold else Tokens.color.sky)
-				else Tokens.color.cream
+				else Tokens.worldColor.feather
 		end
 	end
 end
@@ -335,10 +335,10 @@ function LobbyShellController.setLeaderboard(self: LobbyShellController, snapsho
 		if index > 5 then
 			break
 		end
-		line(index, string.format("%d. %s  %s", index, row.name, tostring(row.value)), Tokens.color.cream, 14)
+		line(index, string.format("%d. %s  %s", index, row.name, tostring(row.value)), Tokens.color.featherWhite, 14)
 	end
 	if #board.rows == 0 then
-		line(1, "Be the first forager here", Tokens.color.creamDeep, 14)
+		line(1, "Be the first forager here", Tokens.color.inkMuted, 14)
 	end
 end
 

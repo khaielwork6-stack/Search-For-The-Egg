@@ -394,7 +394,7 @@ function ToolVisualController._debris(self: ToolVisualController, position: Vect
 		local part = placeholder(
 			"Debris",
 			Vector3.new(0.5 + math.random() * 0.6, 0.12, 0.9 + math.random() * 0.8),
-			Tokens.color.cream,
+			Tokens.worldColor.feather,
 			Enum.PartType.Block
 		)
 		part.Material = Enum.Material.SmoothPlastic
@@ -825,7 +825,7 @@ end
 function ToolVisualController._upsertBundle(self: ToolVisualController, id: string, position: Vector3, count: number)
 	local bundle = self._bundles[id]
 	if not bundle then
-		local part = placeholder("SFE_Bundle", Vector3.new(1.3, 1.3, 1.3), Tokens.color.cream)
+		local part = placeholder("SFE_Bundle", Vector3.new(1.3, 1.3, 1.3), Tokens.worldColor.feather)
 		part.Material = Enum.Material.Fabric
 		local gui = Instance.new("BillboardGui")
 		gui.Size = UDim2.fromOffset(80, 24)
@@ -837,7 +837,7 @@ function ToolVisualController._upsertBundle(self: ToolVisualController, id: stri
 		label.BackgroundTransparency = 1
 		label.Font = Tokens.typography.numeral.font
 		label.TextSize = Tokens.typography.numeral.size
-		label.TextColor3 = Tokens.color.cream
+		label.TextColor3 = Tokens.color.featherWhite
 		label.TextStrokeTransparency = 0.3
 		label.Parent = gui
 		gui.Parent = part

@@ -66,7 +66,7 @@ function CutsceneOverlay.create(parent: Instance, options: { seconds: number, mo
 	if captionArt then
 		captionArt.ImageTransparency = 1
 	else
-		caption.TextColor3 = Tokens.color.cream
+		caption.TextColor3 = Tokens.color.featherWhite
 		caption.TextStrokeTransparency = 0.5
 	end
 	caption.Parent = gui

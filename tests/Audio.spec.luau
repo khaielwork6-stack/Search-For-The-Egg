@@ -88,10 +88,10 @@ return function(describe, it, expect)
 
 	describe("Unapproved feedback sounds", function()
 		it("removes the countdown tick, the Rainbow ping and the toast pop", function()
-			for _, role in ipairs({ "round.countdownTick", "collect.rainbow", "ui.toast", "collect.bagFull" }) do
+			for _, role in ipairs({ "round.countdownTick", "collect.rainbow", "collect.bagFull" }) do
 				expect(roles[role]).toBeNil()
 			end
-			for _, name in ipairs({ "countdownTick", "collectRainbow", "uiToast", "bagFull" }) do
+			for _, name in ipairs({ "countdownTick", "collectRainbow", "bagFull" }) do
 				expect(Tokens.sound[name]).toBeNil()
 			end
 		end)

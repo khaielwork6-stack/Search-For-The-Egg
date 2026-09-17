@@ -173,6 +173,7 @@ Tokens.sound = table.freeze({
 	uiOpen = "ui.open",
 	uiClose = "ui.close",
 	uiError = "ui.error",
+	uiToast = "ui.toast",
 	uiHover = "ui.hover",
 	uiTab = "ui.tab",
 	uiSwitch = "ui.switch",
@@ -265,5 +266,13 @@ Tokens.zIndex = table.freeze({ world = 1, hud = 10, toast = 20, modal = 30, bloc
 
 -- Icon glyph sizes (vector icons drawn from frames; see UI/Components/Icons).
 Tokens.icon = table.freeze({ sm = 16, md = 22, lg = 32 })
+
+-- World colours. The UI token flip (17 Sep 2026) turned `cream`/`creamDeep` charcoal; world feathers,
+-- debris, dust and in-world text must stay the warm light tones they were drawn in.
+Tokens.worldColor = table.freeze({
+	feather = Color3.fromRGB(253, 247, 236),
+	featherDeep = Color3.fromRGB(240, 226, 200),
+	dust = Color3.fromRGB(226, 208, 170),
+})
 
 return Tokens

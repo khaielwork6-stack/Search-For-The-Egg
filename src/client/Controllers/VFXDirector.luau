@@ -29,8 +29,8 @@ export type VFXDirector = typeof(setmetatable(
 
 type Kind = { color: Color3, rate: number, lifetime: number, size: number, speed: NumberRange?, spread: number?, light: boolean? }
 local KINDS: { [string]: Kind } = {
-	featherPuff = { color = Tokens.color.cream, rate = 12, lifetime = 1.4, size = 0.6 },
-	dust = { color = Tokens.color.creamDeep, rate = 4, lifetime = 3, size = 0.3 },
+	featherPuff = { color = Tokens.worldColor.feather, rate = 12, lifetime = 1.4, size = 0.6 },
+	dust = { color = Tokens.worldColor.dust, rate = 4, lifetime = 3, size = 0.3 },
 	sparkle = { color = Tokens.color.straw, rate = 20, lifetime = 0.8, size = 0.25 },
 	-- Pickup contact: a concentrated warm glint where the feather was gripped, and a few tiny down
 	-- motes (feather dust, never collectible feathers) that drift off the spot.

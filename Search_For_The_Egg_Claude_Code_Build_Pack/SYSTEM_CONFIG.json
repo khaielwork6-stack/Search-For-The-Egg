@@ -1895,6 +1895,14 @@
         "minGap": 0.08,
         "group": "uiClick"
       },
+      "ui.toast": {
+        "id": "rbxassetid://131661992591924",
+        "volume": 0.5,
+        "speed": 1.0,
+        "variance": 0.02,
+        "minGap": 0.15,
+        "evidence": "OWNER 14 Sep 2026 notification id (commit 454c375). Played once per notification that actually shows: merged duplicates and refusals (which play ui.error) stay silent."
+      },
       "ui.error": {
         "id": "rbxassetid://133211074702094",
         "volume": 0.6,

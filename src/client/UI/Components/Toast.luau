@@ -4,8 +4,8 @@
 -- (Back-out), pop, and shrink away. Non-blocking, inside the safe area at the top-center. Reward
 -- toasts count their amount up only after the server acknowledged the grant, with a coin icon.
 --
--- This is the game's one notification surface. Toasts are silent (17 Sep 2026: the pop sound on every
--- notification was removed; a refusal's sound belongs to UI/Feedback.deny, which also lands here), and
+-- This is the game's one notification surface. A toast that actually shows plays the owner's
+-- notification sound once through `onShow`; a refusal passes `silent` (its sound is UI/Feedback.deny's), and
 -- a toast whose text matches one pushed within `dedupeSeconds` is merged into it instead of stacking a
 -- second card, so one event can never build two notifications whoever reports it.
 
@@ -31,6 +31,7 @@ export type Toast = typeof(setmetatable(
 		_visible: number,
 		_max: number,
 		_dedupe: CooldownGate.CooldownGate,
+		_onShow: ((tone: string) -> ())?,
 		shown: number,
 		merged: number,
 	},
@@ -48,7 +49,7 @@ local TONES: { [string]: { color: Color3, icon: string } } = {
 local HOLD_SECONDS = 2.8
 local DEFAULT_DEDUPE_SECONDS = 1.5
 
-export type Options = { dedupeSeconds: number?, clock: (() -> number)? }
+export type Options = { dedupeSeconds: number?, clock: (() -> number)?, onShow: ((tone: string) -> ())? }
 
 function Toast.new(gui: Instance, motion: () -> Motion.MotionSettings, options: Options?): Toast
 	local opts = options or {}
@@ -82,15 +83,19 @@ function Toast.new(gui: Instance, motion: () -> Motion.MotionSettings, options: 
 		_visible = 0,
 		_max = 3,
 		_dedupe = CooldownGate.new(opts.dedupeSeconds or DEFAULT_DEDUPE_SECONDS, opts.clock or os.clock),
+		_onShow = opts.onShow,
 		shown = 0,
 		merged = 0,
 	}, Toast)
 end
 
 -- Returns false when the text was merged into an identical toast pushed moments ago.
-function Toast.push(self: Toast, text: string, tone: string?, seconds: number?): boolean
+function Toast.push(self: Toast, text: string, tone: string?, seconds: number?, silent: boolean?): boolean
 	if not self:_accept(text) then
 		return false
+	end
+	if not silent and self._onShow then
+		self._onShow(tone or "info")
 	end
 	table.insert(self._queue, { text = text, tone = tone or "info", seconds = seconds })
 	self:_drain()
@@ -112,6 +117,9 @@ end
 function Toast.reward(self: Toast, text: string, amount: number): boolean
 	if not self:_accept(text) then
 		return false
+	end
+	if self._onShow then
+		self._onShow("reward")
 	end
 	table.insert(self._queue, { text = text, tone = "reward", amount = amount, seconds = HOLD_SECONDS + 0.8 })
 	self:_drain()

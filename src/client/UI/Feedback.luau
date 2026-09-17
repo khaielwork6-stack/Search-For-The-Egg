@@ -60,7 +60,7 @@ function Feedback.deny(reasonKey: string, text: string?, options: DenyOptions?):
 		bound.play(Tokens.sound.uiError)
 	end
 	if text and bound.toasts then
-		bound.toasts:push(text, opts.tone or "warning", opts.seconds)
+		bound.toasts:push(text, opts.tone or "warning", opts.seconds, true)
 	end
 	return true
 end
