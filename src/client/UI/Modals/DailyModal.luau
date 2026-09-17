@@ -1293,10 +1293,12 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				zIndex = z + 20,
 			})
 			Tween.floatText(cell.face, string.format("+%s GEMS", withCommas(data.gems or 0)), Tokens.color.goldDeep, motion, z + 14)
-			deps.toasts:reward(string.format("Day %d nest opened", data.dayIndex), data.gems)
 			animating = false
 			-- The card turns CLAIMED and the next marker lights now that the gems have landed.
 			render()
+			if deps.toasts and deps.toasts.reward then
+				deps.toasts:reward(string.format("Day %d nest opened", data.dayIndex), data.gems)
+			end
 		end)
 	end
 
