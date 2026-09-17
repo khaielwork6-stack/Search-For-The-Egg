@@ -246,8 +246,10 @@ function ModalShell.create(
 
 	local headerRight = Instance.new("Frame")
 	headerRight.Name = "HeaderRight"
-	headerRight.AnchorPoint = Vector2.new(1, 0)
-	headerRight.Position = UDim2.fromScale(0.92, 1.12)
+	-- Centred on the panel's top edge like the close knob, so a short phone header never drops the
+	-- chip onto the first row of content.
+	headerRight.AnchorPoint = Vector2.new(1, 0.5)
+	headerRight.Position = UDim2.fromScale(0.92, 1.0)
 	headerRight.Size = UDim2.fromScale(0.36, 0.62)
 	headerRight.BackgroundTransparency = 1
 	headerRight.ZIndex = 3

@@ -736,7 +736,7 @@ function UpgradeBookController._renderSpread(self: UpgradeBookController)
 	session.prev.button.Visible = session.tab == "upgrades" and session.page > 1
 	session.next.button.Visible = session.tab == "upgrades" and session.page + 1 < #session.items
 	local player = self._deps.round.player
-	session.money.Text = "your money :  " .. EconomyMath.formatCents(player and player.cashCents or 0)
+	session.money.Text = "Your money: " .. EconomyMath.formatCents(player and player.cashCents or 0)
 end
 
 -- Page turn: the right page folds to the spine and back with the new spread.
@@ -900,7 +900,8 @@ function UpgradeBookController.open(self: UpgradeBookController)
 	coverPadding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
 	coverPadding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
 	coverPadding.PaddingTop = UDim.new(0, Tokens.spacing.lg)
-	coverPadding.PaddingBottom = UDim.new(0, Tokens.spacing.lg)
+	-- The bottom margin is a band deep enough for the money readout under the pages.
+	coverPadding.PaddingBottom = UDim.new(0, Tokens.spacing.xl + Tokens.typography.label.size)
 	coverPadding.Parent = cover
 
 	session.cover = cover
@@ -1026,7 +1027,7 @@ function UpgradeBookController.open(self: UpgradeBookController)
 			motion = motion,
 			size = UDim2.fromOffset(tap * 3, tap + Tokens.spacing.xs),
 			zIndex = 5,
-			textSize = Tokens.typography.title.size - 2,
+			textSize = Tokens.typography.label.size + 2,
 			sound = function()
 				deps.audio:play(Tokens.sound.uiTab)
 			end,
@@ -1097,10 +1098,11 @@ function UpgradeBookController.open(self: UpgradeBookController)
 	session.prev = arrow("Previous", 0, 180, -1)
 	session.next = arrow("Next", 1, 0, 1)
 
+	-- Sits on the cover's bottom margin under the pages, so it never lands on the HUD below the book.
 	local money =
-		FrameKit.text(cover, "Money", "", "label", { zIndex = 6, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Right })
-	money.AnchorPoint = Vector2.new(1, 1)
-	money.Position = UDim2.new(1, 0, 1, Tokens.spacing.lg + Tokens.typography.label.size)
+		FrameKit.text(cover, "Money", "", "label", { zIndex = 6, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Center })
+	money.AnchorPoint = Vector2.new(0.5, 1)
+	money.Position = UDim2.new(0.5, 0, 1, Tokens.typography.label.size + Tokens.spacing.xl - Tokens.spacing.sm)
 	money.Size = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + 4)
 	FrameKit.outline(money, 2.5)
 	session.money = money
