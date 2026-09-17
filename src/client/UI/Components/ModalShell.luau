@@ -276,7 +276,7 @@ function ModalShell.create(
 	Depth.applySheen(closeFace, Tokens.color.ember, Color3.fromRGB(255, 150, 140))
 	Depth.rim(closeFace, Tokens.color.ember)
 	closeFace.Parent = closeButton
-	local cross = Fit.text(closeFace, "X", "X", {
+	Fit.text(closeFace, "X", "X", {
 		font = Tokens.typography.display.font,
 		color = Tokens.color.featherWhite,
 		max = 44,
