@@ -105,8 +105,15 @@ function ModalShell.create(
 	holder.BackgroundTransparency = 1
 	holder.ZIndex = z + 1
 	local holderScale = Instance.new("UIScale")
-	holderScale.Scale = if phone and stageScale > 0 then 1 / stageScale else 1
 	holderScale.Parent = holder
+	-- A UIScale grows the holder itself too: sized at the stage scale and drawn at its inverse, the
+	-- holder covers exactly the screen and its Scale-sized card reads in real screen fractions.
+	local function applyHolder()
+		local cancel = phone and stageScale > 0
+		holderScale.Scale = if cancel then 1 / stageScale else 1
+		holder.Size = if cancel then UDim2.fromScale(stageScale, stageScale) else UDim2.fromScale(1, 1)
+	end
+	applyHolder()
 	holder.Parent = root
 
 	-- The one centred root container. Scale box + aspect lock; a max width keeps 4K sane.
@@ -328,7 +335,7 @@ function ModalShell.create(
 			return -- closed: the detached aspect constraint must not be re-parented to a dead card
 		end
 		readDevice()
-		holderScale.Scale = if phone and stageScale > 0 then 1 / stageScale else 1
+		applyHolder()
 		local boxHeight = if phone then PHONE_H else geometry.box.Y
 		if math.abs(card.Position.Y.Scale - cardY()) > 0.001 then
 			card.Position = UDim2.new(0.5, 0, cardY(), card.Position.Y.Offset) -- the device class changed
