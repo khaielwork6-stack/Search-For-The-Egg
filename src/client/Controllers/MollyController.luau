@@ -12,13 +12,11 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
-local Motion = require(Shared.Design.Motion)
 local Feedback = require(script.Parent.Parent.UI.Feedback)
 local Trove = require(Shared.Util.Trove)
 local NestSurvey = require(Shared.Domain.NestSurvey)
@@ -1278,7 +1276,6 @@ end
 
 -- The green button: SURVEY while picking, DONE once the answer is shown.
 function MollyController._confirmSurvey(self: MollyController)
-	local deps = self._deps
 	local selection = self._selection
 	if not selection or selection.scanning then
 		return

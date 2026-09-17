@@ -548,6 +548,13 @@ if RunService:IsStudio() then
 	local bridge = Instance.new("BindableFunction")
 	bridge.Name = "SFE_ClientDebug"
 	local actions: { [string]: (...any) -> any } = {
+		feedbackStats = function()
+			local Feedback = require(script.UI.Feedback)
+			local report: any = Feedback.stats()
+			report.toastsShown = hud.toasts.shown
+			report.toastsMerged = hud.toasts.merged
+			return report
+		end,
 		perfReport = function(reset)
 			local report = PerfTrace.report()
 			report.instances = #workspace:GetDescendants()
