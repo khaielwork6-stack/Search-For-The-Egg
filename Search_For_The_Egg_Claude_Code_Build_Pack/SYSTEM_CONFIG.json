@@ -1929,9 +1929,9 @@
         "minGap": 0.025
       },
       "collect.flight": {
-        "id": "rbxasset://sounds/swoosh.wav",
+        "id": "rbxasset://sounds/action_jump.mp3",
         "volume": 0.14,
-        "speed": 1.9,
+        "speed": 1.6,
         "variance": 0.05,
         "minGap": 0.05
       },
