@@ -161,7 +161,7 @@ function InteractionController.handle(self: InteractionController, promptName: s
 		end
 		self.claimed:Fire(result)
 		return result
-	elseif promptName == "SFE_PlumeBorrow" then
+	elseif promptName == "SFE_PlumeAnalyse" then
 		-- Professor Plume: the PlumeController owns the conversation, the trade and the sequence.
 		self.plumeRequested:Fire()
 		return nil

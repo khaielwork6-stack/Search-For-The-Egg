@@ -218,7 +218,7 @@ local intro = trove:add(IntroCinematicController.new({
 intro:bindRound()
 -- Player nameplates: display name and record time over every character.
 local nameplates = trove:add(NameplateController.new(round))
--- Professor Plume: the rod lender. Nameplate, outline, idle, the board, the loan and its hand-over.
+-- Professor Plume: the clue NPC. Nameplate, outline, idle, the board, the card and the analysis.
 local plume = trove:add(PlumeController.new({
 	net = net,
 	round = round,
@@ -233,7 +233,6 @@ local plume = trove:add(PlumeController.new({
 	config = config,
 	dialogue = dialogue,
 	interaction = interaction,
-	tools = tools,
 }))
 -- Molly the Mole: the survey NPC. Nameplate, outline, idle, the map, the trade and its sequence.
 local molly = trove:add(MollyController.new({
@@ -1231,8 +1230,7 @@ if RunService:IsStudio() then
 			status.hudEnabled = hud.gui.Enabled
 			status.mouseBehaviour = tostring(game:GetService("UserInputService").MouseBehavior)
 			status.promptsEnabled = game:GetService("ProximityPromptService").Enabled
-			status.roundPlume = round.round and round.round.plume or nil
-			status.rod = tools:rodState()
+			status.clue = round.player and round.player.plumeClue or nil
 			status.carriedRainbow = round.player and round.player.carriedRainbow or nil
 			status.carriedStandard = round.player and round.player.carriedStandard or nil
 			local stack = (hud :: any).carriedStack
@@ -1265,20 +1263,14 @@ if RunService:IsStudio() then
 			return { moved = molly:navigate(tonumber(dRow) or 0, tonumber(dCol) or 0), selected = molly:status().selected }
 		end,
 		mollyConfirm = function()
-			local status = molly:status()
-			local selected = status.selected
-			-- Tier 3 (the pin) needs no selection; tiers 1 and 2 need the region (and the patch).
-			if not selected and status.roundSurvey and status.roundSurvey.nextTier ~= "pin" then
+			local selected = molly:status().selected
+			if not selected then
 				return { ok = false, message = "no_selection" }
 			end
-			return molly:survey(selected, status.selectedSub)
+			return molly:survey(selected)
 		end,
 		mollyCancel = function()
 			molly:cancel()
-			return molly:status()
-		end,
-		mollySkip = function()
-			molly:skip()
 			return molly:status()
 		end,
 		mollySpam = function(n, region)
@@ -1288,7 +1280,7 @@ if RunService:IsStudio() then
 			for _ = 1, tonumber(n) or 5 do
 				pending += 1
 				task.spawn(function()
-					local result = net:request("SurveyRequest", { sessionToken = token, region = tostring(region or "B2") })
+					local result = net:request("SurveyRequest", { sessionToken = token, region = tostring(region or "backBarn") })
 					table.insert(codes, if result.ok then "ok" else tostring(result.message or result.code))
 					pending -= 1
 				end)
@@ -1307,7 +1299,7 @@ if RunService:IsStudio() then
 			for _ = 1, tonumber(n) or 5 do
 				pending += 1
 				task.spawn(function()
-					local result = net:request("PlumeLend", { sessionToken = token })
+					local result = net:request("PlumeAnalyse", { sessionToken = token })
 					table.insert(codes, if result.ok then "ok" else tostring(result.message or result.code))
 					pending -= 1
 				end)
@@ -1321,8 +1313,8 @@ if RunService:IsStudio() then
 		plumeOpen = function()
 			return { opened = plume:interact(), top = modals:topId() }
 		end,
-		plumeBorrow = function()
-			return plume:borrow()
+		plumeAnalyse = function()
+			return plume:analyse()
 		end,
 		plumeSkip = function()
 			plume:skip()

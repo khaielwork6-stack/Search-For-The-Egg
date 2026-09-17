@@ -55,8 +55,6 @@ export type HUDController = typeof(setmetatable(
 		_pendingBag: { standard: number, rainbow: number, capacity: number }?,
 		_heatFill: Frame?,
 		_heatFlame: UIScale?,
-		_heatGradient: UIGradient?,
-		_rodHeat: number?,
 		_heatLabel: TextLabel?,
 		_heatState: string?,
 		_gemShopOpener: (() -> ())?,
@@ -573,7 +571,6 @@ function HUDController.new(deps: any): HUDController
 	self._labels.heat = heat
 	self._heatFill = heatFill
 	self._heatFlame = heatFlameScale
-	self._heatGradient = heatGradient
 	self._heatLabel = heatLabel
 	self._heatState = "hidden"
 
@@ -1016,7 +1013,7 @@ function HUDController.setTargeting(self: HUDController, targeting: boolean)
 	self._targeting = targeting
 	if self._reticleArt then
 		Skin.apply(self._reticleArt, if targeting then "hud.reticle.locked" else "hud.reticle")
-	elseif self._rodHeat == nil then
+	else
 		self._labels.reticle.BackgroundColor3 = if targeting then Tokens.color.gold else Tokens.color.featherWhite
 	end
 	local motion = self._deps.accessibility:motionSettings()
@@ -1060,71 +1057,6 @@ function HUDController.setHeat(self: HUDController, fraction: number, state: str
 		fill.BackgroundColor3 = if math.sin(os.clock() * 10) > 0 then Tokens.color.danger else Tokens.color.ember
 	else
 		fill.BackgroundColor3 = Tokens.color.gold
-	end
-end
-
--- Egg Sense rod: `heat` 0..1 tints the reticle from cold to warm and fills the heat meter, whose
--- label counts the loan down; nil hides the meter and restores the reticle. Never touches the
--- targeting state (a feather under the crosshair still swaps the art).
-function HUDController.setRodHeat(self: HUDController, heat: number?, remainingSeconds: number?)
-	local reticle = self._labels.reticle
-	local frame = self._labels.heat
-	local fill = self._heatFill
-	if not reticle or not frame or not fill then
-		return
-	end
-	local rod = self._deps.config.plume and self._deps.config.plume.rod
-	if heat == nil or not rod then
-		if self._rodHeat ~= nil then
-			self._rodHeat = nil
-			if self._reticleArt then
-				self._reticleArt.ImageColor3 = Color3.new(1, 1, 1)
-			else
-				reticle.BackgroundColor3 = if self._targeting then Tokens.color.gold else Tokens.color.featherWhite
-			end
-			if self._heatGradient then
-				self._heatGradient.Color = ColorSequence.new({
-					ColorSequenceKeypoint.new(0, Tokens.color.danger),
-					ColorSequenceKeypoint.new(0.45, Tokens.color.ember),
-					ColorSequenceKeypoint.new(1, Tokens.color.goldLight),
-				})
-			end
-			self:setHeat(0, "hidden")
-		end
-		return
-	end
-	local h = math.clamp(heat, 0, 1)
-	local cold = Color3.fromRGB(rod.coldColor[1], rod.coldColor[2], rod.coldColor[3])
-	local warm = Color3.fromRGB(rod.warmColor[1], rod.warmColor[2], rod.warmColor[3])
-	local tint = cold:Lerp(warm, h)
-	local first = self._rodHeat == nil
-	self._rodHeat = h
-	if self._reticleArt then
-		self._reticleArt.ImageColor3 = tint
-	else
-		reticle.BackgroundColor3 = tint
-	end
-	if first and self._heatGradient then
-		self._heatGradient.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, warm),
-			ColorSequenceKeypoint.new(1, cold),
-		})
-	end
-	if not frame.Visible then
-		frame.Visible = true
-	end
-	fill.Size = UDim2.fromScale(1, h)
-	fill.BackgroundColor3 = tint
-	local flame = self._heatFlame
-	if flame then
-		flame.Scale = 0.8 + 0.6 * h + math.abs(math.sin(os.clock() * (4 + 20 * h))) * 0.1 * h
-	end
-	self._heatState = "rod"
-	local label = self._heatLabel
-	if label then
-		local seconds = math.max(0, math.ceil(remainingSeconds or 0))
-		label.Text = string.format("SENSE %ds", seconds)
-		label.TextColor3 = if h >= 0.95 then warm else Tokens.color.featherWhite
 	end
 end
 

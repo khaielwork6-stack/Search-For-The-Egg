@@ -1,8 +1,8 @@
 --!strict
 -- Molly the Mole's survey authority. Up to three paid readings per party per round, each dearer
--- and each closer: a region, then a sub-cell of that region, then the pin on the Egg's exact cell.
--- Any member may pay for the next one; the readings are shared, live on the round runtime, and
--- reach a late joiner in the same snapshot as everything else.
+-- than the last; each names one of the nest's four areas and answers STRONG, WEAK or NO SIGNAL
+-- (NestSurvey holds the rule). Any member may pay for the next one; the readings are shared, live
+-- on the round runtime, and reach a late joiner in the same snapshot as everything else.
 --
 -- The deduction and the commit happen in one step with no yield between the last check and the
 -- write, so two members pressing at once resolve to one paid scan and one refusal that costs
@@ -27,7 +27,7 @@ export type SurveyService = typeof(setmetatable(
 		_getCharacterPosition: (userId: number) -> Vector3?,
 		_analytics: any?,
 		completed: any, -- (runtime, userId, reading, projection)
-		selected: any, -- (runtime, userId, region?, sub?, tier)
+		selected: any, -- (runtime, userId, region?)
 		stats: { surveys: number, rejected: number, selections: number },
 	},
 	SurveyService
@@ -57,16 +57,10 @@ local function reject(self: SurveyService, code: string, message: string?): Enve
 	return Envelope.fail(code, message)
 end
 
--- The Egg's true region. Server-only: the one place that reads the exact cell.
-function SurveyService.eggRegion(_self: SurveyService, runtime: any): string
+-- The reading for an area against the live Egg. Server-only: the one place that reads the cell.
+function SurveyService.signalFor(self: SurveyService, runtime: any, region: string): NestSurvey.Signal
 	local grid = runtime.grid
-	return NestSurvey.regionOfCell(grid.width, grid.depth, runtime.eggNode.x, runtime.eggNode.z)
-end
-
--- The Egg's true region and sub-cell.
-function SurveyService.eggLocation(_self: SurveyService, runtime: any): (string, number)
-	local grid = runtime.grid
-	return NestSurvey.locate(grid.width, grid.depth, runtime.eggNode.x, runtime.eggNode.z)
+	return NestSurvey.signal(self._config, grid.width, grid.depth, region, runtime.eggNode.x, runtime.eggNode.z)
 end
 
 function SurveyService.project(self: SurveyService, runtime: any): { [string]: any }
@@ -111,37 +105,8 @@ function SurveyService._gate(
 	return runtime, nil
 end
 
--- The target a payload names, checked against the tier the next reading will be. Returns the
--- region and sub the reading will use (nil for the pin), or a refusal.
-function SurveyService._target(
-	self: SurveyService,
-	runtime: any,
-	tier: NestSurvey.Tier,
-	payload: { [string]: any }
-): (boolean, string?, number?, Envelope.Envelope<any>?)
-	local region, sub = payload.region, payload.sub
-	if tier == "pin" then
-		return true, nil, nil, nil -- the pin ignores any selection
-	end
-	if not NestSurvey.isRegion(region) then
-		return false, nil, nil, reject(self, Envelope.Codes.INVALID_PAYLOAD, "region")
-	end
-	if tier == "region" then
-		return true, region, nil, nil
-	end
-	-- Sub-cell: inside the region the first reading measured, whatever it said.
-	if not NestSurvey.isSub(sub) then
-		return false, nil, nil, reject(self, Envelope.Codes.INVALID_PAYLOAD, "sub")
-	end
-	local first = runtime.survey and runtime.survey.readings[1]
-	if not first or first.region ~= region then
-		return false, nil, nil, reject(self, Envelope.Codes.INVALID_PAYLOAD, "wrong_region")
-	end
-	return true, region, sub, nil
-end
-
 -- The live pick, relayed to the party so members at the station see the tile and the drill move.
--- `payload` = { sessionToken, region?, sub? } (nil region = cleared).
+-- `payload` = { sessionToken, region? } (nil region = cleared).
 function SurveyService.select(self: SurveyService, userId: number, payload: { [string]: any }): Envelope.Envelope<any>
 	local runtime, refused = self:_gate(userId, payload.sessionToken)
 	if not runtime then
@@ -150,19 +115,15 @@ function SurveyService.select(self: SurveyService, userId: number, payload: { [s
 	if payload.region ~= nil and not NestSurvey.isRegion(payload.region) then
 		return reject(self, Envelope.Codes.INVALID_PAYLOAD, "region")
 	end
-	if payload.sub ~= nil and not NestSurvey.isSub(payload.sub) then
-		return reject(self, Envelope.Codes.INVALID_PAYLOAD, "sub")
-	end
-	local tier = NestSurvey.nextTier(self._config, countOf(runtime))
-	if tier == nil then
+	if NestSurvey.nextCost(self._config, countOf(runtime)) == nil then
 		return reject(self, Envelope.Codes.ALREADY_DONE, "limit")
 	end
 	self.stats.selections += 1
-	self.selected:Fire(runtime, userId, payload.region, payload.sub, tier)
-	return Envelope.ok({ region = payload.region, sub = payload.sub, tier = tier })
+	self.selected:Fire(runtime, userId, payload.region)
+	return Envelope.ok({ region = payload.region })
 end
 
--- The scan. `payload` = { sessionToken, region?, sub? }. `options.trusted` / `characterPosition`
+-- The scan. `payload` = { sessionToken, region }. `options.trusted` / `characterPosition`
 -- are the same server-caller seams ClueService has; remote requests never set them.
 function SurveyService.survey(
 	self: SurveyService,
@@ -176,13 +137,12 @@ function SurveyService.survey(
 	end
 	local count = countOf(runtime)
 	local cost = NestSurvey.nextCost(self._config, count)
-	local tier = NestSurvey.nextTier(self._config, count)
-	if cost == nil or tier == nil then
+	if cost == nil then
 		return reject(self, Envelope.Codes.ALREADY_DONE, "limit")
 	end
-	local okTarget, region, sub, badTarget = self:_target(runtime, tier, payload)
-	if not okTarget then
-		return badTarget :: Envelope.Envelope<any>
+	local region = payload.region
+	if not NestSurvey.isRegion(region) then
+		return reject(self, Envelope.Codes.INVALID_PAYLOAD, "region")
 	end
 	local state = runtime.players[userId]
 	if state.carriedStandard < cost then
@@ -200,34 +160,12 @@ function SurveyService.survey(
 	end
 	-- One transaction: the crate leaves the bag and the reading is committed together. Normal
 	-- feathers only; the rainbow count is not read.
-	local eggRegion, eggSub = self:eggLocation(runtime)
-	local reading: NestSurvey.Reading
-	if tier == "region" then
-		reading = {
-			tier = 1,
-			region = region :: string,
-			signal = NestSurvey.signal(self._config, region :: string, eggRegion),
-			byUserId = userId,
-		}
-	elseif tier == "subcell" then
-		reading = {
-			tier = 2,
-			region = region :: string,
-			sub = sub,
-			signal = NestSurvey.subSignal(self._config, region :: string, sub :: number, eggRegion, eggSub),
-			byUserId = userId,
-		}
-	else
-		reading = {
-			tier = 3,
-			region = eggRegion,
-			sub = eggSub,
-			signal = "pin",
-			cellX = runtime.eggNode.x,
-			cellZ = runtime.eggNode.z,
-			byUserId = userId,
-		}
-	end
+	local reading: NestSurvey.Reading = {
+		index = count + 1,
+		region = region,
+		signal = self:signalFor(runtime, region),
+		byUserId = userId,
+	}
 	state.carriedStandard -= cost
 	local survey = runtime.survey or NestSurvey.newState()
 	table.insert(survey.readings, reading)
@@ -238,9 +176,8 @@ function SurveyService.survey(
 		self._analytics:track("survey_completed", {
 			chapter = runtime.state.chapter,
 			difficulty = runtime.state.difficulty,
-			tier = reading.tier,
+			order = reading.index,
 			region = reading.region,
-			sub = reading.sub,
 			signal = reading.signal,
 			cost = cost,
 		})
@@ -249,15 +186,11 @@ function SurveyService.survey(
 	local projectedReading = NestSurvey.projectReading(reading)
 	self.completed:Fire(runtime, userId, reading, projection)
 	return Envelope.ok({
-		tier = reading.tier,
 		region = reading.region,
-		sub = reading.sub,
-		id = projectedReading.id,
+		name = projectedReading.name,
 		signal = reading.signal,
 		title = projectedReading.title,
 		text = projectedReading.text,
-		cellX = projectedReading.cellX,
-		cellZ = projectedReading.cellZ,
 		cost = cost,
 		carriedStandard = state.carriedStandard,
 		reading = projectedReading,

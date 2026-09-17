@@ -360,9 +360,8 @@ function StudioDebug.install(container: any): any?
 		return table.clone(container.debugEntitlements[userId])
 	end
 
-	-- Professor Plume. `plumeState` is what the party sees plus the caller's live rod; `eggTruth` is
-	-- the server's Egg position and the heat the rod would read from a given point, so a delivered
-	-- reading can be checked against it; `setCarried` writes a bag directly.
+	-- Professor Plume. `plumeState` is the caller's bag and clue; `plumeAnalyseAs` runs the analysis
+	-- for a member with no character or token.
 	function hooks.plumeState(userId: number)
 		if not StudioDebug.isUserAllowed(userId) then
 			return nil
@@ -373,42 +372,16 @@ function StudioDebug.install(container: any): any?
 		end
 		local state = runtime.players[userId]
 		return {
-			plume = container.clues:project(runtime),
-			rodRemaining = container.tools:timedRemaining(userId, "eggSense"),
-			equippedTool = state and state.equippedTool or nil,
+			clue = state and state.plumeClue or nil,
 			carriedStandard = state and state.carriedStandard or 0,
 			carriedRainbow = state and state.carriedRainbow or 0,
+			eggDepthFraction = runtime.eggDepthFraction,
 			phase = runtime.state.phase,
 			stats = table.clone(container.clues.stats),
 		}
 	end
 
-	function hooks.eggTruth(userId: number, x: number?, y: number?, z: number?)
-		if not StudioDebug.isUserAllowed(userId) then
-			return nil
-		end
-		local runtime = container.rounds:roundOf(userId)
-		if not runtime then
-			return { error = "no_round" }
-		end
-		local EggSense = require(game:GetService("ReplicatedStorage").Shared.Domain.EggSense)
-		local position = container.egg:position(runtime)
-		local heat = nil
-		if type(x) == "number" and type(y) == "number" and type(z) == "number" then
-			heat = EggSense.heatFor(container.config, { x = x, y = y, z = z }, { x = position.X, y = position.Y, z = position.Z })
-		end
-		return {
-			x = position.X,
-			y = position.Y,
-			z = position.Z,
-			heat = heat,
-			eggSlot = runtime.eggSlot,
-		}
-	end
-
-	-- A loan taken by another member (a simulated one has no character or token), so the real
-	-- client can be checked as the party member who did not borrow.
-	function hooks.plumeLendAs(userId: number)
+	function hooks.plumeAnalyseAs(userId: number)
 		if not StudioDebug.isUserAllowed(userId) then
 			return nil
 		end
@@ -418,7 +391,7 @@ function StudioDebug.install(container: any): any?
 			return { error = "no_round" }
 		end
 		local layout = ChapterLayout[runtime.state.chapter]
-		local result = container.clues:lend(userId, {}, { trusted = true, characterPosition = layout.clueStation })
+		local result = container.clues:analyse(userId, {}, { trusted = true, characterPosition = layout.clueStation })
 		local player = container.playerData:playerOf(userId)
 		if result.ok and player and typeof(player) == "Instance" and container.pushPreviews then
 			container.pushPreviews(player)
@@ -455,12 +428,15 @@ function StudioDebug.install(container: any): any?
 			return { error = "no_round" }
 		end
 		local NestSurvey = require(game:GetService("ReplicatedStorage").Shared.Domain.NestSurvey)
-		local region = container.surveys:eggRegion(runtime)
+		local grid = runtime.grid
 		local expected = {}
 		for _, candidate in ipairs(NestSurvey.REGIONS) do
-			expected[candidate] = NestSurvey.signal(container.config, candidate, region)
+			expected[candidate] = container.surveys:signalFor(runtime, candidate)
 		end
-		return { region = region, cellX = runtime.eggNode.x, cellZ = runtime.eggNode.z, expected = expected }
+		return {
+			region = NestSurvey.regionOfCell(grid.width, grid.depth, runtime.eggNode.x, runtime.eggNode.z),
+			expected = expected,
+		}
 	end
 
 	function hooks.surveyAs(userId: number, region: string)

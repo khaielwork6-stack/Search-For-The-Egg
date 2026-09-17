@@ -11,7 +11,6 @@ local RoundReducer = require(Shared.Reducers.RoundReducer)
 local SessionReducer = require(Shared.Reducers.SessionReducer)
 local WeightedRandom = require(Shared.WeightedRandom)
 local PileGrid = require(Shared.Domain.PileGrid)
-local EggSense = require(Shared.Domain.EggSense)
 local NestSurvey = require(Shared.Domain.NestSurvey)
 local PileSurface = require(Shared.Domain.PileSurface)
 local EggNodes = require(Shared.Domain.EggNodes)
@@ -42,6 +41,7 @@ export type PlayerState = {
 	equippedTool: string,
 	toolRuntime: { [string]: any }, -- per-tool live state owned by ToolService (vac heat, charges, chick)
 	permanentTools: { [string]: boolean },
+	plumeClue: { kind: string, key: string, title: string, text: string }?, -- Professor Plume's one clue this round
 }
 
 export type Runtime = {
@@ -60,7 +60,6 @@ export type Runtime = {
 	commitPending: boolean,
 	resultsShownAt: number?,
 	returnVotes: { [number]: string },
-	plume: EggSense.State?, -- Professor Plume's rod loan book; owned by ClueService, reset with the round
 	survey: NestSurvey.State?, -- Molly's readings (up to three); owned by SurveyService, reset with the round
 }
 
@@ -552,9 +551,7 @@ function RoundService.project(self: RoundService, roundId: string, includePile: 
 		projection.introEndsInMs = math.floor(math.max(0, runtime.cutsceneDeadline - self._clock:monotonic()) * 1000 + 0.5)
 	end
 	projection.removedFraction = PileGrid.removedFraction(runtime.grid)
-	-- The rod loan book: counters, prices and who holds a live rod. Never the Egg's place.
-	projection.plume = EggSense.project(self._config, runtime.plume, self._clock:monotonic())
-	-- Squares and categories only; the Egg's cell appears solely in a tier-3 pin reading.
+	-- Areas and signal words only; never the Egg's place.
 	projection.survey = NestSurvey.project(self._config, runtime.survey)
 	if includePile then
 		projection.pile = PileGrid.snapshot(runtime.grid)
@@ -627,6 +624,8 @@ function RoundService.projectPlayer(self: RoundService, roundId: string, userId:
 		saleCount = state.saleCount,
 		upgradeCount = state.upgradeCount,
 		toolRuntime = sanitizeToolRuntime(state.toolRuntime),
+		-- Only this player's own clue, and only its words.
+		plumeClue = if state.plumeClue then table.clone(state.plumeClue) else nil,
 	}
 end
 

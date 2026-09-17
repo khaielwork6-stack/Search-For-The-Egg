@@ -91,8 +91,8 @@ function ToolHotbar.new(
 		_config = config,
 		_sound = sound,
 	}, ToolHotbar)
-	-- Every tool that can sit in the hand gets a slot, the lent rod last; a slot shows only while owned.
-	for _, toolId in ipairs(ToolSpecs.ALL_TOOL_IDS) do
+	-- Every tool that can sit in the hand gets a slot; a slot shows only while owned.
+	for _, toolId in ipairs(ToolSpecs.TOOL_IDS) do
 		table.insert(self._order, toolId)
 	end
 	for index, toolId in ipairs(self._order) do

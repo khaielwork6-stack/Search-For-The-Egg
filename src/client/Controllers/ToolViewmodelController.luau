@@ -3,8 +3,7 @@
 -- Charge) and Vacuum (Feather Vac) models, staged script-free by the server, drawn under the camera
 -- with procedural motion only (CFrames, springs, eased curves): idle sway and look-lag, the rake's
 -- thrust to the reticle and its eased return, the dynamite's light-then-throw, the vac's recoil,
--- jitter, intake particles, wind streaks and motor loop, and the Egg Sense rod (a forked dowsing
--- stick built from parts, its crystal tip warming from blue to orange with the server's heat). No
+-- jitter, intake particles, wind streaks and motor loop. No
 -- hands or arms are ever drawn. Every number lives in SYSTEM_CONFIG.toolFeel (ASSUMED until the
 -- owner's clips are matched).
 
@@ -14,7 +13,6 @@ local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
 local Tokens = require(Shared.Design.Tokens)
-local EggSense = require(Shared.Domain.EggSense)
 
 local ToolViewmodelController = {}
 ToolViewmodelController.__index = ToolViewmodelController
@@ -72,115 +70,7 @@ local POSES: { [string]: Pose } = {
 		rotation = CFrame.Angles(math.rad(-8), math.rad(-80), 0),
 		nozzle = "WideIntake",
 	},
-	-- The rod is held out in front, grip low right, the fork reaching toward the reticle so the
-	-- crystal sits just under the crosshair where its glow can be read against the nest.
-	eggSense = {
-		model = "EggSenseRod",
-		offset = CFrame.new(0.42, -0.62, -0.7),
-		quill = Vector3.new(-0.3, 0.22, -0.93),
-		spin = 0,
-		tip = "Crystal",
-		procedural = true,
-	},
 }
-
-local ROD_WOOD = Color3.fromRGB(122, 82, 46)
-local ROD_WOOD_DEEP = Color3.fromRGB(86, 56, 30)
-local ROD_BRASS = Color3.fromRGB(198, 152, 70)
-
-local function rodPart(model: Model, name: string, size: Vector3, cframe: CFrame, color: Color3, material: Enum.Material): Part
-	local part = Instance.new("Part")
-	part.Name = name
-	part.Size = size
-	part.CFrame = cframe
-	part.Color = color
-	part.Material = material
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.BottomSurface = Enum.SurfaceType.Smooth
-	part.Parent = model
-	return part
-end
-
--- A forked dowsing stick: a wrapped grip, a shaft along +Y from the Origin, two prongs opening in
--- a V, a brass collar where they meet, and the crystal seated in the fork with its own light.
-local function buildRod(coldColor: Color3): Model
-	local model = Instance.new("Model")
-	model.Name = "EggSenseRod"
-	local origin = rodPart(model, "Origin", Vector3.new(0.1, 0.1, 0.1), CFrame.identity, ROD_WOOD, Enum.Material.SmoothPlastic)
-	origin.Transparency = 1
-	model.PrimaryPart = origin
-	local shaftLength = 1.05
-	local shaft = rodPart(
-		model,
-		"Shaft",
-		Vector3.new(shaftLength, 0.11, 0.11),
-		CFrame.new(0, shaftLength / 2, 0) * CFrame.Angles(0, 0, math.rad(90)),
-		ROD_WOOD,
-		Enum.Material.Wood
-	)
-	shaft.Shape = Enum.PartType.Cylinder
-	local grip = rodPart(
-		model,
-		"Grip",
-		Vector3.new(0.34, 0.15, 0.15),
-		CFrame.new(0, 0.2, 0) * CFrame.Angles(0, 0, math.rad(90)),
-		ROD_WOOD_DEEP,
-		Enum.Material.Fabric
-	)
-	grip.Shape = Enum.PartType.Cylinder
-	local collar = rodPart(
-		model,
-		"Collar",
-		Vector3.new(0.08, 0.16, 0.16),
-		CFrame.new(0, shaftLength, 0) * CFrame.Angles(0, 0, math.rad(90)),
-		ROD_BRASS,
-		Enum.Material.Metal
-	)
-	collar.Shape = Enum.PartType.Cylinder
-	local prongLength = 0.52
-	local spread = math.rad(26)
-	for _, side in ipairs({ -1, 1 }) do
-		local base = CFrame.new(0, shaftLength, 0) * CFrame.Angles(0, 0, side * spread)
-		local prong = rodPart(
-			model,
-			if side < 0 then "ProngLeft" else "ProngRight",
-			Vector3.new(prongLength, 0.08, 0.08),
-			base * CFrame.new(0, prongLength / 2, 0) * CFrame.Angles(0, 0, math.rad(90)),
-			ROD_WOOD,
-			Enum.Material.Wood
-		)
-		prong.Shape = Enum.PartType.Cylinder
-	end
-	-- The crystal sits at the fork's apex, between the prong tips.
-	local crystal = rodPart(
-		model,
-		"Crystal",
-		Vector3.new(0.3, 0.3, 0.3),
-		CFrame.new(0, shaftLength + prongLength * 0.78, 0),
-		coldColor,
-		Enum.Material.Neon
-	)
-	crystal.Shape = Enum.PartType.Ball
-	local light = Instance.new("PointLight")
-	light.Name = "CrystalLight"
-	light.Color = coldColor
-	light.Brightness = 0.5
-	light.Range = 6
-	light.Shadows = false
-	light.Parent = crystal
-	local motes = Instance.new("ParticleEmitter")
-	motes.Name = "Motes"
-	motes.Color = ColorSequence.new(coldColor)
-	motes.LightEmission = 1
-	motes.Size = NumberSequence.new(0.05, 0)
-	motes.Transparency = NumberSequence.new(0.3, 1)
-	motes.Lifetime = NumberRange.new(0.3, 0.6)
-	motes.Rate = 0
-	motes.Speed = NumberRange.new(0.3, 0.8)
-	motes.SpreadAngle = Vector2.new(180, 180)
-	motes.Parent = crystal
-	return model
-end
 
 type Streak = { part: Part, start: Vector3, life: number, seconds: number, side: number }
 
@@ -206,12 +96,8 @@ export type ToolViewmodelController = typeof(setmetatable(
 		_streakFolder: Folder?,
 		_streaks: { Streak },
 		_aimHit: Vector3?,
-		_rodHeat: number,
-		_rodCrystal: BasePart?,
-		_rodLight: PointLight?,
-		_rodMotes: ParticleEmitter?,
 		_trove: Trove.Trove,
-		stats: { builds: number, thrusts: number, lights: number, throws: number, vacFrames: number, rodFrames: number },
+		stats: { builds: number, thrusts: number, lights: number, throws: number, vacFrames: number },
 	},
 	ToolViewmodelController
 ))
@@ -256,12 +142,8 @@ function ToolViewmodelController.new(deps: {
 		_streakFolder = nil,
 		_streaks = {},
 		_aimHit = nil,
-		_rodHeat = 0,
-		_rodCrystal = nil,
-		_rodLight = nil,
-		_rodMotes = nil,
 		_trove = Trove.new(),
-		stats = { builds = 0, thrusts = 0, lights = 0, throws = 0, vacFrames = 0, rodFrames = 0 },
+		stats = { builds = 0, thrusts = 0, lights = 0, throws = 0, vacFrames = 0 },
 	}, ToolViewmodelController)
 
 	local tools = deps.tools
@@ -299,15 +181,6 @@ function ToolViewmodelController.new(deps: {
 	self._trove:add(tools.vacChanged:Connect(function(running)
 		self:_setVacRunning(running)
 	end))
-	-- Egg Sense rod: every server reading recolours the crystal; the loan ending resets it.
-	self._trove:add(tools.rodHeat:Connect(function(heat)
-		self:_setRodHeat(heat)
-	end))
-	self._trove:add(tools.rodChanged:Connect(function(active)
-		if not active then
-			self:_setRodHeat(0)
-		end
-	end))
 	return self
 end
 
@@ -330,9 +203,6 @@ function ToolViewmodelController._destroyModel(self: ToolViewmodelController)
 		self._model:Destroy()
 		self._model = nil
 	end
-	self._rodCrystal = nil
-	self._rodLight = nil
-	self._rodMotes = nil
 	if self._streakFolder then
 		self._streakFolder:Destroy()
 		self._streakFolder = nil
@@ -345,19 +215,14 @@ function ToolViewmodelController._build(self: ToolViewmodelController, toolId: s
 	local pose = POSES[toolId]
 	local models = self:_models()
 	local camera = workspace.CurrentCamera
-	if not pose or not camera or (not models and not pose.procedural) then
+	if not pose or not camera or not models then
 		return nil
 	end
-	local model: Model
-	if pose.procedural then
-		model = buildRod(self:_rodColor(0))
-	else
-		local source = models and models:FindFirstChild(pose.model)
-		if not (source and source:IsA("Model")) then
-			return nil
-		end
-		model = source:Clone()
+	local source = models:FindFirstChild(pose.model)
+	if not (source and source:IsA("Model")) then
+		return nil
 	end
+	local model = source:Clone()
 	model.Name = "SFE_Viewmodel_" .. toolId
 	if not model.PrimaryPart then
 		model.PrimaryPart = model:FindFirstChild("Origin") :: BasePart? or model:FindFirstChildWhichIsA("BasePart", true)
@@ -377,15 +242,6 @@ function ToolViewmodelController._build(self: ToolViewmodelController, toolId: s
 	end
 	model.Parent = camera
 	self.stats.builds += 1
-	if pose.procedural then
-		local crystal = model:FindFirstChild("Crystal")
-		if crystal and crystal:IsA("BasePart") then
-			self._rodCrystal = crystal
-			self._rodLight = crystal:FindFirstChild("CrystalLight") :: PointLight?
-			self._rodMotes = crystal:FindFirstChild("Motes") :: ParticleEmitter?
-			self:_applyRodLook()
-		end
-	end
 	return model
 end
 
@@ -563,22 +419,6 @@ function ToolViewmodelController.step(self: ToolViewmodelController, dt: number)
 		)
 		self.stats.vacFrames += 1
 		self:_stepStreaks(dt)
-	end
-	if self._toolId == "eggSense" and self._model then
-		-- The rod trembles with heat and dips its tip toward the nest; the crystal pulses at the
-		-- tick rate so the glow and the sound read as one instrument.
-		local rodFeel = self:_feelFor("eggSense")
-		local heat = self._rodHeat
-		local tremble = (rodFeel.trembleStuds or 0.03) * heat * motion
-		local hz = EggSense.tickHzFor(self._deps.config, heat)
-		live = CFrame.new(math.sin(self._time * 37) * tremble, math.sin(self._time * 41) * tremble * 0.6, 0)
-			* CFrame.Angles(math.rad(-(rodFeel.dipStuds or 0.06) * 60 * heat), 0, math.sin(self._time * hz * math.pi * 2) * 0.02 * heat)
-		self.stats.rodFrames += 1
-		local light = self._rodLight
-		if light then
-			local pulse = 0.5 + 0.5 * math.max(0, math.sin(self._time * hz * math.pi * 2))
-			light.Brightness = 0.5 + 3.0 * heat * (0.6 + 0.4 * pulse)
-		end
 	end
 	local action = self:_actionOffset(now)
 	local orientation = pose.rotation or fromQuill(pose.quill :: Vector3, pose.spin or 0)
@@ -776,48 +616,6 @@ function ToolViewmodelController.muzzlePosition(self: ToolViewmodelController): 
 end
 
 -- ---------------------------------------------------------------------------------------------
--- Egg Sense rod
--- ---------------------------------------------------------------------------------------------
-
-function ToolViewmodelController._rodColor(self: ToolViewmodelController, heat: number): Color3
-	local r, g, b = EggSense.colorFor(self._deps.config, heat)
-	return Color3.fromRGB(math.floor(r + 0.5), math.floor(g + 0.5), math.floor(b + 0.5))
-end
-
-function ToolViewmodelController._setRodHeat(self: ToolViewmodelController, heat: number)
-	self._rodHeat = math.clamp(heat, 0, 1)
-	self:_applyRodLook()
-end
-
--- Colour, light range and mote rate from the current heat. Brightness pulses per frame in `step`.
-function ToolViewmodelController._applyRodLook(self: ToolViewmodelController)
-	local crystal = self._rodCrystal
-	if not crystal then
-		return
-	end
-	local heat = self._rodHeat
-	local color = self:_rodColor(heat)
-	crystal.Color = color
-	local feel = self:_feelFor("eggSense")
-	local light = self._rodLight
-	if light then
-		light.Color = color
-		light.Range = 4 + (feel.lightRangeStuds or 9) * heat
-	end
-	local motes = self._rodMotes
-	if motes then
-		motes.Color = ColorSequence.new(color)
-		motes.Rate = math.floor(heat * 24 + 0.5)
-	end
-end
-
--- Where the crystal is right now, for a hand-over or a spark.
-function ToolViewmodelController.crystalPosition(self: ToolViewmodelController): Vector3?
-	local crystal = self._rodCrystal
-	return if crystal then crystal.Position else nil
-end
-
--- ---------------------------------------------------------------------------------------------
 -- Vacuum
 -- ---------------------------------------------------------------------------------------------
 
@@ -961,8 +759,6 @@ function ToolViewmodelController.status(self: ToolViewmodelController): { [strin
 		modelName = self._model and self._model.Name or nil,
 		action = self._action.kind,
 		vacRunning = self._vacRunning,
-		rodHeat = self._rodHeat,
-		rodCrystal = self._rodCrystal ~= nil,
 		streaks = #self._streaks,
 		stats = table.clone(self.stats),
 	}
