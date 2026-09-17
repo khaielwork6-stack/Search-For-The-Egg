@@ -21,6 +21,7 @@ local SalePopup = {}
 
 export type Options = {
 	feathers: number,
+	rainbow: number?, -- Rainbow Feathers in the sale; named on the card (no separate toast)
 	cents: number,
 	motion: Motion.MotionSettings,
 	tier: string?,
@@ -40,7 +41,8 @@ function SalePopup.show(parent: GuiObject, options: Options)
 	card.Name = "SalePopup"
 	card.AnchorPoint = Vector2.new(0.5, 1)
 	card.Position = UDim2.new(0.5, 0, 1, -(Tokens.layout.safeAreaPaddingPx + Tokens.layout.minimumTapTargetPx * 2 + Tokens.spacing.xl * 2))
-	card.Size = UDim2.fromOffset(280, Tokens.layout.minimumTapTargetPx + Tokens.spacing.xl)
+	local rainbow = options.rainbow or 0
+	card.Size = UDim2.fromOffset(if rainbow > 0 then 340 else 280, Tokens.layout.minimumTapTargetPx + Tokens.spacing.xl)
 	card.ZIndex = z
 	Depth.panel(card, Tokens.color.surface, { radius = Tokens.radius.lg })
 	local scale = Instance.new("UIScale")
@@ -56,10 +58,20 @@ function SalePopup.show(parent: GuiObject, options: Options)
 	local title = FrameKit.text(
 		card,
 		"Title",
-		string.format("Sold %d feather%s", options.feathers, if options.feathers == 1 then "" else "s"),
+		if rainbow > 0
+			then string.format("Sold %d feather%s, %d Rainbow", options.feathers, if options.feathers == 1 then "" else "s", rainbow)
+			else string.format("Sold %d feather%s", options.feathers, if options.feathers == 1 then "" else "s"),
 		"heading",
 		{ zIndex = z + 1, color = Tokens.color.featherWhite }
 	)
+	if rainbow > 0 then
+		-- The longer line shrinks to fit rather than running past the card.
+		title.TextScaled = true
+		local fitText = Instance.new("UITextSizeConstraint")
+		fitText.MaxTextSize = Tokens.typography.heading.size
+		fitText.MinTextSize = Tokens.typography.caption.size
+		fitText.Parent = title
+	end
 	title.Position = UDim2.fromOffset(Tokens.spacing.md + Tokens.icon.lg + Tokens.spacing.md, Tokens.spacing.sm)
 	title.Size = UDim2.new(1, -(Tokens.spacing.md * 3 + Tokens.icon.lg), 0, Tokens.typography.heading.size + 2)
 	FrameKit.outline(title, 2)

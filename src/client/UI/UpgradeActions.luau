@@ -6,6 +6,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Feedback)
 
 local UpgradeActions = {}
 
@@ -53,13 +54,15 @@ function UpgradeActions.purchase(deps: Deps, upgradeId: string, title: string?):
 		deps.haptics:pulse(0.5, 0.1)
 		deps.toasts:push(if latest.kind == "acquire" then name .. " acquired" else name .. " improved", "success")
 	else
-		deps.audio:play(Tokens.sound.uiError)
 		local message = if result.code == "insufficient_funds"
 			then (if result.message == "gems" then "Not enough Gems" else "Not enough round cash")
 			elseif result.code == "out_of_range" then "Stand at the supplies counter"
 			elseif result.code == "stale_token" then "Prices changed - try again"
 			else "Upgrade unavailable"
-		deps.toasts:push(message, "warning")
+		Feedback.deny(
+			if result.code == "insufficient_funds" then "funds:" .. tostring(result.message) else "upgrade:" .. tostring(result.code),
+			message
+		)
 	end
 	return result
 end
@@ -71,12 +74,15 @@ function UpgradeActions.promptPurchase(deps: { net: any, audio: any, toasts: any
 	if result.ok then
 		deps.audio:play(Tokens.sound.uiConfirm)
 	else
-		deps.audio:play(Tokens.sound.uiError)
 		local message = if result.code == "already_done"
 			then "You already own " .. (name or "that")
 			elseif result.message == "not_available" then "Not for sale yet"
 			else "Could not open the purchase"
-		deps.toasts:push(message, if result.code == "already_done" then "info" else "warning")
+		Feedback.deny(
+			"purchase:" .. productKey .. ":" .. tostring(result.message or result.code),
+			message,
+			{ tone = if result.code == "already_done" then "info" else "warning" }
+		)
 	end
 	return result
 end

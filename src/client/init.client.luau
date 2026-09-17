@@ -28,6 +28,7 @@ local HUDController = require(Controllers.HUDController)
 local LobbyShellController = require(Controllers.LobbyShellController)
 local RoundController = require(Controllers.RoundController)
 local IntroCinematicController = require(script.Controllers.IntroCinematicController)
+local Feedback = require(script.UI.Feedback)
 local PileVisualController = require(Controllers.PileVisualController)
 local CrateController = require(Controllers.CrateController)
 local ToolController = require(Controllers.ToolController)
@@ -378,15 +379,10 @@ trove:add(pile.targetChanged:Connect(function(targeting)
 end))
 -- Permanent first person: locked from boot; menus unlock through the modal controller.
 modals:setExternalUnlock(false)
+-- The crate's click path refuses through SaleResult; the prompt path refuses through its request.
+-- Both report the same reason through the same gate, so a refused sale is one toast and one sound.
 trove:add(round.saleRefused:Connect(function(payload)
-	hud.toasts:push(
-		if payload.message == "nothing_to_sell"
-			then "Your bag is empty"
-			elseif payload.message == "crate_busy" then "The crate is on its way - wait for it to come back"
-			else "Trade unavailable",
-		"warning"
-	)
-	audio:play("ui.error")
+	Feedback.deny(Feedback.saleReason(payload), Feedback.saleText(payload))
 end))
 -- The bag and bundle update when the picked feather lands (PickupFeedbackController), not here.
 
@@ -454,7 +450,7 @@ hud:setGemShopOpener(function()
 	if round:phase() == nil or round:phase() == "Lobby" then
 		lobbyMeta:open("gems")
 	else
-		hud.toasts:push("The Gem Shop opens between searches", "info")
+		Feedback.deny("lobby:gem_shop_in_round", "The Gem Shop opens between searches", { tone = "info", silent = true })
 	end
 end)
 

@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.Feedback)
 local SkinCatalog = require(Shared.Domain.SkinCatalog)
 local Depth = require(script.Parent.Parent.Components.Depth)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
@@ -199,9 +200,8 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 			local projection = deps.profile.projection
 			local owned = skin.source == "default" or (projection and projection.inventory.toolSkins[skin.id] == true)
 			if not owned then
-				deps.audio:play(Tokens.sound.uiError)
 				Tween.shake(tile, motion)
-				deps.toasts:push("Drops from the Moonlit Chest", "info")
+				Feedback.deny("skin_locked", "Drops from the Moonlit Chest", { tone = "info" })
 				return
 			end
 			deps.audio:play(Tokens.sound.uiTap)
@@ -212,8 +212,7 @@ function InventoryModal.build(container: ScrollingFrame, api: any, deps: Deps): 
 				scale.Scale = 1.1
 				Tween.scale(scale, "release", motion, 1)
 			else
-				deps.audio:play(Tokens.sound.uiError)
-				deps.toasts:push("Could not equip", "warning")
+				Feedback.deny("equip_refused", "Could not equip")
 			end
 		end
 		-- The button is a sibling of the hit frame, above it, so its own press wins over the tile's.

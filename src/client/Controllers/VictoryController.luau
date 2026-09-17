@@ -11,6 +11,7 @@ local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.UI.Feedback)
 local Motion = require(Shared.Design.Motion)
 local EconomyMath = require(Shared.EconomyMath)
 local Button = require(script.Parent.Parent.UI.Components.Button)
@@ -179,8 +180,9 @@ function VictoryController.onCarried(self: VictoryController, payload: { [string
 	if isMe then
 		deps.hud:setObjective("Bring the Egg to the Farmer", "He is waiting between the barn and the nest")
 	else
+		-- The objective banner is the announcement; a toast saying the same thing under it was a second
+		-- notification for one pickup.
 		deps.hud:setObjective(tostring(payload.carrierName) .. " has the Egg!", "Follow them to the Farmer")
-		deps.hud.toasts:push(tostring(payload.carrierName) .. " picked up the Egg", "info")
 	end
 	deps.audio:play(Tokens.sound.eggChime)
 	local carrier = Players:GetPlayerByUserId(payload.carrierUserId)
@@ -204,8 +206,8 @@ function VictoryController.onDropped(self: VictoryController, _payload: { [strin
 		this._carrierGlow:Destroy()
 		this._carrierGlow = nil
 	end
-	deps.hud:setObjective("Claim the Egg!", "Hold Interact on the Egg before anyone else")
-	deps.hud.toasts:push("The Egg was dropped", "info")
+	-- One notice: the objective banner says it was dropped and what to do (it used to be a toast too).
+	deps.hud:setObjective("The Egg was dropped!", "Hold Interact on the Egg before anyone else")
 end
 
 -- Winner announcement with gameplay input lock for inputLockSeconds.
@@ -408,7 +410,7 @@ function VictoryController.onResults(self: VictoryController, payload: { [string
 			if result.ok then
 				api.close()
 			elseif result.code == "rate_limited" then
-				deps.hud.toasts:push("Take a breath...", "info")
+				Feedback.deny("results:rate_limited", "Take a breath...", { tone = "info", silent = true })
 			end
 		end
 		local replay, replayCleanup = Button.create(container, {

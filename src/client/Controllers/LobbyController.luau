@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.UI.Feedback)
 local AssetManifest = require(Shared.Design.AssetManifest)
 local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local Signal = require(Shared.Util.Signal)
@@ -251,8 +252,9 @@ function LobbyController.new(deps: any): LobbyController
 	self._trove:add(deps.net:on("RewardGranted", function(grant)
 		self.stats.rewards += 1
 		-- Currency chips already re-render from the acknowledged projection; this is the celebration.
+		-- Silent: the claim that caused the grant (Daily, Quests, Codes) already has its own sound, and
+		-- a tick here layered a second one onto the same moment.
 		deps.hud:celebrateCurrency("gems", grant.gems or 0)
-		deps.audio:play(Tokens.sound.rewardTick)
 	end))
 	-- Rail state: the station whose modal is open lifts and holds its pressed art; the Daily station
 	-- breathes only while a reward is ready to claim.
@@ -270,7 +272,8 @@ function LobbyController.new(deps: any): LobbyController
 			self:open("party")
 		end
 	end))
-	-- The banner narrates the party: waiting count, then the countdown with a tick per second.
+	-- The banner narrates the party: waiting count, then the countdown. The countdown is silent after
+	-- its start chime (owner 17 Sep 2026: the per-second tick is gone).
 	local lastPhase: string? = nil
 	local lastMembers = 0
 	local lastTick = -1
@@ -318,7 +321,6 @@ function LobbyController.new(deps: any): LobbyController
 						if whole ~= lastTick then
 							lastTick = whole
 							deps.hud:setObjective(string.format("Setting off in %d", whole), "Stay on the pad")
-							deps.audio:play(Tokens.sound.countdownTick)
 						end
 						task.wait(0.1)
 					end
@@ -392,7 +394,7 @@ end
 function LobbyController.open(self: LobbyController, id: string): boolean
 	local deps = self._deps
 	if self._inRound then
-		deps.hud.toasts:push("Finish the search first", "info")
+		Feedback.deny("lobby:in_round", "Finish the search first", { tone = "info", silent = true })
 		return false
 	end
 	if deps.modals:isOpen(id) then

@@ -76,14 +76,45 @@ return function(describe, it, expect)
 	end)
 
 	describe("One denial, one sound", function()
-		it("throttles the refusal roles together", function()
-			-- Both roles are the same refusal asset played by different callers. Sharing a group means
-			-- the second one inside the window is dropped instead of doubling.
-			expect(roles["ui.error"].group).toBe("denial")
-			expect(roles["collect.bagFull"].group).toBe(roles["ui.error"].group)
-			expect(roles["ui.error"].id).toBe(roles["collect.bagFull"].id)
-			expect(roles["ui.error"].minGap).toBeGreaterThan(0)
-			expect(roles["collect.bagFull"].minGap).toBeGreaterThan(0)
+		it("has a single refusal role behind the Feedback gate", function()
+			-- collect.bagFull was the same asset as ui.error under a second name; every refusal now plays
+			-- ui.error through UI/Feedback.deny, which owns the per-reason cooldown.
+			expect(roles["ui.error"]).never.toBeNil()
+			expect(roles["ui.error"].id).never.toBe("")
+			expect(roles["collect.bagFull"]).toBeNil()
+			expect(cfg.hud.feedback.denialCooldownSeconds).toBe(5)
+		end)
+	end)
+
+	describe("Unapproved feedback sounds", function()
+		it("removes the countdown tick, the Rainbow ping and the toast pop", function()
+			for _, role in ipairs({ "round.countdownTick", "collect.rainbow", "ui.toast", "collect.bagFull" }) do
+				expect(roles[role]).toBeNil()
+			end
+			for _, name in ipairs({ "countdownTick", "collectRainbow", "uiToast", "bagFull" }) do
+				expect(Tokens.sound[name]).toBeNil()
+			end
+		end)
+
+		it("keeps the assigned gameplay sounds", function()
+			for _, role in ipairs({
+				"collect.release",
+				"sell.burst",
+				"tool.rakeImpact",
+				"tool.vacMotor",
+				"tool.fuseHiss",
+				"tool.blast",
+				"tool.blastLow",
+				"ui.tap",
+				"ui.hover",
+				"ui.close",
+				"ui.tab",
+				"ui.pageFlip",
+				"round.countdownGo",
+				"egg.chime",
+			}) do
+				expect(roles[role].id).never.toBe("")
+			end
 		end)
 	end)
 

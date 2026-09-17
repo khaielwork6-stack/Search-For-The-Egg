@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.Feedback)
 local Depth = require(script.Parent.Parent.Components.Depth)
 local Tween = require(script.Parent.Parent.Components.Tween)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
@@ -208,10 +209,9 @@ function QuestsModal.build(container: ScrollingFrame, api: any, deps: Deps): () 
 				elseif result.ok then
 					deps.toasts:push("Those Gems are already in your pouch", "info")
 				else
-					deps.audio:play(Tokens.sound.uiError)
-					deps.toasts:push(
-						if result.message == "not_complete" then "Not finished yet" else "Could not claim right now",
-						"warning"
+					Feedback.deny(
+						"quest:" .. tostring(result.message or result.code),
+						if result.message == "not_complete" then "Not finished yet" else "Could not claim right now"
 					)
 				end
 			end)

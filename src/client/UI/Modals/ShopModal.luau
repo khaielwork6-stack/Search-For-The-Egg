@@ -13,6 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.Feedback)
 local Depth = require(script.Parent.Parent.Components.Depth)
 local Perks = require(Shared.Domain.Perks)
 local Tween = require(script.Parent.Parent.Components.Tween)
@@ -591,7 +592,6 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 					deps.audio:play(Tokens.sound.uiConfetti)
 					deps.toasts:push(string.format("%s reached level %d", copy.title, result.data.level), "success")
 				else
-					deps.audio:play(Tokens.sound.uiError)
 					Tween.shake(card, motion)
 					local message = if result.code == "insufficient_funds"
 						then "Not enough Gems"
@@ -599,7 +599,10 @@ function ShopModal.build(container: ScrollingFrame, api: any, deps: Deps, initia
 						elseif result.message == "maxed" then "Already at the top"
 						elseif result.message == "not_in_lobby" then "Perks change between searches"
 						else "Purchase unavailable"
-					deps.toasts:push(message, "warning")
+					Feedback.deny(
+						if result.code == "insufficient_funds" then "funds:gems" else "perk:" .. tostring(result.message or result.code),
+						message
+					)
 				end
 			end)
 		)

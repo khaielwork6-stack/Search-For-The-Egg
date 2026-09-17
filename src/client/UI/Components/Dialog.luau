@@ -132,7 +132,9 @@ function Dialog.open(modals: any, options: Options): boolean
 			table.insert(cleanups, cancel.destroy)
 		end
 		api.setInitialFocus(confirm.button)
-		options.audio:play(if options.tone == "danger" or options.tone == "warning" then Tokens.sound.uiError else Tokens.sound.uiOpen)
+		-- Opening a dialog is not a refusal: a warning-toned dialog opens like any other (ui.open), not
+		-- on the denial sound.
+		options.audio:play(Tokens.sound.uiOpen)
 		return function()
 			for _, cleanup in ipairs(cleanups) do
 				cleanup()

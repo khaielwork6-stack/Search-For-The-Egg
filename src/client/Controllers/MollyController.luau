@@ -19,7 +19,7 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
-local Motion = require(Shared.Design.Motion)
+local Feedback = require(script.Parent.Parent.UI.Feedback)
 local AssetManifest = require(Shared.Design.AssetManifest)
 local Trove = require(Shared.Util.Trove)
 local NestSurvey = require(Shared.Domain.NestSurvey)
@@ -1787,10 +1787,9 @@ end
 
 -- The SCAN / PIN button is the decision; the sign already said how many surveys are left.
 function MollyController._confirmSurvey(self: MollyController)
-	local deps = self._deps
 	local selection = self._selection
 	if not selection or not selection.canSurvey or self._pending then
-		deps.audio:play(Tokens.sound.uiError)
+		Feedback.deny("survey:cannot_confirm")
 		return
 	end
 	if selection.tier == "pin" then
@@ -1817,18 +1816,23 @@ function MollyController.survey(self: MollyController, region: string?, sub: num
 	local result = deps.net:request("SurveyRequest", { sessionToken = token, region = region, sub = sub })
 	if not result.ok then
 		self._pending = false
-		deps.audio:play(Tokens.sound.uiError)
 		local message = result.message
+		-- Every refusal goes through the gate; Molly answers "limit" and "egg_found" in her own words,
+		-- everything else is a toast.
+		local reason = "survey:" .. tostring(message or result.code)
 		if message == "limit" then
+			Feedback.deny(reason)
 			sayOn(self._rig, NestSurvey.LINES.used)
 			self:_endSelection("used")
 		elseif message == "egg_found" then
+			Feedback.deny(reason)
 			sayOn(self._rig, NestSurvey.LINES.exposed)
 			self:_endSelection("egg")
 		else
 			local info = self:_surveyInfo()
 			local first = info.readings and info.readings[1]
-			deps.hud.toasts:push(
+			Feedback.deny(
+				reason,
 				if message == "insufficient"
 					then string.format("You need %d normal feathers for the next survey crate", info.nextCost or 0)
 					elseif message == "wrong_region" then string.format(
@@ -1837,8 +1841,7 @@ function MollyController.survey(self: MollyController, region: string?, sub: num
 					)
 					elseif result.code == "out_of_range" then "Stand at Molly's bench"
 					elseif result.code == "rate_limited" then "One moment..."
-					else "Survey unavailable",
-				"warning"
+					else "Survey unavailable"
 			)
 		end
 		return result
@@ -2336,6 +2339,10 @@ function MollyController._applyBoardOnly(self: MollyController)
 	end
 end
 
+-- The survey's announcement. It used to be two notifications for one reading: a bare TextLabel
+-- banner across the top of the screen ("MOLLY SURVEYED B2: STRONG SIGNAL") and, a frame later, a toast
+-- with the same news. The toast is the game's notification surface, so it is the one that stays; the
+-- stamp on the board and the lamps already name the square.
 function MollyController._banner(self: MollyController, data: any)
 	local deps = self._deps
 	local stage = deps.hud.stage
@@ -2345,32 +2352,6 @@ function MollyController._banner(self: MollyController, data: any)
 	self.stats.banners += 1
 	local motion = deps.accessibility:motionSettings()
 	local words = (NestSurvey.WORDS :: any)[tostring(data and data.signal or "none")] or NestSurvey.WORDS.none
-	local label = Instance.new("TextLabel")
-	label.Name = "SFE_SurveyBanner"
-	label.AnchorPoint = Vector2.new(0.5, 0)
-	label.Position = UDim2.fromScale(0.5, 0.16)
-	label.Size = UDim2.new(0.9, 0, 0, 64)
-	label.BackgroundTransparency = 1
-	label.Font = Tokens.typography.display.font
-	label.TextSize = Tokens.typography.display.size - 2
-	label.TextColor3 = if data and data.signal == "none" then Color3.fromRGB(200, 214, 236) else Tokens.color.goldLight
-	label.TextStrokeTransparency = 0.2
-	label.TextStrokeColor3 = Tokens.color.outline
-	local id = tostring(data and (data.id or data.region) or "?")
-	label.Text = if data and data.signal == "pin"
-		then string.format("MOLLY PINNED THE NEST AT %s", id)
-		else string.format("MOLLY SURVEYED %s: %s", id, words.title)
-	label.TextTransparency = 1
-	label.ZIndex = Tokens.zIndex.toast + 2
-	label.Parent = stage
-	local constraint = Instance.new("UISizeConstraint")
-	constraint.MaxSize = Vector2.new(780, 64)
-	constraint.Parent = label
-	local scale = Instance.new("UIScale")
-	scale.Scale = 0.8
-	scale.Parent = label
-	TweenService:Create(label, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeOut), { TextTransparency = 0 }):Play()
-	TweenService:Create(scale, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeBack), { Scale = 1 }):Play()
 	if data and (data.signal == "strong" or data.signal == "pin") then
 		Confetti.burst(stage, {
 			origin = UDim2.fromScale(0.5, 0.2),
@@ -2382,20 +2363,6 @@ function MollyController._banner(self: MollyController, data: any)
 		})
 	end
 	deps.hud.toasts:push(words.text, if data and data.signal == "none" then "info" else "success", 4)
-	task.delay(2.0, function()
-		if label.Parent then
-			local out = TweenService:Create(
-				label,
-				TweenInfo.new(Motion.duration("quick", motion)),
-				{ TextTransparency = 1, TextStrokeTransparency = 1 }
-			)
-			out:Play()
-			out.Completed:Once(function()
-				label:Destroy()
-			end)
-		end
-	end)
-	self._trove:add(label)
 end
 
 function MollyController._announce(self: MollyController, data: any)

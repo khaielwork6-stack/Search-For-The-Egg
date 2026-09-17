@@ -10,6 +10,7 @@ local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Feedback)
 local Motion = require(Shared.Design.Motion)
 local FrameKit = require(script.Parent.Components.Frame)
 local Button = require(script.Parent.Components.Button)
@@ -317,7 +318,7 @@ function PlumeCard.create(
 		if current and current.canBorrow then
 			callbacks.onBorrow()
 		else
-			deps.audio:play(Tokens.sound.uiError)
+			Feedback.deny("plume:cannot_borrow")
 		end
 	end)
 

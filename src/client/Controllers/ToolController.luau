@@ -16,6 +16,7 @@ local Shared = ReplicatedStorage.Shared
 local Trove = require(Shared.Util.Trove)
 local Signal = require(Shared.Util.Signal)
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.UI.Feedback)
 local ToolSpecs = require(Shared.Domain.ToolSpecs)
 local EggSense = require(Shared.Domain.EggSense)
 
@@ -26,7 +27,6 @@ export type ToolController = typeof(setmetatable(
 	{} :: {
 		_deps: any,
 		_swing: number,
-		_bagFullToastAt: number?,
 		_requestCounter: number?,
 		_inFlight: boolean,
 		_lastAttemptAt: number?,
@@ -220,18 +220,18 @@ function ToolController.new(deps: {
 		if payload.state == "overheated" then
 			self._vac.overheated = true
 			self:_setVacRunning(false)
-			deps.audio:play(Tokens.sound.bagFull)
-			deps.haptics:pulse(0.7, 0.15)
-			deps.hud.toasts:push("Feather Vac overheated - cooling", "warning")
+			if Feedback.deny("vac_cooling", "Feather Vac overheated - cooling") then
+				deps.haptics:pulse(0.7, 0.15)
+			end
 		elseif payload.state == "ready" then
+			-- Cooled down: the hotbar status clears. No "ready" chime - a cooldown ending is not an event.
 			self._vac.overheated = false
-			deps.audio:play(Tokens.sound.uiConfirm)
 		elseif payload.state == "idle" then
 			self:_setVacRunning(false)
 			if payload.reason == "bag_full" then
-				deps.audio:play(Tokens.sound.bagFull)
+				Feedback.deny("bag_full", "Bag full - trade your feathers")
 			elseif payload.reason == "range" then
-				deps.hud.toasts:push("Aim at the nest", "info")
+				Feedback.deny("out_of_range", "Aim at the nest", { tone = "info", silent = true })
 			end
 		elseif payload.state == "running" then
 			self:_setVacRunning(true)
@@ -296,11 +296,8 @@ function ToolController.new(deps: {
 				deps.audio:play(Tokens.sound.collectRelease, { pitchVariance = 0.15 })
 				deps.haptics:pulse(0.12, 0.03)
 			end
-			if (payload.rainbow or 0) > 0 then
-				deps.audio:play(Tokens.sound.collectRainbow)
-			end
 			if payload.bagFull then
-				deps.audio:play(Tokens.sound.bagFull)
+				Feedback.deny("bag_full", "Bag full - trade your feathers")
 			end
 			pcall(function()
 				self.collected:Fire(payload)
@@ -560,7 +557,9 @@ function ToolController.equip(self: ToolController, toolId: string): boolean
 	self:_stopHold()
 	local result = self._deps.net:request("ToolEquip", { toolId = toolId })
 	if not result.ok then
-		self._deps.audio:play(Tokens.sound.uiError)
+		if result.code ~= "rate_limited" then
+			Feedback.deny("equip_refused")
+		end
 		return false
 	end
 	self._equipped = toolId
@@ -808,13 +807,8 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 		local levels = self._deps.config.bags.levels
 		local capacity = player.bagCapacity or (levels[player.bagLevel or 1] or levels[1]).capacity
 		if (player.carriedStandard or 0) + (player.carriedRainbow or 0) >= capacity then
-			if now - (self._bagFullToastAt or 0) > self._deps.config.pile.visual.bagFullToastCooldownSeconds then
-				self._bagFullToastAt = now
-				-- Denial sound first, then the toast. Both roles share the "denial" throttle group, so
-				-- whichever fires first is the one the player hears and the other is dropped; leading
-				-- with the specific one keeps a full bag sounding like a full bag.
-				self._deps.audio:play(Tokens.sound.bagFull)
-				self._deps.hud.toasts:push("Bag full - trade your feathers", "warning")
+			-- One refusal, then five quiet seconds for this reason (Feedback owns the window).
+			if Feedback.deny("bag_full", "Bag full - trade your feathers") then
 				self._deps.haptics:pulse(0.5, 0.1)
 			end
 			self.stats.rejected += 1
@@ -883,12 +877,8 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 		return true
 	end
 	self.stats.rejected += 1
-	if
-		result.message == "no_feathers"
-		and now - (self._bagFullToastAt or 0) > self._deps.config.pile.visual.bagFullToastCooldownSeconds
-	then
-		self._bagFullToastAt = now
-		self._deps.hud.toasts:push("Nothing left there - aim at fresh feathers", "info")
+	if result.message == "no_feathers" then
+		Feedback.deny("no_feathers", "Nothing left there - aim at fresh feathers", { tone = "info", silent = true })
 	end
 	-- A refused request never re-sends immediately: hold the debounce window before the next try,
 	-- and a server cooldown refusal waits out that cooldown instead of hammering it.
@@ -1018,8 +1008,7 @@ function ToolController._lightCharge(self: ToolController)
 		return
 	end
 	if os.clock() < self._chargeReadyAt then
-		self._deps.audio:play(Tokens.sound.uiError)
-		self._deps.hud.toasts:push("Confetti Charge is cooling", "info")
+		Feedback.deny("charge_cooling", "Confetti Charge is cooling", { tone = "info" })
 		return
 	end
 	self._chargeLitAt = os.clock()
@@ -1104,18 +1093,21 @@ function ToolController.beginAction(self: ToolController, aimTarget: Vector3?): 
 	self.stats.rejected += 1
 	local message = result.message
 	if message == "overheated" then
-		self._deps.hud.toasts:push("Feather Vac is still cooling", "warning")
+		Feedback.deny("vac_cooling", "Feather Vac is still cooling")
 	elseif message == "bag_full" then
-		self._deps.hud.toasts:push("Bag full - trade at the crate", "warning")
+		Feedback.deny("bag_full", "Bag full - trade your feathers")
 	elseif message == "charge_live" then
-		self._deps.hud.toasts:push("One charge at a time", "info")
+		Feedback.deny("charge_live", "One charge at a time", { tone = "info" })
 	elseif result.code == "out_of_range" then
 		-- A charge is thrown wherever it is aimed, so this is no longer "aim at the nest": the only
 		-- way a throw is out of range now is the server disagreeing about where the character is.
-		self._deps.hud.toasts:push(if self._equipped == "confettiCharge" then "Too far to throw from here" else "Aim at the nest", "info")
-	end
-	if result.code ~= "rate_limited" then
-		self._deps.audio:play(Tokens.sound.uiError)
+		Feedback.deny(
+			"out_of_range",
+			if self._equipped == "confettiCharge" then "Too far to throw from here" else "Aim at the nest",
+			{ tone = "info" }
+		)
+	elseif result.code ~= "rate_limited" then
+		Feedback.deny("tool:" .. tostring(message or result.code))
 	end
 	self.rejected:Fire(result)
 	return result

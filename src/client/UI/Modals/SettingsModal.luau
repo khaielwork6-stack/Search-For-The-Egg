@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
+local Feedback = require(script.Parent.Parent.Feedback)
 local Motion = require(Shared.Design.Motion)
 local FrameKit = require(script.Parent.Parent.Components.Frame)
 local Button = require(script.Parent.Parent.Components.Button)
@@ -146,8 +147,7 @@ function SettingsModal.build(container: ScrollingFrame, api: any, deps: Deps): (
 			deps.audio:play(Tokens.sound.uiConfirm)
 			return true
 		end
-		deps.toasts:push("Could not save setting", "warning")
-		deps.audio:play(Tokens.sound.uiError)
+		Feedback.deny("settings:" .. tostring(result.code), "Could not save setting")
 		return false
 	end
 
