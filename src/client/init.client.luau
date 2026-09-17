@@ -362,8 +362,18 @@ local lobbyMeta = trove:add(LobbyController.new({
 trove:add(modals.changed:Connect(function()
 	local blocking = modals:isBlocking()
 	lobbyMeta:setRailHidden(blocking)
-	if not round:inRound() then
-		hud.gui.Enabled = not blocking
+	-- Hidden only by a blocking modal in the lobby; shown again the moment nothing blocks. (Checking
+	-- inRound on the way back left the HUD off for a whole round when the party screen was still open
+	-- as the round began.)
+	if not blocking then
+		hud.gui.Enabled = true
+	elseif not round:inRound() then
+		hud.gui.Enabled = false
+	end
+end))
+trove:add(round.phaseChanged:Connect(function(phase)
+	if phase == "Countdown" or phase == "Searching" or phase == "EggRevealed" then
+		hud.gui.Enabled = true
 	end
 end))
 hud:setGemShopOpener(function()
