@@ -99,7 +99,8 @@ function LobbyController.new(deps: any): LobbyController
 	local rail = Instance.new("Frame")
 	rail.Name = "SideMenu"
 	rail.AnchorPoint = Vector2.new(1, 0.5)
-	rail.Position = UDim2.new(1, -Tokens.layout.safeAreaPaddingPx, 0.5, 0)
+	-- Centred in the strip under the settings gear, so the top tile never sits beneath it.
+	rail.Position = UDim2.new(1, -Tokens.layout.safeAreaPaddingPx, 0.5, (Tokens.layout.minimumTapTargetPx + Tokens.spacing.md) / 2)
 	rail.Size = UDim2.fromOffset(Tokens.layout.stationButtonPx + Tokens.spacing.md, 0)
 	rail.AutomaticSize = Enum.AutomaticSize.Y
 	rail.BackgroundTransparency = 1
@@ -171,7 +172,8 @@ function LobbyController.new(deps: any): LobbyController
 		labelCap.Parent = label
 		label.AnchorPoint = Vector2.new(0.5, 1)
 		label.Position = UDim2.fromScale(0.5, 1)
-		label.Size = UDim2.new(1, Tokens.spacing.md, 0, labelHeight)
+		-- Wider than the slot: the stroked name may overhang the tile (INVENTORY on a phone tile).
+		label.Size = UDim2.fromOffset(108, labelHeight)
 		FrameKit.outline(label, 3)
 		self._buttons[entry.id] = handle
 		self._trove:add(handle.destroy)
@@ -181,8 +183,11 @@ function LobbyController.new(deps: any): LobbyController
 	-- size comes from the height on offer (pre-scale), never below the tap minimum.
 	local function layoutRail()
 		local available = stage.AbsoluteSize.Y / math.max(0.1, SafeArea.scaleOf(stage))
-		local budget = available * 0.8 - railLayout.Padding.Offset * (#slots - 1)
-		local tile = math.clamp(math.floor(budget / math.max(1, #slots) - labelHeight), math.max(minimumTap, 48), size)
+		local phone = SafeArea.classOf(stage) == "phone"
+		railLayout.Padding = UDim.new(0, if phone then Tokens.spacing.sm else Tokens.spacing.md)
+		local usable = available - (Tokens.layout.minimumTapTargetPx + Tokens.spacing.md) - Tokens.layout.safeAreaPaddingPx * 2
+		local budget = usable - railLayout.Padding.Offset * (#slots - 1)
+		local tile = math.clamp(math.floor(budget / math.max(1, #slots) - labelHeight), math.max(minimumTap, 56), size)
 		for _, item in ipairs(slots) do
 			item.slot.Size = UDim2.fromOffset(tile + Tokens.spacing.md, tile + labelHeight)
 			item.button.Size = UDim2.fromOffset(tile, tile)
