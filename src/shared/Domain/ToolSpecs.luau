@@ -8,12 +8,8 @@ local EconomyMath = require(script.Parent.Parent.EconomyMath)
 local ToolSpecs = {}
 
 -- The tools a player buys, upgrades and can own permanently. The shop, the Book and the upgrade
--- previews iterate this list; nothing lent ever appears in it.
+-- previews iterate this list.
 ToolSpecs.TOOL_IDS = table.freeze({ "nestRake", "confettiCharge", "featherVac", "scoutChick" })
--- Tools an NPC lends for a timed spell (Professor Plume's Egg Sense rod): equippable, never
--- bought, never upgraded, taken back by the server when the time is up.
-ToolSpecs.LENT_TOOL_IDS = table.freeze({ "eggSense" })
-ToolSpecs.ALL_TOOL_IDS = table.freeze({ "nestRake", "confettiCharge", "featherVac", "scoutChick", "eggSense" })
 ToolSpecs.HAND_PATHS = table.freeze({ "grasp", "speed", "hold" })
 
 ToolSpecs.PATHS = table.freeze({
@@ -21,7 +17,6 @@ ToolSpecs.PATHS = table.freeze({
 	confettiCharge = table.freeze({ "luckyBlast", "speed", "power" }),
 	featherVac = table.freeze({ "power", "cooling", "runtime" }),
 	scoutChick = table.freeze({ "speed", "grasp", "capacity" }),
-	eggSense = table.freeze({}),
 })
 
 export type Levels = { [string]: number }
@@ -31,19 +26,9 @@ function ToolSpecs.isTool(toolId: any): boolean
 	return type(toolId) == "string" and table.find(ToolSpecs.TOOL_IDS, toolId) ~= nil
 end
 
--- A lent tool.
-function ToolSpecs.isLentTool(toolId: any): boolean
-	return type(toolId) == "string" and table.find(ToolSpecs.LENT_TOOL_IDS, toolId) ~= nil
-end
-
--- Anything that can sit in the hand: bought or lent.
-function ToolSpecs.isEquippable(toolId: any): boolean
-	return ToolSpecs.isTool(toolId) or ToolSpecs.isLentTool(toolId)
-end
-
 function ToolSpecs.defaultLevels(): { [string]: Levels }
 	local out: { [string]: Levels } = {}
-	for _, toolId in ipairs(ToolSpecs.ALL_TOOL_IDS) do
+	for _, toolId in ipairs(ToolSpecs.TOOL_IDS) do
 		local levels: Levels = {}
 		for _, pathName in ipairs(ToolSpecs.PATHS[toolId]) do
 			levels[pathName] = 0
@@ -164,19 +149,6 @@ function ToolSpecs.scoutChick(cfg: { [string]: any }, levels: Levels, modifiers:
 		depositSeconds = tool.depositSeconds,
 		swarmChance = modifiers.procs.swarmChancePerTrip or 0,
 		swarmCount = modifiers.params.swarmCount or 0,
-	}
-end
-
--- Egg Sense rod: Professor Plume's timed loan. No levels, no modifiers; every number is the rod's.
-function ToolSpecs.eggSense(cfg: { [string]: any }, _levels: Levels, _modifiers: any)
-	local rod = cfg.plume.rod
-	return {
-		toolId = "eggSense",
-		durationSeconds = rod.activeSeconds,
-		radiusStuds = rod.radiusStuds,
-		minTickHz = rod.minTickHz,
-		maxTickHz = rod.maxTickHz,
-		aimRateHz = rod.aimRateHz,
 	}
 end
 

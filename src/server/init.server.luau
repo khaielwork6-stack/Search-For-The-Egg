@@ -428,20 +428,17 @@ local tools = ToolService.new({
 })
 local egg =
 	EggService.new({ config = config, rounds = rounds, clock = clock, getCharacterPosition = getCharacterPosition, analytics = analytics })
--- Professor Plume: normal feathers for a timed loan of the Egg Sense rod; the loan count is the round's.
+-- Professor Plume: Rainbow Feathers for one vague clue per player per round.
 local clues = ClueService.new({
 	config = config,
 	rounds = rounds,
 	sessions = sessions,
-	tools = tools,
 	clock = clock,
+	rng = rng,
 	getCharacterPosition = getCharacterPosition,
-	getEggPosition = function(runtime)
-		return egg:position(runtime)
-	end,
 	analytics = analytics,
 })
--- Molly the Mole: crates of normal feathers for the party's three narrowing surveys of the round.
+-- Molly the Mole: crates of normal feathers for the party's three area surveys of the round.
 local surveys = SurveyService.new({
 	config = config,
 	rounds = rounds,
@@ -1220,20 +1217,16 @@ end)
 registry:onRequest("EggDeliver", function(player, payload)
 	return egg:deliver(player.UserId, payload.sessionToken)
 end)
-registry:onRequest("PlumeLend", function(player, payload)
-	local result = clues:lend(player.UserId, payload)
+registry:onRequest("PlumeAnalyse", function(player, payload)
+	local result = clues:analyse(player.UserId, payload)
 	local runtime = rounds:roundOf(player.UserId)
 	if result.ok and runtime then
-		-- The borrower's bag and hand changed; the same snapshot shape the HUD already binds to
-		-- carries both, and the previews push covers a client that reached the remote some other way.
+		-- The bag lost its Rainbow Feathers and the player's projection now carries the clue.
 		local data = result.data :: any
 		data.player = projectPlayerFor(runtime.state.roundId, player.UserId)
 		pushPreviews(player)
 	end
 	return result
-end)
-registry:onRequest("RodAim", function(player, payload)
-	return clues:aim(player.UserId, payload)
 end)
 registry:onRequest("SurveyRequest", function(player, payload)
 	local result = surveys:survey(player.UserId, payload)
@@ -1256,16 +1249,12 @@ surveys.completed:Connect(function(runtime, userId, _reading, projection)
 	for _, member in ipairs(memberPlayers(runtime.state.members)) do
 		send(member, "SurveyCompleted", {
 			roundId = runtime.state.roundId,
-			tier = latest.tier,
 			region = latest.region,
-			sub = latest.sub,
-			id = latest.id,
+			name = latest.name,
 			signal = latest.signal,
 			title = latest.title,
 			short = latest.short,
 			text = latest.text,
-			cellX = latest.cellX,
-			cellZ = latest.cellZ,
 			byUserId = userId,
 			byName = payerName,
 			reading = latest,
@@ -1273,28 +1262,11 @@ surveys.completed:Connect(function(runtime, userId, _reading, projection)
 		})
 	end
 end)
-surveys.selected:Connect(function(runtime, userId, region, sub, tier)
+surveys.selected:Connect(function(runtime, userId, region)
 	for _, member in ipairs(memberPlayers(runtime.state.members)) do
 		if member.UserId ~= userId then
-			send(member, "SurveySelection", { roundId = runtime.state.roundId, byUserId = userId, region = region, sub = sub, tier = tier })
+			send(member, "SurveySelection", { roundId = runtime.state.roundId, byUserId = userId, region = region })
 		end
-	end
-end)
--- A loan is the whole party's: everyone learns how many are left and what the next one costs, with
--- the borrower's name for the notice. The rod itself reaches only the borrower, through ToolEvent.
-clues.lent:Connect(function(runtime, userId, projection)
-	local borrower = playerData:playerOf(userId)
-	local borrowerName = if borrower and typeof(borrower) == "Instance" then (borrower :: Player).DisplayName else "A forager"
-	for _, member in ipairs(memberPlayers(runtime.state.members)) do
-		send(member, "PlumeLent", {
-			roundId = runtime.state.roundId,
-			usesLeft = projection.usesLeft,
-			nextCost = projection.nextCost,
-			activeSeconds = projection.activeSeconds,
-			byUserId = userId,
-			byName = borrowerName,
-			plume = projection,
-		})
 	end
 end)
 -- Carrying: the Egg rides on the carrier, everyone hears who has it; a drop puts it back.
@@ -1419,6 +1391,7 @@ for _, player in ipairs(Players:GetPlayers()) do
 	end)
 end
 Players.PlayerRemoving:Connect(function(player)
+	clues:forget(player.UserId)
 	local runtime = rounds:roundOf(player.UserId)
 	if runtime then
 		tools:onLeave(player.UserId)

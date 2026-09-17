@@ -536,33 +536,16 @@
     "assumption": "ASSUMED"
   },
   "plume": {
-    "costsStandard": [
-      100,
-      200,
-      400
-    ],
-    "maxPerRound": 3,
+    "rainbowCost": 10,
     "stationRangeStuds": 10,
-    "rod": {
-      "activeSeconds": 18,
-      "radiusStuds": 14,
-      "minTickHz": 1.2,
-      "maxTickHz": 9,
-      "warmColor": [
-        255,
-        150,
-        60
-      ],
-      "coldColor": [
-        120,
-        190,
-        255
-      ],
-      "hapticsMax": 0.6,
-      "aimRateHz": 8
+    "requestCooldownSeconds": 1.0,
+    "directionChance": 0.5,
+    "depthBands": {
+      "shallowBelow": 0.35,
+      "deepFrom": 0.6
     },
-    "evidence": "OWNER 17 Sep 2026 (Egg Sense brief): Professor Plume lends the Egg Sense rod instead of reading band clues. Three loans per party per round at 100, 200 then 400 normal feathers from the borrower's carried bag (never Rainbow); the rod is active for 18 s and ticks faster, glows warmer and pulses harder the closer the crosshair is to the hidden Egg. Heat = 1 - distance / radiusStuds, quantised to 0.05 so a reading can never be triangulated to the centimetre. Radius, tick rates, colours, haptics and the aim rate are ASSUMED.",
-    "assumption": "OWNER costs, limit and active time; ASSUMED radius, tick rates, colours, haptics and aim rate"
+    "evidence": "OWNER 17 Sep 2026 (Plume simplification): the Egg Sense rod was far too strong and is gone. Professor Plume's analysis costs rainbowCost Rainbow Feathers from the player's carried bag, consumed server-side, once per round per player, and reveals ONE vague clue chosen by the server: a half of the nest (barn/fence side or back/front half, axis picked at random) with probability directionChance, otherwise a depth band from the Egg's covering fraction (below shallowBelow = near the surface, at or above deepFrom = deep, else middling). Never both, never a marker. requestCooldownSeconds is the per-player server-side rate limit.",
+    "assumption": "OWNER cost, once-per-round and one-vague-clue rule; ASSUMED direction chance, depth band edges and cooldown"
   },
   "survey": {
     "crateCosts": [
@@ -572,10 +555,10 @@
     ],
     "maxPerRound": 3,
     "stationRangeStuds": 10,
-    "sequenceSeconds": 5.0,
-    "weakManhattanDistance": 1,
-    "evidence": "OWNER 17 Sep 2026 (Molly the Mole, reusable survey): three surveys per party per round, paid in normal feathers at 100, 200 and 400 in that order, each one narrowing the search - the first reads one of nine map regions (STRONG inside, WEAK at Manhattan distance 1, NO EGG SIGNAL otherwise), the second reads one of nine sub-cells inside that region by the same rule, the third pins the Egg's exact cell with no choice to make. Costs are fixed numbers, never the bag capacity, because upgraded and Infinite Bags never fill; Rainbow Feathers are never touched.",
-    "assumption": "OWNER costs, limit and narrowing rule; ASSUMED range and sequence length"
+    "sequenceSeconds": 2.0,
+    "weakBorderFraction": 0.15,
+    "evidence": "OWNER 17 Sep 2026 (Molly simplification): a clear top-down nest map in four large labelled areas (BACK BARN, BACK FENCE, FRONT BARN, FRONT FENCE; BARN is the yard's west, BACK its north). Three surveys per party per round, paid in normal feathers at 100, 200 and 400 in that order; each picks one area and answers only STRONG SIGNAL (the Egg is inside it), WEAK SIGNAL (outside, but within weakBorderFraction of the nest's width/depth of that area's border) or NO SIGNAL. No coordinates, sub-cells or pins. Rainbow Feathers are never touched.",
+    "assumption": "OWNER costs, limit, four areas and three-word answer; ASSUMED weak margin, range and sequence length"
   },
   "selling": {
     "cashPerStandardFeather": 0.01,
@@ -806,11 +789,6 @@
       "depositSeconds": 1.0,
       "permanentIncludesMaxUpgrades": true,
       "evidence": "VERIFIED packaging/speed preview; ASSUMED target name and other base values"
-    },
-    "eggSense": {
-      "displayName": "Egg Sense Rod",
-      "lent": true,
-      "evidence": "OWNER 17 Sep 2026 (Egg Sense brief): never bought, never upgraded; Professor Plume lends it for plume.rod.activeSeconds per loan and the server takes it back when the time is up."
     }
   },
   "toolUpgrades": {
@@ -1794,12 +1772,6 @@
       "recoilStuds": 0.12,
       "jitterStuds": 0.02
     },
-    "eggSense": {
-      "viewmodelScale": 1.0,
-      "trembleStuds": 0.03,
-      "dipStuds": 0.06,
-      "lightRangeStuds": 9
-    },
     "scoutChick": {
       "modelScale": 0.34,
       "hopHeightStuds": 0.32,
@@ -2196,20 +2168,6 @@
         "speed": 1.9,
         "variance": 0.15,
         "minGap": 0.25
-      },
-      "tool.rodTick": {
-        "id": "rbxasset://sounds/clickfast.wav",
-        "volume": 0.45,
-        "speed": 1.0,
-        "variance": 0.08,
-        "minGap": 0.0
-      },
-      "tool.rodLock": {
-        "id": "rbxasset://sounds/electronicpingshort.wav",
-        "volume": 0.4,
-        "speed": 1.4,
-        "variance": 0.04,
-        "minGap": 0.5
       },
       "intro.ambience": {
         "id": "",

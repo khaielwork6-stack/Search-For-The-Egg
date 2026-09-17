@@ -25,7 +25,7 @@ local Confetti = require(script.Parent.Parent.UI.Components.Confetti)
 local UpgradeActions = require(script.Parent.Parent.UI.UpgradeActions)
 local UpgradeCopy = require(script.Parent.Parent.UI.UpgradeCopy)
 local Depth = require(script.Parent.Parent.UI.Components.Depth)
-local EggSense = require(Shared.Domain.EggSense)
+local PlumeClue = require(Shared.Domain.PlumeClue)
 local NestSurvey = require(Shared.Domain.NestSurvey)
 
 local UpgradeBookController = {}
@@ -648,13 +648,10 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 	story.Size = UDim2.new(1, 0, 0, Tokens.typography.body.size * 5)
 	story.TextYAlignment = Enum.TextYAlignment.Top
 	FrameKit.outline(story, 2)
-	-- NEST INTEL: Professor Plume's rod loans and Molly's survey this round. One row each; the
-	-- data is the round snapshot's `plume` and `survey`, so a member who paid nothing and a member
-	-- who joined late read the same rows.
+	-- NEST INTEL: this player's clue from Professor Plume and the party's latest survey from Molly.
+	-- The clue is the player's own projection; the survey is the round snapshot's, shared by all.
 	local round = deps.round.round
-	local plume = round and round.plume
-	local usesLeft = if plume then (plume.usesLeft or 0) else EggSense.maxUses(deps.config)
-	local nextCost = if plume then plume.nextCost else EggSense.nextCost(deps.config, 0)
+	local clue = deps.round.player and deps.round.player.plumeClue
 	local cluesTop = Tokens.typography.display.size + Tokens.spacing.md + Tokens.typography.body.size * 5 + Tokens.spacing.md
 	local cluesTitle = FrameKit.text(right, "CluesTitle", "NEST INTEL", "title", { zIndex = z, color = Tokens.color.featherWhite })
 	cluesTitle.Position = UDim2.fromOffset(0, cluesTop)
@@ -663,39 +660,39 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 	local rowHeight = tap - 4
 	-- A live row is a slate card with a gold keyline; a spent one sinks into the page behind a black
 	-- one.
-	local rodRow = Instance.new("Frame")
-	rodRow.Name = "Clue_rod"
-	rodRow.Position = UDim2.fromOffset(0, cluesTop + Tokens.typography.title.size + Tokens.spacing.sm)
-	rodRow.Size = UDim2.new(1, 0, 0, rowHeight)
-	rodRow.BackgroundColor3 = if usesLeft > 0 then Tokens.color.surfaceAlt else Tokens.color.panelDeep
-	rodRow.BorderSizePixel = 0
-	rodRow.ZIndex = z
-	local rodCorner = Instance.new("UICorner")
-	rodCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
-	rodCorner.Parent = rodRow
-	Depth.keyline(rodRow, Tokens.depth.keylineThin, if usesLeft > 0 then Tokens.color.gold else nil)
-	rodRow.Parent = right
-	local rodLabel = FrameKit.text(rodRow, "Label", "EGG SENSE", "heading", { zIndex = z + 1, color = Tokens.color.featherWhite })
-	rodLabel.AnchorPoint = Vector2.new(0, 0.5)
-	rodLabel.Position = UDim2.new(0, Tokens.spacing.md, 0.5, 0)
-	rodLabel.Size = UDim2.new(0.4, 0, 0, Tokens.typography.heading.size + 2)
-	FrameKit.outline(rodLabel, 2)
-	local rodValue = FrameKit.text(
-		rodRow,
+	local plumeRow = Instance.new("Frame")
+	plumeRow.Name = "Clue_plume"
+	plumeRow.Position = UDim2.fromOffset(0, cluesTop + Tokens.typography.title.size + Tokens.spacing.sm)
+	plumeRow.Size = UDim2.new(1, 0, 0, rowHeight)
+	plumeRow.BackgroundColor3 = if clue then Tokens.color.surfaceAlt else Tokens.color.panelDeep
+	plumeRow.BorderSizePixel = 0
+	plumeRow.ZIndex = z
+	local plumeCorner = Instance.new("UICorner")
+	plumeCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
+	plumeCorner.Parent = plumeRow
+	Depth.keyline(plumeRow, Tokens.depth.keylineThin, if clue then Tokens.color.gold else nil)
+	plumeRow.Parent = right
+	local plumeLabel = FrameKit.text(plumeRow, "Label", "PLUME", "heading", { zIndex = z + 1, color = Tokens.color.featherWhite })
+	plumeLabel.AnchorPoint = Vector2.new(0, 0.5)
+	plumeLabel.Position = UDim2.new(0, Tokens.spacing.md, 0.5, 0)
+	plumeLabel.Size = UDim2.new(0.4, 0, 0, Tokens.typography.heading.size + 2)
+	FrameKit.outline(plumeLabel, 2)
+	local plumeValue = FrameKit.text(
+		plumeRow,
 		"Value",
-		if nextCost then string.format("%d LEFT - NEXT %d", usesLeft, nextCost) else "NO LOANS LEFT",
+		if clue then tostring(clue.title) else string.format("NOT USED - %d RAINBOW", PlumeClue.cost(deps.config)),
 		"heading",
 		{
 			zIndex = z + 1,
-			color = if nextCost then Tokens.color.gold else Tokens.color.inkMuted,
+			color = if clue then Tokens.color.gold else Tokens.color.inkMuted,
 			align = Enum.TextXAlignment.Right,
 		}
 	)
-	rodValue.AnchorPoint = Vector2.new(1, 0.5)
-	rodValue.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, 0)
-	rodValue.Size = UDim2.new(0.6, -Tokens.spacing.md, 0, Tokens.typography.heading.size + 2)
-	rodValue.TextSize = Tokens.typography.heading.size - 2
-	FrameKit.outline(rodValue, 2)
+	plumeValue.AnchorPoint = Vector2.new(1, 0.5)
+	plumeValue.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, 0)
+	plumeValue.Size = UDim2.new(0.6, -Tokens.spacing.md, 0, Tokens.typography.heading.size + 2)
+	plumeValue.TextSize = Tokens.typography.heading.size - 2
+	FrameKit.outline(plumeValue, 2)
 	-- Molly's survey: the party's latest reading of the round (of up to three), or NOT RUN.
 	local surveyState = round and round.survey
 	local survey = surveyState and surveyState.latest
@@ -723,7 +720,7 @@ function UpgradeBookController._renderIndex(self: UpgradeBookController, left: F
 		if survey
 			then string.format(
 				"%s: %s (%d/%d)",
-				tostring(survey.id or survey.region),
+				tostring(survey.name or survey.region),
 				tostring(((NestSurvey.WORDS :: any)[survey.signal] or NestSurvey.WORDS.none).title),
 				tonumber(surveyState.count) or 0,
 				tonumber(surveyState.max) or 0

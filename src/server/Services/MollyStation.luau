@@ -1,6 +1,6 @@
 --!strict
 -- Molly the Mole and her surveying station: a heavy field bench east of the mound carrying the
--- miniature Nest Map (nine tiles fixed to the yard's compass), the drill gantry over it, the brass
+-- miniature Nest Map (four large named areas fixed to the yard's compass), the drill gantry over it, the brass
 -- survey machine with its hopper, gauge, lamps, gears, crank and lever, the seismograph, the
 -- survey-crate platform and the result board. Built from parts at boot and anchored; the client
 -- MollyController owns every motion (idle, selection, drill, gears, needle, lamps, stamps) and the
@@ -23,9 +23,8 @@ MollyStation.PLACEHOLDER_TAG = "SFE_ChapterShell"
 -- OWNER 17 Sep 2026: at 0.62 she was a toy beside her own bench; 0.88 puts her chest over the bench
 -- top with her paws resting on it.
 MollyStation.RIG_SCALE = 0.95
-MollyStation.TILE_PITCH = 1.5 -- tile size plus gap
-MollyStation.TILE_SIZE = 1.36
-MollyStation.SUB_TILE_SIZE = 0.4 -- nine patches across one tile, with a hair of gap
+MollyStation.TILE_PITCH = 2.2 -- tile size plus gap
+MollyStation.TILE_SIZE = 2.08
 
 local IRON = Color3.fromRGB(70, 72, 78)
 local IRON_DARK = Color3.fromRGB(44, 46, 50)
@@ -231,10 +230,10 @@ local function buildBench(station: Model, base: CFrame): number
 	return topY + 0.15
 end
 
--- The miniature Nest Map: a round plinth and nine flat parchment tiles laid in WORLD axes, so BARN
+-- The miniature Nest Map: a round plinth and four large parchment tiles laid in WORLD axes, so BARN
 -- is always the yard's west and BACK its north whatever way the bench faces. Each tile carries its
--- name in big letters and a small arrow pointing BACK, like the signs; tiles are query-able so the
--- player can point at them. A neon ring and four sparks (hidden at rest) mark the chosen tile.
+-- area's name in big letters and a small arrow pointing BACK, like the signs. A neon ring and four
+-- sparks (hidden at rest) mark the chosen tile.
 local function buildMap(station: Model, base: CFrame, tableTop: number): (Vector3, { [string]: Part })
 	local centre = (base * CFrame.new(-1.9, tableTop, -0.1)).Position
 	local plinth =
@@ -254,8 +253,8 @@ local function buildMap(station: Model, base: CFrame, tableTop: number): (Vector
 	local pitch = MollyStation.TILE_PITCH
 	for _, region in ipairs(NestSurvey.REGIONS) do
 		local row, col = NestSurvey.rowCol(region)
-		-- col 1 = west (-X), row 1 (A) = north (-Z).
-		local dx, dz = (col - 2) * pitch, (row - 2) * pitch
+		-- col 1 = barn (west, -X), row 1 = back (north, -Z).
+		local dx, dz = (col - 1.5) * pitch, (row - 1.5) * pitch
 		local height = 0.3
 		local tile = part(
 			station,
@@ -265,7 +264,7 @@ local function buildMap(station: Model, base: CFrame, tableTop: number): (Vector
 			PARCHMENT_TILE,
 			Enum.Material.SmoothPlastic
 		)
-		tile.CanQuery = true
+		tile.CanQuery = false
 		tile:SetAttribute("SFE_Region", region)
 		tile:SetAttribute("SFE_RestY", tile.Position.Y)
 		-- Worn edges: a darker underlay a touch larger than the tile.
@@ -288,7 +287,7 @@ local function buildMap(station: Model, base: CFrame, tableTop: number): (Vector
 		face.Size = UDim2.fromScale(1, 1)
 		face.Rotation = 180
 		face.Parent = gui
-		label(face, "Id", region, UDim2.fromScale(1, 0.6), UDim2.fromScale(0, 0.3), Enum.Font.FredokaOne, 46, INK)
+		label(face, "Id", NestSurvey.name(region), UDim2.fromScale(0.9, 0.5), UDim2.fromScale(0.05, 0.3), Enum.Font.FredokaOne, 40, INK)
 		local arrow = label(
 			face,
 			"Arrow",
@@ -329,48 +328,6 @@ local function buildMap(station: Model, base: CFrame, tableTop: number): (Vector
 	ring.PrimaryPart = hub
 	tag(ring)
 	ring.Parent = station
-	-- The second survey's map: nine small patch tiles the client lays over the region read first,
-	-- numbered like the regions (1 2 3 / 4 5 6 / 7 8 9, barn -> fence, back -> front). Parked under
-	-- the plinth and invisible until a party has its first reading.
-	local subSize = MollyStation.SUB_TILE_SIZE
-	for _, sub in ipairs(NestSurvey.SUBS) do
-		local subTile = part(
-			station,
-			"SubTile_" .. sub,
-			Vector3.new(subSize, 0.08, subSize),
-			CFrame.new(centre + Vector3.new(0, -1.2, 0)),
-			PARCHMENT_TILE,
-			Enum.Material.SmoothPlastic
-		)
-		subTile.CanQuery = true
-		subTile.Transparency = 1
-		subTile:SetAttribute("SFE_Sub", sub)
-		local subGui = surface(subTile, Enum.NormalId.Top, 120)
-		local subFace = Instance.new("Frame")
-		subFace.Name = "Sheet"
-		subFace.BackgroundTransparency = 1
-		subFace.Size = UDim2.fromScale(1, 1)
-		subFace.Rotation = 180
-		subFace.Parent = subGui
-		local subId = label(subFace, "Id", tostring(sub), UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Enum.Font.FredokaOne, 30, INK)
-		subId.TextTransparency = 1
-	end
-	-- The third survey's pin: a brass post with a red head, dropped by the client on the Egg's cell.
-	local pin = Instance.new("Model")
-	pin.Name = "PinMarker"
-	local post = part(pin, "Post", Vector3.new(0.06, 0.6, 0.06), CFrame.new(centre + Vector3.new(0, -1.5, 0)), BRASS, Enum.Material.Metal)
-	post.Transparency = 1
-	local head = ball(pin, "Head", 0.16, CFrame.new(centre + Vector3.new(0, -1.2, 0)), RED, Enum.Material.Neon)
-	head.Transparency = 1
-	local headLight = Instance.new("PointLight")
-	headLight.Name = "Light"
-	headLight.Color = RED
-	headLight.Brightness = 0
-	headLight.Range = 3
-	headLight.Parent = head
-	pin.PrimaryPart = post
-	tag(pin)
-	pin.Parent = station
 	-- Landmark signs: upright planks on posts at the rim, all facing the players' side, with a wooden
 	-- arrow pointing the way the sign names.
 	local signs = {
@@ -446,7 +403,7 @@ end
 -- a carriage on the bridge (world X) and the drill head under it. The client moves bridge and head.
 local function buildGantry(station: Model, centre: Vector3)
 	local railH = 3.8 -- rail height over the map centre
-	local span = MollyStation.TILE_PITCH * 3 + 0.6
+	local span = MollyStation.TILE_PITCH * 2 + 0.7
 	for _, x in ipairs({ -span / 2, span / 2 }) do
 		part(station, "GantryRail", Vector3.new(0.16, 0.16, span), CFrame.new(centre + Vector3.new(x, railH, 0)), IRON, Enum.Material.Metal)
 		for _, z in ipairs({ -span / 2, span / 2 }) do
@@ -765,7 +722,7 @@ local function buildPlatform(station: Model, base: CFrame)
 	label(gui, "Text", "SURVEY CRATE HERE", UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Enum.Font.FredokaOne, 22, PAPER)
 end
 
--- The result board: the same nine cells with the landmarks, stamped by the client after a scan.
+-- The result board: the same four areas with the landmarks, written by the client after a scan.
 local function buildBoard(station: Model, base: CFrame)
 	local origin = base * CFrame.new(4.6, 0, 4.0) * CFrame.Angles(0, math.rad(22), 0)
 	local lean = CFrame.Angles(math.rad(-6), 0, 0)
@@ -843,8 +800,8 @@ local function buildBoard(station: Model, base: CFrame)
 		local row, col = NestSurvey.rowCol(region)
 		local cell = Instance.new("Frame")
 		cell.Name = "Cell_" .. region
-		cell.Position = UDim2.fromScale((col - 1) / 3 + 0.01, (row - 1) / 3 + 0.01)
-		cell.Size = UDim2.fromScale(1 / 3 - 0.02, 1 / 3 - 0.02)
+		cell.Position = UDim2.fromScale((col - 1) / 2 + 0.01, (row - 1) / 2 + 0.01)
+		cell.Size = UDim2.fromScale(1 / 2 - 0.02, 1 / 2 - 0.02)
 		cell.BackgroundColor3 = STRAW
 		cell.BorderSizePixel = 0
 		local corner = Instance.new("UICorner")
@@ -857,8 +814,8 @@ local function buildBoard(station: Model, base: CFrame)
 		stroke.Transparency = 0.4
 		stroke.Parent = cell
 		cell.Parent = grid
-		label(cell, "Id", region, UDim2.fromScale(1, 0.5), UDim2.fromScale(0, 0.05), Enum.Font.FredokaOne, 22, INK)
-		local mark = label(cell, "Mark", "", UDim2.fromScale(1, 0.4), UDim2.fromScale(0, 0.55), Enum.Font.FredokaOne, 14, RED)
+		label(cell, "Id", NestSurvey.name(region), UDim2.fromScale(1, 0.45), UDim2.fromScale(0, 0.08), Enum.Font.FredokaOne, 20, INK)
+		local mark = label(cell, "Mark", "", UDim2.fromScale(1, 0.35), UDim2.fromScale(0, 0.55), Enum.Font.FredokaOne, 18, INK)
 		mark.Visible = false
 		for i, angle in ipairs({ 45, -45 }) do
 			local cross = Instance.new("Frame")
@@ -867,49 +824,12 @@ local function buildBoard(station: Model, base: CFrame)
 			cross.Position = UDim2.fromScale(0.5, 0.5)
 			cross.Size = UDim2.new(1.1, 0, 0, 5)
 			cross.Rotation = angle
-			cross.BackgroundColor3 = RED
+			cross.BackgroundColor3 = INK
+			cross.BackgroundTransparency = 0.5
 			cross.BorderSizePixel = 0
 			cross.Visible = false
 			cross.Parent = cell
 		end
-		-- The second reading's nine patches inside this cell and the third reading's pin, both
-		-- hidden until the party buys them.
-		for _, sub in ipairs(NestSurvey.SUBS) do
-			local subRow, subCol = NestSurvey.subRowCol(sub)
-			local patch = Instance.new("Frame")
-			patch.Name = "Sub_" .. sub
-			patch.Position = UDim2.fromScale((subCol - 1) / 3 + 0.02, (subRow - 1) / 3 + 0.02)
-			patch.Size = UDim2.fromScale(1 / 3 - 0.04, 1 / 3 - 0.04)
-			patch.BackgroundColor3 = STRAW
-			patch.BackgroundTransparency = 0.35
-			patch.BorderSizePixel = 0
-			patch.Visible = false
-			patch.ZIndex = 3
-			local patchStroke = Instance.new("UIStroke")
-			patchStroke.Name = "Edge"
-			patchStroke.Color = INK
-			patchStroke.Thickness = 1
-			patchStroke.Transparency = 0.5
-			patchStroke.Parent = patch
-			patch.Parent = cell
-		end
-		local pinDot = Instance.new("Frame")
-		pinDot.Name = "Pin"
-		pinDot.AnchorPoint = Vector2.new(0.5, 0.5)
-		pinDot.Position = UDim2.fromScale(0.5, 0.5)
-		pinDot.Size = UDim2.fromOffset(12, 12)
-		pinDot.BackgroundColor3 = RED
-		pinDot.BorderSizePixel = 0
-		pinDot.Visible = false
-		pinDot.ZIndex = 5
-		local pinCorner = Instance.new("UICorner")
-		pinCorner.CornerRadius = UDim.new(1, 0)
-		pinCorner.Parent = pinDot
-		local pinStroke = Instance.new("UIStroke")
-		pinStroke.Color = PAPER
-		pinStroke.Thickness = 2
-		pinStroke.Parent = pinDot
-		pinDot.Parent = cell
 	end
 end
 

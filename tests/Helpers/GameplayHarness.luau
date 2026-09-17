@@ -183,16 +183,14 @@ function GameplayHarness.new(cfg, options)
 		getCharacterPosition = getCharacterPosition,
 		analytics = analytics,
 	})
+	local clueRng = WeightedRandom.fromSeed(options.clueSeed or 29)
 	local clues = ClueService.new({
 		config = cfg,
 		rounds = rounds,
 		sessions = sessions,
-		tools = tools,
 		clock = clock,
+		rng = clueRng,
 		getCharacterPosition = getCharacterPosition,
-		getEggPosition = function(runtime)
-			return egg:position(runtime)
-		end,
 		analytics = analytics,
 	})
 	local surveys = SurveyService.new({
@@ -338,14 +336,12 @@ function GameplayHarness.new(cfg, options)
 	h.entitlements = entitlements
 	h.clues = clues
 	h.surveys = surveys
-	function h.survey(userId, region, sub)
-		return surveys:survey(userId, { sessionToken = h.token(userId), region = region, sub = sub })
+	h.clueRng = clueRng
+	function h.survey(userId, region)
+		return surveys:survey(userId, { sessionToken = h.token(userId), region = region })
 	end
-	function h.lend(userId)
-		return clues:lend(userId, { sessionToken = h.token(userId) })
-	end
-	function h.rodAim(userId, x, y, z)
-		return clues:aim(userId, { sessionToken = h.token(userId), x = x, y = y, z = z })
+	function h.analyse(userId)
+		return clues:analyse(userId, { sessionToken = h.token(userId) })
 	end
 	h.toolEvents = toolEvents
 	h.toolRng = toolRng
