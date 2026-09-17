@@ -293,6 +293,9 @@ function ToolService.grantTimed(self: ToolService, userId: number, toolId: strin
 		track(self, "tool_acquired", { chapter = runtime.state.chapter, tool = toolId, source = source }, userId)
 		self.granted:Fire(userId, runtime, toolId, source)
 	end
+	-- Equip before the event: the projection pushed on `tools_granted` must already carry the rod as
+	-- the equipped tool, or the client syncs straight back to the hand a frame after raising it.
+	self:equip(userId, toolId)
 	self.event:Fire(runtime.state.roundId, {
 		kind = "tools_granted",
 		tools = { toolId },
@@ -300,7 +303,6 @@ function ToolService.grantTimed(self: ToolService, userId: number, toolId: strin
 		expiresInMs = math.floor(seconds * 1000 + 0.5),
 		equipped = true,
 	}, userId)
-	self:equip(userId, toolId)
 	return true
 end
 
