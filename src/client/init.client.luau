@@ -56,6 +56,22 @@ if RunService:IsStudio() then
 	game.Loaded:Connect(function()
 		PerfTrace.event("gameLoaded")
 	end)
+	if workspace:GetAttribute("SFE_PerfBareClient") then
+		-- A/B baseline: the recorder alone, no game client, to separate engine/content cost from ours.
+		local bare = Instance.new("BindableFunction")
+		bare.Name = "SFE_ClientDebug"
+		bare.OnInvoke = function()
+			local report = PerfTrace.report()
+			report.bare = true
+			report.instances = #workspace:GetDescendants()
+			return game:GetService("HttpService"):JSONEncode(report)
+		end
+		bare.Parent = player:WaitForChild("PlayerScripts")
+		player.CharacterAdded:Connect(function()
+			PerfTrace.event("characterAdded")
+		end)
+		return
+	end
 	player.CharacterAdded:Connect(function(character)
 		PerfTrace.event("characterAdded")
 		task.defer(function()
