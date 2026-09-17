@@ -258,7 +258,7 @@ Tokens.world = table.freeze({
 	promptStuds = Vector2.new(1.9, 0.52),
 	displayCardStuds = Vector2.new(2.2, 0.72),
 	padBoardStuds = Vector2.new(6.4, 2.2),
-	nextRoundBoardStuds = Vector2.new(9, 1.1), -- the barn doorway's next-search line
+	nextRoundBoardStuds = Vector2.new(18, 2.6), -- the barn doorway's next-search line (readable from spawn)
 })
 
 Tokens.zIndex = table.freeze({ world = 1, hud = 10, toast = 20, modal = 30, blocking = 40, prompt = 50, veil = 60 })
