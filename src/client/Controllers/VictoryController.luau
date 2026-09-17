@@ -3,6 +3,15 @@
 -- reveal = final-cover spiral + positional chime + glow + short camera framing (static cut under
 -- reduced motion); claim = brief gameplay input lock, winner announcement; rewards/results modal
 -- as a clean Round Complete recap (winner, reward, CONTINUE) counting up only after RewardsCommitted.
+--
+-- The notices themselves (THE EGG IS UNCOVERED!, Soryn has the Egg!, EGG RETURNED!) are the server's
+-- announcements on the AnnouncementBanner; this controller only presents the moments around them:
+--   reveal    music dip, a golden ripple across the nest, gold light rising from the Egg, a small FOV
+--             punch, the existing spiral/glow/framing;
+--   carry     a gold highlight and trail on the carrier for everyone, a gold edge glow for the carrier;
+--   return    confetti for the party; the carrier's camera eases toward the hand-over, everyone else
+--             sees a burst and a ripple there; the Round Complete card opens after this short beat
+--             (never more than RETURN_BEAT_MAX seconds; the server flow is not delayed at all).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -17,9 +26,9 @@ local Button = require(script.Parent.Parent.UI.Components.Button)
 local Fit = require(script.Parent.Parent.UI.Components.Fit)
 local Depth = require(script.Parent.Parent.UI.Components.Depth)
 local Icons = require(script.Parent.Parent.UI.Components.Icons)
-local Skin = require(script.Parent.Parent.UI.Components.Skin)
 local Confetti = require(script.Parent.Parent.UI.Components.Confetti)
 local SafeArea = require(script.Parent.Parent.UI.SafeArea)
+local ChapterLayout = require(Shared.Domain.ChapterLayout)
 
 local VictoryController = {}
 VictoryController.__index = VictoryController
@@ -27,8 +36,10 @@ VictoryController.__index = VictoryController
 export type VictoryController = typeof(setmetatable(
 	{} :: {
 		_deps: any,
-		_announcement: TextLabel?,
 		_trove: Trove.Trove,
+		_carrierGlowRemove: (() -> ())?,
+		_resultsNotBefore: number,
+		_beatToken: number,
 		stats: { reveals: number, victories: number, results: number },
 	},
 	VictoryController
@@ -47,11 +58,13 @@ function VictoryController.new(deps: {
 	haptics: any,
 	accessibility: any,
 	config: { [string]: any },
+	celebration: any?,
 }): VictoryController
 	local self = setmetatable({
 		_deps = deps,
-		_announcement = nil,
-		_carrierGlow = nil,
+		_carrierGlowRemove = nil,
+		_resultsNotBefore = 0,
+		_beatToken = 0,
 		_trove = Trove.new(),
 		stats = { reveals = 0, victories = 0, results = 0 },
 	}, VictoryController)
@@ -70,10 +83,27 @@ function VictoryController.new(deps: {
 	self._trove:add(deps.round.results:Connect(function(payload)
 		self:onResults(payload)
 	end))
+	self._trove:add(deps.round.phaseChanged:Connect(function(phase)
+		if phase == "Returning" or phase == "Abandoned" or phase == "Cutscene" then
+			self:_clearCarrierGlow()
+		end
+	end))
 	return self
 end
 
--- Reveal cue: spiral, chime, glow, camera framing (or static cut), party toast.
+-- The return beat before the Round Complete card: long enough for the confetti and the camera ease
+-- to read, never longer than RETURN_BEAT_MAX.
+VictoryController.RETURN_BEAT_SECONDS = 1.3
+VictoryController.RETURN_BEAT_MAX = 1.5
+
+function VictoryController._clearCarrierGlow(self: VictoryController)
+	if self._carrierGlowRemove then
+		self._carrierGlowRemove()
+		self._carrierGlowRemove = nil
+	end
+end
+
+-- Reveal cue: spiral, chime, glow, ripple, rising light, camera framing (or static cut).
 function VictoryController.onRevealed(self: VictoryController, payload: { [string]: any })
 	local deps = self._deps
 	self.stats.reveals += 1
@@ -82,7 +112,16 @@ function VictoryController.onRevealed(self: VictoryController, payload: { [strin
 	local eggPart = workspace:FindFirstChild("SFE_Chapter1") and workspace.SFE_Chapter1:FindFirstChild("SFE_Egg")
 	deps.audio:play(Tokens.sound.eggChime, { at = eggPart })
 	deps.haptics:pulse(0.7, 0.2)
-	deps.hud.toasts:push("The Egg is uncovered!", "success")
+	-- The notice is the server's announcement (one notice for the reveal, not a toast as well).
+	local celebration = deps.celebration
+	if celebration then
+		local pile = deps.round.pile
+		local nestRadius = if pile and pile.width and pile.cellSize then pile.width * pile.cellSize * 0.55 else 16
+		celebration:musicDip(2.2, 0.65)
+		celebration:goldenRipple(position, math.max(10, nestRadius))
+		celebration:burst(position + Vector3.new(0, 1, 0), "gold", 1.3)
+		celebration:cameraPunch(0.45, 0.5)
+	end
 	if eggPart then
 		local highlight = Instance.new("Highlight")
 		highlight.Name = "SFE_EggGlow"
@@ -181,113 +220,130 @@ function VictoryController.onCarried(self: VictoryController, payload: { [string
 	if isMe then
 		deps.hud:setObjective("Bring the Egg to the Farmer", "He is waiting between the barn and the nest")
 	else
-		-- The objective banner is the announcement; a toast saying the same thing under it was a second
-		-- notification for one pickup.
-		deps.hud:setObjective(tostring(payload.carrierName) .. " has the Egg!", "Follow them to the Farmer")
+		-- "<Name> has the Egg!" is the announcement; the objective says what to do about it, so the
+		-- same words are not on screen twice.
+		deps.hud:setObjective("Follow " .. tostring(payload.carrierName), "They are taking the Egg to the Farmer")
 	end
 	deps.audio:play(Tokens.sound.eggChime)
+	self:_clearCarrierGlow()
 	local carrier = Players:GetPlayerByUserId(payload.carrierUserId)
 	local character = carrier and carrier.Character
-	if character then
+	local celebration = deps.celebration
+	if character and celebration then
+		self._carrierGlowRemove = celebration:carrierGlow(character)
+	elseif character then
 		local highlight = Instance.new("Highlight")
 		highlight.Name = "SFE_CarrierGlow"
 		highlight.FillColor = Tokens.color.goldLight
 		highlight.FillTransparency = 0.75
 		highlight.OutlineColor = Tokens.color.gold
 		highlight.Parent = character
-		local this = self :: any
-		this._carrierGlow = highlight
+		self._carrierGlowRemove = function()
+			highlight:Destroy()
+		end
+	end
+	if isMe and celebration then
+		celebration:screenFlash("gold")
 	end
 end
 
 function VictoryController.onDropped(self: VictoryController, _payload: { [string]: any })
 	local deps = self._deps
-	local this = self :: any
-	if this._carrierGlow then
-		this._carrierGlow:Destroy()
-		this._carrierGlow = nil
-	end
+	self:_clearCarrierGlow()
 	-- One notice: the objective banner says it was dropped and what to do (it used to be a toast too).
 	deps.hud:setObjective("The Egg was dropped!", "Hold Interact on the Egg before anyone else")
 end
 
--- Winner announcement with gameplay input lock for inputLockSeconds.
+-- The Egg is home: input lock for inputLockSeconds, the victory stem, and the return beat. The
+-- "EGG RETURNED!" notice is the server's announcement; there is no local banner any more.
 function VictoryController.onVictory(self: VictoryController, payload: { [string]: any })
 	local deps = self._deps
 	self.stats.victories += 1
-	local this = self :: any
-	if this._carrierGlow then
-		this._carrierGlow:Destroy()
-		this._carrierGlow = nil
-	end
+	self:_clearCarrierGlow()
 	deps.input:setSuspended(true)
 	deps.audio:play(Tokens.sound.victoryStem)
 	deps.haptics:pulse(1, 0.25)
-	deps.camera:impulse(0.2)
-	deps.vfx:burst(
-		"sparkle",
-		(workspace.CurrentCamera and workspace.CurrentCamera.CFrame.Position or Vector3.zero) + Vector3.new(0, 1, -4),
-		deps.config.round.discoverySequence.confettiSeconds
-	)
 	local isMe = payload.finderUserId == Players.LocalPlayer.UserId
 	local text = if isMe then "You found the Egg!" else (tostring(payload.finderName) .. " found the Egg!")
 	deps.hud:setObjective(text, "Rewards on the way")
-	local label = Instance.new("TextLabel")
-	label.Name = "Announcement"
-	label.AnchorPoint = Vector2.new(0.5, 0.5)
-	label.Position = UDim2.fromScale(0.5, 0.4)
-	label.Size = UDim2.new(0.8, 0, 0, 96)
-	label.BackgroundTransparency = 1
-	label.Font = Tokens.typography.display.font
-	label.TextSize = Tokens.typography.display.size
-	label.TextColor3 = Tokens.color.inkStrong
-	label.TextStrokeTransparency = 0.6
-	label.TextStrokeColor3 = Tokens.color.goldLight
-	label.Text = text
-	label.TextTransparency = 1
-	label.ZIndex = Tokens.zIndex.toast + 1
-	label.Parent = deps.hud.stage
-	local plateMax = Instance.new("UISizeConstraint")
-	plateMax.MaxSize = Vector2.new(720, 96)
-	plateMax.Parent = label
-	local plate = Skin.label(label, "victory.plate", { zIndex = Tokens.zIndex.toast, inset = 6, name = "Plate" })
-	if plate then
-		plate.ImageTransparency = 1
-		TweenService:Create(
-			plate,
-			TweenInfo.new(Motion.duration("standard", deps.accessibility:motionSettings()), Tokens.motion.easeOut),
-			{ ImageTransparency = 0 }
-		):Play()
-	end
-	Confetti.burst(deps.hud.stage, {
-		origin = UDim2.fromScale(0.5, 0.4),
-		count = 40,
-		spread = 260,
-		motion = deps.accessibility:motionSettings(),
-		tier = deps.quality and deps.quality:tier() or nil,
-		zIndex = Tokens.zIndex.toast + 2,
-	})
-	deps.audio:play(Tokens.sound.uiConfetti)
-	local scale = Instance.new("UIScale")
-	scale.Scale = 0.8
-	scale.Parent = label
-	local motion = deps.accessibility:motionSettings()
-	TweenService:Create(label, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeOut), { TextTransparency = 0 }):Play()
-	TweenService:Create(scale, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeBack), { Scale = 1 }):Play()
-	self._announcement = label
+	self._resultsNotBefore = os.clock() + VictoryController.RETURN_BEAT_SECONDS
+	self._beatToken += 1
+	local token = self._beatToken
 	task.delay(deps.config.round.discoverySequence.inputLockSeconds, function()
 		deps.input:setSuspended(deps.modals:isBlocking())
 	end)
-	task.delay(deps.config.round.discoverySequence.winnerAnnouncementSeconds, function()
-		if label.Parent then
-			TweenService
-				:Create(label, TweenInfo.new(Motion.duration("quick", motion)), { TextTransparency = 1, TextStrokeTransparency = 1 })
-				:Play()
-			local plateArt = label:FindFirstChild("Plate")
-			if plateArt and plateArt:IsA("ImageLabel") then
-				TweenService:Create(plateArt, TweenInfo.new(Motion.duration("quick", motion)), { ImageTransparency = 1 }):Play()
-			end
+
+	local celebration = deps.celebration
+	if not celebration then
+		deps.camera:impulse(0.2)
+		Confetti.burst(deps.hud.stage, {
+			origin = UDim2.fromScale(0.5, 0.4),
+			count = 40,
+			spread = 260,
+			motion = deps.accessibility:motionSettings(),
+			tier = deps.quality and deps.quality:tier() or nil,
+			zIndex = Tokens.zIndex.toast + 2,
+		})
+		return
+	end
+	-- Where the Egg was handed over: the Farmer, or (a chapter without one) where it was claimed.
+	local layout = payload.chapter and (ChapterLayout :: any)[payload.chapter]
+	local point: Vector3? = if layout and layout.farmer then layout.farmer else deps.round.eggPosition
+	celebration:confetti(UDim2.fromScale(0.5, 0.3), 48)
+	if point then
+		celebration:burst(point + Vector3.new(0, 2, 0), "gold", 1.4)
+		celebration:goldenRipple(point, 12)
+	end
+	if isMe then
+		celebration:screenFlash("gold")
+		self:_returnCamera(point, token)
+	end
+end
+
+-- The carrier's slow beat: the camera eases toward the carrier and the hand-over point for ~0.6 s and
+-- hands control back when the card opens. Reduced motion keeps the player's camera where it is.
+function VictoryController._returnCamera(self: VictoryController, point: Vector3?, token: number)
+	local deps = self._deps
+	if deps.accessibility:reducedMotion() then
+		return
+	end
+	local camera = workspace.CurrentCamera
+	local character = Players.LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not camera or not root or not root:IsA("BasePart") then
+		return
+	end
+	local focus = if point then root.Position:Lerp(point, 0.5) + Vector3.new(0, 2.5, 0) else root.Position + Vector3.new(0, 2.5, 0)
+	local from = camera.CFrame
+	local away = from.Position - focus
+	local flat = Vector3.new(away.X, 0, away.Z)
+	local direction = if flat.Magnitude > 0.1 then flat.Unit else -root.CFrame.LookVector
+	local target = CFrame.lookAt(focus + direction * 11 + Vector3.new(0, 4.5, 0), focus)
+	camera.CameraType = Enum.CameraType.Scriptable
+	TweenService:Create(camera, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { CFrame = target }):Play()
+	task.delay(VictoryController.RETURN_BEAT_MAX, function()
+		if self._beatToken == token and camera.CameraType == Enum.CameraType.Scriptable then
+			camera.CameraType = Enum.CameraType.Custom
 		end
+	end)
+end
+
+-- The results arrive right behind the victory (the commit is synchronous); the card waits out what is
+-- left of the return beat, capped, and never opens after the party has been sent home.
+function VictoryController.onResults(self: VictoryController, payload: { [string]: any })
+	local deps = self._deps
+	self.stats.results += 1
+	local waitSeconds = math.clamp(self._resultsNotBefore - os.clock(), 0, VictoryController.RETURN_BEAT_MAX)
+	if waitSeconds <= 0.03 then
+		self:_openResults(payload)
+		return
+	end
+	task.delay(waitSeconds, function()
+		local phase = deps.round:phase()
+		if phase == nil or phase == "Returning" or phase == "Abandoned" then
+			return
+		end
+		self:_openResults(payload)
 	end)
 end
 
@@ -297,13 +353,8 @@ end
 -- included, and Tokens when any), and one green CONTINUE that sends the same ResultsAction the old
 -- primary "Search again" button sent. The reward counts up only after RewardsCommitted (which
 -- precedes ResultsProjection), and the card closes itself when the server returns the party.
-function VictoryController.onResults(self: VictoryController, payload: { [string]: any })
+function VictoryController._openResults(self: VictoryController, payload: { [string]: any })
 	local deps = self._deps
-	self.stats.results += 1
-	if self._announcement then
-		self._announcement:Destroy()
-		self._announcement = nil
-	end
 	local minimumTap = SafeArea.minimumTapTarget(deps.modals.gui, deps.config)
 	deps.modals:open("results", deps.modals.Priority.Results, true, function(container, api)
 		local cleanups: { any } = {}
@@ -539,9 +590,8 @@ function VictoryController.onResults(self: VictoryController, payload: { [string
 end
 
 function VictoryController.destroy(self: VictoryController)
-	if self._announcement then
-		self._announcement:Destroy()
-	end
+	self._beatToken += 1
+	self:_clearCarrierGlow()
 	self._trove:destroy()
 end
 
