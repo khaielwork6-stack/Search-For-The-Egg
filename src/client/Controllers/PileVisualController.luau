@@ -192,18 +192,7 @@ local function depthTint(visual: { [string]: any }, t: number, depth: number): n
 	return math.clamp(t * (1 - weight) + deep * weight, 0, 0.999)
 end
 
--- Cosmetic undulation of the coat. The logical dome is a perfect profile until it is dug, which
--- reads as a blob; rendered feathers ride this smooth deterministic wave so the mound has natural
--- rises and hollows. Aim, collision and every server number use the clean surface underneath.
-local function seatLump(visual: { [string]: any }, wx: number, wz: number): number
-	local amplitude = visual.seatLumpStuds or 0
-	if amplitude <= 0 then
-		return 0
-	end
-	local broad = math.sin(wx * 0.27 + wz * 0.17) * math.cos(wz * 0.31 - wx * 0.11)
-	local fine = math.sin((wx + wz) * 0.52 + 1.3)
-	return amplitude * (broad * 0.62 + fine * 0.38)
-end
+-- The coat's cosmetic undulation lives in FeatherLayout.seatLump (shared with server targeting).
 
 local function paletteColor(cfg: { [string]: any }, t: number): Color3
 	local palette = cfg.pile.visual.palette
@@ -382,14 +371,7 @@ end
 -- no floor overspill. Returns the length scale (0 = skip).
 function PileVisualController._rimScale(self: PileVisualController, wx: number, wz: number): number
 	local field = (self._seatField or self._field) :: PileSurface.Field
-	local visual = self._config.pile.visual
-	local dx, dz = wx - field.centreX, wz - field.centreZ
-	local r = math.sqrt(dx * dx + dz * dz)
-	local foot = field.radius * PileSurface.RIM_STRETCH - visual.rimInsetStuds
-	if r >= foot then
-		return 0
-	end
-	return math.clamp((foot - r) / visual.rimTaperStuds, visual.rimMinScale, 1)
+	return FeatherLayout.rimScale(field, self._config.pile.visual, wx, wz)
 end
 
 -- (Re)materialises one column: exposed records as targetable feathers (the stack recedes by one
@@ -426,17 +408,15 @@ function PileVisualController._applyColumn(self: PileVisualController, column: C
 		if scale <= 0 then
 			continue
 		end
-		local y, normal = self:_surfaceAt(wx, wz)
+		local _, normal = self:_surfaceAt(wx, wz)
 		-- Seat by slot, never by rank: a record's place is fixed for the round whatever gets taken
 		-- above or beside it (the server resolves the same point for its aim check).
 		-- The undulation fades out where the coat is thin: at the foot the surface is a fraction of a
 		-- stud tall, so a dip of the full amplitude buried whole feathers under the sand and opened
 		-- bare patches. Nothing may seat below the nest floor either.
-		local height = y - field.baseY
-		local lumpFade = math.clamp(height / math.max(0.01, visual.seatLumpFadeStuds or 3), 0, 1)
-		local seatY = y + FeatherLayout.seatOffset(visual, column.base, slot, column.step) + seatLump(visual, wx, wz) * scale * lumpFade
+		-- One shared formula (FeatherLayout.seatY): the server's tool targeting seats the record here too.
 		local floorY = math.max(field.baseY, (self._layout and self._layout.groundY) or field.baseY)
-		seatY = math.max(seatY, floorY + 0.06)
+		local seatY = FeatherLayout.seatY(visual, field, wx, wz, column.base, slot, column.step, scale, floorY)
 		-- Rim factor: 0 well inside the coat, 1 at the outermost strands, used to curl the edge under
 		-- instead of letting it radiate outward as blades.
 		local rimMin = visual.rimMinScale
@@ -1353,13 +1333,27 @@ function PileVisualController.detachFeather(self: PileVisualController, featherI
 		part.Size = Vector3.new(placement.width, placement.length, visual.featherThicknessStuds)
 		local column2 = cellIndex and self._columns[cellIndex]
 		part.Color = paletteColor(self._config, depthTint(visual, placement.tint, if column2 and slot then column2.base - slot else 0))
-		part.CFrame = CFrame.new(hitPosition)
+		-- A confirmed record this client was not drawing (culled, a shallower device window) leaves
+		-- from its own seat - the same point the server selected it at - never from the strike point.
+		local seatField = (self._seatField or self._field) :: PileSurface.Field
+		if column2 and slot and self._minCorner and column2.step > 0 then
+			local wx, wz = FeatherLayout.worldXZ(self._minCorner, seatField.cellSize, column2.x, column2.z, placement)
+			local floorY = math.max(seatField.baseY, (self._layout and self._layout.groundY) or seatField.baseY)
+			local scale = math.max(self:_rimScale(wx, wz), 0)
+			from = Vector3.new(wx, FeatherLayout.seatY(visual, seatField, wx, wz, column2.base, slot, column2.step, scale, floorY), wz)
+		end
+		part.CFrame = CFrame.new(from)
 		part.Parent = folder
 	end
-	-- Local prediction: mark the record taken and re-apply just this column (the delta is idempotent).
+	-- Server-confirmed removal of exactly this record: mark it taken and re-apply just this column so
+	-- the record beneath shows at once. Idempotent with the authoritative delta, whichever lands first
+	-- (a slot the delta already cleared is not counted twice).
 	if column and slot then
-		column.mask = bit32.bor(column.mask, bit32.lshift(1, slot - 1))
-		column.remaining = math.max(0, column.remaining - 1)
+		local bit = bit32.lshift(1, slot - 1)
+		if bit32.band(column.mask, bit) == 0 then
+			column.mask = bit32.bor(column.mask, bit)
+			column.remaining = math.max(0, column.remaining - 1)
+		end
 		if self._grid then
 			(self._grid :: any).remaining[column.index] = column.remaining
 		end

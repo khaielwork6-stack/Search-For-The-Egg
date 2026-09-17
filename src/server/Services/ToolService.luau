@@ -17,7 +17,6 @@ local ToolSpecs = require(Shared.Domain.ToolSpecs)
 local EconomyMath = require(Shared.EconomyMath)
 local Envelope = require(Shared.Net.Envelope)
 local Signal = require(Shared.Util.Signal)
-local CollectionService = require(script.Parent.CollectionService)
 local RoundAwards = require(script.Parent.RoundAwards)
 
 local ToolService = {}
@@ -158,6 +157,15 @@ local function vacRuntime(state: any): any
 		state.toolRuntime.featherVac = rt
 	end
 	return rt
+end
+
+-- The nozzle ray the suction follows: every tick selects from this ray, surface first.
+local function setVacAim(rt: any, aim: any, payload: any)
+	rt.aimX, rt.aimZ = aim.cx, aim.cz
+	rt.aimHitX, rt.aimHitY, rt.aimHitZ = aim.hit.X, aim.hit.Y, aim.hit.Z
+	rt.aimOrigin = payload.origin
+	rt.aimDirection = payload.direction.Unit
+	rt.aimFeatherId = if type(payload.featherId) == "number" then payload.featherId else nil
 end
 
 local function chickRuntime(state: any): any
@@ -447,13 +455,12 @@ function ToolService.actionAim(self: ToolService, userId: number, payload: { [st
 	if not rt.running then
 		return Envelope.ok({ running = false })
 	end
-	local aim = CollectionService.resolveAim(self._config, runtime, characterPosition, payload.origin, payload.direction)
+	local aim = self._collection:resolveToolAim(runtime, characterPosition, payload.origin, payload.direction, payload.featherId)
 	if not aim then
 		self:_stopVac(runtime, userId, state, "range")
 		return Envelope.ok({ running = false, reason = "range", heat = rt.heat })
 	end
-	rt.aimX, rt.aimZ = aim.cx, aim.cz
-	rt.aimHitX, rt.aimHitZ = aim.hit.X, aim.hit.Z
+	setVacAim(rt, aim, payload)
 	return Envelope.ok({ running = true, aimX = aim.hit.X, aimZ = aim.hit.Z, heat = rt.heat })
 end
 
@@ -728,7 +735,7 @@ function ToolService._startVac(
 		return reject(self, Envelope.Codes.ALREADY_DONE, "running")
 	end
 	local aim, aimCode, aimMessage =
-		CollectionService.resolveAim(self._config, runtime, characterPosition, payload.origin, payload.direction)
+		self._collection:resolveToolAim(runtime, characterPosition, payload.origin, payload.direction, payload.featherId)
 	if not aim then
 		return reject(self, aimCode :: string, aimMessage)
 	end
@@ -738,8 +745,7 @@ function ToolService._startVac(
 	end
 	local spec = self:spec(runtime, userId, "featherVac")
 	rt.running = true
-	rt.aimX, rt.aimZ = aim.cx, aim.cz
-	rt.aimHitX, rt.aimHitZ = aim.hit.X, aim.hit.Z
+	setVacAim(rt, aim, payload)
 	rt.startedAt = now
 	self.event:Fire(runtime.state.roundId, {
 		kind = "vac_state",
@@ -831,30 +837,25 @@ function ToolService._tickVac(self: ToolService, runtime: any, userId: number, s
 			self:_stopVac(runtime, userId, state, "bag_full")
 			return
 		end
-		-- Only the cells under the reticle feed the nozzle (a hair of reach so a bare spot pulls
-		-- from the feathers beside it); the vac never wanders to a fuller patch on its own.
-		local minCorner = ChapterLayout.gridMinCorner(layout, grid.width, grid.depth, grid.cellSize)
-		local localX = (rt.aimHitX or aimWorld.X) - minCorner.X
-		local localZ = (rt.aimHitZ or aimWorld.Z) - minCorner.Z
-		local radiusStuds = spec.radiusStuds or grid.cellSize
-		local cells = PileGrid.cellsWithinStuds(grid, localX, localZ, radiusStuds)
-		if #cells == 0 and spec.reachStuds then
-			local nearest = PileGrid.cellsWithinStuds(grid, localX, localZ, spec.reachStuds)[1]
-			if nearest then
-				localX, localZ = PileGrid.cellCenter(grid, nearest)
-				cells = PileGrid.cellsWithinStuds(grid, localX, localZ, radiusStuds)
-			end
-		end
-		if #cells == 0 then
+		-- Surface first (PileTargeting): the nozzle ray strikes the record under the reticle and the
+		-- suction takes the exposed records around it, nearest first, top layer before anything under
+		-- it - never a record hidden under or behind another. A bare spot pulls the nearest exposed
+		-- records within reach; the vac never wanders to a fuller patch on its own.
+		local amount = math.min(whole, if free == math.huge then whole else free)
+		local fallback = Vector3.new(rt.aimHitX or aimWorld.X, rt.aimHitY or aimWorld.Y, rt.aimHitZ or aimWorld.Z)
+		local origin = rt.aimOrigin or (fallback + Vector3.new(0, 4, 0))
+		local direction = rt.aimDirection or Vector3.new(0, -1, 0)
+		local model = self._collection:targetingModel(runtime)
+		local selection = self._collection:selectRecords(model, spec, origin, direction, amount, fallback, rt.aimFeatherId)
+		if #selection.records == 0 then
 			rt.carry = 0
 			return
 		end
-		local amount = math.min(whole, if free == math.huge then whole else free)
-		local weights = PileGrid.focusWeights(grid, cells, localX, localZ, radiusStuds, spec.focusWeight or 0.7)
-		local removals, total = PileGrid.removeFocused(grid, cells, weights, amount, spec.perCellCap)
+		local removals, total = self._collection:removeSelection(grid, selection)
 		if total == 0 then
 			return
 		end
+		local strike = selection.strike or fallback
 		local cleared = 0
 		for _, removal in ipairs(removals) do
 			self._rounds:queueDelta(runtime.state.roundId, removal.index, removal.remaining, removal.mask)
@@ -871,10 +872,11 @@ function ToolService._tickVac(self: ToolService, runtime: any, userId: number, s
 			kind = "vac_pull",
 			userId = userId,
 			cells = removals,
+			featherIds = selection.featherIds,
 			awarded = award.standard,
-			x = rt.aimHitX or aimWorld.X,
-			y = aimWorld.Y,
-			z = rt.aimHitZ or aimWorld.Z,
+			x = strike.X,
+			y = strike.Y,
+			z = strike.Z,
 		})
 		self.awarded:Fire(userId, runtime, {
 			toolId = "featherVac",
@@ -886,11 +888,12 @@ function ToolService._tickVac(self: ToolService, runtime: any, userId: number, s
 			capacity = award.capacity,
 			infinite = award.infinite,
 			bagFull = award.bagFull,
-			hitX = rt.aimHitX or aimWorld.X,
-			hitY = aimWorld.Y + 1,
-			hitZ = rt.aimHitZ or aimWorld.Z,
+			hitX = strike.X,
+			hitY = strike.Y + 1,
+			hitZ = strike.Z,
 			removedFraction = PileGrid.removedFraction(grid),
 			cells = removals,
+			featherIds = selection.featherIds,
 			heat = rt.heat,
 		})
 		if award.bagFull then

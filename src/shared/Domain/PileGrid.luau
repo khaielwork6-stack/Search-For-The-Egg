@@ -172,6 +172,36 @@ function PileGrid.removeFeather(grid: Grid, cell: Cell, slot: number): Removal?
 	return { index = cell.index, remaining = cell.remaining, removed = 1, mask = cell.taken, slots = { slot } }
 end
 
+-- Removes exactly the listed records, in order (a surface-first tool selection). Records already
+-- taken are skipped. Returns one removal per touched cell, in the order each cell first appears (its
+-- `slots` in pick order), and the total removed.
+function PileGrid.removeRecords(grid: Grid, records: { { cell: Cell, slot: number } }): ({ Removal }, number)
+	local order: { Cell } = {}
+	local taken: { [number]: { number } } = {}
+	local total = 0
+	for _, record in ipairs(records) do
+		local cell, slot = record.cell, record.slot
+		if slot >= 1 and slot <= cell.base and slot % 1 == 0 and not PileGrid.isTaken(cell, slot) then
+			cell.taken = bit32.bor(cell.taken, slotBit(slot))
+			cell.remaining -= 1
+			grid.removed += 1
+			total += 1
+			if not taken[cell.index] then
+				taken[cell.index] = {}
+				table.insert(order, cell)
+			end
+			table.insert(taken[cell.index], slot)
+		end
+	end
+	local removals: { Removal } = {}
+	for _, cell in ipairs(order) do
+		local slots = taken[cell.index]
+		grid.version += 1
+		table.insert(removals, { index = cell.index, remaining = cell.remaining, removed = #slots, mask = cell.taken, slots = slots })
+	end
+	return removals, total
+end
+
 -- Atomically removes up to `amount` feathers from the top of the cell's stack (area tools, debug).
 -- Returns the removal (removed may be 0).
 function PileGrid.remove(grid: Grid, cell: Cell, amount: number): Removal

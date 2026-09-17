@@ -746,6 +746,31 @@ local function aimRay(aimTarget: Vector3?): (Vector3?, Vector3?, string?)
 	return origin, direction, nil
 end
 
+-- Area-tool aim (Nest Rake, Feather Vac): the crosshair ray - the same ray the pile resolves the
+-- reticle record on - plus that record's id as a hint. The server re-resolves the strike from the ray
+-- (surface first) and only honours the hint when the record is on the ray and in sight, so the tool
+-- takes what the player is looking at. `aimTarget` (Studio automation) keeps the body-origin ray.
+function ToolController._toolAim(self: ToolController, aimTarget: Vector3?): (Vector3?, Vector3?, number?)
+	local origin, direction = aimRay(aimTarget)
+	local pile = self._deps.pile
+	if aimTarget or not origin or not pile or not pile.aimRay then
+		return origin, direction, nil
+	end
+	local rayOrigin, rayDirection = pile:aimRay()
+	if not rayOrigin or not rayDirection or rayDirection.Magnitude < 1e-6 then
+		return origin, direction, nil
+	end
+	local target = pile:resolveUnderCursor()
+	local hint = if target then target.featherId else nil
+	-- First person: the camera is the eye, well inside the server's origin tolerance. Any other camera
+	-- aims from the body through the crosshair's world point instead.
+	if (rayOrigin - (origin - Vector3.new(0, 1.5, 0))).Magnitude <= 3 then
+		return rayOrigin, rayDirection.Unit, hint
+	end
+	local point = if target then target.position else rayOrigin + rayDirection.Unit * self._deps.config.interaction.defaultRangeStuds
+	return origin, (point - origin).Unit, hint
+end
+
 function ToolController.canCollect(self: ToolController): boolean
 	return self._enabled and os.clock() >= self._nextAllowedAt and self._deps.round:phase() == "Searching"
 end
@@ -769,6 +794,10 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 	end
 	local token = self._deps.round:sessionToken()
 	local origin, direction = aimRay(aimTarget)
+	local hintId: number? = nil
+	if toolId == "nestRake" then
+		origin, direction, hintId = self:_toolAim(aimTarget)
+	end
 	if not origin or not direction or not token then
 		return false
 	end
@@ -839,7 +868,7 @@ function ToolController.tryCollect(self: ToolController, aimTarget: Vector3?): b
 			direction = direction,
 			toolId = toolId,
 			requestId = self._requestCounter,
-			featherId = featherId,
+			featherId = featherId or hintId,
 		})
 	end)
 	self._inFlight = false
@@ -1043,7 +1072,7 @@ end
 -- Vac aim update from the reticle (camera ray), never yielding the render step.
 function ToolController._sendVacAim(self: ToolController)
 	local token = self._deps.round:sessionToken()
-	local origin, direction = aimRay(nil)
+	local origin, direction, hintId = self:_toolAim(nil)
 	if not token or not origin or not direction then
 		return
 	end
@@ -1056,6 +1085,7 @@ function ToolController._sendVacAim(self: ToolController)
 				toolId = "featherVac",
 				origin = origin,
 				direction = direction,
+				featherId = hintId,
 			})
 		end)
 		self._aimInFlight = false
@@ -1075,12 +1105,18 @@ function ToolController.beginAction(self: ToolController, aimTarget: Vector3?): 
 	local toolId = self._equipped
 	local token = self._deps.round:sessionToken()
 	local origin, direction = aimRay(aimTarget)
+	local hintId: number? = nil
+	if toolId == "featherVac" then
+		origin, direction, hintId = self:_toolAim(aimTarget)
+	end
 	if not token or not origin or not direction then
 		return { ok = false, code = "no_character" }
 	end
 	self.stats.sent += 1
-	local result =
-		self._deps.net:request("ToolActionBegin", { sessionToken = token, toolId = toolId, origin = origin, direction = direction })
+	local result = self._deps.net:request(
+		"ToolActionBegin",
+		{ sessionToken = token, toolId = toolId, origin = origin, direction = direction, featherId = hintId }
+	)
 	if result.ok then
 		self.stats.accepted += 1
 		self._swing = 1

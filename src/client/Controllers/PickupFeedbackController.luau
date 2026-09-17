@@ -343,10 +343,18 @@ end
 -- Confirmed pick: the transaction from release to landing
 -- ---------------------------------------------------------------------------------------------
 
+-- The exact records the server removed, in the order it chose them. Nothing else ever animates: the
+-- cavity the player sees is the reward they got.
 local function ids(data: { [string]: any }): { number }
 	local list = {}
 	if data.featherId then
 		table.insert(list, data.featherId)
+		return list
+	end
+	if type(data.featherIds) == "table" then
+		for _, featherId in ipairs(data.featherIds) do
+			table.insert(list, featherId)
+		end
 		return list
 	end
 	for _, removal in ipairs(data.cells or {}) do
