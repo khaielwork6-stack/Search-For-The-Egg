@@ -78,7 +78,9 @@ function ObjectiveController.apply(self: ObjectiveController, step: string, inRo
 		self._lobbyStatus()
 	elseif step == Objectives.COMPLETE and not inRound then
 		self._deps.hud:setObjective("Ready for another search", "Enter the henhouse doorway when you like")
-	elseif copy then
+	elseif copy and not (inRound and self._deps.round:phase() == "EggRevealed") then
+		-- Once the Egg is out the Egg flow owns the pill ("Grab the Egg!", "Follow <Name>"); a late
+		-- tutorial update used to put "Gather 25 feathers" back over it.
 		self._deps.hud:setObjective(copy.title, copy.detail)
 	end
 	self:_highlightTarget()
