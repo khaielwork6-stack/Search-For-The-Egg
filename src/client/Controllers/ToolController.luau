@@ -319,7 +319,9 @@ function ToolController._syncFromPlayer(self: ToolController, player: { [string]
 	end
 	self._owned = owned
 	if player.equippedTool and player.equippedTool ~= self._equipped then
-		self._equipped = player.equippedTool
+		-- Through the announcing path: a projection can carry a new tool before the grant event does
+		-- (a lent rod), and the viewmodel and hotbar only follow `equippedChanged`.
+		self:_applyEquipped(player.equippedTool)
 	end
 	local vac = player.toolRuntime and player.toolRuntime.featherVac
 	if vac then
