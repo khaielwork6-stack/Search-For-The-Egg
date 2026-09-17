@@ -56,17 +56,23 @@ function LobbyOffer.create(parent: Instance, options: Options): Offer?
 	local scale = Instance.new("UIScale")
 	scale.Parent = frame
 
-	-- Glow: the same art blurred outward by drawing it larger and very faint behind the button.
-	local glow = Instance.new("ImageLabel")
+	-- Glow: a soft gold rim just outside the tile. (It used to be the art itself drawn larger and faint,
+	-- which printed a ghost "[PERMANENT]" under the tile.)
+	local glow = Instance.new("Frame")
 	glow.Name = "Glow"
 	glow.AnchorPoint = Vector2.new(0.5, 0.5)
 	glow.Position = UDim2.fromScale(0.5, 0.5)
-	glow.Size = UDim2.fromScale(1.16, 1.16)
+	glow.Size = UDim2.fromScale(0.94, 0.94)
 	glow.BackgroundTransparency = 1
-	glow.Image = image
-	glow.ImageColor3 = Tokens.color.goldLight
-	glow.ImageTransparency = offer.glowTransparency
 	glow.ZIndex = frame.ZIndex
+	local glowCorner = Instance.new("UICorner")
+	glowCorner.CornerRadius = UDim.new(0.18, 0)
+	glowCorner.Parent = glow
+	local glowStroke = Instance.new("UIStroke")
+	glowStroke.Color = Tokens.color.goldLight
+	glowStroke.Thickness = 6
+	glowStroke.Transparency = offer.glowTransparency
+	glowStroke.Parent = glow
 	glow.Parent = frame
 
 	local button = Instance.new("ImageButton")

@@ -41,7 +41,9 @@ function Fit.text(parent: Instance, name: string, text: string, options: TextOpt
 	label.TextColor3 = opts.color or Tokens.color.inkStrong
 	label.Text = if opts.upper then string.upper(text) else text
 	label.TextScaled = true
-	label.TextWrapped = opts.wrap ~= false
+	-- Always wrapped: in practice TextWrapped = false left TextScaled labels at their minimum size (the
+	-- HUD gem count, 17 Sep 2026), so `wrap` is ignored and single-word labels simply never break.
+	label.TextWrapped = true
 	label.TextXAlignment = opts.align or Enum.TextXAlignment.Center
 	label.TextYAlignment = opts.valign or Enum.TextYAlignment.Center
 	label.ZIndex = opts.zIndex or 1

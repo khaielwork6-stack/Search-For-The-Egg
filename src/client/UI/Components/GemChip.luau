@@ -113,7 +113,7 @@ function GemChip.build(
 		zIndex = z + 2,
 		outline = 2,
 		outlineColor = Tokens.color.outline,
-		wrap = false,
+		-- No wrap = false: TextWrapped off disables TextScaled and the count renders at the minimum size.
 		anchor = Vector2.new(0, 0.5),
 		align = Enum.TextXAlignment.Center,
 	})
