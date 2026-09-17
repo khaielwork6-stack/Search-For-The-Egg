@@ -384,7 +384,7 @@ local clues = ClueService.new({
 	getCharacterPosition = getCharacterPosition,
 	analytics = analytics,
 })
--- Molly the Mole: one crate of normal feathers for the party's single survey of the round.
+-- Molly the Mole: crates of normal feathers for the party's three narrowing surveys of the round.
 local surveys = SurveyService.new({
 	config = config,
 	rounds = rounds,
@@ -1180,27 +1180,34 @@ registry:onRequest("SurveySelect", function(player, payload)
 	return surveys:select(player.UserId, payload)
 end)
 -- The reading belongs to the party; the live pick is shown to the other members at the station.
-surveys.completed:Connect(function(runtime, userId, _state, projection)
+surveys.completed:Connect(function(runtime, userId, _reading, projection)
 	local payer = playerData:playerOf(userId)
 	local payerName = if payer and typeof(payer) == "Instance" then (payer :: Player).DisplayName else "A forager"
+	local latest = projection.latest
 	for _, member in ipairs(memberPlayers(runtime.state.members)) do
 		send(member, "SurveyCompleted", {
 			roundId = runtime.state.roundId,
-			region = projection.region,
-			signal = projection.signal,
-			title = projection.title,
-			short = projection.short,
-			text = projection.text,
+			tier = latest.tier,
+			region = latest.region,
+			sub = latest.sub,
+			id = latest.id,
+			signal = latest.signal,
+			title = latest.title,
+			short = latest.short,
+			text = latest.text,
+			cellX = latest.cellX,
+			cellZ = latest.cellZ,
 			byUserId = userId,
 			byName = payerName,
+			reading = latest,
 			survey = projection,
 		})
 	end
 end)
-surveys.selected:Connect(function(runtime, userId, region)
+surveys.selected:Connect(function(runtime, userId, region, sub, tier)
 	for _, member in ipairs(memberPlayers(runtime.state.members)) do
 		if member.UserId ~= userId then
-			send(member, "SurveySelection", { roundId = runtime.state.roundId, byUserId = userId, region = region })
+			send(member, "SurveySelection", { roundId = runtime.state.roundId, byUserId = userId, region = region, sub = sub, tier = tier })
 		end
 	end
 end)

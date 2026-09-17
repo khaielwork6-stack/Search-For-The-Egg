@@ -25,6 +25,7 @@ MollyStation.PLACEHOLDER_TAG = "SFE_ChapterShell"
 MollyStation.RIG_SCALE = 0.95
 MollyStation.TILE_PITCH = 1.5 -- tile size plus gap
 MollyStation.TILE_SIZE = 1.36
+MollyStation.SUB_TILE_SIZE = 0.4 -- nine patches across one tile, with a hair of gap
 
 local IRON = Color3.fromRGB(70, 72, 78)
 local IRON_DARK = Color3.fromRGB(44, 46, 50)
@@ -328,6 +329,48 @@ local function buildMap(station: Model, base: CFrame, tableTop: number): (Vector
 	ring.PrimaryPart = hub
 	tag(ring)
 	ring.Parent = station
+	-- The second survey's map: nine small patch tiles the client lays over the region read first,
+	-- numbered like the regions (1 2 3 / 4 5 6 / 7 8 9, barn -> fence, back -> front). Parked under
+	-- the plinth and invisible until a party has its first reading.
+	local subSize = MollyStation.SUB_TILE_SIZE
+	for _, sub in ipairs(NestSurvey.SUBS) do
+		local subTile = part(
+			station,
+			"SubTile_" .. sub,
+			Vector3.new(subSize, 0.08, subSize),
+			CFrame.new(centre + Vector3.new(0, -1.2, 0)),
+			PARCHMENT_TILE,
+			Enum.Material.SmoothPlastic
+		)
+		subTile.CanQuery = true
+		subTile.Transparency = 1
+		subTile:SetAttribute("SFE_Sub", sub)
+		local subGui = surface(subTile, Enum.NormalId.Top, 120)
+		local subFace = Instance.new("Frame")
+		subFace.Name = "Sheet"
+		subFace.BackgroundTransparency = 1
+		subFace.Size = UDim2.fromScale(1, 1)
+		subFace.Rotation = 180
+		subFace.Parent = subGui
+		local subId = label(subFace, "Id", tostring(sub), UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Enum.Font.FredokaOne, 30, INK)
+		subId.TextTransparency = 1
+	end
+	-- The third survey's pin: a brass post with a red head, dropped by the client on the Egg's cell.
+	local pin = Instance.new("Model")
+	pin.Name = "PinMarker"
+	local post = part(pin, "Post", Vector3.new(0.06, 0.6, 0.06), CFrame.new(centre + Vector3.new(0, -1.5, 0)), BRASS, Enum.Material.Metal)
+	post.Transparency = 1
+	local head = ball(pin, "Head", 0.16, CFrame.new(centre + Vector3.new(0, -1.2, 0)), RED, Enum.Material.Neon)
+	head.Transparency = 1
+	local headLight = Instance.new("PointLight")
+	headLight.Name = "Light"
+	headLight.Color = RED
+	headLight.Brightness = 0
+	headLight.Range = 3
+	headLight.Parent = head
+	pin.PrimaryPart = post
+	tag(pin)
+	pin.Parent = station
 	-- Landmark signs: upright planks on posts at the rim, all facing the players' side, with a wooden
 	-- arrow pointing the way the sign names.
 	local signs = {
@@ -740,37 +783,52 @@ local function buildBoard(station: Model, base: CFrame)
 	)
 	part(station, "ResultBoardFrame", Vector3.new(4.7, 4.3, 0.1), origin * CFrame.new(0, 4.5, -0.02) * lean, IRON, Enum.Material.Metal)
 	local gui = surface(board, Enum.NormalId.Front, 80)
-	label(gui, "Title", "NEST SURVEY", UDim2.new(1, 0, 0, 52), UDim2.fromScale(0, 0.02), Enum.Font.FredokaOne, 40, INK)
+	label(gui, "Title", "NEST SURVEY", UDim2.new(1, 0, 0, 46), UDim2.fromScale(0, 0.02), Enum.Font.FredokaOne, 40, INK)
 	local status = label(
 		gui,
 		"Status",
 		"NOT YET RUN",
-		UDim2.new(1, 0, 0, 30),
-		UDim2.fromScale(0, 0.17),
+		UDim2.new(1, 0, 0, 22),
+		UDim2.fromScale(0, 0.165),
 		Enum.Font.GothamMedium,
-		20,
+		18,
 		Color3.fromRGB(140, 120, 100)
 	)
 	status.Name = "Status"
+	-- The list of readings, one line each, written by the client as the party buys them.
+	for i = 1, 3 do
+		local line = label(
+			gui,
+			"Reading" .. i,
+			"",
+			UDim2.new(0.96, 0, 0, 15),
+			UDim2.fromScale(0.02, 0.235 + (i - 1) * 0.048),
+			Enum.Font.GothamBold,
+			13,
+			RED,
+			Enum.TextXAlignment.Left
+		)
+		line.Visible = false
+	end
 	-- Landmarks around the grid.
-	label(gui, "LandBack", NestSurvey.LANDMARKS.top, UDim2.new(0.5, 0, 0, 22), UDim2.fromScale(0.25, 0.25), Enum.Font.FredokaOne, 16, INK)
+	label(gui, "LandBack", NestSurvey.LANDMARKS.top, UDim2.new(0.5, 0, 0, 18), UDim2.fromScale(0.25, 0.385), Enum.Font.FredokaOne, 16, INK)
 	label(
 		gui,
 		"LandFront",
 		NestSurvey.LANDMARKS.bottom,
-		UDim2.new(0.5, 0, 0, 22),
-		UDim2.fromScale(0.25, 0.93),
+		UDim2.new(0.5, 0, 0, 18),
+		UDim2.fromScale(0.25, 0.935),
 		Enum.Font.FredokaOne,
 		16,
 		INK
 	)
-	label(gui, "LandBarn", NestSurvey.LANDMARKS.left, UDim2.new(0.15, 0, 0, 22), UDim2.fromScale(0.02, 0.58), Enum.Font.FredokaOne, 16, INK)
+	label(gui, "LandBarn", NestSurvey.LANDMARKS.left, UDim2.new(0.15, 0, 0, 22), UDim2.fromScale(0.02, 0.66), Enum.Font.FredokaOne, 16, INK)
 	label(
 		gui,
 		"LandFence",
 		NestSurvey.LANDMARKS.right,
 		UDim2.new(0.15, 0, 0, 22),
-		UDim2.fromScale(0.83, 0.58),
+		UDim2.fromScale(0.83, 0.66),
 		Enum.Font.FredokaOne,
 		16,
 		INK
@@ -778,8 +836,8 @@ local function buildBoard(station: Model, base: CFrame)
 	local grid = Instance.new("Frame")
 	grid.Name = "Grid"
 	grid.BackgroundTransparency = 1
-	grid.Position = UDim2.fromScale(0.2, 0.32)
-	grid.Size = UDim2.fromScale(0.6, 0.6)
+	grid.Position = UDim2.fromScale(0.2, 0.44)
+	grid.Size = UDim2.fromScale(0.6, 0.49)
 	grid.Parent = gui
 	for _, region in ipairs(NestSurvey.REGIONS) do
 		local row, col = NestSurvey.rowCol(region)
@@ -814,6 +872,44 @@ local function buildBoard(station: Model, base: CFrame)
 			cross.Visible = false
 			cross.Parent = cell
 		end
+		-- The second reading's nine patches inside this cell and the third reading's pin, both
+		-- hidden until the party buys them.
+		for _, sub in ipairs(NestSurvey.SUBS) do
+			local subRow, subCol = NestSurvey.subRowCol(sub)
+			local patch = Instance.new("Frame")
+			patch.Name = "Sub_" .. sub
+			patch.Position = UDim2.fromScale((subCol - 1) / 3 + 0.02, (subRow - 1) / 3 + 0.02)
+			patch.Size = UDim2.fromScale(1 / 3 - 0.04, 1 / 3 - 0.04)
+			patch.BackgroundColor3 = STRAW
+			patch.BackgroundTransparency = 0.35
+			patch.BorderSizePixel = 0
+			patch.Visible = false
+			patch.ZIndex = 3
+			local patchStroke = Instance.new("UIStroke")
+			patchStroke.Name = "Edge"
+			patchStroke.Color = INK
+			patchStroke.Thickness = 1
+			patchStroke.Transparency = 0.5
+			patchStroke.Parent = patch
+			patch.Parent = cell
+		end
+		local pinDot = Instance.new("Frame")
+		pinDot.Name = "Pin"
+		pinDot.AnchorPoint = Vector2.new(0.5, 0.5)
+		pinDot.Position = UDim2.fromScale(0.5, 0.5)
+		pinDot.Size = UDim2.fromOffset(12, 12)
+		pinDot.BackgroundColor3 = RED
+		pinDot.BorderSizePixel = 0
+		pinDot.Visible = false
+		pinDot.ZIndex = 5
+		local pinCorner = Instance.new("UICorner")
+		pinCorner.CornerRadius = UDim.new(1, 0)
+		pinCorner.Parent = pinDot
+		local pinStroke = Instance.new("UIStroke")
+		pinStroke.Color = PAPER
+		pinStroke.Thickness = 2
+		pinStroke.Parent = pinDot
+		pinDot.Parent = cell
 	end
 end
 

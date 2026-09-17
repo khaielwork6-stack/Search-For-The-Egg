@@ -2,9 +2,11 @@
 -- Molly the Mole on the client. Owns everything the player sees of her and her machine: the
 -- nameplate, the outline while her prompt is in reach, the idle (looking between the pile and the
 -- map, goggles, notes, tapping tiles, the crank, a drill test, an ear to the table, greeting who
--- walks up), the map's region selection (mouse hover and click, touch, gamepad and keyboard), the
--- live pick relayed to the party, the trade request, the full survey sequence after a committed
--- trade, and the result on the map and the board from the round snapshot.
+-- walks up), the map's selection (mouse hover and click, touch, gamepad and keyboard) for each of
+-- the round's three narrowing surveys - a region, then a patch inside it on a zoomed map of nine
+-- small tiles laid over the chosen region, then the pin with nothing to choose - the live pick
+-- relayed to the party, the trade request, the full survey sequence after a committed trade, and
+-- the readings on the map and the board from the round snapshot.
 --
 -- The rig arrives anchored; limbs are freed locally and the Motor6D C0s driven from here. Every
 -- resource a mode takes (input, cursor, camera, props) is returned by one trove with a watchdog.
@@ -41,12 +43,29 @@ local WATCHDOG_GRACE = 4
 local STRAW = Color3.fromRGB(226, 196, 132)
 local STRAW_LIT = Color3.fromRGB(255, 226, 150)
 local STRAW_HOVER = Color3.fromRGB(240, 214, 150)
+local STRAW_DIM = Color3.fromRGB(168, 150, 118) -- the eight regions not being subdivided
 local NONE_TINT = Color3.fromRGB(170, 176, 190)
 local WEAK_TINT = Color3.fromRGB(240, 190, 110)
 local STRONG_TINT = Color3.fromRGB(255, 214, 96)
+local NEAR_TINT = Color3.fromRGB(248, 222, 176)
+local BLUE_GREY = Color3.fromRGB(90, 110, 140)
 local RED = Color3.fromRGB(196, 52, 44)
 local PAPER = Color3.fromRGB(246, 236, 212)
 local INK = Color3.fromRGB(60, 44, 32)
+local PIN_DROP_SECONDS = 0.3
+
+local function tintFor(signal: string?): Color3
+	if signal == "strong" or signal == "pin" then
+		return STRONG_TINT
+	elseif signal == "weak" then
+		return WEAK_TINT
+	end
+	return NONE_TINT
+end
+
+local function inkFor(signal: string?): Color3
+	return if signal == "none" then BLUE_GREY else RED
+end
 
 local RIG_PARTS = { "HumanoidRootPart", "Head", "UpperTorso", "RightUpperArm", "RightLowerArm", "LeftUpperArm", "LeftLowerArm" }
 local RIG_MOTORS = {
@@ -76,10 +95,31 @@ local STATION_PARTS = {
 	"Whistle",
 	"CrankWheel",
 	"MapPlinth",
+	"SubTile_1",
+	"SubTile_9",
+	"PinMarker",
 }
 
 type Pivoted = { part: BasePart, rest: CFrame, pivot: Vector3, axis: Vector3 }
 type SpinGroup = { rest: CFrame, pieces: { { part: BasePart, rel: CFrame } } }
+-- The zoomed map: which region the nine patch tiles sit on, and which patch is chosen / hovered /
+-- already read (with its signal). nil region parks the patches under the plinth.
+type SubGrid = { region: string?, chosen: number?, hovered: number?, signal: string? }
+-- The pin on the map: the region tile it stands on and where inside it (0..1 along x and z).
+type PinAt = { region: string, fx: number, fz: number }
+type Selection = {
+	trove: Trove.Trove,
+	tier: string, -- "region" | "subcell" | "pin"
+	baseRegion: string?, -- tiers 2 and 3: the region the first reading measured
+	region: string?,
+	sub: number?,
+	hovered: string?,
+	hoveredSub: number?,
+	sent: string?, -- the last relayed pick, as "B2" / "B2-5"
+	panel: any,
+	canSurvey: boolean,
+	baseline: any?,
+}
 
 export type MollyController = typeof(setmetatable(
 	{} :: {
@@ -91,6 +131,11 @@ export type MollyController = typeof(setmetatable(
 		_highlights: { Highlight },
 		_motors: { [string]: { motor: Motor6D, base: CFrame } },
 		_tiles: { [string]: { part: BasePart, restY: number, tufts: { { part: BasePart, rest: CFrame } }, lift: number, color: Color3 } },
+		_subTiles: { [number]: { part: BasePart, label: TextLabel?, color: Color3 } },
+		_subGrid: SubGrid,
+		_pin: { model: Model, post: BasePart, head: BasePart, light: PointLight?, parkCF: CFrame }?,
+		_pinAt: PinAt?,
+		_pinDropAt: number,
 		_mapCentre: Vector3,
 		_pivots: { [string]: Pivoted },
 		_gears: { SpinGroup },
@@ -102,10 +147,10 @@ export type MollyController = typeof(setmetatable(
 		_yaw: number,
 		_pitch: number,
 		_hop: number,
-		_selection: { trove: Trove.Trove, region: string?, hovered: string?, sent: string?, panel: any, canSurvey: boolean }?,
+		_selection: Selection?,
 		_sequence: { trove: Trove.Trove, done: boolean, committed: boolean, data: any, panel: any? }?,
 		_pending: boolean,
-		_remoteSelection: string?,
+		_remoteSelection: { region: string?, sub: number? }?,
 		_lamps: { [string]: { part: BasePart, light: PointLight, level: number } },
 		_ring: { bars: { BasePart }, sparks: { BasePart }, hub: BasePart, region: string?, restY: number }?,
 		_gaugeLevel: number,
@@ -153,6 +198,11 @@ function MollyController.new(deps: {
 		_highlights = {},
 		_motors = {},
 		_tiles = {},
+		_subTiles = {},
+		_subGrid = { region = nil, chosen = nil, hovered = nil, signal = nil },
+		_pin = nil,
+		_pinAt = nil,
+		_pinDropAt = 0,
 		_mapCentre = Vector3.zero,
 		_pivots = {},
 		_gears = {},
@@ -383,6 +433,33 @@ function MollyController._bindReady(self: MollyController, rig: Model, station: 
 			self._tiles[region] = { part = tile, restY = tile.Position.Y, tufts = tufts, lift = 0, color = tile.Color }
 		end
 	end
+	-- The zoomed map's nine patch tiles and the pin, parked under the plinth until used.
+	self._subTiles = {}
+	for _, sub in ipairs(NestSurvey.SUBS) do
+		local subTile = station:FindFirstChild("SubTile_" .. sub)
+		if subTile and subTile:IsA("BasePart") then
+			local gui = subTile:FindFirstChild("Gui")
+			local sheet = gui and gui:FindFirstChild("Sheet")
+			local id = sheet and sheet:FindFirstChild("Id")
+			self._subTiles[sub] = { part = subTile, label = if id and id:IsA("TextLabel") then id else nil, color = subTile.Color }
+		end
+	end
+	self._subGrid = { region = nil, chosen = nil, hovered = nil, signal = nil }
+	self._pin = nil
+	self._pinAt = nil
+	local pinModel = station:FindFirstChild("PinMarker")
+	local pinPost = pinModel and pinModel:FindFirstChild("Post")
+	local pinHead = pinModel and pinModel:FindFirstChild("Head")
+	if pinModel and pinModel:IsA("Model") and pinPost and pinPost:IsA("BasePart") and pinHead and pinHead:IsA("BasePart") then
+		local light = pinHead:FindFirstChild("Light")
+		self._pin = {
+			model = pinModel,
+			post = pinPost,
+			head = pinHead,
+			light = if light and light:IsA("PointLight") then light else nil,
+			parkCF = pinPost.CFrame,
+		}
+	end
 	-- Pivoted pieces: gauge needle (about the gauge's normal), lever (about its hinge), seismo arm.
 	self._pivots = {}
 	local gauge = station:FindFirstChild("GaugeNeedle")
@@ -485,6 +562,10 @@ function MollyController._bindReady(self: MollyController, rig: Model, station: 
 		self._station = nil
 		self._motors = {}
 		self._tiles = {}
+		self._subTiles = {}
+		self._subGrid = { region = nil, chosen = nil, hovered = nil, signal = nil }
+		self._pin = nil
+		self._pinAt = nil
 		self._drill = nil
 		self._gears = {}
 		self._crank = nil
@@ -533,6 +614,106 @@ end
 function MollyController._tilePosition(self: MollyController, region: string): Vector3?
 	local tile = self._tiles[region]
 	return tile and tile.part.Position or nil
+end
+
+-- Where a patch tile sits on a region tile: thirds of the tile, at the tile's current height.
+function MollyController._subTilePosition(self: MollyController, region: string, sub: number): Vector3?
+	local tile = self._tiles[region]
+	if not tile then
+		return nil
+	end
+	local row, col = NestSurvey.subRowCol(sub)
+	local pitch = tile.part.Size.X / 3
+	local p = tile.part.Position
+	return Vector3.new(p.X + (col - 2) * pitch, p.Y + tile.part.Size.Y / 2 + 0.06, p.Z + (row - 2) * pitch)
+end
+
+-- Where the pin stands: a fraction across a region tile, above the patch tiles.
+function MollyController._pinPosition(self: MollyController, at: PinAt): Vector3?
+	local tile = self._tiles[at.region]
+	if not tile then
+		return nil
+	end
+	local p = tile.part.Position
+	return Vector3.new(p.X + (at.fx - 0.5) * tile.part.Size.X, p.Y + tile.part.Size.Y / 2 + 0.1, p.Z + (at.fz - 0.5) * tile.part.Size.Z)
+end
+
+-- The round's survey as the snapshot projects it, or the fresh shape before any scan.
+function MollyController._surveyInfo(self: MollyController): { [string]: any }
+	local round = self._deps.round.round
+	local survey = round and round.phase ~= "Returning" and round.survey or nil
+	if survey and survey.readings then
+		return survey
+	end
+	return NestSurvey.project(self._deps.config, nil)
+end
+
+-- Lays the patch tiles over a region (or parks them). `chosen` is tinted by `signal` when given.
+function MollyController._setSubGrid(self: MollyController, grid: SubGrid)
+	self._subGrid = grid
+	self:_placeSubTiles()
+end
+
+function MollyController._placeSubTiles(self: MollyController)
+	local grid = self._subGrid
+	local region = grid.region
+	local tile = region and self._tiles[region]
+	for sub, entry in pairs(self._subTiles) do
+		if not (region and tile) then
+			entry.part.Transparency = 1
+			entry.part.CFrame = CFrame.new(self._mapCentre + Vector3.new(0, -1.2, 0))
+			if entry.label then
+				entry.label.TextTransparency = 1
+			end
+			continue
+		end
+		local pos = self:_subTilePosition(region :: string, sub)
+		if pos then
+			entry.part.CFrame = CFrame.new(pos + Vector3.new(0, if sub == grid.hovered then 0.03 else 0, 0))
+		end
+		entry.part.Transparency = 0
+		if entry.label then
+			entry.label.TextTransparency = 0
+		end
+		if sub == grid.chosen then
+			entry.part.Color = if grid.signal then tintFor(grid.signal) else STRAW_LIT
+		elseif sub == grid.hovered then
+			entry.part.Color = STRAW_HOVER
+		else
+			entry.part.Color = entry.color
+		end
+	end
+end
+
+-- Stands the pin on the map (or parks it). The drop animation runs from `_pinDropAt`.
+function MollyController._placePin(self: MollyController, now: number)
+	local pin = self._pin
+	if not pin then
+		return
+	end
+	local at = self._pinAt
+	local pos = at and self:_pinPosition(at)
+	if not pos then
+		pin.post.CFrame = pin.parkCF
+		pin.head.CFrame = pin.parkCF + Vector3.new(0, 0.3, 0)
+		pin.post.Transparency = 1
+		pin.head.Transparency = 1
+		if pin.light then
+			pin.light.Brightness = 0
+		end
+		return
+	end
+	local reduced = self._deps.accessibility:motionSettings().reducedMotion
+	local drop = if reduced then 0 else math.max(0, 1 - (now - self._pinDropAt) / PIN_DROP_SECONDS)
+	local lift = drop * drop * 1.2
+	local base = (pos :: Vector3) + Vector3.new(0, lift, 0)
+	pin.post.CFrame = CFrame.new(base + Vector3.new(0, pin.post.Size.Y / 2, 0))
+	pin.head.CFrame = CFrame.new(base + Vector3.new(0, pin.post.Size.Y + pin.head.Size.Y / 2 - 0.04, 0))
+	pin.post.Transparency = 0
+	pin.head.Transparency = 0
+	if pin.light then
+		pin.light.Brightness = if reduced then 1.2 else 1.2 + 0.8 * (0.5 + 0.5 * math.sin(now * 4))
+	end
 end
 
 -- ----------------------------------------------------------------------------------------------
@@ -774,6 +955,13 @@ function MollyController._stepMachine(self: MollyController, dt: number, t: numb
 			tile.lift = math.max(0, tile.lift - dt * 0.4) -- an idle tap settles back
 		end
 	end
+	-- The patch tiles ride their region tile; the pin stands on its cell.
+	if self._subGrid.region then
+		self:_placeSubTiles()
+	end
+	if self._pinAt then
+		self:_placePin(os.clock())
+	end
 	-- Drill: bridge follows the target's Z, head follows X and Z, and dips by `descend`.
 	local drill = self._drill
 	if drill then
@@ -858,33 +1046,68 @@ end
 -- ----------------------------------------------------------------------------------------------
 -- The result, from the round snapshot: tiles, stamp, board, lamps at rest.
 
+-- The pin's place on a region tile, from the pin reading's cell.
+function MollyController._pinAtFor(self: MollyController, reading: any): PinAt?
+	if not (reading and reading.tier == 3 and type(reading.cellX) == "number" and type(reading.cellZ) == "number") then
+		return nil
+	end
+	local pile = self._deps.config.pile
+	local fx, fz = NestSurvey.fractionInRegion(pile.gridWidth, pile.gridDepth, reading.cellX, reading.cellZ)
+	return { region = reading.region, fx = fx, fz = fz }
+end
+
+-- One line of the board's list: "1. REGION B2: WEAK SIGNAL", "3. PINNED AT B2-5".
+local function readingLine(reading: any): string
+	if reading.tier == 3 then
+		return string.format("%d. PINNED AT %s", reading.tier, tostring(reading.id))
+	elseif reading.tier == 2 then
+		return string.format("%d. PATCH %s: %s", reading.tier, tostring(reading.id), tostring(reading.title))
+	end
+	return string.format("%d. REGION %s: %s", reading.tier, tostring(reading.id or reading.region), tostring(reading.title))
+end
+
 function MollyController._applyResult(self: MollyController)
 	local station = self._station
 	if not station then
 		return
 	end
-	local round = self._deps.round.round
-	local survey = if round and round.phase ~= "Returning" then round.survey else nil
-	-- Tiles and stamp.
-	local existingStamp = station:FindFirstChild("SFE_SurveyStamp")
+	local survey = self:_surveyInfo()
+	local readings = survey.readings or {}
+	local first, second, third = readings[1], readings[2], readings[3]
+	local latest = readings[#readings]
+	-- Tiles, patches, pin, stamps.
 	if not self._sequence then
 		for region, tile in pairs(self._tiles) do
-			local chosen = survey and survey.region == region
+			local chosen = first and first.region == region
 			tile.lift = if chosen then TILE_RAISE else 0
-			tile.part.Color = if chosen
-				then (if survey.signal == "strong" then STRONG_TINT elseif survey.signal == "weak" then WEAK_TINT else NONE_TINT)
-				else tile.color
+			tile.part.Color = if chosen then tintFor(first.signal) elseif second then STRAW_DIM else tile.color
 		end
-		if survey and not existingStamp then
-			self:_placeStamp(survey.region, survey.signal)
-		elseif not survey and existingStamp then
-			existingStamp:Destroy()
+		self:_setSubGrid(
+			if second
+				then { region = first.region, chosen = second.sub, hovered = nil, signal = second.signal }
+				else { region = nil, chosen = nil, hovered = nil, signal = nil }
+		)
+		local pinAt = self:_pinAtFor(third)
+		if pinAt and not self._pinAt then
+			self._pinDropAt = os.clock() -- a late joiner still sees it drop once
 		end
-		self:_setRing(if survey then survey.region else nil)
+		self._pinAt = pinAt
+		self:_placePin(os.clock())
+		for tier = 1, 3 do
+			local reading = readings[tier]
+			local existing = station:FindFirstChild("SFE_SurveyStamp" .. tier)
+			if reading and not existing then
+				self:_placeStamp(reading)
+			elseif not reading and existing then
+				existing:Destroy()
+			end
+		end
+		self:_setRing(if first then first.region else nil)
+		local lampKey = if latest then (if latest.signal == "pin" then "strong" else latest.signal) else nil
 		for key, lamp in pairs(self._lamps) do
-			lamp.level = if survey and survey.signal == key then 0.6 else 0
+			lamp.level = if lampKey == key then 0.6 else 0
 		end
-		self._gaugeLevel = if survey then (if survey.signal == "strong" then 0.95 elseif survey.signal == "weak" then 0.35 else 0) else 0.05
+		self._gaugeLevel = if latest then (if lampKey == "strong" then 0.95 elseif lampKey == "weak" then 0.35 else 0) else 0.05
 		self._seismoLevel = 0
 	end
 	-- The board.
@@ -895,46 +1118,82 @@ function MollyController._applyResult(self: MollyController)
 	end
 	local status = gui:FindFirstChild("Status")
 	local grid = gui:FindFirstChild("Grid")
-	local statusText = if survey then string.format("%s: %s", survey.region, survey.title) else "NOT YET RUN"
+	local statusText = if not first
+		then "NOT YET RUN"
+		elseif survey.nextCost then string.format("%d OF %d SURVEYS - NEXT %d FEATHERS", survey.count, survey.max, survey.nextCost)
+		else string.format("ALL %d SURVEYS USED", survey.max)
 	if status and status:IsA("TextLabel") then
 		if status.Text ~= statusText then
 			self.stats.boardUpdates += 1
 		end
 		status.Text = statusText
-		status.TextColor3 = if survey
-			then (if survey.signal == "none" then Color3.fromRGB(90, 110, 140) else RED)
-			else Color3.fromRGB(140, 120, 100)
+		status.TextColor3 = if first then INK else Color3.fromRGB(140, 120, 100)
+	end
+	for tier = 1, 3 do
+		local line = gui:FindFirstChild("Reading" .. tier)
+		local reading = readings[tier]
+		if line and line:IsA("TextLabel") then
+			line.Visible = reading ~= nil
+			if reading then
+				line.Text = readingLine(reading)
+				line.TextColor3 = inkFor(reading.signal)
+			end
+		end
 	end
 	if grid then
-		local adjacent = if survey and survey.signal == "weak" then NestSurvey.adjacent(survey.region) else {}
+		local adjacent = if first and first.signal == "weak" then NestSurvey.adjacent(first.region) else {}
+		local nearSubs = if second and second.signal == "weak" then NestSurvey.adjacentSubs(second.sub) else {}
+		local pinAt = self:_pinAtFor(third)
 		for _, region in ipairs(NestSurvey.REGIONS) do
 			local cell = grid:FindFirstChild("Cell_" .. region)
 			if cell and cell:IsA("Frame") then
 				local mark = cell:FindFirstChild("Mark")
 				local edge = cell:FindFirstChild("Edge")
-				local isChosen = survey ~= nil and survey.region == region
+				local isChosen = first ~= nil and first.region == region
 				local isNear = table.find(adjacent, region) ~= nil
-				cell.BackgroundColor3 = if isChosen
-					then (if survey.signal == "strong" then STRONG_TINT elseif survey.signal == "weak" then WEAK_TINT else NONE_TINT)
-					elseif isNear then Color3.fromRGB(248, 222, 176)
-					else STRAW
+				cell.BackgroundColor3 = if isChosen then tintFor(first.signal) elseif isNear then NEAR_TINT else STRAW
 				if mark and mark:IsA("TextLabel") then
-					mark.Visible = isChosen or isNear
-					mark.Text = if isChosen then survey.short :: string elseif isNear then "?" else ""
-					mark.TextColor3 = if isChosen and survey.signal == "none" then Color3.fromRGB(90, 110, 140) else RED
+					mark.Visible = (isChosen or isNear) and not (isChosen and second)
+					mark.Text = if isChosen then first.short :: string elseif isNear then "?" else ""
+					mark.TextColor3 = if isChosen then inkFor(first.signal) else RED
 				end
 				if edge and edge:IsA("UIStroke") then
 					edge.Thickness = if isChosen then 5 elseif isNear then 3 else 2
-					edge.Color = if isChosen
-						then (if survey.signal == "none" then Color3.fromRGB(90, 110, 140) else RED)
-						elseif isNear then WEAK_TINT
-						else INK
+					edge.Color = if isChosen then inkFor(first.signal) elseif isNear then WEAK_TINT else INK
 					edge.Transparency = if isChosen or isNear then 0 else 0.4
 				end
 				for i = 1, 2 do
 					local cross = cell:FindFirstChild("Cross" .. i)
 					if cross and cross:IsA("Frame") then
-						cross.Visible = isChosen and survey.signal == "none"
+						cross.Visible = isChosen and first.signal == "none" and not second
+					end
+				end
+				-- The second reading's patches live inside the first reading's cell.
+				local showSubs = isChosen and second ~= nil
+				for _, sub in ipairs(NestSurvey.SUBS) do
+					local patch = cell:FindFirstChild("Sub_" .. sub)
+					if patch and patch:IsA("Frame") then
+						patch.Visible = showSubs
+						if showSubs then
+							local isSub = second.sub == sub
+							local isNearSub = table.find(nearSubs, sub) ~= nil
+							patch.BackgroundColor3 = if isSub then tintFor(second.signal) elseif isNearSub then NEAR_TINT else STRAW
+							patch.BackgroundTransparency = if isSub then 0 elseif isNearSub then 0.2 else 0.35
+							local patchEdge = patch:FindFirstChild("Edge")
+							if patchEdge and patchEdge:IsA("UIStroke") then
+								patchEdge.Thickness = if isSub then 3 else 1
+								patchEdge.Color = if isSub then inkFor(second.signal) else INK
+								patchEdge.Transparency = if isSub then 0 else 0.5
+							end
+						end
+					end
+				end
+				local pinDot = cell:FindFirstChild("Pin")
+				if pinDot and pinDot:IsA("Frame") then
+					local showPin = pinAt ~= nil and pinAt.region == region
+					pinDot.Visible = showPin
+					if showPin then
+						pinDot.Position = UDim2.fromScale((pinAt :: PinAt).fx, (pinAt :: PinAt).fz)
 					end
 				end
 			end
@@ -942,24 +1201,46 @@ function MollyController._applyResult(self: MollyController)
 	end
 end
 
--- The permanent card on the chosen tile.
-function MollyController._placeStamp(self: MollyController, region: string, signal: string)
+-- The permanent card for a reading: a big one on the region tile, a small one beside the patch,
+-- a tag beside the pin. Named by tier so the list survives a resync and clears with the round.
+function MollyController._placeStamp(self: MollyController, reading: any): BasePart?
 	local station = self._station
-	local tile = self._tiles[region]
+	local tile = self._tiles[reading.region]
 	if not (station and tile) then
-		return
+		return nil
+	end
+	local tier = reading.tier
+	local topY = tile.part.Position.Y + tile.part.Size.Y / 2 + (TILE_RAISE - tile.lift)
+	local at: Vector3
+	local size: Vector3
+	local textSize: number
+	if tier == 1 then
+		at = Vector3.new(tile.part.Position.X, topY + 0.12, tile.part.Position.Z)
+		size = Vector3.new(1.0, 0.04, 0.6)
+		textSize = 34
+	elseif tier == 2 then
+		local pos = self:_subTilePosition(reading.region, reading.sub or 5) or tile.part.Position
+		at = Vector3.new(pos.X, topY + 0.2, pos.Z)
+		size = Vector3.new(0.42, 0.02, 0.24)
+		textSize = 18
+	else
+		local pinAt = self:_pinAtFor(reading)
+		local pos = if pinAt then self:_pinPosition(pinAt) else nil
+		local base = pos or tile.part.Position
+		at = Vector3.new(base.X + 0.22, topY + 0.24, base.Z + 0.14)
+		size = Vector3.new(0.36, 0.02, 0.2)
+		textSize = 18
 	end
 	local card = Instance.new("Part")
-	card.Name = "SFE_SurveyStamp"
+	card.Name = "SFE_SurveyStamp" .. tier
 	card.Anchored = true
 	card.CanCollide = false
 	card.CanQuery = false
 	card.CanTouch = false
-	card.Size = Vector3.new(1.0, 0.04, 0.6)
+	card.Size = size
 	card.Color = PAPER
 	card.Material = Enum.Material.SmoothPlastic
-	card.CFrame = CFrame.new(tile.part.Position + Vector3.new(0, tile.part.Size.Y / 2 + 0.12 + (TILE_RAISE - tile.lift), 0))
-		* CFrame.Angles(0, math.rad(-8), 0)
+	card.CFrame = CFrame.new(at) * CFrame.Angles(0, math.rad(-8 + tier * 3), 0)
 	local gui = Instance.new("SurfaceGui")
 	gui.Face = Enum.NormalId.Top
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
@@ -969,9 +1250,9 @@ function MollyController._placeStamp(self: MollyController, region: string, sign
 	text.BackgroundTransparency = 1
 	text.Size = UDim2.fromScale(1, 1)
 	text.Font = Enum.Font.FredokaOne
-	text.TextSize = 34
-	text.TextColor3 = if signal == "none" then Color3.fromRGB(90, 110, 140) else RED
-	text.Text = (NestSurvey.WORDS :: any)[signal].short
+	text.TextSize = textSize
+	text.TextColor3 = inkFor(reading.signal)
+	text.Text = ((NestSurvey.WORDS :: any)[reading.signal] or NestSurvey.WORDS.none).short
 	text.Rotation = -6
 	text.Parent = gui
 	card.Parent = station
@@ -1005,13 +1286,20 @@ function MollyController.interact(self: MollyController): boolean
 		return false
 	end
 	local phase = deps.round:phase()
-	local round = deps.round.round
 	local player = deps.round.player
 	local carried = player and player.carriedStandard or 0
-	local used = round ~= nil and round.survey ~= nil
+	local info = self:_surveyInfo()
+	local used = (info.usesLeft or 0) <= 0
 	local exposed = phase == "EggRevealed"
 	local active = phase == "Searching"
-	local line = NestSurvey.lineFor(deps.config, { active = active, exposed = exposed, used = used, carriedStandard = carried })
+	local first = info.readings and info.readings[1]
+	local line = NestSurvey.lineFor(deps.config, {
+		active = active,
+		exposed = exposed,
+		count = info.count or 0,
+		carriedStandard = carried,
+		region = first and first.region or nil,
+	})
 	self.stats.opens += 1
 	if not active or exposed or used then
 		deps.audio:play(Tokens.sound.uiTap)
@@ -1028,23 +1316,57 @@ function MollyController._selectionState(self: MollyController): SurveyPanel.Sta
 	local selection = self._selection
 	local player = deps.round.player
 	local carried = player and player.carriedStandard or 0
-	local cost = NestSurvey.crateCost(deps.config)
-	local region = selection and selection.region or nil
-	local canSurvey = region ~= nil and carried >= cost and deps.round:phase() == "Searching"
+	local info = self:_surveyInfo()
+	local tier = selection and selection.tier or info.nextTier or "region"
+	local cost = info.nextCost or 0
+	local step = (info.count or 0) + 1
+	local max = info.max or NestSurvey.maxSurveys(deps.config)
+	-- The target: a region, a patch of the base region, or nothing for the pin.
+	local target: string? = nil
+	if tier == "region" then
+		target = selection and selection.region or nil
+	elseif tier == "subcell" then
+		local base = selection and selection.baseRegion
+		local sub = selection and selection.sub
+		target = if base and sub then NestSurvey.id(base, sub) else nil
+	end
+	local affordable = info.nextCost ~= nil and carried >= cost
+	local canSurvey = affordable and deps.round:phase() == "Searching" and (tier == "pin" or target ~= nil)
 	if selection then
 		selection.canSurvey = canSurvey
 	end
 	local mode = deps.input:mode()
-	local caption = if carried < cost
-		then string.format("BRING %d NORMAL FEATHERS", cost)
-		elseif region then NestSurvey.describe(region)
-		else (if mode == "gamepad" then "D-PAD TO CHOOSE" elseif mode == "touch" then "TAP A TILE" else "CLICK A TILE")
+	local words = (NestSurvey.TIER_WORDS :: any)[tier] or NestSurvey.TIER_WORDS.region
+	local stepLine = string.format("SURVEY %d OF %d - %d FEATHERS", step, max, cost)
+	local hint = if mode == "gamepad" then "D-PAD TO CHOOSE" elseif mode == "touch" then "TAP A TILE" else "CLICK A TILE"
+	local caption = if not affordable
+		then string.format("BRING %d NORMAL FEATHERS  -  %s", cost, stepLine)
+		elseif tier == "pin" then stepLine .. "  -  NO CHOICE: MOLLY PINS THE NEST"
+		elseif target then stepLine .. "  -  " .. NestSurvey.describe(
+			(selection and selection.baseRegion) or (target :: string),
+			selection and selection.sub
+		)
+		else stepLine .. "  -  " .. hint
+	local title: string
+	local primary: string
+	if tier == "pin" then
+		title = words.pick
+		primary = string.format("%s - %d FEATHERS", words.scan, cost)
+	elseif target then
+		title = string.format("%s %s?", words.scan, target)
+		primary = string.format("%s %s - %d FEATHERS", words.scan, target, cost)
+	else
+		title = string.format(words.pick, selection and selection.baseRegion or "")
+		primary = "PICK " .. string.upper(words.hint)
+	end
 	return {
-		title = if region then "SCAN " .. region .. "?" else "PICK ONE AREA",
+		title = title,
 		caption = caption,
 		carried = carried,
 		cost = cost,
-		primary = if region then "SCAN " .. region else "PICK AN AREA",
+		usesLeft = info.usesLeft,
+		usesMax = max,
+		primary = primary,
 		primaryEnabled = canSurvey,
 		back = true,
 		skip = false,
@@ -1061,7 +1383,28 @@ function MollyController._beginSelection(self: MollyController, _line: string): 
 	if not (station and rig and camera and player) then
 		return false
 	end
-	local selection = { trove = Trove.new(), region = nil, hovered = nil, sent = nil, panel = nil, canSurvey = false }
+	local info = self:_surveyInfo()
+	local tier = info.nextTier
+	if not tier then
+		return false
+	end
+	local first = info.readings and info.readings[1]
+	local selection: Selection = {
+		trove = Trove.new(),
+		tier = tier,
+		baseRegion = if tier ~= "region" and first then first.region else nil,
+		region = nil,
+		sub = nil,
+		hovered = nil,
+		hoveredSub = nil,
+		sent = nil,
+		panel = nil,
+		canSurvey = false,
+		baseline = nil,
+	}
+	if tier ~= "region" and not selection.baseRegion then
+		return false -- a snapshot without the first reading cannot be zoomed
+	end
 	self._selection = selection
 	local motion = deps.accessibility:motionSettings()
 	local reduced = motion.reducedMotion
@@ -1084,6 +1427,12 @@ function MollyController._beginSelection(self: MollyController, _line: string): 
 	local mapCentre = self._mapCentre
 	local focus = mapCentre + base.RightVector * 1.3 + Vector3.new(0, 1.0, 0)
 	local eye = focus + base.LookVector * 9.4 + Vector3.new(0, 4.6, 0)
+	if tier == "subcell" then
+		-- Zoomed: the chosen region fills the view, its nine patches readable, the rest dimmed.
+		local basePos = self:_tilePosition(selection.baseRegion :: string) or mapCentre
+		focus = basePos + Vector3.new(0, 0.2, 0)
+		eye = focus + base.LookVector * 3.2 + Vector3.new(0, 2.7, 0)
+	end
 	local baseline = { type = camera.CameraType, cframe = camera.CFrame }
 	camera.CameraType = Enum.CameraType.Scriptable
 	TweenService:Create(camera, TweenInfo.new(if reduced then 0.05 else 0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -1119,19 +1468,33 @@ function MollyController._beginSelection(self: MollyController, _line: string): 
 			panel.setState(self:_selectionState())
 		end
 	end))
-	-- Pointing: the tile under the cursor (mouse) or the last touch; clicks pick it.
+	-- Pointing: the tile (or patch tile, when zoomed) under the cursor or the last touch; clicks
+	-- pick it. Returns a region for tier 1, a patch number for tier 2, nothing for the pin.
 	local tileParts = {}
-	for _, tile in pairs(self._tiles) do
-		table.insert(tileParts, tile.part)
+	if tier == "region" then
+		for _, tile in pairs(self._tiles) do
+			table.insert(tileParts, tile.part)
+		end
+	elseif tier == "subcell" then
+		for _, entry in pairs(self._subTiles) do
+			table.insert(tileParts, entry.part)
+		end
 	end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Include
 	params.FilterDescendantsInstances = tileParts
-	local function tileAt(screen: Vector2): string?
+	local function tileAt(screen: Vector2): (string?, number?)
+		if #tileParts == 0 then
+			return nil, nil
+		end
 		local ray = camera:ViewportPointToRay(screen.X, screen.Y)
 		local hit = workspace:Raycast(ray.Origin, ray.Direction * 60, params)
-		local region = hit and hit.Instance:GetAttribute("SFE_Region")
-		return if type(region) == "string" then region else nil
+		if not hit then
+			return nil, nil
+		end
+		local region = hit.Instance:GetAttribute("SFE_Region")
+		local sub = hit.Instance:GetAttribute("SFE_Sub")
+		return if type(region) == "string" then region else nil, if type(sub) == "number" then sub else nil
 	end
 	-- Hover only counts while the pointer is actually moving: a D-pad or keyboard pick must not be
 	-- overruled by whatever tile happens to sit under a parked cursor.
@@ -1146,9 +1509,13 @@ function MollyController._beginSelection(self: MollyController, _line: string): 
 			lastPointer = location
 			pointerMovedAt = os.clock()
 		end
-		local region = if os.clock() - pointerMovedAt < 1.5 then tileAt(location) else nil
-		if region ~= selection.hovered then
+		local region: string?, sub: number? = nil, nil
+		if os.clock() - pointerMovedAt < 1.5 then
+			region, sub = tileAt(location)
+		end
+		if region ~= selection.hovered or sub ~= selection.hoveredSub then
 			selection.hovered = region
+			selection.hoveredSub = sub
 			self:_refreshSelectionVisuals()
 		end
 	end))
@@ -1157,14 +1524,14 @@ function MollyController._beginSelection(self: MollyController, _line: string): 
 			return
 		end
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			local region = tileAt(UserInputService:GetMouseLocation())
-			if region then
-				self:select(region)
+			local region, sub = tileAt(UserInputService:GetMouseLocation())
+			if region or sub then
+				self:select(region, sub)
 			end
 		elseif input.UserInputType == Enum.UserInputType.Touch then
-			local region = tileAt(Vector2.new(input.Position.X, input.Position.Y))
-			if region then
-				self:select(region)
+			local region, sub = tileAt(Vector2.new(input.Position.X, input.Position.Y))
+			if region or sub then
+				self:select(region, sub)
 			end
 		elseif input.UserInputType == Enum.UserInputType.Keyboard then
 			local key = input.KeyCode
@@ -1221,7 +1588,16 @@ function MollyController._beginSelection(self: MollyController, _line: string): 
 	end))
 	-- Molly says her piece over her head and watches the map while a player picks.
 	local carriedNow = deps.round.player and deps.round.player.carriedStandard or 0
-	sayOn(rig, NestSurvey.lineFor(deps.config, { active = true, exposed = false, used = false, carriedStandard = carriedNow }))
+	sayOn(
+		rig,
+		NestSurvey.lineFor(deps.config, {
+			active = true,
+			exposed = false,
+			count = info.count or 0,
+			carriedStandard = carriedNow,
+			region = selection.baseRegion,
+		})
+	)
 	self._look = { yaw = 0.3, pitch = -0.6, until_ = math.huge }
 	selection.trove:add(function()
 		self._look = nil
@@ -1236,31 +1612,54 @@ function MollyController._beginSelection(self: MollyController, _line: string): 
 		end
 	end)
 	if deps.input:mode() ~= "mouse" then
-		self:select("B2")
+		if tier == "region" then
+			self:select("B2")
+		elseif tier == "subcell" then
+			self:select(nil, 5)
+		end
 	end
 	self:_refreshSelectionVisuals()
 	return true
 end
 
--- The pick itself, from any input path.
-function MollyController.select(self: MollyController, region: string): boolean
+-- The pick itself, from any input path: a region for the first survey, a patch of the base region
+-- for the second. The pin takes no pick. The live pick is relayed to the party once per change.
+function MollyController.select(self: MollyController, region: string?, sub: number?): boolean
 	local selection = self._selection
-	if not selection or not NestSurvey.isRegion(region) then
+	if not selection then
 		return false
 	end
-	if selection.region ~= region then
+	local changed = false
+	if selection.tier == "region" then
+		if not NestSurvey.isRegion(region) then
+			return false
+		end
+		changed = selection.region ~= region
+		selection.region = region
+	elseif selection.tier == "subcell" then
+		if not NestSurvey.isSub(sub) then
+			return false
+		end
+		changed = selection.sub ~= sub
+		selection.sub = sub
+		selection.region = selection.baseRegion
+	else
+		return false
+	end
+	if changed then
 		self.stats.selections += 1
 		self._deps.audio:play(Tokens.sound.uiSelect)
 		self._deps.haptics:pulse(0.15, 0.04)
 	end
-	selection.region = region
 	self:_refreshSelectionVisuals()
-	if selection.sent ~= region then
-		selection.sent = region
+	local id = NestSurvey.id(selection.region :: string, selection.sub)
+	if selection.sent ~= id then
+		selection.sent = id
 		local token = self._deps.round:sessionToken()
+		local sendRegion, sendSub = selection.region, selection.sub
 		if token then
 			task.spawn(function()
-				self._deps.net:request("SurveySelect", { sessionToken = token, region = region })
+				self._deps.net:request("SurveySelect", { sessionToken = token, region = sendRegion, sub = sendSub })
 			end)
 		end
 	end
@@ -1272,43 +1671,70 @@ function MollyController.navigate(self: MollyController, dRow: number, dCol: num
 	if not selection then
 		return false
 	end
-	return self:select(NestSurvey.step(selection.region or "B2", dRow, dCol))
+	if selection.tier == "region" then
+		return self:select(NestSurvey.step(selection.region or "B2", dRow, dCol))
+	elseif selection.tier == "subcell" then
+		return self:select(nil, NestSurvey.stepSub(selection.sub or 5, dRow, dCol))
+	end
+	return false
 end
 
--- Tiles, drill and Molly's gaze follow the hover and the pick.
+-- Tiles, patches, drill and Molly's gaze follow the hover and the pick.
 function MollyController._refreshSelectionVisuals(self: MollyController)
 	local selection = self._selection
 	if not selection then
 		return
 	end
-	local focus = selection.hovered or selection.region
-	for region, tile in pairs(self._tiles) do
-		if region == selection.region then
-			tile.lift = TILE_RAISE
-			tile.part.Color = STRAW_LIT
-		elseif region == selection.hovered then
-			tile.lift = TILE_HOVER
-			tile.part.Color = STRAW_HOVER
-		else
-			tile.lift = 0
-			tile.part.Color = tile.color
+	local focusPos: Vector3? = nil
+	if selection.tier == "region" then
+		for region, tile in pairs(self._tiles) do
+			if region == selection.region then
+				tile.lift = TILE_RAISE
+				tile.part.Color = STRAW_LIT
+			elseif region == selection.hovered then
+				tile.lift = TILE_HOVER
+				tile.part.Color = STRAW_HOVER
+			else
+				tile.lift = 0
+				tile.part.Color = tile.color
+			end
 		end
+		self:_setSubGrid({ region = nil, chosen = nil, hovered = nil, signal = nil })
+		self:_setRing(selection.region)
+		local focus = selection.hovered or selection.region
+		focusPos = if focus then self:_tilePosition(focus) else nil
+	else
+		-- Zoomed (tier 2) or pinning (tier 3): the base region stays up and lit, the other eight
+		-- sit dimmed, and the nine patches lie on the base tile.
+		local base = selection.baseRegion :: string
+		for region, tile in pairs(self._tiles) do
+			tile.lift = if region == base then TILE_RAISE else 0
+			tile.part.Color = if region == base then STRAW_LIT else STRAW_DIM
+		end
+		local info = self:_surveyInfo()
+		local second = info.readings and info.readings[2]
+		if selection.tier == "subcell" then
+			self:_setSubGrid({ region = base, chosen = selection.sub, hovered = selection.hoveredSub, signal = nil })
+			local focusSub = selection.hoveredSub or selection.sub
+			focusPos = if focusSub then self:_subTilePosition(base, focusSub) else self:_tilePosition(base)
+		else
+			self:_setSubGrid({ region = base, chosen = second and second.sub, hovered = nil, signal = second and second.signal })
+			focusPos = self:_tilePosition(base)
+		end
+		self:_setRing(base)
 	end
-	self:_setRing(selection.region)
-	if focus then
-		local pos = self:_tilePosition(focus)
-		if pos then
-			if self._drill then
-				self._drill.target = Vector3.new(pos.X, self._drill.headRest.Position.Y, pos.Z)
-				self._drill.descend = 0
-			end
-			local rig = self._rig
-			local root = rig and rig:FindFirstChild("HumanoidRootPart")
-			local head = rig and rig:FindFirstChild("Head")
-			if root and root:IsA("BasePart") and head and head:IsA("BasePart") then
-				local yaw, pitch = lookAngles(root, head, pos)
-				self._look = { yaw = yaw, pitch = pitch, until_ = math.huge }
-			end
+	if focusPos then
+		local pos = focusPos :: Vector3
+		if self._drill then
+			self._drill.target = Vector3.new(pos.X, self._drill.headRest.Position.Y, pos.Z)
+			self._drill.descend = 0
+		end
+		local rig = self._rig
+		local root = rig and rig:FindFirstChild("HumanoidRootPart")
+		local head = rig and rig:FindFirstChild("Head")
+		if root and root:IsA("BasePart") and head and head:IsA("BasePart") then
+			local yaw, pitch = lookAngles(root, head, pos)
+			self._look = { yaw = yaw, pitch = pitch, until_ = math.huge }
 		end
 	end
 	if selection.panel then
@@ -1359,19 +1785,25 @@ function MollyController._restoreCamera(self: MollyController, baseline: { type:
 	task.delay(1.2, release)
 end
 
--- The SCAN button is the decision; the sign already said this is the only scan of the round.
+-- The SCAN / PIN button is the decision; the sign already said how many surveys are left.
 function MollyController._confirmSurvey(self: MollyController)
 	local deps = self._deps
 	local selection = self._selection
-	if not selection or not selection.region or not selection.canSurvey or self._pending then
+	if not selection or not selection.canSurvey or self._pending then
 		deps.audio:play(Tokens.sound.uiError)
 		return
 	end
-	self:survey(selection.region)
+	if selection.tier == "pin" then
+		self:survey(nil, nil)
+	elseif selection.tier == "subcell" then
+		self:survey(selection.baseRegion, selection.sub)
+	else
+		self:survey(selection.region, nil)
+	end
 end
 
 -- The request. Returns the envelope; a success hands the screen from the selection to the sequence.
-function MollyController.survey(self: MollyController, region: string): any
+function MollyController.survey(self: MollyController, region: string?, sub: number?): any
 	local deps = self._deps
 	local token = deps.round:sessionToken()
 	if not token then
@@ -1382,21 +1814,27 @@ function MollyController.survey(self: MollyController, region: string): any
 		return { ok = false, code = "invalid_state", message = "busy" }
 	end
 	self._pending = true
-	local result = deps.net:request("SurveyRequest", { sessionToken = token, region = region })
+	local result = deps.net:request("SurveyRequest", { sessionToken = token, region = region, sub = sub })
 	if not result.ok then
 		self._pending = false
 		deps.audio:play(Tokens.sound.uiError)
 		local message = result.message
-		if message == "already_surveyed" then
+		if message == "limit" then
 			sayOn(self._rig, NestSurvey.LINES.used)
 			self:_endSelection("used")
 		elseif message == "egg_found" then
 			sayOn(self._rig, NestSurvey.LINES.exposed)
 			self:_endSelection("egg")
 		else
+			local info = self:_surveyInfo()
+			local first = info.readings and info.readings[1]
 			deps.hud.toasts:push(
 				if message == "insufficient"
-					then string.format("You need %d normal feathers for a survey crate", NestSurvey.crateCost(deps.config))
+					then string.format("You need %d normal feathers for the next survey crate", info.nextCost or 0)
+					elseif message == "wrong_region" then string.format(
+						"Pick a patch inside %s",
+						tostring(first and first.region or "the surveyed region")
+					)
 					elseif result.code == "out_of_range" then "Stand at Molly's bench"
 					elseif result.code == "rate_limited" then "One moment..."
 					else "Survey unavailable",
@@ -1485,6 +1923,11 @@ function MollyController._runSequence(self: MollyController, data: any)
 	local player = Players.LocalPlayer
 	local region = tostring(data and data.region or "B2")
 	local signal = tostring(data and data.signal or "none")
+	local tier = tonumber(data and data.tier) or 1
+	local sub: number? = if data and NestSurvey.isSub(data.sub) then data.sub else nil
+	local id = tostring(data and data.id or NestSurvey.id(region, sub))
+	local strength = if signal == "pin" then "strong" else signal -- the lamps read the pin as strong
+	local reading = if data and type(data.reading) == "table" then data.reading else data
 	if not (rig and station and camera and player) then
 		self:_endSelection("sequence")
 		self:_announce(data)
@@ -1541,11 +1984,15 @@ function MollyController._runSequence(self: MollyController, data: any)
 	session.panel = panel
 	session.trove:add(panel.destroy)
 	local playerState = deps.round.player
+	local infoNow = self:_surveyInfo()
+	local paid = tonumber(data and data.cost) or 0
 	panel.setState({
-		title = "SCANNING " .. region .. "...",
-		caption = NestSurvey.describe(region),
+		title = if tier == 3 then "PINNING THE NEST..." else "SCANNING " .. id .. "...",
+		caption = if tier == 3 then "MOLLY DROPS THE PIN ON THE EGG'S CELL" else NestSurvey.describe(region, sub),
 		carried = playerState and playerState.carriedStandard or 0,
-		cost = NestSurvey.crateCost(deps.config),
+		cost = paid,
+		usesLeft = infoNow.usesLeft,
+		usesMax = infoNow.max,
 		primary = nil,
 		primaryEnabled = false,
 		back = false,
@@ -1565,6 +2012,14 @@ function MollyController._runSequence(self: MollyController, data: any)
 	-- Props and levels we set here are undone by _applyResult at the end.
 	local tile = self._tiles[region]
 	local drill = self._drill
+	-- Where the drill goes: the region tile, the patch tile, or the pin's exact spot.
+	local pinAt = if tier == 3 then self:_pinAtFor(reading) else nil
+	local targetPos: Vector3? = if tier == 1
+		then self:_tilePosition(region)
+		elseif tier == 2 then self:_subTilePosition(region, sub or 5)
+		elseif pinAt then self:_pinPosition(pinAt)
+		else self:_tilePosition(region)
+	local second = infoNow.readings and infoNow.readings[2]
 	local platform = station:FindFirstChild("CratePlatform")
 	local spot = platform and platform:FindFirstChild("CrateSpot")
 	local spotPos = if spot and spot:IsA("Attachment") then spot.WorldPosition else base.Position + base.RightVector * 5.6
@@ -1649,11 +2104,18 @@ function MollyController._runSequence(self: MollyController, data: any)
 				:Play()
 		end
 	end)
-	-- 3. The selected tile rises and lights.
+	-- 3. The selected tile rises and lights; a zoomed survey shows its patches, the rest dimmed.
 	after(at(1.0), function()
 		for r, t in pairs(self._tiles) do
 			t.lift = if r == region then TILE_RAISE + 0.08 else 0
-			t.part.Color = if r == region then STRAW_LIT else t.color
+			t.part.Color = if r == region then STRAW_LIT elseif tier > 1 then STRAW_DIM else t.color
+		end
+		if tier == 2 then
+			self:_setSubGrid({ region = region, chosen = sub, hovered = nil, signal = nil })
+		elseif tier == 3 then
+			self:_setSubGrid({ region = region, chosen = second and second.sub, hovered = nil, signal = second and second.signal })
+		else
+			self:_setSubGrid({ region = nil, chosen = nil, hovered = nil, signal = nil })
 		end
 		self:_setRing(region)
 	end)
@@ -1710,8 +2172,8 @@ function MollyController._runSequence(self: MollyController, data: any)
 	end)
 	-- 5. The drill moves over the tile and descends; the table shakes; the machine searches.
 	after(at(2.3), function()
-		if drill and tile then
-			drill.target = Vector3.new(tile.part.Position.X, drill.headRest.Position.Y, tile.part.Position.Z)
+		if drill and targetPos then
+			drill.target = Vector3.new(targetPos.X, drill.headRest.Position.Y, targetPos.Z)
 		end
 	end)
 	local searching = false
@@ -1767,17 +2229,17 @@ function MollyController._runSequence(self: MollyController, data: any)
 			drill.descend = 0
 		end
 		self._gearSpeed = 2
-		local words = (NestSurvey.WORDS :: any)[signal]
+		local words = (NestSurvey.WORDS :: any)[signal] or NestSurvey.WORDS.none
 		for key, lamp in pairs(self._lamps) do
-			lamp.level = if key == signal then 1 else 0
+			lamp.level = if key == strength then 1 else 0
 		end
-		if signal == "none" then
+		if strength == "none" then
 			self._gaugeLevel = 0
 			self._seismoLevel = 0
 			self._gesture = { name = "headshake", t = 0, duration = at(1.2) }
 			self._look = { yaw = 0.3, pitch = -0.4, until_ = os.clock() + at(1.4) }
 			deps.audio:play(Tokens.sound.uiCancel)
-		elseif signal == "weak" then
+		elseif strength == "weak" then
 			self._gaugeLevel = 0.4
 			self._seismoLevel = 0.18
 			self._gesture = { name = "ear", t = 0.4, duration = at(2.4) }
@@ -1798,31 +2260,41 @@ function MollyController._runSequence(self: MollyController, data: any)
 			deps.haptics:pulse(0.8, 0.2)
 			deps.camera:impulse(0.05)
 		end
-		if tile then
-			tile.part.Color = if signal == "strong" then STRONG_TINT elseif signal == "weak" then WEAK_TINT else NONE_TINT
+		if tier == 1 and tile then
+			tile.part.Color = tintFor(signal)
+		elseif tier == 2 then
+			self:_setSubGrid({ region = region, chosen = sub, hovered = nil, signal = signal })
+		elseif tier == 3 and pinAt then
+			-- The pin drops on the exact cell.
+			self._pinAt = pinAt
+			self._pinDropAt = os.clock()
+			self:_placePin(os.clock())
 		end
+		local afterInfo = self:_surveyInfo()
 		if session.panel then
 			session.panel.setState({
-				title = (if signal == "strong" then words.title .. "!" else words.title),
-				caption = region .. "  -  " .. words.text,
+				title = (if strength == "strong" then words.title .. "!" else words.title),
+				caption = id .. "  -  " .. words.text,
 				carried = deps.round.player and deps.round.player.carriedStandard or 0,
-				cost = NestSurvey.crateCost(deps.config),
+				cost = afterInfo.nextCost or paid,
+				usesLeft = afterInfo.usesLeft,
+				usesMax = afterInfo.max,
 				primary = nil,
 				primaryEnabled = false,
 				back = false,
 				skip = true,
-				tone = if signal == "none" then "bad" else "good",
+				tone = if strength == "none" then "bad" else "good",
 			})
 		end
 		sayOn(rig, words.text)
 	end)
 	-- 7. The stamp lands on the map and the board is written.
 	after(searchEnd + at(0.6), function()
-		local existing = station:FindFirstChild("SFE_SurveyStamp")
+		local existing = station:FindFirstChild("SFE_SurveyStamp" .. tier)
 		if existing then
 			existing:Destroy()
 		end
-		local card = self:_placeStamp(region, signal)
+		local card = self:_placeStamp(reading)
 		if card then
 			local restCF = card.CFrame
 			card.CFrame = restCF + Vector3.new(0, 1.4, 0)
@@ -1855,9 +2327,9 @@ function MollyController._applyBoardOnly(self: MollyController)
 	self._sequence = sequence
 	-- _applyResult reset the lamps/gauge/tiles to the rest display for a finished survey, which is
 	-- exactly the state the sequence is converging on; the pulse below keeps the lamps alive.
-	local survey = self._deps.round.round and self._deps.round.round.survey
-	if survey then
-		local lamp = self._lamps[survey.signal]
+	local latest = self:_surveyInfo().latest
+	if latest then
+		local lamp = self._lamps[if latest.signal == "pin" then "strong" else latest.signal]
 		if lamp then
 			lamp.level = 1
 		end
@@ -1884,7 +2356,10 @@ function MollyController._banner(self: MollyController, data: any)
 	label.TextColor3 = if data and data.signal == "none" then Color3.fromRGB(200, 214, 236) else Tokens.color.goldLight
 	label.TextStrokeTransparency = 0.2
 	label.TextStrokeColor3 = Tokens.color.outline
-	label.Text = string.format("MOLLY SURVEYED %s: %s", tostring(data and data.region or "?"), words.title)
+	local id = tostring(data and (data.id or data.region) or "?")
+	label.Text = if data and data.signal == "pin"
+		then string.format("MOLLY PINNED THE NEST AT %s", id)
+		else string.format("MOLLY SURVEYED %s: %s", id, words.title)
 	label.TextTransparency = 1
 	label.ZIndex = Tokens.zIndex.toast + 2
 	label.Parent = stage
@@ -1896,7 +2371,7 @@ function MollyController._banner(self: MollyController, data: any)
 	scale.Parent = label
 	TweenService:Create(label, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeOut), { TextTransparency = 0 }):Play()
 	TweenService:Create(scale, TweenInfo.new(Motion.duration("standard", motion), Tokens.motion.easeBack), { Scale = 1 }):Play()
-	if data and data.signal == "strong" then
+	if data and (data.signal == "strong" or data.signal == "pin") then
 		Confetti.burst(stage, {
 			origin = UDim2.fromScale(0.5, 0.2),
 			count = 16,
@@ -1938,32 +2413,60 @@ function MollyController._onCompleted(self: MollyController, payload: any)
 	if payload.byUserId == me and (self._pending or self._sequence) then
 		return -- the payer's own sequence reads it out
 	end
-	-- Another member paid: their pick is no longer a preview; the map shows the reading.
+	-- Another member paid: their pick is no longer a preview and the next survey is a different
+	-- tier, so any map open here closes and shows the reading instead.
 	if self._selection then
 		self:_endSelection("surveyed")
-		sayOn(self._rig, NestSurvey.LINES.used)
+		local info = self:_surveyInfo()
+		if info.nextCost then
+			sayOn(
+				self._rig,
+				string.format(
+					"%s paid for that one. The next crate is %d feathers.",
+					tostring(payload.byName or "A forager"),
+					info.nextCost
+				)
+			)
+		else
+			sayOn(self._rig, NestSurvey.LINES.used)
+		end
 	end
 	self._deps.audio:play(Tokens.sound.stationChime)
 	self:_announce(payload)
 end
 
--- Another member's live pick: the tile and the drill follow it for anyone not picking themselves.
+-- Another member's live pick: the tile (and patch, when zoomed) and the drill follow it for anyone
+-- not picking themselves.
 function MollyController._onRemoteSelection(self: MollyController, payload: any)
 	local round = self._deps.round.round
-	if not round or round.roundId ~= payload.roundId or round.survey then
+	if not round or round.roundId ~= payload.roundId then
 		return
 	end
-	self._remoteSelection = if NestSurvey.isRegion(payload.region) then payload.region else nil
+	local info = self:_surveyInfo()
+	if (info.usesLeft or 0) <= 0 then
+		return
+	end
+	local region = if NestSurvey.isRegion(payload.region) then payload.region else nil
+	local sub = if NestSurvey.isSub(payload.sub) then payload.sub else nil
+	self._remoteSelection = if region then { region = region, sub = sub } else nil
 	if self._selection or self._sequence then
 		return
 	end
-	for region, tile in pairs(self._tiles) do
-		local chosen = region == self._remoteSelection
+	if not region then
+		self:_applyResult() -- the pick was cleared: back to the readings on the map
+		return
+	end
+	for r, tile in pairs(self._tiles) do
+		local chosen = r == region
 		tile.lift = if chosen then TILE_RAISE else 0
-		tile.part.Color = if chosen then STRAW_HOVER else tile.color
+		tile.part.Color = if chosen then STRAW_HOVER elseif sub then STRAW_DIM else tile.color
+	end
+	if sub then
+		local second = info.readings and info.readings[2]
+		self:_setSubGrid({ region = region, chosen = second and second.sub, hovered = sub, signal = second and second.signal })
 	end
 	if self._drill then
-		local pos = self._remoteSelection and self:_tilePosition(self._remoteSelection)
+		local pos = if sub then self:_subTilePosition(region :: string, sub :: number) else self:_tilePosition(region :: string)
 		self._drill.target = if pos then Vector3.new(pos.X, self._drill.headRest.Position.Y, pos.Z) else self._drill.headRest.Position
 	end
 end
@@ -2033,9 +2536,16 @@ function MollyController.status(self: MollyController): { [string]: any }
 		highlighted = highlighted,
 		busy = self:isBusy(),
 		selecting = selection ~= nil,
+		tier = selection and selection.tier or nil,
+		baseRegion = selection and selection.baseRegion or nil,
 		selected = selection and selection.region or nil,
+		selectedSub = selection and selection.sub or nil,
 		hovered = selection and selection.hovered or nil,
+		hoveredSub = selection and selection.hoveredSub or nil,
 		canSurvey = selection and selection.canSurvey or false,
+		subGrid = self._subGrid.region,
+		pin = self._pinAt ~= nil,
+		usesLeft = self:_surveyInfo().usesLeft,
 		sequence = self._sequence ~= nil,
 		raisedTiles = raised,
 		drillDescend = self._drill and self._drill.descend or 0,
@@ -2050,9 +2560,18 @@ function MollyController.status(self: MollyController): { [string]: any }
 			return out
 		end)(),
 		boardStatus = if status and status:IsA("TextLabel") then status.Text else nil,
-		stamp = station and station:FindFirstChild("SFE_SurveyStamp") ~= nil or false,
+		stamp = station and station:FindFirstChild("SFE_SurveyStamp1") ~= nil or false,
+		stamps = (function()
+			local n = 0
+			for tier = 1, 3 do
+				if station and station:FindFirstChild("SFE_SurveyStamp" .. tier) then
+					n += 1
+				end
+			end
+			return n
+		end)(),
 		gesture = self._gesture and self._gesture.name or nil,
-		remoteSelection = self._remoteSelection,
+		remoteSelection = self._remoteSelection and NestSurvey.id(self._remoteSelection.region or "?", self._remoteSelection.sub) or nil,
 		cameraType = tostring(camera and camera.CameraType),
 		stats = table.clone(self.stats),
 	}

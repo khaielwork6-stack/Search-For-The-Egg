@@ -1054,10 +1054,25 @@ function Validator.validate(raw: any): Report
 	check(type(raw.survey) == "table", "survey missing")
 	if type(raw.survey) == "table" then
 		local survey = raw.survey
-		check(
-			isPositiveNumber(survey.SurveyCrateCost) and survey.SurveyCrateCost == math.floor(survey.SurveyCrateCost),
-			"survey.SurveyCrateCost must be a positive integer"
-		)
+		-- One cost per survey, paid in order; each must be dearer than the one before.
+		check(type(survey.crateCosts) == "table" and #survey.crateCosts > 0, "survey.crateCosts must list at least one cost")
+		if type(survey.crateCosts) == "table" then
+			for index, cost in ipairs(survey.crateCosts) do
+				check(isPositiveNumber(cost) and cost == math.floor(cost), "survey.crateCosts[" .. index .. "] must be a positive integer")
+				if index > 1 then
+					check(
+						type(cost) == "number" and type(survey.crateCosts[index - 1]) == "number" and cost > survey.crateCosts[index - 1],
+						"survey.crateCosts must ascend"
+					)
+				end
+			end
+			check(
+				isPositiveNumber(survey.maxPerRound)
+					and survey.maxPerRound == math.floor(survey.maxPerRound)
+					and survey.maxPerRound <= #survey.crateCosts,
+				"survey.maxPerRound must be an integer within [1, #crateCosts]"
+			)
+		end
 		check(isPositiveNumber(survey.stationRangeStuds), "survey.stationRangeStuds must be > 0")
 		check(isPositiveNumber(survey.sequenceSeconds), "survey.sequenceSeconds must be > 0")
 		check(

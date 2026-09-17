@@ -1,8 +1,9 @@
 --!strict
 -- What is on screen while a player is at Molly's map: a wooden sign across the top with the one
--- instruction, a feather counter on the right, and the one orange button at the bottom with a small
--- BACK beside it. The map itself is the interface; this only names the decision. It draws and
--- reports presses; the MollyController owns every decision.
+-- instruction, a feather counter on the right (carried against the next crate) with the round's
+-- surveys-left pips under it, and the one orange button at the bottom with a small BACK beside it.
+-- The map itself is the interface; this only names the decision. It draws and reports presses;
+-- the MollyController owns every decision.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -25,7 +26,9 @@ export type State = {
 	title: string, -- the sign: "PICK ONE AREA", "SCANNING...", the result
 	caption: string?, -- one short line under the sign, or nothing
 	carried: number,
-	cost: number,
+	cost: number, -- the next crate (0 once the round's surveys are spent)
+	usesLeft: number?, -- surveys still available this round; nil hides the pips
+	usesMax: number?,
 	primary: string?, -- the button's words; nil hides it
 	primaryEnabled: boolean,
 	back: boolean, -- show BACK
@@ -154,6 +157,50 @@ function SurveyPanel.create(
 	count.TextScaled = true
 	outlined(count, 2, WOOD_DEEP)
 
+	-- Surveys left this round: one pip per survey, lit while it is still to be bought.
+	local pips = Instance.new("Frame")
+	pips.Name = "Uses"
+	pips.AnchorPoint = Vector2.new(1, 0)
+	pips.Position = UDim2.new(1, -Tokens.spacing.lg, 0, Tokens.spacing.lg + 20 + 64 + Tokens.spacing.xs)
+	pips.Size = UDim2.fromOffset(250, 26)
+	pips.BackgroundTransparency = 1
+	pips.ZIndex = 2
+	pips.Visible = false
+	pips.Parent = stage
+	local pipsLabel = FrameKit.text(
+		pips,
+		"Label",
+		"SURVEYS LEFT",
+		"caption",
+		{ zIndex = 3, color = Tokens.color.featherWhite, align = Enum.TextXAlignment.Right }
+	)
+	pipsLabel.AnchorPoint = Vector2.new(1, 0.5)
+	pipsLabel.Position = UDim2.new(1, -Tokens.spacing.md, 0.5, 0)
+	pipsLabel.Size = UDim2.fromScale(0.6, 1)
+	outlined(pipsLabel, 2, WOOD_DEEP)
+	local pipDots: { Frame } = {}
+	local function buildPips(total: number)
+		for _, dot in ipairs(pipDots) do
+			dot:Destroy()
+		end
+		pipDots = {}
+		for i = 1, total do
+			local dot = Instance.new("Frame")
+			dot.Name = "Pip" .. i
+			dot.AnchorPoint = Vector2.new(0, 0.5)
+			dot.Position = UDim2.new(0, Tokens.spacing.sm + (i - 1) * 26, 0.5, 0)
+			dot.Size = UDim2.fromOffset(18, 18)
+			dot.BackgroundColor3 = Tokens.color.goldLight
+			dot.ZIndex = 3
+			local dotCorner = Instance.new("UICorner")
+			dotCorner.CornerRadius = UDim.new(1, 0)
+			dotCorner.Parent = dot
+			Depth.keyline(dot, 2, WOOD_DEEP)
+			dot.Parent = pips
+			table.insert(pipDots, dot)
+		end
+	end
+
 	-- The bottom row: BACK, the primary, SKIP.
 	local row = Instance.new("Frame")
 	row.Name = "Actions"
@@ -230,6 +277,20 @@ function SurveyPanel.create(
 		caption.Visible = (state.caption or "") ~= ""
 		count.Text = string.format("%d / %d", state.carried, state.cost)
 		count.TextColor3 = if state.carried >= state.cost then Tokens.color.featherWhite else Color3.fromRGB(255, 190, 170)
+		local usesMax = state.usesMax or 0
+		pips.Visible = state.usesLeft ~= nil and usesMax > 0
+		if pips.Visible then
+			if #pipDots ~= usesMax then
+				buildPips(usesMax)
+			end
+			local left = state.usesLeft or 0
+			for i, dot in ipairs(pipDots) do
+				-- Spent pips go dark from the left; the ones still to buy stay lit.
+				local lit = i > usesMax - left
+				dot.BackgroundColor3 = if lit then Tokens.color.goldLight else WOOD_DEEP
+				dot.BackgroundTransparency = if lit then 0 else 0.3
+			end
+		end
 		primary.button.Visible = state.primary ~= nil
 		if state.primary then
 			primary.setText(state.primary)
