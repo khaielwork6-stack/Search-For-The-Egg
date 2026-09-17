@@ -3,12 +3,13 @@
 -- the round. The Upgrades tab pages through Hand, Bag and every tool - each page shows the item's
 -- paths as tiles with level pips and prices, a story box for the selected path with its current
 -- and next value, and one BUY. Unowned tools show ??? tiles with locks and a buy-the-tool button.
--- The Index tab lists the feathers: Normal and Rainbow with their odds and value. Pages turn with
--- a flip; the book opens and closes with a spring. Purchases go through UpgradeActions; the
+-- The Index tab lists the feathers: Normal and Rainbow with their odds and value. Pages turn one
+-- leaf at a time across the spine; the book opens and closes with a spring. Purchases go through UpgradeActions; the
 -- server's previews are the only source of levels and prices.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
@@ -54,6 +55,15 @@ local BOARD_THICKNESS_PX = 7 -- how far the board's underside shows below the co
 local BOARD_RULE_INSET = 10 -- how far in from the board's edge the gold rule is inlaid
 local BOOK_DESIGN = Vector2.new(1000, 580) -- the book's drawn size in px before the fit scale
 local BOOK_MAX_SCALE = 1.45 -- physical cap so a 4K window does not get a wall-sized book
+local COVER_PAD_BOTTOM = Tokens.spacing.xl + Tokens.typography.label.size -- the money band under the pages
+-- One page in design px: half the board's padded width less half the spine gap, full padded height.
+local PAGE_DESIGN =
+	Vector2.new((BOOK_DESIGN.X - Tokens.spacing.lg * 2) / 2 - Tokens.spacing.md, BOOK_DESIGN.Y - Tokens.spacing.lg - COVER_PAD_BOTTOM)
+local TURN_SECONDS = 0.5 -- one whole leaf turn, lift to landing
+local TURN_LIFT_PX = 10 -- how far the leaf rises off the paper at the top of its arc
+local TURN_NEAR_SCALE = 0.035 -- how much nearer (larger) the leaf reads at the top of its arc
+local TURN_CAST_PX = 56 -- the widest the leaf's shadow falls across the page below
+local TURN_Z = 20 -- above the pages, the spine and its bands
 
 -- The items that get a page, in book order.
 local function itemList(cfg: { [string]: any }): { { id: string, title: string, art: string, paths: { string } } }
@@ -109,6 +119,43 @@ end
 
 local function previewOf(round: any, upgradeId: string): any?
 	return UpgradeActions.previewFor(round, upgradeId)
+end
+
+-- Dresses a frame as a page: slate paper with the kit's ramp, a thin keyline, the page padding and a
+-- darker gutter on the spine side (anchorX 0 = a left page, 1 = a right page). The fixed pages and
+-- both faces of the turning leaf are dressed by this one function, so a leaf that lands reads as
+-- exactly the page it becomes.
+local function dressPage(page: Frame, anchorX: number)
+	page.BackgroundColor3 = PAGE
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, Tokens.radius.md)
+	corner.Parent = page
+	local padding = Instance.new("UIPadding")
+	padding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
+	padding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
+	padding.PaddingTop = UDim.new(0, Tokens.spacing.md)
+	padding.PaddingBottom = UDim.new(0, Tokens.spacing.md)
+	padding.Parent = page
+	Depth.keyline(page, Tokens.depth.keylineThin)
+	-- The page is lit like every other surface in the kit (the glossy ramp), with a darker edge
+	-- where it meets the spine so the two halves read as one bound object.
+	Depth.applySheen(page, PAGE)
+	local gutter = Instance.new("Frame")
+	gutter.Name = "Gutter"
+	gutter.AnchorPoint = Vector2.new(1 - anchorX, 0)
+	gutter.Position = UDim2.fromScale(1 - anchorX, 0)
+	gutter.Size = UDim2.new(0, 14, 1, 0)
+	gutter.BackgroundColor3 = Tokens.color.overlay
+	gutter.BorderSizePixel = 0
+	gutter.ZIndex = page.ZIndex + 1
+	gutter.Parent = page
+	local gutterFade = Instance.new("UIGradient")
+	gutterFade.Rotation = if anchorX == 0 then 0 else 180
+	gutterFade.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(1, 0.45),
+	})
+	gutterFade.Parent = gutter
 end
 
 -- Builds one page (left or right) for an item, or the index pages.
@@ -714,6 +761,11 @@ function UpgradeBookController._renderSpread(self: UpgradeBookController)
 	-- added another set of button handles and tile connections to the session trove, which only
 	-- emptied when the book closed: a long session leaked one set per click.
 	local existing = self._session
+	if existing and existing.turning then
+		-- A leaf is in the air: its landing renders the whole spread once, with whatever changed
+		-- meanwhile (a purchase, new cash). Rebuilding the pages under it now would tear the turn.
+		return
+	end
 	if existing then
 		if existing.pageTrove then
 			existing.pageTrove:destroy()
@@ -741,43 +793,212 @@ function UpgradeBookController._renderSpread(self: UpgradeBookController)
 	session.money.Text = "Your money: " .. EconomyMath.formatCents(player and player.cashCents or 0)
 end
 
--- Page turn: the right page folds to the spine and back with the new spread.
+-- Page turn, built like a real leaf. Only the page being turned moves: it lifts off its outer edge,
+-- bends toward the spine (it narrows as the cosine of its angle, darkens toward the fold, rises a
+-- little and casts a shadow on the paper under it), crosses the spine, and lands as the page on the
+-- other side. The other page never moves. Going forward the right page lifts, its back is the new
+-- left page and the new right page is already lying underneath; backward is the mirror.
+--
+-- Roblox cannot snapshot a page, so the turning leaf is a clip frame holding two whole pages built
+-- with the same _renderPage: the front (what the lifting page showed) and the back (what lands).
+-- Each face is pinned to the leaf's outer edge, so narrowing the clip toward the spine carries the
+-- page's content in with its edge.
+
+-- The items on the three faces a turn from `page` to `target` involves: the leaf's front, its back
+-- (the page that lands) and the page revealed under it.
+local function turnFaces(items: { any }, page: number, target: number, direction: number): (any?, any?, any?)
+	if direction > 0 then
+		return items[page + 1], items[target], items[target + 1]
+	end
+	return items[page], items[target + 1], items[target]
+end
+
+-- Commits a page change: exactly once per completed turn, and the only place `flips` counts.
+function UpgradeBookController._commitTurn(self: UpgradeBookController, session: any, target: number)
+	session.turning = false
+	session.page = target
+	self.stats.flips += 1
+	if self._session == session then
+		self:_renderSpread()
+	end
+end
+
 function UpgradeBookController._flip(self: UpgradeBookController, direction: number)
 	local session = self._session
-	if not session or session.flipping then
+	if not session or session.turning then
 		return
 	end
 	local target = math.clamp(session.page + direction * 2, 1, math.max(1, #session.items - 1))
 	if target == session.page then
 		return
 	end
-	session.flipping = true
-	self.stats.flips += 1
-	-- The only page-turn sound. The arrow buttons deliberately carry no click of their own: a press
-	-- that does not change the page (already at an end, or mid-flip) returns above and stays silent.
+	-- The only page-turn sound, played once as the leaf lifts. The arrow buttons deliberately carry no
+	-- click of their own: a press that does not change the page (already at an end, or mid-turn)
+	-- returned above and stays silent.
 	self._deps.audio:play(Tokens.sound.uiPageFlip)
 	local motion = self._deps.accessibility:motionSettings()
-	local seconds = if motion.reducedMotion then 0.02 else 0.16
-	local page = if direction > 0 then session.right else session.left
-	local fold = TweenService:Create(
-		page,
-		TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-		{ Size = UDim2.new(0.02, 0, page.Size.Y.Scale, page.Size.Y.Offset) }
-	)
-	fold:Play()
-	fold.Completed:Once(function()
-		session.page = target
-		self:_renderSpread()
-		local open = TweenService:Create(
-			page,
-			TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ Size = UDim2.new(0.5, -Tokens.spacing.md, page.Size.Y.Scale, page.Size.Y.Offset) }
-		)
-		open:Play()
-		open.Completed:Once(function()
-			session.flipping = false
-		end)
-	end)
+	if motion.reducedMotion or session.tab ~= "upgrades" then
+		self:_commitTurn(session, target)
+		return
+	end
+	self:_turnLeaf(session, direction, target)
+end
+
+function UpgradeBookController._turnLeaf(self: UpgradeBookController, session: any, direction: number, target: number)
+	local cover: Frame = session.cover
+	local md = Tokens.spacing.md
+	local frontItem, backItem, underItem = turnFaces(session.items, session.page, target, direction)
+	-- Sides as anchorX: 1 is the right page, 0 the left.
+	local fromSide = if direction > 0 then 1 else 0
+	local toSide = 1 - fromSide
+	local fromPage: Frame = if direction > 0 then session.right else session.left
+	session.turning = true
+	local turn = Trove.new()
+	session.trove:add(turn)
+
+	-- Nothing on the book answers while a leaf is in the air: no second turn, no tab switch, no BUY on
+	-- a face that is mid-bend. The dim behind the book still sits under this, so a stray click does
+	-- not close it either.
+	local blocker = Instance.new("TextButton")
+	blocker.Name = "TurnBlocker"
+	blocker.Text = ""
+	blocker.AutoButtonColor = false
+	blocker.BackgroundTransparency = 1
+	blocker.Size = UDim2.fromScale(1, 1)
+	blocker.ZIndex = session.holder.ZIndex + 1
+	blocker.Parent = session.stage
+	turn:add(blocker)
+
+	-- The page under the lifting leaf is already the next one.
+	self:_renderPage(fromPage, underItem)
+
+	-- The shadows sit between the leaf and the paper: a drop shadow under the raised leaf, and a cast
+	-- that falls outward across the page below from the leaf's moving edge.
+	local drop = Instance.new("Frame")
+	drop.Name = "LeafDrop"
+	drop.BackgroundColor3 = Tokens.color.overlay
+	drop.BorderSizePixel = 0
+	drop.ZIndex = TURN_Z - 1
+	local dropCorner = Instance.new("UICorner")
+	dropCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
+	dropCorner.Parent = drop
+	drop.Parent = cover
+	turn:add(drop)
+	local cast = Instance.new("Frame")
+	cast.Name = "LeafCast"
+	cast.BackgroundColor3 = Tokens.color.overlay
+	cast.BorderSizePixel = 0
+	cast.ZIndex = TURN_Z - 1
+	local castFade = Instance.new("UIGradient")
+	castFade.Parent = cast
+	cast.Parent = cover
+	turn:add(cast)
+
+	local leaf = Instance.new("Frame")
+	leaf.Name = "TurningLeaf"
+	leaf.BackgroundTransparency = 1
+	leaf.BorderSizePixel = 0
+	leaf.ClipsDescendants = true
+	leaf.ZIndex = TURN_Z
+	leaf.Parent = cover
+	turn:add(leaf)
+	local function face(name: string, item: any?, side: number): (Frame, UIScale)
+		local sheet = Instance.new("Frame")
+		sheet.Name = name
+		-- Pinned to its outer edge (and centred top to bottom, so the near-scale grows both ways).
+		sheet.AnchorPoint = Vector2.new(side, 0.5)
+		sheet.Position = UDim2.fromScale(side, 0.5)
+		sheet.Size = UDim2.fromOffset(PAGE_DESIGN.X, PAGE_DESIGN.Y)
+		sheet.ZIndex = 1
+		dressPage(sheet, side)
+		local near = Instance.new("UIScale")
+		near.Parent = sheet
+		sheet.Parent = leaf
+		self:_renderPage(sheet, item)
+		return sheet, near
+	end
+	local front, frontNear = face("Front", frontItem, fromSide)
+	local back, backNear = face("Back", backItem, toSide)
+	-- The bend: a shade over the leaf, darkest at the fold on the spine side.
+	local bend = Instance.new("Frame")
+	bend.Name = "Bend"
+	bend.Size = UDim2.fromScale(1, 1)
+	bend.AnchorPoint = Vector2.new(0, 0.5)
+	bend.Position = UDim2.fromScale(0, 0.5)
+	bend.BackgroundColor3 = Tokens.color.overlay
+	bend.BorderSizePixel = 0
+	bend.ZIndex = 2
+	local bendCorner = Instance.new("UICorner")
+	bendCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
+	bendCorner.Parent = bend
+	local bendShade = Instance.new("UIGradient")
+	bendShade.Parent = bend
+	bend.Parent = leaf
+	-- Room above and below the page for the near-scale, so the clip only ever cuts across.
+	local headroom = math.ceil(PAGE_DESIGN.Y * TURN_NEAR_SCALE) + 2
+
+	-- theta runs 0 (flat on its own side) to pi (flat on the other side).
+	local function pose(theta: number)
+		local onFront = theta < math.pi / 2
+		local side = if onFront then fromSide else toSide
+		local sign = if side == 1 then 1 else -1
+		local width = math.abs(math.cos(theta))
+		local lifted = math.sin(theta)
+		local lift = TURN_LIFT_PX * lifted
+		local hingeX = UDim.new(0.5, sign * md)
+		-- The leaf's spine edge stays on the hinge; its outer edge travels.
+		local anchorX = 1 - side
+		local size = UDim2.new(0.5 * width, -md * width, 1, headroom)
+		leaf.AnchorPoint = Vector2.new(anchorX, 0.5)
+		leaf.Position = UDim2.new(hingeX, UDim.new(0.5, -lift))
+		leaf.Size = size
+		front.Visible = onFront
+		back.Visible = not onFront
+		frontNear.Scale = 1 + TURN_NEAR_SCALE * lifted
+		backNear.Scale = frontNear.Scale
+		bend.Size = UDim2.new(1, 0, 0, PAGE_DESIGN.Y * (1 + TURN_NEAR_SCALE * lifted))
+		-- Keypoint 0 is the fold: on the leaf's left when it lies on the right page, and mirrored.
+		bendShade.Rotation = if side == 1 then 0 else 180
+		bendShade.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1 - 0.78 * lifted),
+			NumberSequenceKeypoint.new(0.55, 1 - 0.32 * lifted),
+			NumberSequenceKeypoint.new(1, 1 - 0.08 * lifted),
+		})
+		drop.AnchorPoint = Vector2.new(anchorX, 0.5)
+		drop.Position = UDim2.new(hingeX, UDim.new(0.5, lift * 0.7))
+		drop.Size = UDim2.new(0.5 * width, -md * width, 1, 0)
+		drop.BackgroundTransparency = 1 - 0.4 * lifted
+		-- The cast starts at the leaf's outer edge and falls outward over the page below.
+		local outerX = UDim.new(0.5 + sign * 0.5 * width, sign * md * (1 - width))
+		cast.AnchorPoint = Vector2.new(1 - anchorX, 0)
+		cast.Position = UDim2.new(outerX, UDim.new(0, 0))
+		cast.Size = UDim2.new(0, math.floor(TURN_CAST_PX * lifted + 0.5), 1, 0)
+		castFade.Rotation = if side == 1 then 0 else 180
+		castFade.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1 - 0.5 * lifted),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+	end
+	pose(0)
+
+	local elapsed = 0
+	turn:add(RunService.RenderStepped:Connect(function(dt)
+		if self._session ~= session then
+			-- Closed mid-turn: the page is not changed and nothing more is drawn.
+			session.trove:remove(turn)
+			return
+		end
+		elapsed += dt
+		local t = math.min(1, elapsed / TURN_SECONDS)
+		-- Sine in-out on the angle: the leaf peels off slowly, sweeps through the spine, and settles.
+		pose(math.pi * (1 - math.cos(math.pi * t)) / 2)
+		if t >= 1 then
+			-- Landing: the spread renders once with the new pages (identical to the faces), then the
+			-- leaf goes, in the same frame.
+			self:_commitTurn(session, target)
+			session.trove:remove(turn)
+		end
+	end))
 end
 
 function UpgradeBookController.open(self: UpgradeBookController)
@@ -799,7 +1020,7 @@ function UpgradeBookController.open(self: UpgradeBookController)
 		items = itemList(cfg),
 		selectedPath = {},
 		pageTrove = Trove.new(),
-		flipping = false,
+		turning = false,
 		rainbowSeen = false,
 	}
 	self._session = session
@@ -818,6 +1039,7 @@ function UpgradeBookController.open(self: UpgradeBookController)
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = player:WaitForChild("PlayerGui")
 	local _, scaleCleanup, stage = SafeArea.applyScale(gui, cfg)
+	session.stage = stage
 	session.trove:add(gui)
 	session.trove:add(scaleCleanup)
 	local tap = Tokens.layout.minimumTapTargetPx
@@ -916,7 +1138,7 @@ function UpgradeBookController.open(self: UpgradeBookController)
 	coverPadding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
 	coverPadding.PaddingTop = UDim.new(0, Tokens.spacing.lg)
 	-- The bottom margin is a band deep enough for the money readout under the pages.
-	coverPadding.PaddingBottom = UDim.new(0, Tokens.spacing.xl + Tokens.typography.label.size)
+	coverPadding.PaddingBottom = UDim.new(0, COVER_PAD_BOTTOM)
 	coverPadding.Parent = cover
 
 	session.cover = cover
@@ -934,38 +1156,8 @@ function UpgradeBookController.open(self: UpgradeBookController)
 		page.AnchorPoint = Vector2.new(anchorX, 0)
 		page.Position = UDim2.fromScale(anchorX, 0)
 		page.Size = UDim2.new(0.5, -Tokens.spacing.md, 1, 0)
-		page.BackgroundColor3 = PAGE
 		page.ZIndex = 3
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, Tokens.radius.md)
-		corner.Parent = page
-		local padding = Instance.new("UIPadding")
-		padding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
-		padding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
-		padding.PaddingTop = UDim.new(0, Tokens.spacing.md)
-		padding.PaddingBottom = UDim.new(0, Tokens.spacing.md)
-		padding.Parent = page
-		Depth.keyline(page, Tokens.depth.keylineThin)
-
-		-- The page is lit like every other surface in the kit (the glossy ramp), with a darker edge
-		-- where it meets the spine so the two halves read as one bound object.
-		Depth.applySheen(page, PAGE)
-		local gutter = Instance.new("Frame")
-		gutter.Name = "Gutter"
-		gutter.AnchorPoint = Vector2.new(1 - anchorX, 0)
-		gutter.Position = UDim2.fromScale(1 - anchorX, 0)
-		gutter.Size = UDim2.new(0, 14, 1, 0)
-		gutter.BackgroundColor3 = Tokens.color.overlay
-		gutter.BorderSizePixel = 0
-		gutter.ZIndex = 4
-		gutter.Parent = page
-		local gutterFade = Instance.new("UIGradient")
-		gutterFade.Rotation = if anchorX == 0 then 0 else 180
-		gutterFade.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(1, 0.45),
-		})
-		gutterFade.Parent = gutter
+		dressPage(page, anchorX)
 		page.Parent = cover
 		-- The stack of sheets under the top one, along the outer edge. Two thin slivers stepped out and
 		-- down is all it takes for a page to stop being a rectangle and become paper. Built after the

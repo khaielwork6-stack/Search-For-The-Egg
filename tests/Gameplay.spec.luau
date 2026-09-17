@@ -279,9 +279,8 @@ return function(describe, it, expect)
 			expect(bought.data.paidCents).toBe(graspPreview.costCents)
 			expect(state.cashCents).toBe(1000 - graspPreview.costCents)
 			expect(state.handLevels.grasp).toBe(1)
+			-- No location gate: the book buys from anywhere, here from the spawn far from the counter.
 			h.standAt(1, layout.spawn)
-			expect(h.upgrades:purchase(1, h.token(1), "bag", 1).code).toBe("out_of_range")
-			h.standAt(1, layout.upgradeBoard)
 			state.cashCents = 100000
 			for level = 1, cfg.bags.maxLevel - 1 do
 				expect(h.upgrades:purchase(1, h.token(1), "bag", level).ok).toBe(true)

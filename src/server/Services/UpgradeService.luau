@@ -9,7 +9,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local RoundReducer = require(Shared.Reducers.RoundReducer)
-local ChapterLayout = require(Shared.Domain.ChapterLayout)
 local ToolSpecs = require(Shared.Domain.ToolSpecs)
 local EconomyMath = require(Shared.EconomyMath)
 local Envelope = require(Shared.Net.Envelope)
@@ -356,15 +355,12 @@ function UpgradeService.purchase(
 	if not state or not state.alive then
 		return reject(self, Envelope.Codes.INVALID_STATE, "not_alive")
 	end
-	local characterPosition = self._getCharacterPosition(userId)
-	if not characterPosition then
+	if not self._getCharacterPosition(userId) then
 		return reject(self, Envelope.Codes.INVALID_STATE, "no_character")
 	end
-	local board = ChapterLayout[runtime.state.chapter].upgradeBoard
-	local flat = Vector3.new(characterPosition.X - board.X, 0, characterPosition.Z - board.Z)
-	if flat.Magnitude > self._config.interaction.upgradeRangeStuds then
-		return reject(self, Envelope.Codes.OUT_OF_RANGE, "board")
-	end
+	-- No location gate: the upgrade book (Tab) buys from anywhere in the round, and the supplies
+	-- counter and workbench send this same request. Price, funds, level, phase, token and the
+	-- request rate limit are still checked here and in the net layer.
 	local parsed = UpgradeService.parseId(upgradeId)
 	local preview = parsed and self:preview(state, upgradeId, runtime, userId)
 	if not parsed or not preview then
