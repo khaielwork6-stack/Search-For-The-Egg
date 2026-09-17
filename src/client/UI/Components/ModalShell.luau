@@ -236,7 +236,6 @@ function ModalShell.create(
 		position = UDim2.fromScale(0, 0),
 		anchor = Vector2.new(0, 0),
 	})
-	title.TextWrapped = false
 	title.TextTruncate = Enum.TextTruncate.AtEnd
 
 	local headerRight = Instance.new("Frame")
@@ -289,7 +288,6 @@ function ModalShell.create(
 		position = UDim2.fromScale(0.5, 0.5),
 		anchor = Vector2.new(0.5, 0.5),
 	})
-	cross.TextWrapped = false
 	local closeScale = Instance.new("UIScale")
 	closeScale.Parent = closeButton
 	closeButton.MouseEnter:Connect(function()

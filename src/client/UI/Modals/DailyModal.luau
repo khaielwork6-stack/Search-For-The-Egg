@@ -206,7 +206,6 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			position = UDim2.fromScale(0.5, 0.05),
 			anchor = Vector2.new(0.5, 0),
 		})
-		title.TextWrapped = false
 		local amount = Fit.text(body, "Amount", "+" .. tostring(entry.gems) .. " Gems", {
 			font = Tokens.typography.label.font,
 			color = if grand then Tokens.color.gold else Tokens.color.featherWhite,
@@ -219,7 +218,6 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			position = UDim2.fromScale(0.5, 0.215),
 			anchor = Vector2.new(0.5, 0),
 		})
-		amount.TextWrapped = false
 
 		-- Artwork: the painted reward, the biggest thing on the card.
 		local artBox = Fit.frame(body, "ArtBox", UDim2.fromScale(0.5, 0.33), UDim2.fromScale(0.86, 0.42), z + 3, Vector2.new(0.5, 0))
@@ -268,7 +266,6 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 			position = UDim2.fromScale(0.5, 0.5),
 			anchor = Vector2.new(0.5, 0.5),
 		})
-		pillLabel.TextWrapped = false
 
 		-- Flash for the claim moment.
 		local flash = Instance.new("Frame")
