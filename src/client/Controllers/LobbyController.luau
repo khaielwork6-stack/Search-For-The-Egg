@@ -191,12 +191,32 @@ function LobbyController.new(deps: any): LobbyController
 		local usable = available - gearBottom - Tokens.layout.safeAreaPaddingPx
 		local count = math.max(1, #slots)
 		local tile = math.clamp(math.floor((usable - gap * (count - 1)) / count - nameHeight), math.max(minimumTap, 52), size)
+		-- A landscape phone has no height for four tiles with names beneath: the names move to the
+		-- left of the tiles and each slot is just one tile tall.
+		local beside = phone and count * (tile + nameHeight) + gap * (count - 1) > usable
+		local nameWidth = 108
+		rail.Size = UDim2.fromOffset(tile + Tokens.spacing.md + (if beside then nameWidth + Tokens.spacing.sm else 0), 0)
 		for _, item in ipairs(slots) do
-			item.slot.Size = UDim2.fromOffset(tile + Tokens.spacing.md, tile + nameHeight)
 			item.button.Size = UDim2.fromOffset(tile, tile)
-			item.label.Size = UDim2.fromOffset(108, nameHeight)
+			if beside then
+				item.slot.Size = UDim2.fromOffset(tile + Tokens.spacing.md + nameWidth + Tokens.spacing.sm, tile)
+				item.button.AnchorPoint = Vector2.new(1, 0)
+				item.button.Position = UDim2.new(1, -Tokens.spacing.md / 2, 0, 0)
+				item.label.AnchorPoint = Vector2.new(1, 0.5)
+				item.label.Position = UDim2.new(1, -(tile + Tokens.spacing.md), 0.5, 0)
+				item.label.Size = UDim2.fromOffset(nameWidth, nameHeight)
+				item.label.TextXAlignment = Enum.TextXAlignment.Right
+			else
+				item.slot.Size = UDim2.fromOffset(tile + Tokens.spacing.md, tile + nameHeight)
+				item.button.AnchorPoint = Vector2.new(0.5, 0)
+				item.button.Position = UDim2.fromScale(0.5, 0)
+				item.label.AnchorPoint = Vector2.new(0.5, 1)
+				item.label.Position = UDim2.fromScale(0.5, 1)
+				item.label.Size = UDim2.fromOffset(nameWidth, nameHeight)
+				item.label.TextXAlignment = Enum.TextXAlignment.Center
+			end
 		end
-		local railHeight = count * (tile + nameHeight) + gap * (count - 1)
+		local railHeight = count * (tile + (if beside then 0 else nameHeight)) + gap * (count - 1)
 		-- Centred when there is room, otherwise pinned into the strip.
 		local top = math.clamp(
 			available / 2 - railHeight / 2 + gearBottom / 2,
