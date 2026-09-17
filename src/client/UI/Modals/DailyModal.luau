@@ -50,6 +50,27 @@ local GREEN = Color3.fromRGB(96, 208, 40)
 local GREEN_DEEP = Color3.fromRGB(38, 132, 24)
 local PILL_TEXT = Color3.fromRGB(18, 40, 12)
 
+-- Card containment (owner, 17 Sep 2026: the Day 1 glow and the top row poked past the panel top and
+-- the bottom row was cut by the foot). The numbers that keep every card inside its border:
+--   * The grid is inset inside the content frame (1% / 2% each side), and the content frame already
+--     sits between the floating title band (ends at 8.2% of the modal card) and the panel foot (94%).
+--   * Cells: 4 x 2, CellPadding 1% x 3%, so CellSize = (1 - 3 * 0.01) / 4 = 0.2425 wide and
+--     (1 - 0.03) / 2 = 0.485 tall of the grid: exactly the grid, nothing hangs past it.
+--   * Inside each cell the card is centred at CARD_FILL (0.93) of the cell minus 2 * STROKE_PX, where
+--     STROKE_PX (6) is the widest stroke drawn outside the body (lime glow = keyline 4 + 2; the black
+--     keyline is 4). So card + glow measure exactly 0.93 of the cell at rest.
+--   * All motion is a UIScale on that centre-anchored card (strokes scale with it), and every scale
+--     target is clamped to PEAK_SCALE (1.07): 1.07 * 0.93 = 0.995 <= 1, so card and glow stay inside
+--     the cell at the top of every bounce. The opening pop starts at 0.8 so its Back overshoot (about
+--     10% of the 0.22 swing: ~1.04) stays under the peak; hover eases with Quad (no overshoot); the
+--     claim beat is an Elastic release that only decays from 1.06; the breathing loop tops at 1.04.
+--   * The art scales on a centre-anchored box: 0.546 of the card tall at rest and 0.655 at its 1.2
+--     claim peak, centred at 0.54, so it spans 0.19..0.87 of the card even with the 0.025 float.
+--     Sparkles sit at 0.16..0.84 x 0.32..0.74 and are 0.1 tall, so they never reach an edge either.
+local CARD_FILL = 0.93
+local STROKE_PX = Tokens.depth.keyline + 2
+local PEAK_SCALE = 1.07
+
 local FLIGHT_SECONDS = 0.55
 local FLIGHT_STAGGER = 0.06
 
@@ -137,6 +158,10 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	local function amp(value: number): number
 		return Motion.amplitude(value, motion)
 	end
+	-- A card scale target, never past the containment peak.
+	local function bounce(value: number): number
+		return math.min(1 + amp(value), PEAK_SCALE)
+	end
 
 	-- The content frame is the one root: no scrolling, every child in Scale.
 	container.AutomaticCanvasSize = Enum.AutomaticSize.None
@@ -155,10 +180,10 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	end
 
 	-- Reward grid --------------------------------------------------------------------------------
-	local grid = Fit.frame(container, "Calendar", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), z)
+	local grid = Fit.frame(container, "Calendar", UDim2.fromScale(0.01, 0.02), UDim2.fromScale(0.98, 0.96), z)
 	local layout = Instance.new("UIGridLayout")
-	layout.CellSize = UDim2.fromScale(0.235, 0.47)
-	layout.CellPadding = UDim2.fromScale(0.02, 0.06)
+	layout.CellSize = UDim2.fromScale(0.2425, 0.485)
+	layout.CellPadding = UDim2.fromScale(0.01, 0.03)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	layout.VerticalAlignment = Enum.VerticalAlignment.Center
@@ -172,8 +197,18 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		root.BackgroundTransparency = 1
 		root.BorderSizePixel = 0
 		root.ZIndex = z + 1
+		-- The scaled card: centred in the cell with room for its outside strokes and the peak bounce.
+		local card = Instance.new("Frame")
+		card.Name = "Card"
+		card.AnchorPoint = Vector2.new(0.5, 0.5)
+		card.Position = UDim2.fromScale(0.5, 0.5)
+		card.Size = UDim2.new(CARD_FILL, -STROKE_PX * 2, CARD_FILL, -STROKE_PX * 2)
+		card.BackgroundTransparency = 1
+		card.BorderSizePixel = 0
+		card.ZIndex = z + 1
+		card.Parent = root
 		local scale = Instance.new("UIScale")
-		scale.Parent = root
+		scale.Parent = card
 
 		-- The card: dark slate, a thick black keyline, a glossy ramp; the lime glow lives on a second
 		-- stroke so the keyline never has to change.
@@ -193,7 +228,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		glow.Transparency = 0.15
 		glow.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 		glow.Parent = body
-		body.Parent = root
+		body.Parent = card
 
 		local title = Fit.text(body, "Title", "DAY " .. entry.day, {
 			font = Tokens.typography.display.font,
@@ -221,7 +256,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 		})
 
 		-- Artwork: the painted reward, the biggest thing on the card.
-		local artBox = Fit.frame(body, "ArtBox", UDim2.fromScale(0.5, 0.33), UDim2.fromScale(0.86, 0.42), z + 3, Vector2.new(0.5, 0))
+		local artBox = Fit.frame(body, "ArtBox", UDim2.fromScale(0.5, 0.54), UDim2.fromScale(0.86, 0.42), z + 3, Vector2.new(0.5, 0.5))
 		local artScale = Instance.new("UIScale")
 		artScale.Parent = artBox
 		local role = artRoleFor(entry.gems or 0, biggest, grand)
@@ -710,9 +745,9 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 				{ BackgroundTransparency = 1 }
 			)
 			:Play()
-		cell.artScale.Scale = 1 + amp(0.28)
+		cell.artScale.Scale = 1 + amp(0.2)
 		Tween.scale(cell.artScale, "release", motion, 1)
-		cell.scale.Scale = 1 + amp(0.08)
+		cell.scale.Scale = bounce(0.06)
 		Tween.scale(cell.scale, "release", motion, 1)
 		local copies = math.clamp(3 + math.floor((data.gems or 0) / 40), 3, 9)
 		flyGems(cell, copies, function()
@@ -763,7 +798,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 						cell.stopPulse()
 						cell.stopPulse = nil
 					end
-					TweenService:Create(cell.scale, TweenInfo.new(seconds(0.14), Enum.EasingStyle.Back), { Scale = 1 + amp(0.06) }):Play()
+					TweenService:Create(cell.scale, TweenInfo.new(seconds(0.14), Enum.EasingStyle.Quad), { Scale = bounce(0.06) }):Play()
 				end
 			end)
 		)
@@ -820,8 +855,8 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 	-- rise. Everything is pressable from the first frame; nothing waits on this.
 	if not motion.reducedMotion then
 		for index, cell in ipairs(cells) do
-			cell.scale.Scale = 0.6
-			local rest = if cell.claimable then 1 + amp(0.02) else 1
+			cell.scale.Scale = 0.8
+			local rest = if cell.claimable then bounce(0.02) else 1
 			TweenService:Create(
 				cell.scale,
 				TweenInfo.new(seconds(0.24), Enum.EasingStyle.Back, Enum.EasingDirection.Out, 0, false, 0.03 * (index - 1)),
@@ -838,7 +873,7 @@ function DailyModal.build(container: ScrollingFrame, api: any, deps: Deps): () -
 						cell.stopPulse()
 						cell.stopPulse = nil
 					end
-					cell.scale.Scale = 1 + amp(0.09)
+					cell.scale.Scale = bounce(0.06)
 					local settle = TweenService:Create(
 						cell.scale,
 						TweenInfo.new(seconds(0.34), Enum.EasingStyle.Back, Enum.EasingDirection.Out),

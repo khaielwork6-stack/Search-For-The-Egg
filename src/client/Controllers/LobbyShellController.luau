@@ -14,6 +14,7 @@ local Trove = require(Shared.Util.Trove)
 local PerfTrace = require(Shared.Util.PerfTrace)
 local Tokens = require(Shared.Design.Tokens)
 local AssetManifest = require(Shared.Design.AssetManifest)
+local WorldBillboard = require(script.Parent.Parent.UI.Components.WorldBillboard)
 local NpcPlate = require(script.Parent.Parent.UI.NpcPlate)
 
 local LobbyShellController = {}
@@ -346,44 +347,22 @@ end
 -- The floating board over a nest pad: the big count on top, the line beneath, both from the
 -- zone's SFE_PadText attribute ("0/4\nTouch to create a party" / "Setting off in 3").
 function LobbyShellController._presentPadBoard(self: LobbyShellController, part: BasePart)
-	local gui = Instance.new("BillboardGui")
-	gui.Name = "PadBoard"
-	gui.Adornee = part
-	gui.Size = UDim2.fromOffset(320, 110)
-	gui.StudsOffsetWorldSpace = Vector3.new(0, 6.5, 0)
-	gui.MaxDistance = 120
-	gui.LightInfluence = 0
-	gui.ResetOnSpawn = false
-	local count = Instance.new("TextLabel")
-	count.Name = "Count"
-	count.BackgroundTransparency = 1
-	count.Size = UDim2.new(1, 0, 0, 56)
-	count.Font = Tokens.typography.display.font
-	count.TextSize = 48
-	count.TextColor3 = Tokens.color.featherWhite
-	count.Text = "0/4"
-	count.Parent = gui
-	local countStroke = Instance.new("UIStroke")
-	countStroke.Thickness = 3
-	countStroke.Color = Tokens.color.outline
-	countStroke.Parent = count
-	local line = Instance.new("TextLabel")
-	line.Name = "Line"
-	line.BackgroundTransparency = 1
-	line.AnchorPoint = Vector2.new(0.5, 1)
-	line.Position = UDim2.fromScale(0.5, 1)
-	line.Size = UDim2.new(1, 0, 0, 44)
-	line.Font = Tokens.typography.label.font
-	line.TextSize = Tokens.typography.title.size
-	line.TextColor3 = Tokens.color.featherWhite
-	line.TextWrapped = true
-	line.Text = "Touch to create a party"
-	line.Parent = gui
-	local lineStroke = Instance.new("UIStroke")
-	lineStroke.Thickness = 2.4
-	lineStroke.Color = Tokens.color.outline
-	lineStroke.Parent = line
-	gui.Parent = part
+	-- A world billboard: studs-sized (it shrinks with distance), occluded by the lobby's geometry and
+	-- culled past Tokens.world.padBoardMaxDistance.
+	local world = Tokens.world
+	local gui = WorldBillboard.create(part, "PadBoard", world.padBoardStuds, Vector3.new(0, 6.5, 0), world.padBoardMaxDistance)
+	local count = WorldBillboard.text(gui, "Count", "0/4", {
+		size = UDim2.fromScale(1, 0.5),
+		font = Tokens.typography.display.font,
+		outline = 3,
+	})
+	local line = WorldBillboard.text(gui, "Line", "Touch to create a party", {
+		size = UDim2.fromScale(1, 0.4),
+		position = UDim2.fromScale(0.5, 1),
+		anchor = Vector2.new(0.5, 1),
+		outline = 2.4,
+		wrap = true,
+	})
 	local padIndex = part:GetAttribute("SFE_Pad")
 	local shell = part.Parent
 	local function apply()

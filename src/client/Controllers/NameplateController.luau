@@ -8,13 +8,13 @@ local Players = game:GetService("Players")
 local Shared = ReplicatedStorage.Shared
 local Tokens = require(Shared.Design.Tokens)
 local Trove = require(Shared.Util.Trove)
-local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
+local WorldBillboard = require(script.Parent.Parent.UI.Components.WorldBillboard)
 
 local NameplateController = {}
 NameplateController.__index = NameplateController
 
 export type NameplateController = typeof(setmetatable(
-	{} :: { _trove: any, _plates: { [Player]: { gui: BillboardGui, record: TextLabel } }, _showRecord: boolean },
+	{} :: { _trove: any, _plates: { [Player]: { gui: BillboardGui, record: Frame, recordText: TextLabel } }, _showRecord: boolean },
 	NameplateController
 ))
 
@@ -45,7 +45,7 @@ function NameplateController.new(round: any?): NameplateController
 		self._trove:add(player:GetAttributeChangedSignal("SFE_BestTimeMs"):Connect(function()
 			local plate = self._plates[player]
 			if plate then
-				plate.record.Text = formatRecord(player:GetAttribute("SFE_BestTimeMs") :: number?)
+				plate.recordText.Text = formatRecord(player:GetAttribute("SFE_BestTimeMs") :: number?)
 			end
 		end))
 	end
@@ -64,36 +64,23 @@ function NameplateController._attach(self: NameplateController, player: Player, 
 	if not head or not head:IsA("BasePart") then
 		return
 	end
-	local gui = Instance.new("BillboardGui")
-	gui.Name = "SFE_Nameplate"
-	gui.Adornee = head
-	gui.Size = UDim2.fromOffset(220, 54)
-	gui.StudsOffsetWorldSpace = Vector3.new(0, 2.6, 0)
-	gui.MaxDistance = 70
-	gui.LightInfluence = 0
-	gui.ResetOnSpawn = false
-	local name = FrameKit.text(gui, "Name", player.DisplayName, "title", {
-		zIndex = 2,
-		color = Tokens.color.featherWhite,
-		align = Enum.TextXAlignment.Center,
+	-- A world billboard (studs-sized, occluded by geometry, culled past Tokens.world range).
+	local world = Tokens.world
+	local gui = WorldBillboard.create(head, "SFE_Nameplate", world.playerPlateStuds, Vector3.new(0, 2.2, 0), world.playerPlateMaxDistance)
+	WorldBillboard.text(gui, "Name", player.DisplayName, {
+		size = UDim2.fromScale(1, 0.58),
+		font = Tokens.typography.title.font,
+		outline = 2.4,
 	})
-	name.Size = UDim2.new(1, 0, 0, Tokens.typography.title.size + 4)
-	name.TextSize = Tokens.typography.title.size - 2
-	FrameKit.outline(name, 2.4)
-	local record = FrameKit.pill(gui, "Record", formatRecord(player:GetAttribute("SFE_BestTimeMs") :: number?), {
-		size = UDim2.fromOffset(0, Tokens.typography.caption.size + Tokens.spacing.sm + 2),
-		textSize = Tokens.typography.caption.size,
-		zIndex = 2,
+	local record, recordText = WorldBillboard.pill(gui, "Record", formatRecord(player:GetAttribute("SFE_BestTimeMs") :: number?), {
+		size = UDim2.fromScale(1, 0.38),
+		position = UDim2.fromScale(0.5, 1),
+		anchor = Vector2.new(0.5, 1),
 		fill = Tokens.color.creamPill,
 		textColor = Tokens.color.inkStrong,
-		fitText = true,
-		outline = true,
 	})
-	record.AnchorPoint = Vector2.new(0.5, 1)
-	record.Position = UDim2.fromScale(0.5, 1)
 	record.Visible = self._showRecord
-	gui.Parent = head
-	self._plates[player] = { gui = gui, record = record }
+	self._plates[player] = { gui = gui, record = record, recordText = recordText }
 end
 
 function NameplateController.setRecordVisible(self: NameplateController, visible: boolean)

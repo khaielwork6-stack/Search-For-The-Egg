@@ -7,8 +7,8 @@
 -- small so it reads as alive rather than busy. No particles and no lights, so nothing it does can
 -- touch the world behind it.
 --
--- It decides nothing about ownership or price. The caller tells it whether the pass is owned, and a
--- click is a request that the server validates.
+-- It decides nothing about ownership or price. The caller tells it whether the pass is owned (an
+-- owned pass hides the whole offer), and a click is a request that the server validates.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -105,37 +105,7 @@ function LobbyOffer.create(parent: Instance, options: Options): Offer?
 	glintFade.Rotation = 90
 	glintFade.Parent = glint
 
-	local ownedTag = Instance.new("TextLabel")
-	ownedTag.Name = "Owned"
-	ownedTag.AnchorPoint = Vector2.new(0.5, 1)
-	ownedTag.Position = UDim2.fromScale(0.5, 0.98)
-	ownedTag.Size = UDim2.new(0.86, 0, 0, Tokens.typography.label.size + Tokens.spacing.sm)
-	ownedTag.BackgroundColor3 = Tokens.color.success
-	ownedTag.BorderSizePixel = 0
-	ownedTag.Font = Tokens.typography.label.font
-	ownedTag.TextSize = Tokens.typography.label.size
-	ownedTag.TextColor3 = Tokens.color.featherWhite
-	ownedTag.Text = "OWNED"
-	ownedTag.Visible = false
-	ownedTag.ZIndex = frame.ZIndex + 3
-	ownedTag.Parent = frame
-	local ownedCorner = Instance.new("UICorner")
-	ownedCorner.CornerRadius = UDim.new(0, Tokens.radius.pill)
-	ownedCorner.Parent = ownedTag
-	local ownedStroke = Instance.new("UIStroke")
-	ownedStroke.Thickness = Tokens.depth.keyline
-	ownedStroke.Color = Tokens.color.outline
-	ownedStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	ownedStroke.Parent = ownedTag
-	local ownedText = Instance.new("UIStroke")
-	ownedText.Name = "TextOutline"
-	ownedText.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
-	ownedText.Thickness = 2
-	ownedText.Color = Tokens.color.outline
-	ownedText.LineJoinMode = Enum.LineJoinMode.Round
-	ownedText.Parent = ownedTag
-
-	local alive, owned, hovered = true, false, false
+	local alive, owned, hovered, wanted = true, false, false, true
 	local connections: { RBXScriptConnection } = {}
 	local threads: { thread } = {}
 
@@ -245,18 +215,18 @@ function LobbyOffer.create(parent: Instance, options: Options): Offer?
 	handle = {
 		frame = frame,
 		button = button,
+		-- Owners never see the offer at all (owner, 17 Sep 2026): the whole tile hides, live, the moment
+		-- the projection reports the pass, and nothing about it can be clicked.
 		setOwned = function(isOwned: boolean)
 			owned = isOwned
-			ownedTag.Visible = isOwned
-			button.ImageTransparency = if isOwned then 0.25 else 0
-			glow.ImageTransparency = if isOwned then 1 else offer.glowTransparency
-			shineHost.Visible = not isOwned
 			if isOwned then
 				applyScale(1)
 			end
+			frame.Visible = wanted and not owned
 		end,
 		setVisible = function(visible: boolean)
-			frame.Visible = visible
+			wanted = visible
+			frame.Visible = wanted and not owned
 		end,
 		destroy = function()
 			if not alive then

@@ -826,7 +826,7 @@ function UpgradeBookController.open(self: UpgradeBookController)
 	dim.Name = "Dim"
 	dim.Text = ""
 	dim.BackgroundColor3 = Tokens.color.overlay
-	dim.BackgroundTransparency = 0.45
+	dim.BackgroundTransparency = 1 -- invisible click-catcher: no scrim behind menus (owner)
 	dim.Size = UDim2.fromScale(1, 1)
 	dim.ZIndex = 1
 	dim.Parent = stage

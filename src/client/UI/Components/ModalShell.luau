@@ -85,7 +85,8 @@ function ModalShell.create(
 	local root = Instance.new("Frame")
 	root.Name = "Modal_" .. (options.id or options.title)
 	root.Size = UDim2.fromScale(1, 1)
-	root.BackgroundColor3 = Tokens.color.overlay
+	-- No scrim (owner, 17 Sep 2026: remove the semi-transparent black overlay behind menus). The root
+	-- stays fully transparent for its whole life; it is only the click-catcher.
 	root.BackgroundTransparency = 1
 	root.BorderSizePixel = 0
 	root.ZIndex = z
@@ -385,11 +386,8 @@ function ModalShell.create(
 		titleLabel = title,
 		open = function()
 			local openRecipe = Motion.recipe("panelOpen", motion)
-			local fadeRecipe = Motion.recipe("panelFadeIn", motion)
 			cardScale.Scale = openRecipe.fromScale or 0.82
 			card.Position = UDim2.new(0.5, 0, 0.52, Motion.amplitude(18, motion))
-			TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = if options.blocking then 0.45 else 0.7 })
-				:Play()
 			TweenService:Create(cardScale, Motion.tweenInfo(openRecipe), { Scale = 1 }):Play()
 			TweenService:Create(card, Motion.tweenInfo(openRecipe), { Position = UDim2.fromScale(0.5, 0.52) }):Play()
 			relayout()
@@ -397,6 +395,7 @@ function ModalShell.create(
 		close = function(onClosed)
 			local closeRecipe = Motion.recipe("panelClose", motion)
 			local fadeRecipe = Motion.recipe("panelFadeOut", motion)
+			-- The root never darkens; this tween only times the destroy after the card's ease.
 			local fade = TweenService:Create(root, Motion.tweenInfo(fadeRecipe), { BackgroundTransparency = 1 })
 			fade:Play()
 			TweenService:Create(cardScale, Motion.tweenInfo(closeRecipe), { Scale = closeRecipe.toScale or 0.86 }):Play()

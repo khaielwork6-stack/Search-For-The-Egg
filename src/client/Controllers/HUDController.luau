@@ -26,6 +26,7 @@ local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
 local Icons = require(script.Parent.Parent.UI.Components.Icons)
 local Skin = require(script.Parent.Parent.UI.Components.Skin)
 local Depth = require(script.Parent.Parent.UI.Components.Depth)
+local GemChip = require(script.Parent.Parent.UI.Components.GemChip)
 local SettingsModal = require(script.Parent.Parent.UI.Modals.SettingsModal)
 
 local HUDController = {}
@@ -109,16 +110,15 @@ function HUDController.new(deps: any): HUDController
 	self._trove:add(gui)
 	self._trove:add(scaleCleanup)
 
-	-- Top-left currency row: dark chips with a gem / token glyph and a live count in white stroked
-	-- numerals. The gem chip is the big one, like the reference: a 40 px painted gem and a 30 px count.
-	local GEM_ICON_PX = 40
-	local GEM_COUNT_PX = 30
-	local GEM_CHIP_HEIGHT = GEM_ICON_PX + Tokens.spacing.md
+	-- Top-left currency row: the gem pill (GemChip: gem, count and "+" in fixed proportions of the
+	-- pill height) and the event token chip. Heights are stage pixels, so the stage UIScale sizes the
+	-- whole row per layout class and nothing inside a pill drifts out of proportion.
+	local CHIP_HEIGHT = Tokens.layout.minimumTapTargetPx
 	local row = Instance.new("Frame")
 	row.Name = "Currencies"
 	row.BackgroundTransparency = 1
 	row.Position = UDim2.fromOffset(Tokens.layout.safeAreaPaddingPx, Tokens.layout.safeAreaPaddingPx)
-	row.Size = UDim2.fromOffset(0, GEM_CHIP_HEIGHT)
+	row.Size = UDim2.fromOffset(0, CHIP_HEIGHT)
 	row.AutomaticSize = Enum.AutomaticSize.X
 	local rowLayout = Instance.new("UIListLayout")
 	rowLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -127,9 +127,9 @@ function HUDController.new(deps: any): HUDController
 	rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	rowLayout.Parent = row
 	row.Parent = stage
-	local function currencyChip(name: string, order: number, iconRole: string, fallback: string, big: boolean?): TextLabel
-		local height = if big then GEM_CHIP_HEIGHT else Tokens.layout.minimumTapTargetPx
-		local iconPx = if big then GEM_ICON_PX else Tokens.icon.md + 2
+	local function currencyChip(name: string, order: number, iconRole: string, fallback: string): TextLabel
+		local height = CHIP_HEIGHT
+		local iconPx = Tokens.icon.md + 2
 		local frame, label, iconSlot = FrameKit.chip(row, name, { zIndex = Tokens.zIndex.hud, height = height })
 		frame.LayoutOrder = order
 		iconSlot.Visible = true
@@ -140,145 +140,111 @@ function HUDController.new(deps: any): HUDController
 		end
 		label.Text = "0"
 		label.Font = Tokens.typography.label.font
-		label.TextSize = if big then GEM_COUNT_PX else Tokens.typography.label.size + 1
+		label.TextSize = Tokens.typography.label.size + 1
 		local outline = label:FindFirstChild("TextOutline") :: UIStroke?
 		if outline then
-			outline.Thickness = if big then 3 else 2.4
-		end
-		-- The kit chip fits its width around a 24 px icon slot; the big gem slot needs the difference.
-		local extra = iconPx - (Tokens.icon.md + 2)
-		if extra > 0 then
-			local function widen()
-				frame.Size = UDim2.fromOffset(frame.Size.X.Offset + extra, height)
-			end
-			label:GetPropertyChangedSignal("TextBounds"):Connect(widen)
-			widen()
+			outline.Thickness = 2.4
 		end
 		return label
 	end
-	self._labels.gems = currencyChip("Gems", 1, "hud.gem", "gem", true)
-	-- "+" beside the Gems chip opens the Gem Shop (the lobby registers the opener).
-	local plusHandle = Button.build(row, {
-		text = "+",
-		variant = "success",
-		round = true,
-		minimumTapTarget = SafeArea.minimumTapTarget(gui, deps.config),
-		motion = deps.accessibility:motionSettings(),
-		size = UDim2.fromOffset(Tokens.layout.minimumTapTargetPx - 10, Tokens.layout.minimumTapTargetPx - 10),
-		zIndex = Tokens.zIndex.hud + 1,
-		textSize = Tokens.typography.title.size,
+	-- "+" inside the gem pill opens the Gem Shop; hidden until the lobby registers the opener.
+	local gemChip = GemChip.build(row, {
+		count = 0,
+		height = CHIP_HEIGHT,
+		zIndex = Tokens.zIndex.hud,
+		showPlus = false,
 		sound = function()
 			deps.audio:play(Tokens.sound.uiTap)
 		end,
-		hoverSound = function()
-			deps.audio:play(Tokens.sound.uiHover)
-		end,
-		onActivated = function()
+		onPlus = function()
 			if self._gemShopOpener then
 				self._gemShopOpener()
 			end
 		end,
 	})
-	plusHandle.button.Name = "GemPlus"
-	plusHandle.button.LayoutOrder = 2
-	plusHandle.button.Visible = false
-	self._labels.gemPlus = plusHandle.button
-	self._trove:add(plusHandle.destroy)
+	gemChip.root.Name = "Gems"
+	gemChip.root.LayoutOrder = 1
+	gemChip.plus.Name = "GemPlus"
+	gemChip.count.Text = "0"
+	self._labels.gems = gemChip.count
+	self._labels.gemChip = gemChip
+	self._trove:add(gemChip.destroy)
 	self._labels.tokens = currencyChip("Tokens", 3, "hud.token", "coin")
 
-	-- Top-center objective ribbon: a dark slate banner with a green line along its top, the objective
-	-- in white stroked lettering and the detail beneath it.
-	local bannerHeight = Tokens.layout.minimumTapTargetPx + Tokens.typography.caption.size + Tokens.spacing.lg
+	-- Top-center objective pill (owner, 17 Sep 2026: smaller, cleaner, less overwhelming). One slim,
+	-- softly translucent pill with a thin keyline: the objective in 18 px stroked lettering and, only
+	-- when there is one, the detail as a smaller muted line under it. At most 40% of the screen wide;
+	-- longer copy truncates. It sits in the stage, which already excludes the Roblox topbar insets.
+	local BANNER_TITLE_PX = Tokens.typography.label.size - 2
+	local BANNER_DETAIL_PX = Tokens.typography.caption.size - 2
+	local BANNER_PAD_X = Tokens.spacing.md + 2
+	local BANNER_PAD_Y = Tokens.spacing.xs
 	local banner = Instance.new("Frame")
 	banner.Name = "Banner"
 	banner.AnchorPoint = Vector2.new(0.5, 0)
 	banner.Position = UDim2.new(0.5, 0, 0, Tokens.layout.safeAreaPaddingPx)
-	banner.Size = UDim2.fromOffset(280, bannerHeight)
+	banner.Size = UDim2.fromOffset(200, BANNER_TITLE_PX + BANNER_PAD_Y * 2 + 4)
 	banner.BackgroundColor3 = Tokens.color.panelDeep
+	banner.BackgroundTransparency = 0.15
+	banner.BorderSizePixel = 0
 	banner.ZIndex = Tokens.zIndex.hud
 	local bannerCorner = Instance.new("UICorner")
-	bannerCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
+	bannerCorner.CornerRadius = UDim.new(0, Tokens.radius.md)
 	bannerCorner.Parent = banner
-	Depth.keyline(banner)
+	local bannerLine = Depth.keyline(banner, Tokens.stroke.hairline)
+	bannerLine.Transparency = 0.25
 	local bannerScale = Instance.new("UIScale")
 	bannerScale.Parent = banner
 	banner.Parent = stage
-	local bannerFace = Instance.new("Frame")
-	bannerFace.Name = "Face"
-	bannerFace.Size = UDim2.new(1, 0, 1, -4)
-	bannerFace.BackgroundColor3 = Tokens.color.surface
-	bannerFace.BorderSizePixel = 0
-	bannerFace.ClipsDescendants = true
-	bannerFace.ZIndex = banner.ZIndex + 1
-	local bannerFaceCorner = Instance.new("UICorner")
-	bannerFaceCorner.CornerRadius = UDim.new(0, Tokens.radius.lg)
-	bannerFaceCorner.Parent = bannerFace
-	Depth.applySheen(bannerFace, Tokens.color.surface)
-	Depth.rim(bannerFace, Tokens.color.surface)
-	bannerFace.Parent = banner
-	-- The green line: the one colour on the ribbon, along the top edge inside the keyline.
-	local bannerLine = Instance.new("Frame")
-	bannerLine.Name = "Line"
-	bannerLine.AnchorPoint = Vector2.new(0.5, 0)
-	bannerLine.Position = UDim2.fromScale(0.5, 0)
-	bannerLine.Size = UDim2.new(1, -Tokens.radius.lg, 0, 4)
-	bannerLine.BackgroundColor3 = Tokens.color.success
-	bannerLine.BorderSizePixel = 0
-	bannerLine.ZIndex = banner.ZIndex + 2
-	local bannerLineCorner = Instance.new("UICorner")
-	bannerLineCorner.CornerRadius = UDim.new(1, 0)
-	bannerLineCorner.Parent = bannerLine
-	bannerLine.Parent = bannerFace
-	local bannerContent = Instance.new("Frame")
-	bannerContent.Name = "Content"
-	bannerContent.Size = UDim2.fromScale(1, 1)
-	bannerContent.BackgroundTransparency = 1
-	bannerContent.ZIndex = banner.ZIndex + 2
-	bannerContent.Parent = bannerFace
 	local bannerPadding = Instance.new("UIPadding")
-	bannerPadding.PaddingLeft = UDim.new(0, Tokens.spacing.lg)
-	bannerPadding.PaddingRight = UDim.new(0, Tokens.spacing.lg)
-	bannerPadding.PaddingTop = UDim.new(0, Tokens.spacing.xs + 2)
-	bannerPadding.PaddingBottom = UDim.new(0, Tokens.spacing.xs + 1)
-	bannerPadding.Parent = bannerContent
+	bannerPadding.PaddingLeft = UDim.new(0, BANNER_PAD_X)
+	bannerPadding.PaddingRight = UDim.new(0, BANNER_PAD_X)
+	bannerPadding.PaddingTop = UDim.new(0, BANNER_PAD_Y)
+	bannerPadding.PaddingBottom = UDim.new(0, BANNER_PAD_Y)
+	bannerPadding.Parent = banner
 	local bannerTitle = Instance.new("TextLabel")
 	bannerTitle.Name = "Title"
-	bannerTitle.Size = UDim2.new(1, 0, 0, Tokens.layout.minimumTapTargetPx - Tokens.spacing.sm)
+	bannerTitle.Size = UDim2.new(1, 0, 0, BANNER_TITLE_PX + 4)
 	bannerTitle.BackgroundTransparency = 1
 	bannerTitle.Font = Tokens.typography.display.font
-	bannerTitle.TextSize = Tokens.typography.label.size + 2
+	bannerTitle.TextSize = BANNER_TITLE_PX
 	bannerTitle.TextColor3 = Tokens.color.featherWhite
 	bannerTitle.Text = "Loading your nest..."
 	bannerTitle.TextTruncate = Enum.TextTruncate.AtEnd
-	bannerTitle.ZIndex = banner.ZIndex + 3
-	FrameKit.outline(bannerTitle, 3)
-	bannerTitle.Parent = bannerContent
+	bannerTitle.ZIndex = banner.ZIndex + 1
+	FrameKit.outline(bannerTitle, 2)
+	bannerTitle.Parent = banner
 	self._labels.banner = bannerTitle
 	local detail = Instance.new("TextLabel")
 	detail.Name = "Detail"
-	detail.AnchorPoint = Vector2.new(0.5, 1)
-	detail.Position = UDim2.fromScale(0.5, 1)
-	detail.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 4)
+	detail.Position = UDim2.fromOffset(0, BANNER_TITLE_PX + 4)
+	detail.Size = UDim2.new(1, 0, 0, BANNER_DETAIL_PX + 3)
 	detail.BackgroundTransparency = 1
 	detail.Font = Tokens.typography.body.font
-	detail.TextSize = Tokens.typography.caption.size
-	detail.TextColor3 = Tokens.color.ink
+	detail.TextSize = BANNER_DETAIL_PX
+	detail.TextColor3 = Tokens.color.inkMuted
+	detail.TextTruncate = Enum.TextTruncate.AtEnd
 	detail.Text = ""
-	detail.ZIndex = banner.ZIndex + 3
-	FrameKit.outline(detail, 2)
-	detail.Parent = bannerContent
+	detail.Visible = false
+	detail.ZIndex = banner.ZIndex + 1
+	local detailStroke = FrameKit.outline(detail, 1.5)
+	detailStroke.Transparency = 0.35
+	detail.Parent = banner
 	self._labels.detail = detail
 	self._bannerScale = bannerScale
 	-- Measured through TextService, not TextBounds: bounds follow the stage's UIScale and the
-	-- truncation, so on a phone they under-report and the ribbon would clip its own objective.
+	-- truncation, so on a phone they under-report and the pill would clip its own objective.
 	local function measure(label: TextLabel): number
 		return TextService:GetTextSize(label.Text, label.TextSize, label.Font, Vector2.new(4096, 256)).X
 	end
 	local function fitBanner()
-		local widest = math.max(measure(bannerTitle) + Tokens.spacing.xxl * 2, measure(detail) + Tokens.spacing.lg * 2)
+		local hasDetail = detail.Text ~= ""
+		detail.Visible = hasDetail
+		local widest = math.max(measure(bannerTitle), if hasDetail then measure(detail) else 0) + BANNER_PAD_X * 2 + 4
 		local stageWidth = stage.AbsoluteSize.X / math.max(0.1, SafeArea.scaleOf(stage))
-		local cap = math.max(240, stageWidth - (Tokens.layout.stationButtonPx + Tokens.spacing.xxl * 2) * 2)
-		banner.Size = UDim2.fromOffset(math.clamp(math.ceil(widest), 280, cap), bannerHeight)
+		local cap = math.max(180, stageWidth * 0.4)
+		local height = BANNER_TITLE_PX + 4 + BANNER_PAD_Y * 2 + (if hasDetail then BANNER_DETAIL_PX + 3 else 0)
+		banner.Size = UDim2.fromOffset(math.clamp(math.ceil(widest), math.min(160, cap), cap), height)
 	end
 	bannerTitle:GetPropertyChangedSignal("Text"):Connect(fitBanner)
 	detail:GetPropertyChangedSignal("Text"):Connect(fitBanner)
@@ -748,9 +714,8 @@ function HUDController.new(deps: any): HUDController
 	-- Bindings.
 	-- Currency chips count up only from acknowledged projections (never from client prediction).
 	local chipLabels = { gems = self._labels.gems, eventTokens = self._labels.tokens }
-	for key, label in pairs(chipLabels) do
-		-- The chip's UIScale sits on the chip frame (label -> Content -> chip).
-		local chipFrame = label.Parent and label.Parent.Parent
+	for key in pairs(chipLabels) do
+		local chipFrame = self:_chipFrame(key)
 		self._chipScales[key] = (chipFrame and chipFrame:FindFirstChildOfClass("UIScale")) :: UIScale
 	end
 	local function applyCurrency(key: string, target: number)
@@ -892,10 +857,18 @@ function HUDController.releaseCurrency(self: HUDController, key: string)
 	end
 end
 
+-- The frame of a currency chip: the gem pill's root, or the token chip (label -> Content -> chip).
+function HUDController._chipFrame(self: HUDController, key: string): Instance?
+	if key == "gems" then
+		return if self._labels.gemChip then self._labels.gemChip.root else nil
+	end
+	local label = self._labels.tokens
+	return label and label.Parent and label.Parent.Parent
+end
+
 -- Screen-space centre of a currency chip (absolute pixels), for animations that fly to it.
 function HUDController.currencyChipPoint(self: HUDController, key: string): Vector2?
-	local label = if key == "gems" then self._labels.gems else self._labels.tokens
-	local chipFrame = label and label.Parent and label.Parent.Parent
+	local chipFrame = self:_chipFrame(key)
 	if not chipFrame or not chipFrame:IsA("GuiObject") or not self.gui.Enabled then
 		return nil
 	end
@@ -908,7 +881,7 @@ function HUDController.celebrateCurrency(self: HUDController, key: string, amoun
 	if not label or amount <= 0 then
 		return
 	end
-	local chipFrame = label.Parent and label.Parent.Parent
+	local chipFrame = self:_chipFrame(key)
 	Tween.rotationPunch(
 		(if chipFrame and chipFrame:IsA("GuiObject") then chipFrame else label) :: GuiObject,
 		self._deps.accessibility:motionSettings(),
@@ -1149,8 +1122,8 @@ end
 -- The lobby registers the Gem Shop opener; the "+" only shows once something can open it.
 function HUDController.setGemShopOpener(self: HUDController, opener: (() -> ())?)
 	self._gemShopOpener = opener
-	if self._labels.gemPlus then
-		self._labels.gemPlus.Visible = opener ~= nil
+	if self._labels.gemChip then
+		self._labels.gemChip.setPlusVisible(opener ~= nil)
 	end
 end
 

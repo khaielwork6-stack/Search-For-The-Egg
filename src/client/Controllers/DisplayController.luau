@@ -11,7 +11,7 @@ local Tokens = require(Shared.Design.Tokens)
 local Feedback = require(script.Parent.Parent.UI.Feedback)
 local EconomyMath = require(Shared.EconomyMath)
 local Trove = require(Shared.Util.Trove)
-local FrameKit = require(script.Parent.Parent.UI.Components.Frame)
+local WorldBillboard = require(script.Parent.Parent.UI.Components.WorldBillboard)
 local UpgradeActions = require(script.Parent.Parent.UI.UpgradeActions)
 
 local DisplayController = {}
@@ -21,7 +21,9 @@ export type DisplayController = typeof(setmetatable(
 	{} :: {
 		_deps: any,
 		_trove: any,
-		_cards: { [string]: { model: Model, gui: BillboardGui, price: TextLabel, caption: TextLabel, scale: UIScale } },
+		_cards: {
+			[string]: { model: Model, gui: BillboardGui, price: TextLabel, priceFill: Frame, caption: TextLabel, scale: UIScale },
+		},
 		stats: { purchases: number, prompts: number },
 	},
 	DisplayController
@@ -124,46 +126,33 @@ function DisplayController._buildCard(self: DisplayController, key: string, mode
 		return false
 	end
 	local _, size = model:GetBoundingBox()
-	local gui = Instance.new("BillboardGui")
-	gui.Name = "PriceCard"
-	gui.Adornee = adornee
-	gui.Size = UDim2.fromOffset(200, 64)
-	gui.StudsOffsetWorldSpace = Vector3.new(0, size.Y * 0.5 + 1.4, 0)
-	gui.MaxDistance = 60
-	gui.LightInfluence = 0
-	gui.ResetOnSpawn = false
+	-- A world billboard: studs-sized, occluded by the counter and shelves, culled past its range.
+	local world = Tokens.world
+	local gui = WorldBillboard.create(
+		adornee,
+		"PriceCard",
+		world.displayCardStuds,
+		Vector3.new(0, size.Y * 0.5 + 0.9, 0),
+		world.displayCardMaxDistance
+	)
 	local scale = Instance.new("UIScale")
 	scale.Parent = gui
-	local name = FrameKit.text(gui, "Name", spec.name, "label", {
-		zIndex = 2,
-		color = Tokens.color.featherWhite,
-		align = Enum.TextXAlignment.Center,
-	})
-	name.Size = UDim2.new(1, 0, 0, Tokens.typography.label.size + 6)
-	name.TextSize = Tokens.typography.label.size + 2
-	FrameKit.outline(name, 2.4)
-	local price = FrameKit.pill(gui, "Price", "-", {
-		size = UDim2.fromOffset(0, Tokens.typography.label.size + Tokens.spacing.md),
-		textSize = Tokens.typography.label.size + 2,
-		zIndex = 2,
+	WorldBillboard.text(gui, "Name", spec.name, { size = UDim2.fromScale(1, 0.36), outline = 2.2 })
+	local priceFill, price = WorldBillboard.pill(gui, "Price", "-", {
+		size = UDim2.fromScale(1, 0.38),
+		position = UDim2.fromScale(0.5, 0.37),
+		anchor = Vector2.new(0.5, 0),
 		fill = Tokens.color.gold,
 		textColor = Tokens.color.inkStrong,
-		fitText = true,
-		outline = true,
 	})
-	price.AnchorPoint = Vector2.new(0.5, 0)
-	price.Position = UDim2.new(0.5, 0, 0, Tokens.typography.label.size + 6)
-	local caption = FrameKit.text(gui, "Caption", "", "caption", {
-		zIndex = 2,
-		color = Tokens.color.featherWhite,
-		align = Enum.TextXAlignment.Center,
+	local caption = WorldBillboard.text(gui, "Caption", "", {
+		size = UDim2.fromScale(1, 0.22),
+		position = UDim2.fromScale(0.5, 1),
+		anchor = Vector2.new(0.5, 1),
+		font = Tokens.typography.caption.font,
+		outline = 1.5,
 	})
-	caption.AnchorPoint = Vector2.new(0.5, 1)
-	caption.Position = UDim2.fromScale(0.5, 1)
-	caption.Size = UDim2.new(1, 0, 0, Tokens.typography.caption.size + 4)
-	FrameKit.outline(caption, 1.6)
-	gui.Parent = adornee
-	self._cards[key] = { model = model, gui = gui, price = price, caption = caption, scale = scale }
+	self._cards[key] = { model = model, gui = gui, price = price, priceFill = priceFill, caption = caption, scale = scale }
 	self._trove:add(gui)
 	return true
 end
@@ -219,7 +208,7 @@ function DisplayController.refresh(self: DisplayController)
 			end
 		end
 		card.price.Text = text
-		card.price.BackgroundColor3 = fill
+		card.priceFill.BackgroundColor3 = fill
 		card.price.TextColor3 = textColor
 		-- Only a state reads under the price; plain descriptions stay off the world.
 		local isState = text == "OWNED" or text == "MAX" or text == "-"
