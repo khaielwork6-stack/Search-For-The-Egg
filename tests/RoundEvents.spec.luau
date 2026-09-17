@@ -110,7 +110,7 @@ return function(describe, it, expect)
 	end
 
 	describe("the plan", function()
-		it("rolls chance, kind and a start inside the window of the round's time limit", function()
+		it("rolls chance, kind and a start inside the seconds window", function()
 			local limit = RoundEvents.roundSeconds(cfg)
 			expect(limit).toBe(cfg.round.maximumRoundSeconds)
 			local values = { 0.2, 0.5, 0 }
@@ -120,7 +120,7 @@ return function(describe, it, expect)
 				return values[i]
 			end)
 			expect(plan.kind).toBe("supplyDrop")
-			expect(plan.delaySeconds).toBeCloseTo(events.startFraction[1] * limit, 1e-6)
+			expect(plan.delaySeconds).toBeCloseTo(events.startSeconds[1], 1e-6)
 			local late = { 0.2, 0.9, 0.999999 }
 			i = 0
 			plan = RoundEvents.plan(cfg, function()
@@ -128,7 +128,7 @@ return function(describe, it, expect)
 				return late[i]
 			end)
 			expect(plan.kind).toBe("chickRescue")
-			expect(plan.delaySeconds).toBeLessThanOrEqual(events.startFraction[2] * limit)
+			expect(plan.delaySeconds).toBeLessThanOrEqual(math.min(events.startSeconds[2], limit))
 			local none = { events.chance, 0.1, 0.1 }
 			i = 0
 			expect(RoundEvents.plan(cfg, function()

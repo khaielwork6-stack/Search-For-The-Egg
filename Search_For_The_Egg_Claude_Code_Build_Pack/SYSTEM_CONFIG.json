@@ -563,9 +563,9 @@
   "roundEvents": {
     "enabled": true,
     "chance": 0.8,
-    "startFraction": [
-      0.35,
-      0.65
+    "startSeconds": [
+      75,
+      150
     ],
     "events": {
       "rainbowRush": {
@@ -640,7 +640,7 @@
       }
     },
     "evidence": "OWNER 17 Sep 2026: at most one short mid-round event per round. Rainbow Rush turns a capped number of buried standard records near the surface into Rainbow Feathers (conversions only; the feather count never changes, never near the Egg). Supply Drop pays contributors CASH for normal feathers deposited from their bags. Chick Rescue pays contributors GEMS for freeing a trapped chick at the nest edge. Events never move the Egg, add feathers or point at the Egg.",
-    "assumption": "OWNER event set and reward currencies; ASSUMED chance, start window (fraction of round.maximumRoundSeconds from Searching start), durations, targets, caps, rewards and preset spots (spots measured from ChapterLayout clear bays, not verified in Studio)"
+    "assumption": "OWNER event set and reward currencies; ASSUMED chance, start window (seconds after Searching starts; a Studio round reached the Egg in ~4 min, so 75-150 s lands mid-round), durations, targets, caps, rewards and preset spots (spots measured from ChapterLayout clear bays, not verified in Studio)"
   },
   "selling": {
     "cashPerStandardFeather": 0.01,

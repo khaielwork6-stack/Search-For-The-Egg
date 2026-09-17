@@ -1433,14 +1433,10 @@ function Validator.validate(raw: any): Report
 	if type(raw.roundEvents) == "table" then
 		local events = raw.roundEvents
 		check(isNonNegativeNumber(events.chance) and events.chance <= 1, "roundEvents.chance must be within [0, 1]")
-		local window = events.startFraction
+		local window = events.startSeconds
 		check(
-			type(window) == "table"
-				and isNonNegativeNumber(window[1])
-				and isNonNegativeNumber(window[2])
-				and window[1] <= window[2]
-				and window[2] < 1,
-			"roundEvents.startFraction must be [a, b] with 0 <= a <= b < 1"
+			type(window) == "table" and isNonNegativeNumber(window[1]) and isNonNegativeNumber(window[2]) and window[1] <= window[2],
+			"roundEvents.startSeconds must be [a, b] seconds with 0 <= a <= b"
 		)
 		check(type(events.events) == "table", "roundEvents.events missing")
 		local defs = if type(events.events) == "table" then events.events else {}

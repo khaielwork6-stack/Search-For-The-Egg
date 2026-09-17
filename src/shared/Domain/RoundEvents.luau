@@ -54,9 +54,11 @@ function RoundEvents.plan(cfg: { [string]: any }, roll: () -> number): Plan?
 		return nil
 	end
 	local kind = WeightedRandom.selectByRoll(entries, kindRoll).id
-	local window = events.startFraction
-	local fraction = window[1] + (window[2] - window[1]) * startRoll
-	return { kind = kind, delaySeconds = fraction * RoundEvents.roundSeconds(cfg) }
+	-- Seconds after Searching begins, not a fraction of the 30-minute cap: real rounds end in minutes, so
+	-- a fraction of the cap would put almost every event after the Egg was already found.
+	local window = events.startSeconds
+	local delay = window[1] + (window[2] - window[1]) * startRoll
+	return { kind = kind, delaySeconds = math.min(delay, RoundEvents.roundSeconds(cfg)) }
 end
 
 -- One preset spot, chosen by the roll alone (the Egg is never an input).
