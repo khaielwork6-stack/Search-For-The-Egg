@@ -177,7 +177,10 @@ function RoundHud.new(gui: Instance, motion: () -> Motion.MotionSettings): Round
 	plumeText.TextScaled = true
 	local plumeTextSize = Instance.new("UITextSizeConstraint")
 	plumeTextSize.MaxTextSize = Tokens.typography.label.size - 2
-	plumeTextSize.MinTextSize = Tokens.typography.minimumBodySize
+	-- Smaller floor than body copy: on a phone the strip narrows and "0/10 FOR PLUME" was cut to "0/10 FOR".
+	plumeTextSize.MinTextSize = 8
+	plumeText.TextWrapped = true
+	plumeText.TextTruncate = Enum.TextTruncate.None
 	plumeTextSize.Parent = plumeText
 	plumeText.Text = "0/10 FOR PLUME"
 	local plumeOutline = plumeFrame:FindFirstChildOfClass("UIStroke")

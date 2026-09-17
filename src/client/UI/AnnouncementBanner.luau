@@ -370,8 +370,10 @@ function AnnouncementBanner._build(self: AnnouncementBanner)
 		barGradient = barGradient,
 		sweepGradient = sweepGradient,
 		title = title,
+		titleSize = titleSize,
 		titleGradient = titleGradient,
 		sub = sub,
+		subSize = subSize,
 		keyline = keyline,
 		rim = rim,
 		titleStroke = titleStroke,
@@ -395,23 +397,36 @@ function AnnouncementBanner._layout(self: AnnouncementBanner, payload: Payload):
 	if parentObject:IsA("GuiObject") and parentObject.AbsoluteSize.X > 0 then
 		stageWidth = parentObject.AbsoluteSize.X / math.max(0.1, SafeArea.scaleOf(parentObject))
 	end
-	local titleWidth =
-		TextService:GetTextSize(payload.text, AnnouncementBanner.TITLE_PX, Tokens.typography.display.font, Vector2.new(4096, 256)).X
+	-- Phones get a smaller plate: at full size it reached the middle of a landscape phone and sat on the
+	-- crosshair, and its subtitle was cut off.
+	local phone = parentObject:IsA("GuiObject") and SafeArea.classOf(parentObject) == "phone"
+	local titlePx = if phone then 22 else AnnouncementBanner.TITLE_PX
+	local subPx = if phone then 12 else AnnouncementBanner.SUB_PX
+	parts.titleSize.MaxTextSize = titlePx
+	parts.titleSize.MinTextSize = math.min(18, titlePx - 4)
+	parts.subSize.MaxTextSize = subPx
+	parts.subSize.MinTextSize = math.min(Tokens.typography.minimumBodySize, subPx - 2)
+	local titleWidth = TextService:GetTextSize(payload.text, titlePx, Tokens.typography.display.font, Vector2.new(4096, 256)).X
 	local hasSub = type(payload.sub) == "string" and payload.sub ~= ""
 	local subWidth = if hasSub
-		then TextService:GetTextSize(payload.sub :: string, AnnouncementBanner.SUB_PX, Tokens.typography.body.font, Vector2.new(4096, 256)).X
+		then TextService:GetTextSize(payload.sub :: string, subPx, Tokens.typography.body.font, Vector2.new(4096, 256)).X
 		else 0
-	local padX = Tokens.spacing.xl + Tokens.spacing.sm
-	local width = math.clamp(math.max(titleWidth, subWidth) + padX * 2 + 8, 280, math.max(280, stageWidth * 0.86))
-	local titleTop = Tokens.spacing.sm + 5
-	local titleHeight = AnnouncementBanner.TITLE_PX + 6
-	local height = titleTop + titleHeight + (if hasSub then AnnouncementBanner.SUB_PX + 4 else 0) + Tokens.spacing.sm + 6
+	local padX = if phone then Tokens.spacing.lg else Tokens.spacing.xl + Tokens.spacing.sm
+	local minWidth = if phone then 200 else 280
+	local width =
+		math.clamp(math.max(titleWidth, subWidth) + padX * 2 + 8, minWidth, math.max(minWidth, stageWidth * (if phone then 0.7 else 0.86)))
+	local titleTop = if phone then Tokens.spacing.xs + 3 else Tokens.spacing.sm + 5
+	local titleHeight = titlePx + 6
+	local height = titleTop
+		+ titleHeight
+		+ (if hasSub then subPx + 4 else 0)
+		+ (if phone then Tokens.spacing.xs + 4 else Tokens.spacing.sm + 6)
 	card.Size = UDim2.fromOffset(width, height)
 	parts.title.Position = UDim2.new(0.5, 0, 0, titleTop)
 	parts.title.Size = UDim2.new(1, -padX * 2, 0, titleHeight)
 	parts.sub.Visible = hasSub
 	parts.sub.Position = UDim2.new(0.5, 0, 0, titleTop + titleHeight)
-	parts.sub.Size = UDim2.new(1, -padX * 2, 0, AnnouncementBanner.SUB_PX + 4)
+	parts.sub.Size = UDim2.new(1, -padX * 2, 0, subPx + 4)
 	return width, height
 end
 
