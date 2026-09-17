@@ -548,6 +548,19 @@ if RunService:IsStudio() then
 	local bridge = Instance.new("BindableFunction")
 	bridge.Name = "SFE_ClientDebug"
 	local actions: { [string]: (...any) -> any } = {
+		inspectOpen = function(key)
+			for _, child in ipairs(workspace:GetChildren()) do
+				if child:IsA("Model") and child:GetAttribute("SFE_Display") == key then
+					inspect:open(tostring(key), child)
+					return { open = inspect:isOpen() }
+				end
+			end
+			return { open = false, error = "no_display" }
+		end,
+		inspectClose = function()
+			inspect:close()
+			return { open = inspect:isOpen() }
+		end,
 		feedbackStats = function()
 			local Feedback = require(script.UI.Feedback)
 			local report: any = Feedback.stats()
