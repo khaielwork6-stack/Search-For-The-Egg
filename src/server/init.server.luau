@@ -541,12 +541,16 @@ end)
 -- 7. World: lobby shell and the Chapter 1 arena (same place; see ChapterLayout).
 Players.CharacterAutoLoads = false
 -- Repair mesh templates (mesh metadata) before any shell clones them; replicates to every client.
+PerfTrace.mark("services")
 local repairedMeshes = AssetManifest.warm()
+PerfTrace.mark("worldShell")
 local lobbyShell = WorldShellService.build(workspace, workspace:FindFirstChildOfClass("SpawnLocation"), config)
 -- Owner tool models (Toolbox assets) staged for the client's first-person viewmodels and the Scout
 -- Chick body: script-free, anchored clones under ReplicatedStorage so streaming never hides them.
 ChapterShellService.stageToolModels(workspace, ReplicatedStorage)
+PerfTrace.mark("chapterShell")
 local arena = ChapterShellService.build(workspace, config)
+PerfTrace.mark("afterShells")
 ChapterShellService.applyReadability(game:GetService("Lighting"), config)
 local mapMode = WorldShellService.isMapMode(lobbyShell)
 
@@ -1512,6 +1516,7 @@ local container = {
 	pileTerrain = pileTerrain,
 }
 local debugHooks = StudioDebug.install(container)
+PerfTrace.mark("booted")
 
 runtimeFolder:SetAttribute("SFE_ServerReady", true)
 runtimeFolder:SetAttribute("SFE_BuildLabel", BuildInfo.buildLabel)
