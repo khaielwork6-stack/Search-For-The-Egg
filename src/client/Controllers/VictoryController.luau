@@ -112,6 +112,8 @@ function VictoryController.onRevealed(self: VictoryController, payload: { [strin
 	local eggPart = workspace:FindFirstChild("SFE_Chapter1") and workspace.SFE_Chapter1:FindFirstChild("SFE_Egg")
 	deps.audio:play(Tokens.sound.eggChime, { at = eggPart })
 	deps.haptics:pulse(0.7, 0.2)
+	-- The objective moves on with the phase (it kept reading "Gather 25 feathers" under the reveal).
+	deps.hud:setObjective("Grab the Egg!", "It's glowing gold in the nest - hold Interact on it")
 	-- The notice is the server's announcement (one notice for the reveal, not a toast as well).
 	local celebration = deps.celebration
 	if celebration then
